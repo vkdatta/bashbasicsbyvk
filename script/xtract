@@ -304,12 +304,7 @@ def save_tables_with_gap(tables, output_path, source_url=None, source_text="Give
         print(f"🚨 Excel save failed: {str(e)}")
         return False
 
-
-# ── NEW: RECURSIVE LINK EXTRACTION HELPERS ───────────────────────────────────
-
-# Default cap on how many links to follow per page at each recursion level.
-# Prevents exponential explosion (e.g. 100 L0 links × 100 L1 links = 10,000 requests).
-RECURSION_LINK_CAP = 50
+RECURSION_LINK_CAP = 500
 
 def build_link_rows_recursive(url, target_depth, current_depth=0,
                                classes=None, ids=None, link_classes=None,
