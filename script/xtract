@@ -307,41 +307,69 @@ def save_tables_with_gap(tables, output_path, source_url=None, source_text="Give
 
 # ── NEW: RECURSIVE LINK EXTRACTION HELPERS ───────────────────────────────────
 
+# Default cap on how many links to follow per page at each recursion level.
+# Prevents exponential explosion (e.g. 100 L0 links × 100 L1 links = 10,000 requests).
+RECURSION_LINK_CAP = 50
+
 def build_link_rows_recursive(url, target_depth, current_depth=0,
-                               classes=None, ids=None, link_classes=None):
+                               classes=None, ids=None, link_classes=None,
+                               visited=None, link_cap=RECURSION_LINK_CAP):
     """
     Recursively extract links from `url` up to `target_depth` levels deep.
 
     Returns a list of paths. Each path is a list of (href, link_text) tuples,
-    one tuple per recursion level (from level current_depth up to target_depth).
+    one tuple per recursion level.
 
-    Example for target_depth=2, one branch:
-      [(L0_href, L0_text), (L1_href, L1_text), (L2_href, L2_text)]
+    Fixes vs original:
+      - Prints live progress at every step so the user sees activity.
+      - Caps links followed per page to `link_cap` to prevent explosion.
+      - Tracks visited URLs to avoid re-fetching the same page.
+      - Short sleep only between HTTP requests (not per-link in memory).
     """
+    if visited is None:
+        visited = set()
+
+    indent = "  " + ("  " * current_depth)
+    print(f"{indent}📄 [L{current_depth}] Fetching: {url}")
+
+    if url in visited:
+        print(f"{indent}   ↩️  Already visited, skipping.")
+        return []
+    visited.add(url)
+
     try:
         content = extract_content_robust(
             url, 'links', classes=classes, ids=ids, link_classes=link_classes
         )
     except Exception as e:
-        print(f"  ⚠️ Recursion error at depth {current_depth} for {url}: {e}")
+        print(f"{indent}   ⚠️ Error: {e}")
         return []
 
     if not content:
+        print(f"{indent}   ⚠️ No links found.")
         return []
 
+    # Cap to avoid runaway requests
+    if len(content) > link_cap:
+        print(f"{indent}   ⚠️ Found {len(content)} links — capping to {link_cap} to prevent explosion.")
+        content = content[:link_cap]
+    else:
+        print(f"{indent}   ✅ Found {len(content)} links.")
+
     paths = []
-    for link in content:
+    for idx, link in enumerate(content):
         abs_url = urljoin(url, link.get('url', ''))
         link_text = link.get('text', '')
 
         if current_depth >= target_depth:
-            # Leaf level — no further recursion needed
+            # Leaf level — no further HTTP requests needed
             paths.append([(abs_url, link_text)])
         else:
-            # Go one level deeper
+            print(f"{indent}   [{idx+1}/{len(content)}] → {abs_url[:80]}")
+            time.sleep(0.5)  # polite delay before each child fetch
             sub_paths = build_link_rows_recursive(
                 abs_url, target_depth, current_depth + 1,
-                classes, ids, link_classes
+                classes, ids, link_classes, visited, link_cap
             )
             if sub_paths:
                 for sp in sub_paths:
@@ -351,13 +379,12 @@ def build_link_rows_recursive(url, target_depth, current_depth=0,
                 empty_padding = [('', '')] * (target_depth - current_depth)
                 paths.append([(abs_url, link_text)] + empty_padding)
 
-        time.sleep(0.5)  # polite delay during recursion
-
     return paths
 
 
 def build_links_dataframe(source_url, source_text, recursion_depth,
-                           content=None, classes=None, ids=None, link_classes=None):
+                           content=None, classes=None, ids=None, link_classes=None,
+                           link_cap=RECURSION_LINK_CAP):
     """
     Build a fully structured DataFrame for links output.
 
@@ -366,8 +393,7 @@ def build_links_dataframe(source_url, source_text, recursion_depth,
                                    [| L1 Link | L1 Link Text | ...]
 
     For recursion_depth=0:
-      Uses the already-fetched `content` list of dicts (each with
-      'absolute_url'/'url', 'text', optionally 'source_url').
+      Uses the already-fetched `content` list of dicts.
 
     For recursion_depth>0:
       Fetches recursively from source_url using build_link_rows_recursive.
@@ -378,22 +404,24 @@ def build_links_dataframe(source_url, source_text, recursion_depth,
         col_names += [f'L{d} Link', f'L{d} Link Text']
 
     if recursion_depth == 0:
-        # Simple non-recursive case
+        # Simple non-recursive case — no extra fetching needed
         rows = []
         for link in (content or []):
             abs_url = link.get('absolute_url', link.get('url', ''))
             link_text = link.get('text', '')
-            # Use per-link source_url if available (multi-URL mode), else the passed source_url
             src_url = link.get('source_url', source_url) or source_url
             rows.append([src_url, source_text, abs_url, link_text])
         return pd.DataFrame(rows, columns=col_names) if rows else pd.DataFrame(columns=col_names)
 
     else:
-        # Recursive case — fetch all paths
-        print(f"  🔄 Running recursive link extraction (depth={recursion_depth}) from: {source_url}")
+        # Recursive case
+        print(f"\n🔄 Recursive link extraction | depth={recursion_depth} | cap={link_cap} links/page")
+        print(f"   Starting from: {source_url}\n")
         paths = build_link_rows_recursive(
-            source_url, recursion_depth, 0, classes, ids, link_classes
+            source_url, recursion_depth, 0, classes, ids, link_classes,
+            visited=set(), link_cap=link_cap
         )
+        print(f"\n✅ Recursion complete. Total paths collected: {len(paths)}")
         rows = []
         for path in paths:
             row = [source_url, source_text]
@@ -542,6 +570,7 @@ def main():
 
     # ── ADDENDUM: Recursion prompt — links only ───────────────────────────────
     recursion_depth = 0
+    link_cap = RECURSION_LINK_CAP
     if content_type == 'links':
         recurse_input = input("\nDo you need recursive link extraction? (y/n): ").strip().lower()
         if recurse_input == 'y':
@@ -554,8 +583,17 @@ def main():
                 print(f"✅ Recursion depth set to {recursion_depth}")
                 print(f"   Output columns: Source URL | Source Text | L0 Link | L0 Text"
                       + "".join([f" | L{d} Link | L{d} Text" for d in range(1, recursion_depth + 1)]))
+                try:
+                    cap_raw = input(f"\nMax links to follow per page per level (default: {RECURSION_LINK_CAP}, higher = much slower):\n> ").strip()
+                    link_cap = int(cap_raw) if cap_raw else RECURSION_LINK_CAP
+                    if link_cap < 1:
+                        link_cap = RECURSION_LINK_CAP
+                except ValueError:
+                    link_cap = RECURSION_LINK_CAP
+                print(f"✅ Link cap: {link_cap} per page | Est. max requests: ~{link_cap ** (recursion_depth+1)}")
             except ValueError:
                 recursion_depth = 1
+                link_cap = RECURSION_LINK_CAP
                 print("⚠️  Invalid input. Using recursion depth 1.")
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -609,10 +647,11 @@ def main():
         
         # ── Links with recursion: use recursive fetcher directly ─────────────
         if content_type == 'links' and recursion_depth > 0:
-            print(f"\n⏳ Starting recursive link extraction (depth={recursion_depth})...")
+            print(f"\n⏳ Starting recursive link extraction (depth={recursion_depth}, cap={link_cap}/page)...")
             df = build_links_dataframe(
                 url, "Given Link", recursion_depth,
-                classes=classes, ids=ids, link_classes=link_classes
+                classes=classes, ids=ids, link_classes=link_classes,
+                link_cap=link_cap
             )
             if not df.empty:
                 save_content(df, content_type, filename, url, "Given Link", recursion_depth)
@@ -748,7 +787,8 @@ def main():
                             # Recursive extraction
                             df = build_links_dataframe(
                                 url, "Given Link", recursion_depth,
-                                classes=classes, ids=ids, link_classes=link_classes
+                                classes=classes, ids=ids, link_classes=link_classes,
+                                link_cap=link_cap
                             )
                         else:
                             # Standard extraction then structure
@@ -793,7 +833,8 @@ def main():
                     # ADDENDUM: Recursive link extraction per URL
                     df = build_links_dataframe(
                         url, "Given Link", recursion_depth,
-                        classes=classes, ids=ids, link_classes=link_classes
+                        classes=classes, ids=ids, link_classes=link_classes,
+                        link_cap=link_cap
                     )
                     if not df.empty:
                         save_content(df, content_type, filename, url, "Given Link", recursion_depth)
