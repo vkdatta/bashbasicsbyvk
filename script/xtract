@@ -1,0 +1,820 @@
+#!/usr/bin/env python3
+import re
+import time
+import os
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse, unquote, urljoin
+import sys
+import subprocess
+import math
+import numpy as np
+
+def check_dependencies():
+    """Ensure required packages are installed"""
+    try:
+        import openpyxl
+        return True
+    except ImportError:
+        print("\n❌ Missing required package: openpyxl")
+        print("This package is needed for Excel export functionality")
+        choice = input("Install it now? (y/n): ").lower()
+        if choice == 'y':
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl"])
+                print("✅ openpyxl installed successfully!")
+                return True
+            except:
+                print("🚨 Installation failed. CSV export will still work")
+                return False
+        return False
+
+def clean_sheet_name(name):
+    """Clean invalid characters from Excel sheet names"""
+    name = re.sub(r'[\\/*?:\[\]]', '', name)
+    return name[:31]
+
+def generate_unique_filename(base_path, format):
+    """Generate unique filename to prevent overwriting"""
+    counter = 0
+    path_no_ext, ext = os.path.splitext(base_path)
+    new_path = base_path
+    
+    while os.path.exists(new_path):
+        counter += 1
+        new_path = f"{path_no_ext}_{counter}.{format}"
+    
+    return new_path
+
+def extract_tables_from_container(container, table_classes=None):
+    """Extract tables from a specific container element"""
+    if table_classes:
+        tables = []
+        for cls in table_classes:
+            tables.extend(container.find_all('table', class_=cls))
+        return tables
+    return container.find_all('table')
+
+def extract_links_from_container(container, link_classes=None):
+    """Extract links from a specific container element"""
+    links = []
+    for a in container.find_all('a', href=True):
+        if not a['href'] or a['href'].startswith(('javascript:', 'mailto:', 'tel:')):
+            continue
+            
+        if link_classes:
+            for cls in link_classes:
+                if cls in a.get('class', []):
+                    links.append({
+                        'url': a['href'],
+                        'text': a.get_text(strip=True),
+                        'class': cls
+                    })
+                    break
+        else:
+            links.append({
+                'url': a['href'],
+                'text': a.get_text(strip=True)
+            })
+    return links
+
+def manual_table_extraction(table):
+    """Robust table extraction that handles various table structures"""
+    try:
+        headers = []
+        header_row = None
+        
+        thead = table.find('thead')
+        if thead:
+            for row in thead.find_all('tr'):
+                for th in row.find_all(['th', 'td']):
+                    headers.append(th.get_text(strip=True))
+        
+        if not headers:
+            for th in table.find_all('th'):
+                headers.append(th.get_text(strip=True))
+        
+        if not headers:
+            first_row = table.find('tr')
+            if first_row:
+                header_row = first_row
+                for cell in first_row.find_all(['th', 'td']):
+                    headers.append(cell.get_text(strip=True))
+        
+        rows = []
+        tbody = table.find('tbody') or table
+        
+        for row in tbody.find_all('tr'):
+            if row == header_row:
+                continue
+                
+            cols = row.find_all(['td', 'th'])
+            if cols:
+                row_data = [col.get_text(strip=True) for col in cols]
+                rows.append(row_data)
+        
+        max_columns = max(len(row) for row in rows) if rows else 0
+        if headers:
+            if len(headers) > max_columns:
+                headers = headers[:max_columns]
+            elif len(headers) < max_columns:
+                headers += [f"Column_{i+1}" for i in range(len(headers), max_columns)]
+        
+        padded_rows = []
+        for row in rows:
+            if len(row) < max_columns:
+                row += [''] * (max_columns - len(row))
+            padded_rows.append(row)
+        
+        if headers and padded_rows:
+            return pd.DataFrame(padded_rows, columns=headers)
+        elif padded_rows:
+            return pd.DataFrame(padded_rows)
+        else:
+            return None
+    except Exception as e:
+        print(f"    ⚠️ Table extraction error: {str(e)}")
+        return None
+
+def extract_content_robust(url, content_type, classes=None, ids=None, link_classes=None):
+    """Reliable content extraction that works for complex sites"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        containers = []
+        if ids:
+            for container_id in ids:
+                container = soup.find(id=container_id)
+                if container:
+                    containers.append(container)
+        else:
+            containers = [soup]
+        
+        results = []
+        for container in containers:
+            if content_type == 'tables':
+                tables = extract_tables_from_container(container, classes)
+                for table in tables:
+                    df = manual_table_extraction(table)
+                    if df is not None and not df.empty:
+                        results.append(df)
+            elif content_type == 'links':
+                links = extract_links_from_container(container, link_classes)
+                results.extend(links)
+        
+        return results
+    except Exception as e:
+        print(f"⚠️ Error fetching {url}: {str(e)}")
+        return []
+
+def extract_url(url, content_type, classes=None, ids=None, link_classes=None, num_pages=1):
+    """Extract content from a single URL with pagination support"""
+    all_content = []
+    page_range = range(1, num_pages + 1) if "{}" in url else [1]
+    
+    print(f"⏳ Extracting content from {min(page_range)} to {max(page_range)} pages...")
+    
+    for page in page_range:
+        try:
+            target_url = url.format(page) if "{}" in url else url
+            print(f"  🌐 Fetching page {page}: {target_url}")
+            
+            content = extract_content_robust(
+                target_url, 
+                content_type, 
+                classes=classes, 
+                ids=ids,
+                link_classes=link_classes
+            )
+            
+            if not content:
+                print(f"    ⚠️ No content found on page {page}")
+                continue
+            
+            if content_type == 'tables':
+                for i, df in enumerate(content):
+                    all_content.append(df)
+                    print(f"    ✅ Extracted table {i+1} ({len(df)} rows)")
+            
+            elif content_type == 'links':
+                for link in content:
+                    absolute_url = urljoin(target_url, link['url'])
+                    link['absolute_url'] = absolute_url
+                    # ADDENDUM: track which parent URL each link came from
+                    link['source_url'] = target_url
+                all_content.extend(content)
+                print(f"    ✅ Extracted {len(content)} links")
+                
+            time.sleep(1.5)
+            
+        except Exception as e:
+            print(f"🚨 Page {page} failed: {str(e)}")
+    
+    return all_content
+
+def group_tables(tables):
+    """Group consecutive tables with identical headers"""
+    if not tables:
+        return []
+    
+    groups = []
+    current_group = []
+    
+    for table in tables:
+        if not current_group:
+            current_group.append(table)
+            continue
+            
+        prev_headers = list(current_group[-1].columns)
+        curr_headers = list(table.columns)
+        
+        if curr_headers == prev_headers:
+            current_group.append(table)
+        else:
+            groups.append(current_group)
+            current_group = [table]
+    
+    if current_group:
+        groups.append(current_group)
+        
+    return groups
+
+def save_tables_with_gap(tables, output_path, source_url=None, source_text="Given Link"):
+    """
+    Save tables with 5-row gaps between groups of tables with different headers.
+    ADDENDUM: Prepends 'Source URL' and 'Source Link Text' as first two columns.
+    """
+    try:
+        import openpyxl
+        from openpyxl.utils.dataframe import dataframe_to_rows
+        
+        workbook = openpyxl.Workbook()
+        if workbook.sheetnames:
+            workbook.remove(workbook.active)
+        
+        if source_url:
+            domain = urlparse(source_url).netloc.replace('www.', '')[:15]
+            sheet_name = f"{domain}_Data"
+        else:
+            sheet_name = "ExtractedData"
+        sheet_name = clean_sheet_name(sheet_name)
+        worksheet = workbook.create_sheet(sheet_name)
+        
+        table_groups = group_tables(tables)
+        
+        current_row = 1
+        
+        for group_idx, group in enumerate(table_groups):
+            # Group label row
+            worksheet.cell(row=current_row, column=1, value=f"Table Group {group_idx+1}")
+            current_row += 1
+            
+            # ADDENDUM: Header row — Source URL and Source Link Text are cols 1 & 2,
+            #           original table headers shift to col 3 onwards
+            worksheet.cell(row=current_row, column=1, value="Source URL")
+            worksheet.cell(row=current_row, column=2, value="Source Link Text")
+            headers = group[0].columns.tolist()
+            for col_idx, header in enumerate(headers, 3):
+                worksheet.cell(row=current_row, column=col_idx, value=header)
+            current_row += 1
+            
+            # Data rows
+            for table in group:
+                for row_idx, row in table.iterrows():
+                    # ADDENDUM: Write Source URL + Source Link Text in first two cells
+                    worksheet.cell(row=current_row, column=1, value=source_url or '')
+                    worksheet.cell(row=current_row, column=2, value=source_text)
+                    for col_idx, value in enumerate(row, 3):
+                        worksheet.cell(row=current_row, column=col_idx, value=value)
+                    current_row += 1
+            
+            current_row += 5
+        
+        workbook.save(output_path)
+        print(f"💾 Saved Excel with {len(table_groups)} table groups: {os.path.abspath(output_path)}")
+        return True
+    except Exception as e:
+        print(f"🚨 Excel save failed: {str(e)}")
+        return False
+
+
+# ── NEW: RECURSIVE LINK EXTRACTION HELPERS ───────────────────────────────────
+
+def build_link_rows_recursive(url, target_depth, current_depth=0,
+                               classes=None, ids=None, link_classes=None):
+    """
+    Recursively extract links from `url` up to `target_depth` levels deep.
+
+    Returns a list of paths. Each path is a list of (href, link_text) tuples,
+    one tuple per recursion level (from level current_depth up to target_depth).
+
+    Example for target_depth=2, one branch:
+      [(L0_href, L0_text), (L1_href, L1_text), (L2_href, L2_text)]
+    """
+    try:
+        content = extract_content_robust(
+            url, 'links', classes=classes, ids=ids, link_classes=link_classes
+        )
+    except Exception as e:
+        print(f"  ⚠️ Recursion error at depth {current_depth} for {url}: {e}")
+        return []
+
+    if not content:
+        return []
+
+    paths = []
+    for link in content:
+        abs_url = urljoin(url, link.get('url', ''))
+        link_text = link.get('text', '')
+
+        if current_depth >= target_depth:
+            # Leaf level — no further recursion needed
+            paths.append([(abs_url, link_text)])
+        else:
+            # Go one level deeper
+            sub_paths = build_link_rows_recursive(
+                abs_url, target_depth, current_depth + 1,
+                classes, ids, link_classes
+            )
+            if sub_paths:
+                for sp in sub_paths:
+                    paths.append([(abs_url, link_text)] + sp)
+            else:
+                # Dead end — pad the remaining levels with empty strings
+                empty_padding = [('', '')] * (target_depth - current_depth)
+                paths.append([(abs_url, link_text)] + empty_padding)
+
+        time.sleep(0.5)  # polite delay during recursion
+
+    return paths
+
+
+def build_links_dataframe(source_url, source_text, recursion_depth,
+                           content=None, classes=None, ids=None, link_classes=None):
+    """
+    Build a fully structured DataFrame for links output.
+
+    Column layout:
+      Source URL | Source Link Text | L0 Link | L0 Link Text
+                                   [| L1 Link | L1 Link Text | ...]
+
+    For recursion_depth=0:
+      Uses the already-fetched `content` list of dicts (each with
+      'absolute_url'/'url', 'text', optionally 'source_url').
+
+    For recursion_depth>0:
+      Fetches recursively from source_url using build_link_rows_recursive.
+    """
+    # Build column name list
+    col_names = ['Source URL', 'Source Link Text']
+    for d in range(recursion_depth + 1):
+        col_names += [f'L{d} Link', f'L{d} Link Text']
+
+    if recursion_depth == 0:
+        # Simple non-recursive case
+        rows = []
+        for link in (content or []):
+            abs_url = link.get('absolute_url', link.get('url', ''))
+            link_text = link.get('text', '')
+            # Use per-link source_url if available (multi-URL mode), else the passed source_url
+            src_url = link.get('source_url', source_url) or source_url
+            rows.append([src_url, source_text, abs_url, link_text])
+        return pd.DataFrame(rows, columns=col_names) if rows else pd.DataFrame(columns=col_names)
+
+    else:
+        # Recursive case — fetch all paths
+        print(f"  🔄 Running recursive link extraction (depth={recursion_depth}) from: {source_url}")
+        paths = build_link_rows_recursive(
+            source_url, recursion_depth, 0, classes, ids, link_classes
+        )
+        rows = []
+        for path in paths:
+            row = [source_url, source_text]
+            for href, text in path:
+                row += [href, text]
+            # Pad if a branch ended before reaching target_depth
+            while len(row) < len(col_names):
+                row.append('')
+            rows.append(row[:len(col_names)])
+        return pd.DataFrame(rows, columns=col_names) if rows else pd.DataFrame(columns=col_names)
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def save_content(content, content_type, output_path, source_url=None,
+                 source_text="Given Link", recursion_depth=0):
+    """Save extracted content to appropriate format.
+    
+    ADDENDUM changes vs original:
+      - CSV and TXT output paths are redirected to XLSX (no removal of existing logic).
+      - Tables: Source URL + Source Link Text prepended as first two columns.
+      - Links: structured with Source URL, Source Link Text, L0 Link, L0 Link Text
+               (+ further Ln columns when recursion_depth > 0).
+    """
+    # Guard: handle both list and pre-built DataFrame
+    if isinstance(content, pd.DataFrame):
+        if content.empty:
+            print("❌ No content to save")
+            return False
+    else:
+        if not content:
+            print("❌ No content to save")
+            return False
+    
+    output_dir = os.path.dirname(output_path)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    if content_type == 'tables':
+        if output_path.endswith('.csv'):
+            # ADDENDUM: CSV no longer supported — silently redirect to XLSX
+            xlsx_path = os.path.splitext(output_path)[0] + '.xlsx'
+            print(f"ℹ️  CSV format replaced with XLSX → {xlsx_path}")
+            return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
+        
+        elif output_path.endswith('.xlsx'):
+            try:
+                import openpyxl
+            except ImportError:
+                print("❌ Excel support requires openpyxl package")
+                print("Run: pip install openpyxl")
+                print("Saving as CSV instead")
+                csv_path = os.path.splitext(output_path)[0] + '.csv'
+                return save_content(content, content_type, csv_path, source_url, source_text, recursion_depth)
+                
+            return save_tables_with_gap(content, output_path, source_url, source_text)
+        
+        else:
+            # ADDENDUM: Any other extension → redirect to XLSX
+            base = os.path.splitext(output_path)[0] if '.' in os.path.basename(output_path) else output_path
+            xlsx_path = base + '.xlsx'
+            print(f"ℹ️  Unsupported format replaced with XLSX → {xlsx_path}")
+            return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
+    
+    elif content_type == 'links':
+        if output_path.endswith('.txt'):
+            # ADDENDUM: TXT no longer supported — redirect to XLSX
+            xlsx_path = os.path.splitext(output_path)[0] + '.xlsx'
+            print(f"ℹ️  TXT format replaced with XLSX → {xlsx_path}")
+            return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
+        
+        elif output_path.endswith('.csv'):
+            # ADDENDUM: CSV no longer supported — redirect to XLSX
+            xlsx_path = os.path.splitext(output_path)[0] + '.xlsx'
+            print(f"ℹ️  CSV format replaced with XLSX → {xlsx_path}")
+            return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
+            
+        elif output_path.endswith('.xlsx'):
+            try:
+                import openpyxl
+            except ImportError:
+                print("❌ Excel support requires openpyxl package")
+                print("Saving as CSV instead")
+                csv_path = os.path.splitext(output_path)[0] + '.csv'
+                return save_content(content, content_type, csv_path, source_url, source_text, recursion_depth)
+            
+            try:
+                # ADDENDUM: Build structured DataFrame with Source URL/Text + link columns
+                if isinstance(content, pd.DataFrame):
+                    # Pre-built DataFrame (recursive case or combined multi-URL)
+                    df = content
+                else:
+                    # List of dicts from extract_url → build structured DF
+                    df = build_links_dataframe(
+                        source_url, source_text, recursion_depth, content=content
+                    )
+                
+                if df.empty:
+                    print("❌ No links to save")
+                    return False
+                
+                with pd.ExcelWriter(output_path) as writer:
+                    if source_url:
+                        domain = urlparse(source_url).netloc.replace('www.', '')[:15]
+                        sheet_name = f"{domain}_Links"
+                    else:
+                        sheet_name = "Links"
+                    
+                    sheet_name = clean_sheet_name(sheet_name)
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+                    print(f"💾 Saved Excel: {os.path.abspath(output_path)}")
+                return True
+            except Exception as e:
+                print(f"🚨 Excel save failed: {str(e)}")
+                return False
+        
+        else:
+            # ADDENDUM: Any other extension → redirect to XLSX
+            base = os.path.splitext(output_path)[0] if '.' in os.path.basename(output_path) else output_path
+            xlsx_path = base + '.xlsx'
+            print(f"ℹ️  Unsupported format replaced with XLSX → {xlsx_path}")
+            return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
+    
+    return False
+
+def parse_comma_separated(input_str):
+    """Parse comma-separated input into list, handling empty values"""
+    if not input_str:
+        return None
+    items = [item.strip() for item in input_str.split(',') if item.strip()]
+    return items if items else None
+
+def main():
+    print("\n" + "="*50)
+    print("🌐 XTRACT - WEB CONTENT EXTRACTOR".center(50))
+    print("="*50)
+    
+    excel_support = check_dependencies()
+    
+    content_type = input("\nExtract tables or links? (t/l): ").strip().lower()
+    if content_type not in ['t', 'l']:
+        print("\n❌ Invalid selection. Please choose 't' for tables or 'l' for links")
+        return
+    
+    content_type = 'tables' if content_type == 't' else 'links'
+
+    # ── ADDENDUM: Recursion prompt — links only ───────────────────────────────
+    recursion_depth = 0
+    if content_type == 'links':
+        recurse_input = input("\nDo you need recursive link extraction? (y/n): ").strip().lower()
+        if recurse_input == 'y':
+            try:
+                recursion_depth = int(
+                    input("Enter recursion depth (e.g. 1 = one level deep, 2 = two levels): ").strip()
+                )
+                if recursion_depth < 0:
+                    recursion_depth = 0
+                print(f"✅ Recursion depth set to {recursion_depth}")
+                print(f"   Output columns: Source URL | Source Text | L0 Link | L0 Text"
+                      + "".join([f" | L{d} Link | L{d} Text" for d in range(1, recursion_depth + 1)]))
+            except ValueError:
+                recursion_depth = 1
+                print("⚠️  Invalid input. Using recursion depth 1.")
+    # ─────────────────────────────────────────────────────────────────────────
+
+    mode = input("\nSingle URL or Multiple URLs? (1/2): ").strip()
+    
+    urls = []
+    classes = None
+    ids = None
+    link_classes = None
+    
+    if content_type == 'tables':
+        classes = parse_comma_separated(
+            input("\nEnter table class(es) (optional, comma separated):\n> ").strip()
+        )
+        ids = parse_comma_separated(
+            input("\nEnter container ID(s) (optional, comma separated):\n> ").strip()
+        )
+    else:
+        link_classes = parse_comma_separated(
+            input("\nEnter link class(es) (optional, comma separated):\n> ").strip()
+        )
+        ids = parse_comma_separated(
+            input("\nEnter container ID(s) (optional, comma separated):\n> ").strip()
+        )
+    
+    if mode == '1':
+        url_input = input("\nEnter website URL:\n> ").strip()
+        
+        if re.search(r'/\d+$', url_input):
+            url = url_input
+            num_pages = 1
+        elif re.search(r'\{(\d+)\}', url_input):
+            num_pages = int(re.search(r'\{(\d+)\}', url_input).group(1))
+            url = re.sub(r'\{\d+\}', '{}', url_input)
+        else:
+            url = url_input
+            num_pages = 1
+            
+        urls.append((url, num_pages))
+        
+        # ADDENDUM: Always .xlsx for both tables and links
+        default_name = generate_unique_filename(
+            urlparse(url).netloc.replace('www.', '')[:20] + '.xlsx',
+            'xlsx'
+        )
+        filename = input(f"\nEnter output filename (default: {default_name}):\n> ").strip() or default_name
+        
+        # ADDENDUM: Enforce .xlsx extension regardless of what user typed
+        if not filename.endswith('.xlsx'):
+            filename = os.path.splitext(filename)[0] + '.xlsx'
+        
+        # ── Links with recursion: use recursive fetcher directly ─────────────
+        if content_type == 'links' and recursion_depth > 0:
+            print(f"\n⏳ Starting recursive link extraction (depth={recursion_depth})...")
+            df = build_links_dataframe(
+                url, "Given Link", recursion_depth,
+                classes=classes, ids=ids, link_classes=link_classes
+            )
+            if not df.empty:
+                save_content(df, content_type, filename, url, "Given Link", recursion_depth)
+            else:
+                print("\n❌ No content extracted. Check URL and parameters")
+        # ── All other cases: existing extraction path ─────────────────────────
+        else:
+            content = extract_url(
+                url, 
+                content_type, 
+                classes=classes, 
+                ids=ids, 
+                link_classes=link_classes, 
+                num_pages=num_pages
+            )
+            if content:
+                save_content(content, content_type, filename, url, "Given Link", recursion_depth)
+            else:
+                print("\n❌ No content extracted. Check URL and parameters")
+        
+    elif mode == '2':
+        print("\nEnter URLs (space/comma separated, multiple lines allowed):")
+        print("Press Enter twice when finished")
+        lines = []
+        while True:
+            line = input("> ").strip()
+            if line:
+                lines.append(line)
+            else:
+                break
+                
+        combined_input = " ".join(lines)
+        raw_urls = re.split(r'[,\s]+', combined_input)
+        urls = []
+        
+        for url in raw_urls:
+            if not url:
+                continue
+                
+            if re.search(r'/\d+$', url):
+                urls.append((url, 1))
+            elif re.search(r'\{(\d+)\}', url):
+                num_pages = int(re.search(r'\{(\d+)\}', url).group(1))
+                base_url = re.sub(r'\{\d+\}', '{}', url)
+                urls.append((base_url, num_pages))
+            else:
+                urls.append((url, 1))
+        
+        print(f"\nFound {len(urls)} URLs to process")
+        
+        output_mode = input("\nSave in single file or multiple files? (1/2): ").strip()
+        
+        if output_mode == '1':
+            if content_type == 'tables' and not excel_support:
+                print("\n❌ Excel support not available. Saving as multiple files instead")
+                output_mode = '2'
+            else:
+                # ADDENDUM: Always use xlsx
+                default_ext = 'xlsx'
+                filename = input(f"\nEnter output filename (default: combined.{default_ext}):\n> ").strip()
+                if not filename:
+                    filename = f"combined.{default_ext}"
+                elif '.' not in filename:
+                    filename += f".{default_ext}"
+                elif not filename.endswith('.xlsx'):
+                    # ADDENDUM: redirect any other extension to xlsx
+                    filename = os.path.splitext(filename)[0] + '.xlsx'
+                    
+                if content_type == 'tables':
+                    try:
+                        import openpyxl
+                        workbook = openpyxl.Workbook()
+                        workbook.remove(workbook.active)
+                        
+                        for i, (url, num_pages) in enumerate(urls):
+                            print(f"\nProcessing URL {i+1}/{len(urls)}: {url}")
+                            content = extract_url(
+                                url, content_type, 
+                                classes=classes, 
+                                ids=ids, 
+                                link_classes=link_classes, 
+                                num_pages=num_pages
+                            )
+                            
+                            if content:
+                                domain = urlparse(url).netloc.replace('www.', '')[:15]
+                                sheet_name = clean_sheet_name(f"{domain}_{i+1}")
+                                worksheet = workbook.create_sheet(sheet_name)
+                                
+                                table_groups = group_tables(content)
+                                
+                                current_row = 1
+                                
+                                for group_idx, group in enumerate(table_groups):
+                                    worksheet.cell(row=current_row, column=1, value=f"Table Group {group_idx+1}")
+                                    current_row += 1
+                                    
+                                    # ADDENDUM: Source URL + Source Link Text headers in cols 1 & 2
+                                    worksheet.cell(row=current_row, column=1, value="Source URL")
+                                    worksheet.cell(row=current_row, column=2, value="Source Link Text")
+                                    headers = group[0].columns.tolist()
+                                    for col_idx, header in enumerate(headers, 3):
+                                        worksheet.cell(row=current_row, column=col_idx, value=header)
+                                    current_row += 1
+                                    
+                                    for table in group:
+                                        for row_idx, row in table.iterrows():
+                                            # ADDENDUM: Source URL + "Given Link" in cols 1 & 2
+                                            worksheet.cell(row=current_row, column=1, value=url)
+                                            worksheet.cell(row=current_row, column=2, value="Given Link")
+                                            for col_idx, value in enumerate(row, 3):
+                                                worksheet.cell(row=current_row, column=col_idx, value=value)
+                                            current_row += 1
+                                    
+                                    current_row += 5
+                                
+                                print(f"  💾 Added sheet: {sheet_name}")
+                            else:
+                                print(f"  ⚠️ No content for {url}")
+                        
+                        workbook.save(filename)
+                        print(f"\n💾 Saved Excel with {len(workbook.sheetnames)} sheets: {os.path.abspath(filename)}")
+                    except Exception as e:
+                        print(f"🚨 Excel save failed: {str(e)}")
+
+                else:
+                    # ADDENDUM: Links — build structured DataFrames per URL and combine
+                    all_dfs = []
+                    for i, (url, num_pages) in enumerate(urls):
+                        print(f"\nProcessing URL {i+1}/{len(urls)}: {url}")
+                        
+                        if recursion_depth > 0:
+                            # Recursive extraction
+                            df = build_links_dataframe(
+                                url, "Given Link", recursion_depth,
+                                classes=classes, ids=ids, link_classes=link_classes
+                            )
+                        else:
+                            # Standard extraction then structure
+                            content = extract_url(
+                                url, content_type,
+                                classes=classes,
+                                ids=ids,
+                                link_classes=link_classes,
+                                num_pages=num_pages
+                            )
+                            df = build_links_dataframe(url, "Given Link", 0, content=content)
+                        
+                        if not df.empty:
+                            all_dfs.append(df)
+                        else:
+                            print(f"  ⚠️ No content for {url}")
+                    
+                    if all_dfs:
+                        combined_df = pd.concat(all_dfs, ignore_index=True)
+                        save_content(combined_df, content_type, filename, None, "Given Link", recursion_depth)
+                    else:
+                        print("\n❌ No content extracted from any URLs")
+                
+        if output_mode == '2':
+            output_dir = input("\nEnter output directory (default: current directory):\n> ").strip()
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+                
+            for i, (url, num_pages) in enumerate(urls):
+                print(f"\nProcessing URL {i+1}/{len(urls)}: {url}")
+
+                # ADDENDUM: Always .xlsx extension
+                base_name = urlparse(url).netloc.replace('www.', '')[:20] + '.xlsx'
+                if output_dir:
+                    base_path = os.path.join(output_dir, base_name)
+                else:
+                    base_path = base_name
+                
+                filename = generate_unique_filename(base_path, 'xlsx')
+                
+                if content_type == 'links' and recursion_depth > 0:
+                    # ADDENDUM: Recursive link extraction per URL
+                    df = build_links_dataframe(
+                        url, "Given Link", recursion_depth,
+                        classes=classes, ids=ids, link_classes=link_classes
+                    )
+                    if not df.empty:
+                        save_content(df, content_type, filename, url, "Given Link", recursion_depth)
+                    else:
+                        print(f"  ⚠️ No content for {url}")
+                else:
+                    content = extract_url(
+                        url, content_type, 
+                        classes=classes, 
+                        ids=ids, 
+                        link_classes=link_classes, 
+                        num_pages=num_pages
+                    )
+                    
+                    if content:
+                        save_content(content, content_type, filename, url, "Given Link", recursion_depth)
+                    else:
+                        print(f"  ⚠️ No content for {url}")
+    
+    print("\n✅ Extraction complete! Happy analyzing!")
+    print("="*50 + "\n")
+
+if __name__ == "__main__":
+    main()
