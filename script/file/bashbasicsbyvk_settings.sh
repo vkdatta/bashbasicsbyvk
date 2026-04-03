@@ -141,6 +141,45 @@ _remove_colors_from_rc() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+get_nanorc() {
+    if [ -n "$TERMUX_VERSION" ] || [ -d "/data/data/com.termux" ]; then
+        echo "$HOME/.termux/nanorc"
+        return
+    fi
+
+    if [ -n "$XDG_CONFIG_HOME" ]; then
+        echo "$XDG_CONFIG_HOME/nano/nanorc"
+        return
+    fi
+
+    echo "$HOME/.config/nano/nanorc"
+}
+
+set_nanorc() {
+    local nanorc_file
+    nanorc_file="$(get_nanorc)"
+
+    mkdir -p "$(dirname "$nanorc_file")"
+    touch "$nanorc_file"
+
+    if grep -q "^# bashbasicsbyvk nano settings$" "$nanorc_file"; then
+        return
+    fi
+
+    {
+        echo ""
+        echo "# bashbasicsbyvk nano settings"
+        echo "set mouse"
+        echo "set smarthome"
+        echo "set wordbounds"
+        echo "set indicator"
+        echo "set linenumbers"
+        echo "set zap"
+    } >> "$nanorc_file"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 settings_menu() {
     echo "Settings:"
     echo "1) Hidden file settings ($show_hidden_files)"
@@ -327,3 +366,4 @@ save_settings() {
 }
 
 apply_colors
+set_nanorc
