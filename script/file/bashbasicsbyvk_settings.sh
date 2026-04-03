@@ -141,23 +141,18 @@ _remove_colors_from_rc() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-get_nanorc() {
-    if [ -n "$TERMUX_VERSION" ] || [ -d "/data/data/com.termux" ]; then
-        echo "$HOME/.termux/nanorc"
-        return
-    fi
-
-    if [ -n "$XDG_CONFIG_HOME" ]; then
-        echo "$XDG_CONFIG_HOME/nano/nanorc"
-        return
-    fi
-
-    echo "$HOME/.config/nano/nanorc"
+_get_nanorc_file() {
+    local current_shell
+    current_shell="$(basename "${SHELL:-bash}")"
+    case "$current_shell" in
+        fish) echo "$HOME/.config/fish/nanorc" ;;
+        *)    echo "$HOME/.nanorc" ;;
+    esac
 }
 
 import_nanorc_settings() {
     local nanorc_file
-    nanorc_file="$(get_nanorc)"
+    nanorc_file="$(_get_nanorc_file)"
 
     mkdir -p "$(dirname "$nanorc_file")"
     touch "$nanorc_file"
