@@ -155,7 +155,7 @@ get_nanorc() {
     echo "$HOME/.config/nano/nanorc"
 }
 
-set_nanorc() {
+import_nanorc_settings() {
     local nanorc_file
     nanorc_file="$(get_nanorc)"
 
@@ -187,8 +187,9 @@ settings_menu() {
     echo "3) Terminal background color (#${terminal_bg_color})"
     echo "4) Terminal text color (#${terminal_text_color})"
     echo "5) Restore ALL settings to default"
+    echo "6) Import nano settings"
 
-    read -r -p "Enter choice [1-5]: " main_choice
+    read -r -p "Enter choice [1-6]: " main_choice
 
     case "$main_choice" in
         1) hidden_file_settings ;;
@@ -196,6 +197,7 @@ settings_menu() {
         3) terminal_bg_color_settings ;;
         4) terminal_text_color_settings ;;
         5) restore_all_defaults ;;
+        6) import_nanorc_settings ;;
         *) echo "Invalid choice" ;;
     esac
 }
@@ -366,4 +368,3 @@ save_settings() {
 }
 
 apply_colors
-set_nanorc
