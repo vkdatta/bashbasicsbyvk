@@ -5,10 +5,8 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-FILE="$1"
-
-if [ ! -f "$FILE" ]; then
-  echo "Error: File '$FILE' not found."
+if [ ! -f "$1" ]; then
+  echo "Error: File '$1' not found."
   exit 1
 fi
 
@@ -38,20 +36,11 @@ else
     COPY_CMD="osc52"
 fi
 
-CHUNK_SIZE=4000
-DELAY=0.05
-
-copy_osc52() {
-    base64 -w0 "$FILE" | fold -w $CHUNK_SIZE | while read -r chunk; do
-        printf "\033]52;c;%s\a" "$chunk"
-        sleep $DELAY
-    done
-}
-
 if [ "$COPY_CMD" == "osc52" ]; then
-    copy_osc52
-    echo "✅ Success: Contents of '$FILE' sent to local clipboard via $METHOD (chunked)."
+    PAYLOAD=$(base64 < "$1" | tr -d '[:space:]')
+    printf "\033]52;c;%s\a" "$PAYLOAD"
+    echo "✅ Success: Contents of '$1' sent to local clipboard via $METHOD."
 else
-    cat "$FILE" | $COPY_CMD
-    echo "✅ Success: Contents of '$FILE' copied via $METHOD."
+    cat "$1" | $COPY_CMD
+    echo "✅ Success: Contents of '$1' copied via $METHOD."
 fi
