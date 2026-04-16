@@ -10,16 +10,7 @@ if [ ! -f "$1" ]; then
   exit 1
 fi
 
-# Size limit check (75 KB is the realistic safe max for most setups)
-MAX_BYTES=7500000
-FILE_SIZE=$(stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || wc -c < "$1")
-if [ "$FILE_SIZE" -gt "$MAX_BYTES" ]; then
-  echo "❌ Error: File is ${FILE_SIZE} bytes — too large for OSC 52."
-  echo "   (Most terminals only support \~75 KB max clipboard copy via OSC 52)"
-  echo "   Tip: Use 'scp' / download the file, or split it and copy pieces."
-  exit 1
-fi
-
+# Determine copy method
 if [ -n "$DEVSHELL_PROJECT_ID" ]; then
     METHOD="OSC 52 (Cloud Shell)"
     COPY_CMD="osc52"
@@ -46,16 +37,73 @@ else
     COPY_CMD="osc52"
 fi
 
+# OSC52 with EAGAIN handling
 if [ "$COPY_CMD" == "osc52" ]; then
-    # Safer way: stream base64 in chunks so we never build one huge string in memory
-    PAYLOAD=$(base64 < "$1" | tr -d '[:space:]')
-    # Send in small printf chunks (prevents EAGAIN-like truncation)
-    printf '\033]52;c;' 
-    printf '%s' "$PAYLOAD" | fold -w 4096 | while IFS= read -r chunk; do
-        printf '%s' "$chunk"
-    done
-    printf '\a'
-    echo "✅ Success: Contents of '$1' sent to local clipboard via $METHOD."
+    FILE_SIZE=$(wc -c < "$1")
+    
+    # Max ~700 bytes to stay under 1024 byte write limit after base64 encoding
+    # (base64 adds ~33% overhead: 700 * 1.33 = 931, plus 8 bytes OSC overhead = 939 < 1024)
+    SAFE_LIMIT=700
+    
+    if [ "$FILE_SIZE" -gt "$SAFE_LIMIT" ] && command -v python3 &> /dev/null; then
+        # Use Python to handle EAGAIN retries properly
+        python3 << 'EOF' - "$1"
+import sys
+import os
+import errno
+import base64
+
+filename = sys.argv[1]
+try:
+    with open(filename, 'rb') as f:
+        data = f.read(74994)  # Read up to protocol max, but we'll hit safe limits first
+    
+    # Encode to base64
+    payload = base64.b64encode(data).decode('ascii')
+    
+    # Build OSC52 sequence
+    osc = f"\033]52;c;{payload}\a"
+    if os.environ.get('TMUX') or os.environ.get('TERM', '').startswith('screen'):
+        osc = f"\033Ptmux;\033{osc}\033\\"
+    
+    # Write to stdout with EAGAIN handling
+    buf = osc.encode('latin-1')
+    fd = sys.stdout.fileno()
+    
+    while buf:
+        try:
+            n = os.write(fd, buf)
+            buf = buf[n:]
+        except OSError as e:
+            if e.errno == errno.EAGAIN:
+                import select
+                select.select([], [fd], [])  # Wait until writable
+                continue
+            raise
+    
+    sys.stderr.write(f"✅ Success: Contents of '{filename}' sent via OSC 52 (Python handler, {len(data)} bytes).\n")
+    if len(data) == 74994:
+        sys.stderr.write("   (Note: File truncated to 74KB due to protocol limits)\n")
+except Exception as e:
+    sys.stderr.write(f"❌ Error: {e}\n")
+    sys.exit(1)
+EOF
+    else
+        # Fallback to pure bash for small files only
+        PAYLOAD=$(head -c "$SAFE_LIMIT" "$1" | base64 | tr -d '\n\r')
+        
+        if [ "$FILE_SIZE" -gt "$SAFE_LIMIT" ]; then
+            echo "⚠️  Warning: File is ${FILE_SIZE} bytes (limit ${SAFE_LIMIT}). Truncating to prevent clipboard corruption..." >&2
+            echo "   (Install python3 to handle larger files)" >&2
+        fi
+        
+        if [ -n "$TMUX" ] || [[ "$TERM" == screen* ]]; then
+            printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$PAYLOAD"
+        else
+            printf "\033]52;c;%s\a" "$PAYLOAD"
+        fi
+        echo "✅ Success: Contents of '$1' sent via $METHOD (limited to ${SAFE_LIMIT} bytes)."
+    fi
 else
     cat "$1" | $COPY_CMD
     echo "✅ Success: Contents of '$1' copied via $METHOD."
