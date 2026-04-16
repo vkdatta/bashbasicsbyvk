@@ -11,7 +11,7 @@ if [ ! -f "$1" ]; then
 fi
 
 # Size limit check (75 KB is the realistic safe max for most setups)
-MAX_BYTES=75000
+MAX_BYTES=7500000
 FILE_SIZE=$(stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || wc -c < "$1")
 if [ "$FILE_SIZE" -gt "$MAX_BYTES" ]; then
   echo "❌ Error: File is ${FILE_SIZE} bytes — too large for OSC 52."
