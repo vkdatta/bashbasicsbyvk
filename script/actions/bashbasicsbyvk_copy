@@ -10,59 +10,37 @@ if [ ! -f "$1" ]; then
   exit 1
 fi
 
-# Cloud Shell = very strict OSC 52 limit
 if [ -n "$DEVSHELL_PROJECT_ID" ]; then
-  MAX_BYTES=2048          # safe max for hterm (≈ 2 KB original text)
-  METHOD="OSC 52 (Cloud Shell)"
-else
-  MAX_BYTES=75000
-  METHOD="OSC 52 (Generic)"
-fi
-
-FILE_SIZE=$(stat -c %s "$1" 2>/dev/null || wc -c < "$1")
-if [ "$FILE_SIZE" -gt "$MAX_BYTES" ]; then
-  echo "❌ File too large for OSC 52 in Cloud Shell (${FILE_SIZE} bytes)."
-  echo ""
-  echo "💡 Best fix — run this on your LOCAL laptop:"
-  echo "   gcloud cloud-shell scp --download cloudshell:$1 ."
-  echo ""
-  echo "   (It will download epic.js directly to your computer)"
-  exit 1
-fi
-
-# === OSC 52 path (Cloud Shell or headless) ===
-if [ -n "$DEVSHELL_PROJECT_ID" ] || \
-   ! command -v pbcopy &> /dev/null && \
-   ! command -v xclip &> /dev/null && \
-   ! command -v xsel &> /dev/null && \
-   ! command -v wl-copy &> /dev/null && \
-   ! command -v termux-clipboard-set &> /dev/null && \
-   ! command -v clip.exe &> /dev/null; then
-
-  ENCODED=$(base64 -w0 < "$1")
-  printf '\033]52;c;%s\a' "$ENCODED" > /dev/tty
-  echo "✅ Success: Contents of '$1' sent to local clipboard via $METHOD."
-
-else
-  # Native clipboard tools (macOS, Linux, etc.)
-  if command -v pbcopy &> /dev/null; then
-    cat "$1" | pbcopy
+    METHOD="OSC 52 (Cloud Shell)"
+    COPY_CMD="osc52"
+elif command -v pbcopy &> /dev/null; then
     METHOD="pbcopy (macOS)"
-  elif command -v xclip &> /dev/null; then
-    cat "$1" | xclip -selection clipboard
+    COPY_CMD="pbcopy"
+elif command -v xclip &> /dev/null; then
     METHOD="xclip (Linux/X11)"
-  elif command -v xsel &> /dev/null; then
-    cat "$1" | xsel --clipboard --input
+    COPY_CMD="xclip -selection clipboard"
+elif command -v xsel &> /dev/null; then
     METHOD="xsel (Linux/X11)"
-  elif command -v wl-copy &> /dev/null; then
-    cat "$1" | wl-copy
+    COPY_CMD="xsel --clipboard --input"
+elif command -v wl-copy &> /dev/null; then
     METHOD="wl-copy (Wayland)"
-  elif command -v termux-clipboard-set &> /dev/null; then
-    cat "$1" | termux-clipboard-set
+    COPY_CMD="wl-copy"
+elif command -v termux-clipboard-set &> /dev/null; then
     METHOD="termux-api (Android)"
-  elif command -v clip.exe &> /dev/null; then
-    cat "$1" | clip.exe
+    COPY_CMD="termux-clipboard-set"
+elif command -v clip.exe &> /dev/null; then
     METHOD="clip.exe (WSL/Windows)"
-  fi
-  echo "✅ Success: Contents of '$1' copied via $METHOD."
+    COPY_CMD="clip.exe"
+else
+    METHOD="OSC 52 (Generic Headless)"
+    COPY_CMD="osc52"
+fi
+
+if [ "$COPY_CMD" == "osc52" ]; then
+    PAYLOAD=$(base64 < "$1" | tr -d '[:space:]')
+    printf "\033]52;c;%s\a" "$PAYLOAD"
+    echo "✅ Success: Contents of '$1' sent to local clipboard via $METHOD."
+else
+    cat "$1" | $COPY_CMD
+    echo "✅ Success: Contents of '$1' copied via $METHOD."
 fi
