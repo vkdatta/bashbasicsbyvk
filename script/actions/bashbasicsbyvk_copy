@@ -37,9 +37,26 @@ else
 fi
 
 if [ "$COPY_CMD" == "osc52" ]; then
-    PAYLOAD=$(base64 < "$1" | tr -d '[:space:]')
-    printf "\033]52;c;%s\a" "$PAYLOAD"
+    MAX_BYTES=74994
+    
+    FILE_SIZE=$(wc -c < "$1")
+    
+    if [ "$FILE_SIZE" -gt "$MAX_BYTES" ]; then
+        echo "⚠️  Warning: File is $FILE_SIZE bytes (limit ${MAX_BYTES}). Truncating..." >&2
+    fi
+    
+    PAYLOAD=$(head -c "$MAX_BYTES" "$1" | base64 | tr -d '\n\r')
+    
+    if [ -n "$TMUX" ] || [[ "$TERM" == screen* ]]; then
+        printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$PAYLOAD"
+    else
+        printf "\033]52;c;%s\a" "$PAYLOAD"
+    fi
+    
     echo "✅ Success: Contents of '$1' sent to local clipboard via $METHOD."
+    if [ "$FILE_SIZE" -gt "$MAX_BYTES" ]; then
+        echo "   (Note: Only first ${MAX_BYTES} bytes copied due to terminal limits)" >&2
+    fi
 else
     cat "$1" | $COPY_CMD
     echo "✅ Success: Contents of '$1' copied via $METHOD."
