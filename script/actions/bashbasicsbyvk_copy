@@ -10,64 +10,59 @@ if [ ! -f "$1" ]; then
   exit 1
 fi
 
-# hterm (Cloud Shell) officially supports up to \~75 KB original text
-# (100000-byte OSC sequence limit)
+# Cloud Shell = very strict OSC 52 limit
 if [ -n "$DEVSHELL_PROJECT_ID" ]; then
-  MAX_BYTES=75000
+  MAX_BYTES=2048          # safe max for hterm (≈ 2 KB original text)
   METHOD="OSC 52 (Cloud Shell)"
 else
   MAX_BYTES=75000
   METHOD="OSC 52 (Generic)"
 fi
 
-FILE_SIZE=$(stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || wc -c < "$1")
+FILE_SIZE=$(stat -c %s "$1" 2>/dev/null || wc -c < "$1")
 if [ "$FILE_SIZE" -gt "$MAX_BYTES" ]; then
-  echo "❌ File too large (${FILE_SIZE} bytes) for OSC 52."
-  echo "   Run this on your laptop instead:"
+  echo "❌ File too large for OSC 52 in Cloud Shell (${FILE_SIZE} bytes)."
+  echo ""
+  echo "💡 Best fix — run this on your LOCAL laptop:"
   echo "   gcloud cloud-shell scp --download cloudshell:$1 ."
+  echo ""
+  echo "   (It will download epic.js directly to your computer)"
   exit 1
 fi
 
-# === Neovim-style reliable write (retries on EAGAIN/EINTR) ===
-safe_osc52() {
-  local payload
-  payload=$(base64 -w0 < "$1")
-
-  # Build the full sequence once
-  local seq=\( '\033]52;c;' \){payload}$'\a'
-
-  # Write to /dev/tty with retry loop (exact os_write behaviour)
-  exec 3>/dev/tty
-  local i=0 chunk_size=4096
-  while [ \( i -lt " \){#seq}" ]; do
-    local chunk="${seq:$i:$chunk_size}"
-    printf '%s' "$chunk" >&3 2>/dev/null || {
-      # EAGAIN / EINTR handling
-      sleep 0.001
-      continue
-    }
-    i=$((i + ${#chunk}))
-  done
-  exec 3>&-
-}
-
-if [ -n "$DEVSHELL_PROJECT_ID" ] || ! command -v pbcopy &> /dev/null && \
-   ! command -v xclip &> /dev/null && ! command -v xsel &> /dev/null && \
-   ! command -v wl-copy &> /dev/null && ! command -v termux-clipboard-set &> /dev/null && \
+# === OSC 52 path (Cloud Shell or headless) ===
+if [ -n "$DEVSHELL_PROJECT_ID" ] || \
+   ! command -v pbcopy &> /dev/null && \
+   ! command -v xclip &> /dev/null && \
+   ! command -v xsel &> /dev/null && \
+   ! command -v wl-copy &> /dev/null && \
+   ! command -v termux-clipboard-set &> /dev/null && \
    ! command -v clip.exe &> /dev/null; then
-  safe_osc52 "$1"
+
+  ENCODED=$(base64 -w0 < "$1")
+  printf '\033]52;c;%s\a' "$ENCODED" > /dev/tty
   echo "✅ Success: Contents of '$1' sent to local clipboard via $METHOD."
+
 else
-  # native clipboard tools (macOS, Linux, etc.)
+  # Native clipboard tools (macOS, Linux, etc.)
   if command -v pbcopy &> /dev/null; then
     cat "$1" | pbcopy
     METHOD="pbcopy (macOS)"
   elif command -v xclip &> /dev/null; then
     cat "$1" | xclip -selection clipboard
-    METHOD="xclip (Linux)"
-  # ... (rest of your original detection unchanged)
-  else
-    cat "$1" | wl-copy || cat "$1" | xsel --clipboard --input || true
+    METHOD="xclip (Linux/X11)"
+  elif command -v xsel &> /dev/null; then
+    cat "$1" | xsel --clipboard --input
+    METHOD="xsel (Linux/X11)"
+  elif command -v wl-copy &> /dev/null; then
+    cat "$1" | wl-copy
+    METHOD="wl-copy (Wayland)"
+  elif command -v termux-clipboard-set &> /dev/null; then
+    cat "$1" | termux-clipboard-set
+    METHOD="termux-api (Android)"
+  elif command -v clip.exe &> /dev/null; then
+    cat "$1" | clip.exe
+    METHOD="clip.exe (WSL/Windows)"
   fi
   echo "✅ Success: Contents of '$1' copied via $METHOD."
 fi
