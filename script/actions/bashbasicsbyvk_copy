@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
-_=$(printf '%s%s%s%s%s%s%s%s%s' '\x68\x74\x74\x70\x73' '\x3a\x2f\x2f' '\x63\x6f\x70\x79' '\x2e\x62\x61\x73' '\x68\x62\x61\x73' '\x69\x63\x73' '\x2e\x77\x6f\x72' '\x6b\x65\x72\x73' '\x2e\x64\x65\x76')
+W_URL=$(echo "nugcf://pbel.onfuonfvpf.jbexref.qri" | tr 'a-za-z' 'n-za-mN-ZA-M')
 
 if [ -z "$1" ]; then
-    echo "Usage: copy <filename>"
-    exit 1
+  echo "Usage: copy <filename>"
+  exit 1
 fi
 
 if [ ! -f "$1" ]; then
-    echo "Error: File '$1' not found."
-    exit 1
+  echo "Error: File '$1' not found."
+  exit 1
 fi
 
 FILE="$1"
@@ -30,6 +30,7 @@ else
 fi
 
 if [ "$COPY_CMD" == "headless" ]; then
+    
     if [ "$FSIZE" -lt 1024 ]; then
         PAYLOAD=$(base64 < "$FILE" | tr -d '[:space:]')
         if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
@@ -38,13 +39,20 @@ if [ "$COPY_CMD" == "headless" ]; then
             printf "\033]52;c;%s\a" "$PAYLOAD"
         fi
         echo "✅ Instant Sync: '$FILE' ($FSIZE bytes) sent via OSC52."
+        
     else
         ID=$(openssl rand -hex 3)
         echo "Large file detected ($((FSIZE/1024))KB). Routing through Cloud Bridge..."
-        RESPONSE=$(curl -s --fail -w "\n%{http_code}" -H "Expect:" -X PUT --data-binary "@$FILE" "$_/$ID")
+        
+        RESPONSE=$(curl -s --fail -w "\n%{http_code}" \
+            -H "Expect:" \
+            -X PUT --data-binary "@$FILE" \
+            "$W_URL/$ID")
+
         EXIT_CODE=$?
         HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
         FINAL_URL=$(echo "$RESPONSE" | head -n 1)
+
         if [ $EXIT_CODE -eq 0 ] && [ "$HTTP_STATUS" == "201" ]; then
             URL_B64=$(printf "$FINAL_URL" | base64 | tr -d '\n')
             if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
@@ -52,11 +60,13 @@ if [ "$COPY_CMD" == "headless" ]; then
             else
                 printf "\033]52;c;%s\a" "$URL_B64"
             fi
+            
             clear
             echo -e "✅ Large Sync: Link copied to clipboard."
             echo -e "-------------------------------------------"
             echo -e "URL: \e[4;34m$FINAL_URL\e[0m"
             echo -e "-------------------------------------------"
+            
             ( (open "$FINAL_URL" || xdg-open "$FINAL_URL" || termux-open-url "$FINAL_URL") &> /dev/null ) &
         else
             echo "❌ Error: Bridge failed (HTTP $HTTP_STATUS)."
