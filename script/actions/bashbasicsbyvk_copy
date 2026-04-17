@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # --- CONFIGURATION ---
-WORKER_URL="https://headless-sync-bridge.klines.workers.dev"
+WORKER_URL="https://copy.bashbasics.workers.dev"
 
 if [ -z "$1" ]; then
   echo "Usage: copy <filename>"
