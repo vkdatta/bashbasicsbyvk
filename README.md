@@ -55,7 +55,7 @@ pip install openpyxl
 
 ---
 
-### Storage Setup
+### Storage Setup (for termux)
 
 If you're in Termux, enable storage access in your environment using:
 
