@@ -1,35 +1,54 @@
 #!/usr/bin/env bash
 
-# --- CONFIGURATION ---
 WORKER_URL="https://copy.bashbasics.workers.dev"
-MAX_OSC52_BYTES=1024  # 1KB threshold
+MAX_OSC52_BYTES=1024
 
-if [ -z "$1" ]; then
-  echo "Usage: copy <filename>"
-  exit 1
+TEMP_MODE=false
+
+if [ -n "$1" ]; then
+
+    if [ ! -f "$1" ]; then
+        echo "❌ Error: File '$1' not found."
+        exit 1
+    fi
+
+    FILE="$1"
+
+else
+
+    if [ -t 0 ]; then
+        echo "Usage:"
+        echo "  bashbasicsbyvk_copy <filename>"
+        echo "  cat file.txt | bashbasicsbyvk_copy"
+        echo "  echo hello | bashbasicsbyvk_copy"
+        exit 1
+    fi
+
+    FILE=$(mktemp)
+    TEMP_MODE=true
+
+    cat > "$FILE"
 fi
 
-if [ ! -f "$1" ]; then
-  echo "Error: File '$1' not found."
-  exit 1
-fi
-
-FILE="$1"
 FILE_SIZE=$(stat -c%s "$FILE")
 
-# --- DETECT BEST LOCAL METHOD ---
 if command -v pbcopy &> /dev/null; then
     COPY_CMD="pbcopy"
+
 elif command -v clip.exe &> /dev/null; then
     COPY_CMD="clip.exe"
+
 elif command -v wl-copy &> /dev/null; then
     COPY_CMD="wl-copy"
+
 elif command -v xclip &> /dev/null; then
     COPY_CMD="xclip -selection clipboard"
+
 elif command -v termux-clipboard-set &> /dev/null; then
     COPY_CMD="termux-clipboard-set"
+
 else
-    # No native clipboard tool found, use logic for headless environment
+
     if [ "$FILE_SIZE" -le "$MAX_OSC52_BYTES" ]; then
         COPY_CMD="osc52-direct"
     else
@@ -37,55 +56,74 @@ else
     fi
 fi
 
-# --- EXECUTION ---
-
-# Option A: Local Tool
 if [[ "$COPY_CMD" != "osc52-direct" && "$COPY_CMD" != "worker-bridge" ]]; then
-    cat "$FILE" | $COPY_CMD
+
+    cat "$FILE" | eval "$COPY_CMD"
+
     echo "✅ Success: Copied via $COPY_CMD."
 
-# Option B: OSC 52 Direct (Small file, headless)
 elif [ "$COPY_CMD" == "osc52-direct" ]; then
+
     PAYLOAD=$(base64 < "$FILE" | tr -d '[:space:]')
+
     if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
         printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$PAYLOAD"
     else
         printf "\033]52;c;%s\a" "$PAYLOAD"
     fi
-    echo "✅ Success: Small file (<1KB) copied via OSC 52 escape sequence."
 
-# Option C: Worker Bridge (Large file, headless)
+    echo "✅ Success: Small file (<1KB) copied via OSC52."
+
 else
+
     ID=$(openssl rand -hex 3)
-    echo "Size ($((FILE_SIZE / 1024))KB) exceeds OSC 52 limit. Pushing to Cloud..."
-    
+
+    echo "☁️ Large content detected. Uploading..."
+
     RESPONSE=$(curl -s --fail -w "\n%{http_code}" \
         -H "Expect:" \
-        -X PUT --data-binary "@$FILE" \
+        -X PUT \
+        --data-binary "@$FILE" \
         "$WORKER_URL/$ID")
 
     EXIT_CODE=$?
+
     HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
+
     FINAL_URL=$(echo "$RESPONSE" | head -n 1)
 
     if [ $EXIT_CODE -eq 0 ] && [ "$HTTP_STATUS" == "201" ]; then
-        # Copy the URL to clipboard so you can just Paste in browser
+
+        URL_PAYLOAD=$(printf "%s" "$FINAL_URL" | base64 | tr -d '\n')
+
         if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
-            printf "\033Ptmux;\033\033]52;c;$(printf "$FINAL_URL" | base64 | tr -d '\n')\a\033\\"
+            printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$URL_PAYLOAD"
         else
-            printf "\033]52;c;$(printf "$FINAL_URL" | base64 | tr -d '\n')\a"
+            printf "\033]52;c;%s\a" "$URL_PAYLOAD"
         fi
 
         clear
-        echo -e "✅ Success: Sync link copied to clipboard."
-        echo -e "-------------------------------------------"
-        echo -e "Link: \e[4;34m$FINAL_URL\e[0m"
-        echo -e "-------------------------------------------"
-        
-        # Open browser if possible
-        ( (open "$FINAL_URL" || xdg-open "$FINAL_URL" || termux-open-url "$FINAL_URL") &> /dev/null ) &
+
+        echo "✅ Success: Sync link copied to clipboard."
+        echo "-------------------------------------------"
+        echo "Link: $FINAL_URL"
+        echo "-------------------------------------------"
+
+        (
+            open "$FINAL_URL" \
+            || xdg-open "$FINAL_URL" \
+            || termux-open-url "$FINAL_URL"
+        ) &> /dev/null &
+
     else
         echo "❌ Error: Cloud push failed (HTTP $HTTP_STATUS)."
+
+        [ "$TEMP_MODE" = true ] && rm -f "$FILE"
+
         exit 1
     fi
+fi
+
+if [ "$TEMP_MODE" = true ]; then
+    rm -f "$FILE"
 fi
