@@ -267,6 +267,133 @@ display_imaginary_groups() {
   done
 }
 
+# ----- new helper functions for clean case dispatch -----
+
+handle_rename() {
+  echo "Rename:"
+  echo "1) Select item number to rename (files/folders in current path)"
+  echo "2) Rename current path/folder"
+  read -p "Choice [1-2]: " ren_choice
+  case "$ren_choice" in
+    1)
+      if $imaginary_mode; then
+        echo "Select group number to browse for rename:"
+        read -p "Group number: " gnum
+        if [[ $gnum =~ ^[0-9]+$ ]] && [ "$gnum" -ge 1 ] && [ "$gnum" -le "${#imaginary_map[@]}" ]; then
+          ch="${imaginary_map[$((gnum-1))]}"
+          ch_lower="${ch,,}"
+          items=()
+          while IFS= read -r -d '' _f; do
+            _bn="${_f##*/}"
+            [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
+            ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
+            _bn_lower="${_bn,,}"
+            [[ "$_bn_lower" != "$group_prefix"* ]] && continue
+            _next="${_bn_lower:${#group_prefix}:1}"
+            if [ "$ch" == "#" ]; then
+              [[ "$_next" =~ ^[a-z]$ ]] && continue
+            else
+              [[ "$_next" != "$ch_lower" ]] && continue
+            fi
+            items+=("$_f")
+          done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+          idx=1
+          for item in "${items[@]}"; do
+            [ -d "$item" ] && icon="📁" || icon="📄"
+            printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
+            idx=$((idx+1))
+          done
+          read -p "Enter item number: " num
+          if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
+            rename_item "${items[$((num-1))]}"
+          else
+            echo "❌ Invalid number"
+          fi
+        else
+          echo "❌ Invalid group"
+        fi
+      elif [ ${#items[@]} -eq 0 ]; then
+        echo "❌ No items to rename"
+      else
+        read -p "Enter item number: " num
+        if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
+          rename_item "${items[$((num-1))]}"
+        else
+          echo "❌ Invalid number"
+        fi
+      fi
+      ;;
+    2)
+      rename_item "$path"
+      ;;
+    *)
+      echo "❌ Invalid choice"
+      ;;
+  esac
+}
+
+handle_force_show() {
+  if $force_show; then
+    force_show=false
+    echo "🔓 Force show disabled"
+  else
+    force_show=true
+    echo "🔓 Force show enabled — displaying all items"
+  fi
+}
+
+handle_create() {
+  echo "Create:"
+  echo "1) New folders"
+  echo "2) New files"
+  read -p "Choice: " cr
+  [[ "$cr" == "1" ]] && create_dirs
+  [[ "$cr" == "2" ]] && create_files
+}
+
+handle_selection() {
+  local choice="$1"
+  if $imaginary_mode; then
+    local matched=false
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#imaginary_map[@]}" ]; then
+      ch="${imaginary_map[$((choice-1))]}"
+      matched=true
+    elif [[ ${#choice} -eq 1 ]]; then
+      ch="${choice^^}"
+      for gc in "${group_chars[@]}"; do
+        [[ "$gc" == "$ch" ]] && matched=true && break
+      done
+      [[ "$matched" == false && "$choice" == "#" ]] && ch="#" && matched=true
+    fi
+
+    if $matched; then
+      if [ "$ch" == "#" ]; then
+        group_prefix="${group_prefix}#"
+      else
+        group_prefix="${group_prefix}${ch,,}"
+      fi
+      force_show=false
+    else
+      echo "⚠️  Invalid selection"
+    fi
+  else
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
+      selected="${items[$((choice-1))]}"
+      if [ -d "$selected" ]; then
+        path="$selected"
+        group_prefix=""
+        force_show=false
+      elif [ -f "$selected" ]; then
+        handle_file "$selected"
+      fi
+    else
+      echo "⚠️  Invalid selection"
+    fi
+  fi
+}
+
+# ----- main script -----
+
 path=$(pwd)
 selected_items=()
 group_prefix=""
@@ -345,7 +472,7 @@ while true; do
   fi
   echo
 
-  echo "u) Up   cd) Change directory   t) Transfer"
+  echo "u) Up   cd) Change directory   t) Transfer m) Create Map"
   echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
   echo "q/h) Quit/Home   s) Settings   forceshow) Toggle force show all"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
@@ -353,167 +480,20 @@ while true; do
   read -p "Select: " choice
 
   case "$choice" in
-    q|Q|h|H)
-      exit 0
-      ;;
-    u|U)
-      if [ "$path" != "/" ]; then
-        path=$(dirname "$path")
-        group_prefix=""
-        force_show=false
-      fi
-      continue
-      ;;
-    back)
-      if [ -n "$group_prefix" ]; then
-        group_prefix="${group_prefix%?}"
-        force_show=false
-      fi
-      continue
-      ;;
-    forceshow)
-      if $force_show; then
-        force_show=false
-        echo "🔓 Force show disabled"
-      else
-        force_show=true
-        echo "🔓 Force show enabled — displaying all items"
-      fi
-      continue
-      ;;
-    c|C)
-      echo "Create:"
-      echo "1) New folders"
-      echo "2) New files"
-      read -p "Choice: " cr
-      [[ "$cr" == "1" ]] && create_dirs
-      [[ "$cr" == "2" ]] && create_files
-      continue
-      ;;
-    t|T)
-      transfer_menu
-      continue
-      ;;
-    d|D)
-      delete_items
-      continue
-      ;;
-    f|F)
-      find_menu
-      continue
-      ;;
-    x|X)
-      organise_menu
-      continue
-      ;;
-    s|S)
-      settings_menu
-      continue
-      ;;
-    r|R)
-      echo "Rename:"
-      echo "1) Select item number to rename (files/folders in current path)"
-      echo "2) Rename current path/folder"
-      read -p "Choice [1-2]: " ren_choice
-      case "$ren_choice" in
-        1)
-          if $imaginary_mode; then
-            echo "Select group number to browse for rename:"
-            read -p "Group number: " gnum
-            if [[ $gnum =~ ^[0-9]+$ ]] && [ "$gnum" -ge 1 ] && [ "$gnum" -le "${#imaginary_map[@]}" ]; then
-              ch="${imaginary_map[$((gnum-1))]}"
-              ch_lower="${ch,,}"
-              items=()
-              while IFS= read -r -d '' _f; do
-                _bn="${_f##*/}"
-                [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-                ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
-                _bn_lower="${_bn,,}"
-                [[ "$_bn_lower" != "$group_prefix"* ]] && continue
-                _next="${_bn_lower:${#group_prefix}:1}"
-                if [ "$ch" == "#" ]; then
-                  [[ "$_next" =~ ^[a-z]$ ]] && continue
-                else
-                  [[ "$_next" != "$ch_lower" ]] && continue
-                fi
-                items+=("$_f")
-              done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
-              idx=1
-              for item in "${items[@]}"; do
-                [ -d "$item" ] && icon="📁" || icon="📄"
-                printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
-                idx=$((idx+1))
-              done
-              read -p "Enter item number: " num
-              if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
-                rename_item "${items[$((num-1))]}"
-              else
-                echo "❌ Invalid number"
-              fi
-            else
-              echo "❌ Invalid group"
-            fi
-          elif [ ${#items[@]} -eq 0 ]; then
-            echo "❌ No items to rename"
-          else
-            read -p "Enter item number: " num
-            if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
-              rename_item "${items[$((num-1))]}"
-            else
-              echo "❌ Invalid number"
-            fi
-          fi
-          ;;
-        2)
-          rename_item "$path"
-          ;;
-        *)
-          echo "❌ Invalid choice"
-          ;;
-      esac
-      continue
-      ;;
-    cd|CD|cD|Cd)
-      cd "$path" && exec "$SHELL"
-      ;;
+    q|Q|h|H)               exit 0 ;;
+    u|U)                   if [ "$path" != "/" ]; then path=$(dirname "$path"); group_prefix=""; force_show=false; fi ;;
+    back)                  if [ -n "$group_prefix" ]; then group_prefix="${group_prefix%?}"; force_show=false; fi ;;
+    forceshow)             handle_force_show ;;
+    c|C)                   handle_create ;;
+    t|T)                   transfer_menu ;;
+    d|D)                   delete_items ;;
+    f|F)                   find_menu ;;
+    x|X)                   organise_menu ;;
+    s|S)                   settings_menu ;;
+    r|R)                   handle_rename ;;
+    cd|CD|cD|Cd)           cd "$path" && exec "$SHELL" ;;
+    m|M)                   bashbasicsbyvk_map ;;
+    *)                     handle_selection "$choice" ;;
   esac
-
-  if $imaginary_mode; then
-    matched=false
-    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#imaginary_map[@]}" ]; then
-      ch="${imaginary_map[$((choice-1))]}"
-      matched=true
-    elif [[ ${#choice} -eq 1 ]]; then
-      ch="${choice^^}"
-      for gc in "${group_chars[@]}"; do
-        [[ "$gc" == "$ch" ]] && matched=true && break
-      done
-      [[ "$matched" == false && "$choice" == "#" ]] && ch="#" && matched=true
-    fi
-
-    if $matched; then
-      if [ "$ch" == "#" ]; then
-        group_prefix="${group_prefix}#"
-      else
-        group_prefix="${group_prefix}${ch,,}"
-      fi
-      force_show=false
-    else
-      echo "⚠️  Invalid selection"
-    fi
-  else
-    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
-      selected="${items[$((choice-1))]}"
-      if [ -d "$selected" ]; then
-        path="$selected"
-        group_prefix=""
-        force_show=false
-      elif [ -f "$selected" ]; then
-        handle_file "$selected"
-      fi
-    else
-      echo "⚠️  Invalid selection"
-    fi
-  fi
 
 done
