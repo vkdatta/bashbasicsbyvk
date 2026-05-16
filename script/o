@@ -5,6 +5,7 @@ source "bashbasicsbyvk_organise.sh"
 source "bashbasicsbyvk_find.sh"
 source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_transfer.sh"
+source "bashbasicsbyvk_mapper.sh"
 
 parse_selection() {
   local input="$1"
@@ -492,7 +493,7 @@ while true; do
     s|S)                   settings_menu ;;
     r|R)                   handle_rename ;;
     cd|CD|cD|Cd)           cd "$path" && exec "$SHELL" ;;
-    m|M)                   bashbasicsbyvk_map ;;
+    m|M)                   map_directory ;;
     *)                     handle_selection "$choice" ;;
   esac
 
