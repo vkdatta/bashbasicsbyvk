@@ -7,264 +7,264 @@ source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_transfer.sh"
 
 parse_selection() {
-local input="$1"
-local max="$2"
-local -a indices=()
-IFS=',' read -ra parts <<< "$input"
-for part in "${parts[@]}"; do
-part=$(echo "$part" | xargs)
-if [[ $part =~ ^([0-9]+)-([0-9]+)$ ]]; then
-local start="${BASH_REMATCH[1]}"
-local end="${BASH_REMATCH[2]}"
-for ((i=start; i<=end && i<=max; i++)); do
-indices+=("$i")
-done
-elif [[ $part =~ ^[0-9]+$ ]]; then
-local num="$part"
-(( num >= 1 && num <= max )) && indices+=("$num")
-fi
-done
-echo "${indices[@]}"
+  local input="$1"
+  local max="$2"
+  local -a indices=()
+  IFS=',' read -ra parts <<< "$input"
+  for part in "${parts[@]}"; do
+    part=$(echo "$part" | xargs)
+    if [[ $part =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      local start="${BASH_REMATCH[1]}"
+      local end="${BASH_REMATCH[2]}"
+      for ((i=start; i<=end && i<=max; i++)); do
+        indices+=("$i")
+      done
+    elif [[ $part =~ ^[0-9]+$ ]]; then
+      local num="$part"
+      (( num >= 1 && num <= max )) && indices+=("$num")
+    fi
+  done
+  echo "${indices[@]}"
 }
 
 select_items_common() {
-local prompt="$1"
-if [ ${#items[@]} -eq 0 ]; then
-echo "❌ No items available"
-return 1
-fi
-echo "$prompt (supports ranges: 1-10,15-20,33)"
-read -p "Item numbers: " itemlist
-local indices=($(parse_selection "$itemlist" "${#items[@]}"))
-selected_items=()
-for idx in "${indices[@]}"; do
-selected_items+=("${items[$((idx-1))]}")
-done
-if [ ${#selected_items[@]} -eq 0 ]; then
-echo "❌ No valid items selected"
-return 1
-fi
-return 0
+  local prompt="$1"
+  if [ ${#items[@]} -eq 0 ]; then
+    echo "❌ No items available"
+    return 1
+  fi
+  echo "$prompt (supports ranges: 1-10,15-20,33)"
+  read -p "Item numbers: " itemlist
+  local indices=($(parse_selection "$itemlist" "${#items[@]}"))
+  selected_items=()
+  for idx in "${indices[@]}"; do
+    selected_items+=("${items[$((idx-1))]}")
+  done
+  if [ ${#selected_items[@]} -eq 0 ]; then
+    echo "❌ No valid items selected"
+    return 1
+  fi
+  return 0
 }
 
 select_imaginary_items_common() {
-local p="$1"
-local pfx="$2"
-echo "Select group numbers (supports ranges: 1-3,5):"
-read -p "Group numbers: " grplist
-local indices=($(parse_selection "$grplist" "${#imaginary_map[@]}"))
-if [ "${#indices[@]}" -eq 0 ]; then
-echo "❌ No valid groups selected"
-return 1
-fi
-selected_items=()
-for idx in "${indices[@]}"; do
-local ch="${imaginary_map[$((idx-1))]}"
-local ch_lower="${ch,,}"
-while IFS= read -r -d '' f; do
-local bn="${f##*/}"
-[[ "$bn" == "." || "$bn" == ".." ]] && continue
-! $show_hidden_files && [[ "$bn" == .* ]] && continue
-local bn_lower="${bn,,}"
-[[ "$bn_lower" != "$pfx"* ]] && continue
-local next_char="${bn_lower:${#pfx}:1}"
-if [ "$ch" == "#" ]; then
-[[ "$next_char" =~ ^[a-z]$ ]] && continue
-else
-[[ "$next_char" != "$ch_lower" ]] && continue
-fi
-selected_items+=("$f")
-done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
-done
-local -A _seen=()
-local unique=()
-for f in "${selected_items[@]}"; do
-[ -z "${_seen[$f]+x}" ] && unique+=("$f") && _seen["$f"]=1
-done
-selected_items=("${unique[@]}")
-if [ "${#selected_items[@]}" -eq 0 ]; then
-echo "❌ No items found for selected groups"
-return 1
-fi
-return 0
+  local p="$1"
+  local pfx="$2"
+  echo "Select group numbers (supports ranges: 1-3,5):"
+  read -p "Group numbers: " grplist
+  local indices=($(parse_selection "$grplist" "${#imaginary_map[@]}"))
+  if [ "${#indices[@]}" -eq 0 ]; then
+    echo "❌ No valid groups selected"
+    return 1
+  fi
+  selected_items=()
+  for idx in "${indices[@]}"; do
+    local ch="${imaginary_map[$((idx-1))]}"
+    local ch_lower="${ch,,}"
+    while IFS= read -r -d '' f; do
+      local bn="${f##*/}"
+      [[ "$bn" == "." || "$bn" == ".." ]] && continue
+      ! $show_hidden_files && [[ "$bn" == .* ]] && continue
+      local bn_lower="${bn,,}"
+      [[ "$bn_lower" != "$pfx"* ]] && continue
+      local next_char="${bn_lower:${#pfx}:1}"
+      if [ "$ch" == "#" ]; then
+        [[ "$next_char" =~ ^[a-z]$ ]] && continue
+      else
+        [[ "$next_char" != "$ch_lower" ]] && continue
+      fi
+      selected_items+=("$f")
+    done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+  done
+  local -A _seen=()
+  local unique=()
+  for f in "${selected_items[@]}"; do
+    [ -z "${_seen[$f]+x}" ] && unique+=("$f") && _seen["$f"]=1
+  done
+  selected_items=("${unique[@]}")
+  if [ "${#selected_items[@]}" -eq 0 ]; then
+    echo "❌ No items found for selected groups"
+    return 1
+  fi
+  return 0
 }
 
 rename_item() {
-local target="$1"
-local dir newname
-if [ -d "$target" ]; then
-dir=$(dirname -- "$target")
-read -p "📝 Enter new folder name for '$(basename "$target")': " newname
-mv -v "$target" "$dir/$newname"
-elif [ -f "$target" ]; then
-dir=$(dirname -- "$target")
-read -p "📝 Enter new file name for '$(basename "$target")': " newname
-mv -v "$target" "$dir/$newname"
-else
-echo "❌ Cannot rename: '$target' not found." >&2
-return 1
-fi
+  local target="$1"
+  local dir newname
+  if [ -d "$target" ]; then
+    dir=$(dirname -- "$target")
+    read -p "📝 Enter new folder name for '$(basename "$target")': " newname
+    mv -v "$target" "$dir/$newname"
+  elif [ -f "$target" ]; then
+    dir=$(dirname -- "$target")
+    read -p "📝 Enter new file name for '$(basename "$target")': " newname
+    mv -v "$target" "$dir/$newname"
+  else
+    echo "❌ Cannot rename: '$target' not found." >&2
+    return 1
+  fi
 }
 
 get_abs_path() {
-local target="$1"
-if [ -d "$target" ]; then
-cd -- "$target" && pwd
-elif [ -f "$target" ]; then
-local dir=$(dirname -- "$target")
-local base=$(basename -- "$target")
-echo "$(cd -- "$dir" && pwd)/$base"
-else
-echo "Error: '$target' does not exist" >&2
-return 1
-fi
+  local target="$1"
+  if [ -d "$target" ]; then
+    cd -- "$target" && pwd
+  elif [ -f "$target" ]; then
+    local dir=$(dirname -- "$target")
+    local base=$(basename -- "$target")
+    echo "$(cd -- "$dir" && pwd)/$base"
+  else
+    echo "Error: '$target' does not exist" >&2
+    return 1
+  fi
 }
 
 create_files() {
-read -p "📄 Enter filenames (separated by ,): " filelist
-IFS=',' read -ra files <<< "$filelist"
-for file in "${files[@]}"; do
-touch "$path/$file"
-echo "✅ Created file: $file"
-done
+  read -p "📄 Enter filenames (separated by ,): " filelist
+  IFS=',' read -ra files <<< "$filelist"
+  for file in "${files[@]}"; do
+    touch "$path/$file"
+    echo "✅ Created file: $file"
+  done
 }
 
 create_dirs() {
-read -p "📂 Enter folder names (separated by ,): " dirlist
-IFS=',' read -ra dirs <<< "$dirlist"
-for dir in "${dirs[@]}"; do
-mkdir -p "$path/$dir"
-echo "✅ Created folder: $dir"
-done
+  read -p "📂 Enter folder names (separated by ,): " dirlist
+  IFS=',' read -ra dirs <<< "$dirlist"
+  for dir in "${dirs[@]}"; do
+    mkdir -p "$path/$dir"
+    echo "✅ Created folder: $dir"
+  done
 }
 
 delete_items() {
-local _ok=false
-if $imaginary_mode; then
-select_imaginary_items_common "$path" "$group_prefix" && _ok=true
-else
-select_items_common "DELETE" && _ok=true
-fi
-if $_ok; then
-read -p "Are you really sure you want to delete the selected files? This action can't be undone. (y/n): " confirm
-if [[ $confirm != "y" && $confirm != "Y" ]]; then
-echo "🚫 Deletion cancelled"
-return
-fi
-for item in "${selected_items[@]}"; do
-rm -rf -- "$item"
-done
-echo "✅ Selected items deleted. I can feel the space 🚀"
-fi
+  local _ok=false
+  if $imaginary_mode; then
+    select_imaginary_items_common "$path" "$group_prefix" && _ok=true
+  else
+    select_items_common "DELETE" && _ok=true
+  fi
+  if $_ok; then
+    read -p "Are you really sure you want to delete the selected files? This action can't be undone. (y/n): " confirm
+    if [[ $confirm != "y" && $confirm != "Y" ]]; then
+      echo "🚫 Deletion cancelled"
+      return
+    fi
+    for item in "${selected_items[@]}"; do
+      rm -rf -- "$item"
+    done
+    echo "✅ Selected items deleted. I can feel the space 🚀"
+  fi
 }
 
 fast_count() {
-local pattern="$1"
-local arr=("$pattern")
-echo "${#arr[@]}"
+  local pattern="$1"
+  local arr=("$pattern")
+  echo "${#arr[@]}"
 }
 
 count_items_in_path() {
-local p="$1"
-local total
-if $show_hidden_files; then
-local a=("$p"/*)
-local b=("$p"/.*)
-local count_a="${#a[@]}"
-local count_b="${#b[@]}"
-[[ "${a[0]}" == "$p/*" ]] && count_a=0
-local filtered=0
-for x in "${b[@]}"; do
-local bn; bn=$(basename "$x")
-[[ "$bn" == "." || "$bn" == ".." ]] && continue
-((filtered++))
-done
-total=$((count_a + filtered))
-else
-local a=("$p"/*)
-total="${#a[@]}"
-[[ "${a[0]}" == "$p/*" ]] && total=0
-fi
-echo "$total"
+  local p="$1"
+  local total
+  if $show_hidden_files; then
+    local a=("$p"/*)
+    local b=("$p"/.*)
+    local count_a="${#a[@]}"
+    local count_b="${#b[@]}"
+    [[ "${a[0]}" == "$p/*" ]] && count_a=0
+    local filtered=0
+    for x in "${b[@]}"; do
+      local bn; bn=$(basename "$x")
+      [[ "$bn" == "." || "$bn" == ".." ]] && continue
+      ((filtered++))
+    done
+    total=$((count_a + filtered))
+  else
+    local a=("$p"/*)
+    total="${#a[@]}"
+    [[ "${a[0]}" == "$p/*" ]] && total=0
+  fi
+  echo "$total"
 }
 
 build_items_for_prefix() {
-local p="$1"
-local pfx="$2"
-items=()
-while IFS= read -r -d '' f; do
-local bn="${f##*/}"
-[[ "$bn" == "." || "$bn" == ".." ]] && continue
-! $show_hidden_files && [[ "$bn" == .* ]] && continue
-[[ "${bn,,}" != "$pfx"* ]] && continue
-items+=("$f")
-done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+  local p="$1"
+  local pfx="$2"
+  items=()
+  while IFS= read -r -d '' f; do
+    local bn="${f##*/}"
+    [[ "$bn" == "." || "$bn" == ".." ]] && continue
+    ! $show_hidden_files && [[ "$bn" == .* ]] && continue
+    [[ "${bn,,}" != "$pfx"* ]] && continue
+    items+=("$f")
+  done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
 }
 
 build_all_items() {
-local p="$1"
-items=()
-if $show_hidden_files; then
-for f in "$p"/* "$p"/.*; do
-[ -e "$f" ] || continue
-local bn; bn=$(basename "$f")
-[[ "$bn" == "." || "$bn" == ".." ]] && continue
-items+=("$f")
-done
-else
-for f in "$p"/*; do
-[ -e "$f" ] || continue
-items+=("$f")
-done
-fi
+  local p="$1"
+  items=()
+  if $show_hidden_files; then
+    for f in "$p"/* "$p"/.*; do
+      [ -e "$f" ] || continue
+      local bn; bn=$(basename "$f")
+      [[ "$bn" == "." || "$bn" == ".." ]] && continue
+      items+=("$f")
+    done
+  else
+    for f in "$p"/*; do
+      [ -e "$f" ] || continue
+      items+=("$f")
+    done
+  fi
 }
 
 get_imaginary_groups() {
-local p="$1"
-local pfx="$2"
-declare -gA group_counts=()
-group_chars=()
-local chars=()
-local -A _seen_chars=()
+  local p="$1"
+  local pfx="$2"
+  declare -gA group_counts=()
+  group_chars=()
+  local chars=()
+  local -A _seen_chars=()
 
-while IFS= read -r -d '' entry; do
-local bn="${entry##*/}"
-[[ "$bn" == "." || "$bn" == ".." ]] && continue
-if ! $show_hidden_files && [[ "$bn" == .* ]]; then
-continue
-fi
-[[ ${#bn} -le ${#pfx} ]] && continue
-local bn_lower="${bn,,}"
-[[ "$bn_lower" != "$pfx"* ]] && continue
-local next="${bn_lower:${#pfx}:1}"
-local upper="${next^^}"
-if [[ "$upper" =~ ^[A-Z]$ ]]; then
-group_counts["$upper"]=$(( ${group_counts["$upper"]:-0} + 1 ))
-[ -z "${_seen_chars["$upper"]+x}" ] && chars+=("$upper") && _seen_chars["$upper"]=1
-else
-group_counts["#"]=$(( ${group_counts["#"]:-0} + 1 ))
-[ -z "${_seen_chars["#"]+x}" ] && _seen_chars["#"]=1
-fi
-done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+  while IFS= read -r -d '' entry; do
+    local bn="${entry##*/}"
+    [[ "$bn" == "." || "$bn" == ".." ]] && continue
+    if ! $show_hidden_files && [[ "$bn" == .* ]]; then
+      continue
+    fi
+    [[ ${#bn} -le ${#pfx} ]] && continue
+    local bn_lower="${bn,,}"
+    [[ "$bn_lower" != "$pfx"* ]] && continue
+    local next="${bn_lower:${#pfx}:1}"
+    local upper="${next^^}"
+    if [[ "$upper" =~ ^[A-Z]$ ]]; then
+      group_counts["$upper"]=$(( ${group_counts["$upper"]:-0} + 1 ))
+      [ -z "${_seen_chars["$upper"]+x}" ] && chars+=("$upper") && _seen_chars["$upper"]=1
+    else
+      group_counts["#"]=$(( ${group_counts["#"]:-0} + 1 ))
+      [ -z "${_seen_chars["#"]+x}" ] && _seen_chars["#"]=1
+    fi
+  done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
 
-[ "${group_counts[#]:-0}" -gt 0 ] && chars+=("#")
-group_chars=("${chars[@]}")
+  [ "${group_counts[#]:-0}" -gt 0 ] && chars+=("#")
+  group_chars=("${chars[@]}")
 }
 
 display_imaginary_groups() {
-local p="$1"
-local pfx="$2"
-local total="$3"
-echo "📂 Too many items ($total). Imaginary groups by next character:"
-get_imaginary_groups "$p" "$pfx"
-imaginary_map=()
-local idx=1
-for ch in "${group_chars[@]}"; do
-local cnt="${group_counts[$ch]}"
-printf " %2d) 📁 %s (%d items)\n" "$idx" "$ch" "$cnt"
-imaginary_map+=("$ch")
-idx=$((idx+1))
-done
+  local p="$1"
+  local pfx="$2"
+  local total="$3"
+  echo "📂 Too many items ($total). Imaginary groups by next character:"
+  get_imaginary_groups "$p" "$pfx"
+  imaginary_map=()
+  local idx=1
+  for ch in "${group_chars[@]}"; do
+    local cnt="${group_counts[$ch]}"
+    printf " %2d) 📁 %s (%d items)\n" "$idx" "$ch" "$cnt"
+    imaginary_map+=("$ch")
+    idx=$((idx+1))
+  done
 }
 
 path=$(pwd)
@@ -280,240 +280,240 @@ gcloud_nav_result_path=""
 gcloud_nav_selected_items=()
 
 if [ $# -eq 1 ]; then
-target="$1"
-if [ -d "$target" ]; then
-path=$(get_abs_path "$target")
-elif [ -f "$target" ]; then
-selected=$(get_abs_path "$target")
-handle_file "$selected"
-exit $?
-else
-echo "❌ Error: '$target' not found" >&2
-exit 1
-fi
+  target="$1"
+  if [ -d "$target" ]; then
+    path=$(get_abs_path "$target")
+  elif [ -f "$target" ]; then
+    selected=$(get_abs_path "$target")
+    handle_file "$selected"
+    exit $?
+  else
+    echo "❌ Error: '$target' not found" >&2
+    exit 1
+  fi
 fi
 
 shopt -s nullglob
 while true; do
-echo
-echo "📂 Location: $path${group_prefix:+ [filter: ${group_prefix^^}*]}"
+  echo
+  echo "📂 Location: $path${group_prefix:+ [filter: ${group_prefix^^}*]}"
 
-total=$(count_items_in_path "$path")
+  total=$(count_items_in_path "$path")
 
-imaginary_mode=false
-items=()
+  imaginary_mode=false
+  items=()
 
-if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
-imaginary_mode=true
-if [ -n "$group_prefix" ]; then
-local_arr=()
-while IFS= read -r -d '' _f; do
-_bn="${_f##*/}"
-[[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-! $show_hidden_files && [[ "$_bn" == .* ]] && continue
-[[ "${_bn,,}" != "$group_prefix"* ]] && continue
-local_arr+=("$_f")
-done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
-pfx_count="${#local_arr[@]}"
-if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
-imaginary_mode=false
-items=("${local_arr[@]}")
-else
-display_imaginary_groups "$path" "$group_prefix" "$pfx_count"
-fi
-else
-display_imaginary_groups "$path" "" "$total"
-fi
-fi
+  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
+    imaginary_mode=true
+    if [ -n "$group_prefix" ]; then
+      local_arr=()
+      while IFS= read -r -d '' _f; do
+        _bn="${_f##*/}"
+        [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
+        ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
+        [[ "${_bn,,}" != "$group_prefix"* ]] && continue
+        local_arr+=("$_f")
+      done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+      pfx_count="${#local_arr[@]}"
+      if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
+        imaginary_mode=false
+        items=("${local_arr[@]}")
+      else
+        display_imaginary_groups "$path" "$group_prefix" "$pfx_count"
+      fi
+    else
+      display_imaginary_groups "$path" "" "$total"
+    fi
+  fi
 
-if ! $imaginary_mode; then
-if [ ${#items[@]} -eq 0 ] && [ -n "$group_prefix" ]; then
-build_items_for_prefix "$path" "$group_prefix"
-elif [ ${#items[@]} -eq 0 ]; then
-build_all_items "$path"
-fi
-if [ ${#items[@]} -eq 0 ]; then
-echo "🛑 This directory is empty"
-else
-idx=1
-for item in "${items[@]}"; do
-[ -d "$item" ] && icon="📁" || icon="📄"
-printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
-idx=$((idx+1))
-done
-fi
-fi
-echo
+  if ! $imaginary_mode; then
+    if [ ${#items[@]} -eq 0 ] && [ -n "$group_prefix" ]; then
+      build_items_for_prefix "$path" "$group_prefix"
+    elif [ ${#items[@]} -eq 0 ]; then
+      build_all_items "$path"
+    fi
+    if [ ${#items[@]} -eq 0 ]; then
+      echo "🛑 This directory is empty"
+    else
+      idx=1
+      for item in "${items[@]}"; do
+        [ -d "$item" ] && icon="📁" || icon="📄"
+        printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
+        idx=$((idx+1))
+      done
+    fi
+  fi
+  echo
 
-echo "u) Up   cd) Change directory   t) Transfer"
-echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
-echo "q/h) Quit/Home   s) Settings   forceshow) Toggle force show all"
-[ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
+  echo "u) Up   cd) Change directory   t) Transfer"
+  echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
+  echo "q/h) Quit/Home   s) Settings   forceshow) Toggle force show all"
+  [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
 
-read -p "Select: " choice
+  read -p "Select: " choice
 
-case "$choice" in
-q|Q|h|H)
-exit 0
-;;
-u|U)
-if [ "$path" != "/" ]; then
-path=$(dirname "$path")
-group_prefix=""
-force_show=false
-fi
-continue
-;;
-back)
-if [ -n "$group_prefix" ]; then
-group_prefix="${group_prefix%?}"
-force_show=false
-fi
-continue
-;;
-forceshow)
-if $force_show; then
-force_show=false
-echo "🔓 Force show disabled"
-else
-force_show=true
-echo "🔓 Force show enabled — displaying all items"
-fi
-continue
-;;
-c|C)
-echo "Create:"
-echo "1) New folders"
-echo "2) New files"
-read -p "Choice: " cr
-[[ "$cr" == "1" ]] && create_dirs
-[[ "$cr" == "2" ]] && create_files
-continue
-;;
-t|T)
-transfer_menu
-continue
-;;
-d|D)
-delete_items
-continue
-;;
-f|F)
-find_menu
-continue
-;;
-x|X)
-organise_menu
-continue
-;;
-s|S)
-settings_menu
-continue
-;;
-r|R)
-echo "Rename:"
-echo "1) Select item number to rename (files/folders in current path)"
-echo "2) Rename current path/folder"
-read -p "Choice [1-2]: " ren_choice
-case "$ren_choice" in
-1)
-if $imaginary_mode; then
-echo "Select group number to browse for rename:"
-read -p "Group number: " gnum
-if [[ $gnum =~ ^[0-9]+$ ]] && [ "$gnum" -ge 1 ] && [ "$gnum" -le "${#imaginary_map[@]}" ]; then
-ch="${imaginary_map[$((gnum-1))]}"
-ch_lower="${ch,,}"
-items=()
-while IFS= read -r -d '' _f; do
-_bn="${_f##*/}"
-[[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-! $show_hidden_files && [[ "$_bn" == .* ]] && continue
-_bn_lower="${_bn,,}"
-[[ "$_bn_lower" != "$group_prefix"* ]] && continue
-_next="${_bn_lower:${#group_prefix}:1}"
-if [ "$ch" == "#" ]; then
-[[ "$_next" =~ ^[a-z]$ ]] && continue
-else
-[[ "$_next" != "$ch_lower" ]] && continue
-fi
-items+=("$_f")
-done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
-idx=1
-for item in "${items[@]}"; do
-[ -d "$item" ] && icon="📁" || icon="📄"
-printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
-idx=$((idx+1))
-done
-read -p "Enter item number: " num
-if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
-rename_item "${items[$((num-1))]}"
-else
-echo "❌ Invalid number"
-fi
-else
-echo "❌ Invalid group"
-fi
-elif [ ${#items[@]} -eq 0 ]; then
-echo "❌ No items to rename"
-else
-read -p "Enter item number: " num
-if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
-rename_item "${items[$((num-1))]}"
-else
-echo "❌ Invalid number"
-fi
-fi
-;;
-2)
-rename_item "$path"
-;;
-*)
-echo "❌ Invalid choice"
-;;
-esac
-continue
-;;
-cd|CD|cD|Cd)
-cd "$path" && exec "$SHELL"
-;;
-esac
+  case "$choice" in
+    q|Q|h|H)
+      exit 0
+      ;;
+    u|U)
+      if [ "$path" != "/" ]; then
+        path=$(dirname "$path")
+        group_prefix=""
+        force_show=false
+      fi
+      continue
+      ;;
+    back)
+      if [ -n "$group_prefix" ]; then
+        group_prefix="${group_prefix%?}"
+        force_show=false
+      fi
+      continue
+      ;;
+    forceshow)
+      if $force_show; then
+        force_show=false
+        echo "🔓 Force show disabled"
+      else
+        force_show=true
+        echo "🔓 Force show enabled — displaying all items"
+      fi
+      continue
+      ;;
+    c|C)
+      echo "Create:"
+      echo "1) New folders"
+      echo "2) New files"
+      read -p "Choice: " cr
+      [[ "$cr" == "1" ]] && create_dirs
+      [[ "$cr" == "2" ]] && create_files
+      continue
+      ;;
+    t|T)
+      transfer_menu
+      continue
+      ;;
+    d|D)
+      delete_items
+      continue
+      ;;
+    f|F)
+      find_menu
+      continue
+      ;;
+    x|X)
+      organise_menu
+      continue
+      ;;
+    s|S)
+      settings_menu
+      continue
+      ;;
+    r|R)
+      echo "Rename:"
+      echo "1) Select item number to rename (files/folders in current path)"
+      echo "2) Rename current path/folder"
+      read -p "Choice [1-2]: " ren_choice
+      case "$ren_choice" in
+        1)
+          if $imaginary_mode; then
+            echo "Select group number to browse for rename:"
+            read -p "Group number: " gnum
+            if [[ $gnum =~ ^[0-9]+$ ]] && [ "$gnum" -ge 1 ] && [ "$gnum" -le "${#imaginary_map[@]}" ]; then
+              ch="${imaginary_map[$((gnum-1))]}"
+              ch_lower="${ch,,}"
+              items=()
+              while IFS= read -r -d '' _f; do
+                _bn="${_f##*/}"
+                [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
+                ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
+                _bn_lower="${_bn,,}"
+                [[ "$_bn_lower" != "$group_prefix"* ]] && continue
+                _next="${_bn_lower:${#group_prefix}:1}"
+                if [ "$ch" == "#" ]; then
+                  [[ "$_next" =~ ^[a-z]$ ]] && continue
+                else
+                  [[ "$_next" != "$ch_lower" ]] && continue
+                fi
+                items+=("$_f")
+              done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+              idx=1
+              for item in "${items[@]}"; do
+                [ -d "$item" ] && icon="📁" || icon="📄"
+                printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
+                idx=$((idx+1))
+              done
+              read -p "Enter item number: " num
+              if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
+                rename_item "${items[$((num-1))]}"
+              else
+                echo "❌ Invalid number"
+              fi
+            else
+              echo "❌ Invalid group"
+            fi
+          elif [ ${#items[@]} -eq 0 ]; then
+            echo "❌ No items to rename"
+          else
+            read -p "Enter item number: " num
+            if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
+              rename_item "${items[$((num-1))]}"
+            else
+              echo "❌ Invalid number"
+            fi
+          fi
+          ;;
+        2)
+          rename_item "$path"
+          ;;
+        *)
+          echo "❌ Invalid choice"
+          ;;
+      esac
+      continue
+      ;;
+    cd|CD|cD|Cd)
+      cd "$path" && exec "$SHELL"
+      ;;
+  esac
 
-if $imaginary_mode; then
-matched=false
-if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#imaginary_map[@]}" ]; then
-ch="${imaginary_map[$((choice-1))]}"
-matched=true
-elif [[ ${#choice} -eq 1 ]]; then
-ch="${choice^^}"
-for gc in "${group_chars[@]}"; do
-[[ "$gc" == "$ch" ]] && matched=true && break
-done
-[[ "$matched" == false && "$choice" == "#" ]] && ch="#" && matched=true
-fi
+  if $imaginary_mode; then
+    matched=false
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#imaginary_map[@]}" ]; then
+      ch="${imaginary_map[$((choice-1))]}"
+      matched=true
+    elif [[ ${#choice} -eq 1 ]]; then
+      ch="${choice^^}"
+      for gc in "${group_chars[@]}"; do
+        [[ "$gc" == "$ch" ]] && matched=true && break
+      done
+      [[ "$matched" == false && "$choice" == "#" ]] && ch="#" && matched=true
+    fi
 
-if $matched; then
-if [ "$ch" == "#" ]; then
-group_prefix="${group_prefix}#"
-else
-group_prefix="${group_prefix}${ch,,}"
-fi
-force_show=false
-else
-echo "⚠️  Invalid selection"
-fi
-else
-if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
-selected="${items[$((choice-1))]}"
-if [ -d "$selected" ]; then
-path="$selected"
-group_prefix=""
-force_show=false
-elif [ -f "$selected" ]; then
-handle_file "$selected"
-fi
-else
-echo "⚠️  Invalid selection"
-fi
-fi
+    if $matched; then
+      if [ "$ch" == "#" ]; then
+        group_prefix="${group_prefix}#"
+      else
+        group_prefix="${group_prefix}${ch,,}"
+      fi
+      force_show=false
+    else
+      echo "⚠️  Invalid selection"
+    fi
+  else
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
+      selected="${items[$((choice-1))]}"
+      if [ -d "$selected" ]; then
+        path="$selected"
+        group_prefix=""
+        force_show=false
+      elif [ -f "$selected" ]; then
+        handle_file "$selected"
+      fi
+    else
+      echo "⚠️  Invalid selection"
+    fi
+  fi
 
 done
