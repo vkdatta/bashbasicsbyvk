@@ -1,262 +1,276 @@
 declare -gA item_size=()
 declare -gA item_mtime=()
+_meta_loaded=false
 
+# ─── need-metadata predicates ────────────────────────────────────────────────
+_needs_metadata() {
+  [[ " ${display_suffix_set:-} " == *" size "* ]] && return 0
+  [[ " ${display_suffix_set:-} " == *" time "* ]] && return 0
+  case "${sort_mode:-az}" in new|old|big|small) return 0 ;; esac
+  for lvl in "${group_view_levels[@]}"; do
+    case "$lvl" in year|month|date) return 0 ;; esac
+  done
+  return 1
+}
+
+_needs_dir_size() {
+  case "${sort_mode:-az}" in big|small) return 0 ;; esac
+  [[ " ${display_suffix_set:-} " == *" size "* ]] && return 0
+  return 1
+}
+
+# ─── batch stat (one subprocess for all items) ───────────────────────────────
+_collect_metadata() {
+  item_size=()
+  item_mtime=()
+  [ ${#items[@]} -eq 0 ] && { _meta_loaded=true; return; }
+
+  local need_dir_size=false
+  _needs_dir_size && need_dir_size=true
+
+  local -a files=() dirs=()
+  for f in "${items[@]}"; do
+    [ -d "$f" ] && dirs+=("$f") || files+=("$f")
+  done
+
+  # All files in one stat call
+  if [ ${#files[@]} -gt 0 ]; then
+    while IFS='|' read -r fpath fsize fmtime; do
+      item_size["$fpath"]="$fsize"
+      item_mtime["$fpath"]="$fmtime"
+    done < <(stat -c "%n|%s|%Y" "${files[@]}" 2>/dev/null)
+  fi
+
+  # All dirs in one stat call (size=0 placeholder)
+  if [ ${#dirs[@]} -gt 0 ]; then
+    while IFS='|' read -r fpath fmtime; do
+      item_mtime["$fpath"]="$fmtime"
+      item_size["$fpath"]=0
+    done < <(stat -c "%n|%Y" "${dirs[@]}" 2>/dev/null)
+
+    # du only when size sorting or size suffix is active — all dirs at once
+    if $need_dir_size; then
+      while IFS=$'\t' read -r sz fpath; do
+        item_size["$fpath"]="$sz"
+      done < <(du -sb "${dirs[@]}" 2>/dev/null)
+    fi
+  fi
+
+  _meta_loaded=true
+}
+
+_ensure_meta() {
+  $_meta_loaded && return
+  _collect_metadata
+}
+
+# ─── human-readable size (pure bash, no bc subshell) ─────────────────────────
 _fmt_size() {
-  local b="$1"
-  if   (( b < 1024 ));             then printf "%dB"    "$b"
-  elif (( b < 1048576 ));          then printf "%.1fK"  "$(echo "scale=1;$b/1024"       | bc)"
-  elif (( b < 1073741824 ));       then printf "%.1fM"  "$(echo "scale=1;$b/1048576"    | bc)"
-  else                                  printf "%.1fG"  "$(echo "scale=1;$b/1073741824" | bc)"
+  local b="${1:-0}"
+  if   (( b < 1024 ));       then printf "%dB"  "$b"
+  elif (( b < 1048576 ));    then printf "%dK"  "$(( b / 1024 ))"
+  elif (( b < 1073741824 )); then printf "%dM"  "$(( b / 1048576 ))"
+  else                            printf "%dG"  "$(( b / 1073741824 ))"
   fi
 }
 
+# ─── time formatter ───────────────────────────────────────────────────────────
 _fmt_time() {
-  local epoch="$1"
-  local fmt="${display_time_format:-full}"
-  case "$fmt" in
+  local epoch="${1:-0}"
+  case "${display_time_format:-full}" in
     year)      date -d "@$epoch" "+%Y" ;;
     month)     date -d "@$epoch" "+%b" ;;
     date)      date -d "@$epoch" "+%d" ;;
     datetime)  date -d "@$epoch" "+%d %H:%M" ;;
     monthdate) date -d "@$epoch" "+%b-%d %H:%M" ;;
-    full)      date -d "@$epoch" "+%Y-%b-%d %H:%M" ;;
-    *)         date -d "@$epoch" "+%Y-%b-%d %H:%M" ;;
+    full|*)    date -d "@$epoch" "+%Y-%b-%d %H:%M" ;;
   esac
 }
 
+# ─── suffix builder ───────────────────────────────────────────────────────────
 _build_suffix() {
-  local fpath="$1"
-  local out=""
-  local set="${display_suffix_set:-}"
-
-  for token in $set; do
+  local fpath="$1" out=""
+  for token in ${display_suffix_set:-}; do
     case "$token" in
       ext)
         local bn="${fpath##*/}"
-        local ext=""
-        if [[ "$bn" == *.* ]]; then
-          ext=".${bn##*.}"
-        else
-          ext="(none)"
-        fi
-        out+=" | $ext"
+        [[ "$bn" == *.* ]] && out+=" | .${bn##*.}" || out+=" | (no ext)"
         ;;
       size)
-        local raw_size="${item_size[$fpath]:-0}"
-        out+=" | $(_fmt_size "$raw_size")"
+        out+=" | $(_fmt_size "${item_size[$fpath]:-0}")"
         ;;
       time)
-        local raw_mtime="${item_mtime[$fpath]:-0}"
-        out+=" | $(_fmt_time "$raw_mtime")"
+        out+=" | $(_fmt_time "${item_mtime[$fpath]:-0}")"
         ;;
     esac
   done
-  echo "$out"
+  printf '%s' "$out"
 }
 
-_collect_metadata() {
-  item_size=()
-  item_mtime=()
-  for f in "${items[@]}"; do
-    local mtime sz
-    mtime=$(stat -c "%Y" "$f" 2>/dev/null || echo 0)
-    if [ -d "$f" ]; then
-      sz=$(du -sb "$f" 2>/dev/null | cut -f1)
-      sz="${sz:-0}"
-    else
-      sz=$(stat -c "%s" "$f" 2>/dev/null || echo 0)
-    fi
-    item_size["$f"]="$sz"
-    item_mtime["$f"]="$mtime"
-  done
-}
-
+# ─── build items ──────────────────────────────────────────────────────────────
+# Fast path: glob for normal (no hidden, no prefix) — zero subprocesses.
+# Slow path: find for hidden files or prefix filter.
+# Metadata is NOT collected here — lazy, only on first need.
 build_items_with_meta() {
   local p="$1"
   local pfx="${2:-}"
   items=()
+  item_size=()
+  item_mtime=()
+  _meta_loaded=false
 
-  if $show_hidden_files; then
+  if [ -n "$pfx" ] || $show_hidden_files; then
     while IFS= read -r -d '' f; do
       local bn="${f##*/}"
       [[ "$bn" == "." || "$bn" == ".." ]] && continue
-      if [ -n "$pfx" ]; then
-        [[ "${bn,,}" != "${pfx,,}"* ]] && continue
-      fi
+      ! $show_hidden_files && [[ "$bn" == .* ]] && continue
+      [ -n "$pfx" ] && [[ "${bn,,}" != "${pfx,,}"* ]] && continue
       items+=("$f")
     done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
   else
-    while IFS= read -r -d '' f; do
-      local bn="${f##*/}"
-      [[ "$bn" == "." || "$bn" == ".." ]] && continue
-      [[ "$bn" == .* ]] && continue
-      if [ -n "$pfx" ]; then
-        [[ "${bn,,}" != "${pfx,,}"* ]] && continue
-      fi
+    # Original fast glob — same as pre-displayer code
+    for f in "$p"/*; do
+      [ -e "$f" ] || continue
       items+=("$f")
-    done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+    done
   fi
-
-  _collect_metadata
 }
 
+# ─── sorting ──────────────────────────────────────────────────────────────────
 apply_sort() {
   local mode="${sort_mode:-az}"
   [ ${#items[@]} -eq 0 ] && return
 
+  case "$mode" in
+    az|za)
+      # No metadata needed — sort by basename only (one subprocess: sort)
+      local flag; [ "$mode" = "za" ] && flag="-r" || flag=""
+      local sorted_output
+      sorted_output=$(for f in "${items[@]}"; do
+                        printf '%s\t%s\n' "${f##*/}" "$f"
+                      done | sort -f $flag -t$'\t' -k1,1 | cut -f2-)
+      items=()
+      while IFS= read -r line; do [ -n "$line" ] && items+=("$line"); done <<< "$sorted_output"
+      return
+      ;;
+  esac
+
+  # Remaining modes need metadata
+  _ensure_meta
+
   local -a records=()
   for f in "${items[@]}"; do
-    local bn="${f##*/}"
     case "$mode" in
-      az|za)
-        records+=("${bn,,}	$f")
-        ;;
-      new|old)
-        records+=("${item_mtime[$f]:-0}	$f")
-        ;;
-      big|small)
-        records+=("${item_size[$f]:-0}	$f")
-        ;;
+      new|old)   records+=("${item_mtime[$f]:-0}"$'\t'"$f") ;;
+      big|small) records+=("${item_size[$f]:-0}"$'\t'"$f") ;;
     esac
   done
 
-  local sorted_output
+  local flag
   case "$mode" in
-    az)    sorted_output=$(printf '%s\n' "${records[@]}" | sort -t$'\t' -k1,1) ;;
-    za)    sorted_output=$(printf '%s\n' "${records[@]}" | sort -t$'\t' -k1,1r) ;;
-    new)   sorted_output=$(printf '%s\n' "${records[@]}" | sort -t$'\t' -k1,1nr) ;;
-    old)   sorted_output=$(printf '%s\n' "${records[@]}" | sort -t$'\t' -k1,1n) ;;
-    big)   sorted_output=$(printf '%s\n' "${records[@]}" | sort -t$'\t' -k1,1nr) ;;
-    small) sorted_output=$(printf '%s\n' "${records[@]}" | sort -t$'\t' -k1,1n) ;;
+    new|big)   flag="-k1,1nr" ;;
+    old|small) flag="-k1,1n"  ;;
   esac
 
   items=()
-  while IFS=$'\t' read -r _key fpath; do
-    [ -n "$fpath" ] && items+=("$fpath")
-  done <<< "$sorted_output"
+  while IFS= read -r line; do
+    [ -n "$line" ] && items+=("$line")
+  done < <(printf '%s\n' "${records[@]}" | sort -t$'\t' $flag | cut -f2-)
 }
 
-_group_key_ext() {
-  local f="$1"
-  local bn="${f##*/}"
-  if [ -d "$f" ]; then echo "[dir]"; return; fi
-  if [[ "$bn" == *.* ]]; then echo ".${bn##*.}"; else echo "(no ext)"; fi
+# ─── group key helpers ────────────────────────────────────────────────────────
+_gk_ext() {
+  local bn="${1##*/}"
+  [ -d "$1" ] && { printf '[dir]'; return; }
+  [[ "$bn" == *.* ]] && printf '.%s' "${bn##*.}" || printf '(no ext)'
 }
-
-_group_key_year() {
-  local f="$1"
-  date -d "@${item_mtime[$f]:-0}" "+%Y" 2>/dev/null || echo "unknown"
-}
-
-_group_key_month() {
-  local f="$1"
-  date -d "@${item_mtime[$f]:-0}" "+%Y-%b" 2>/dev/null || echo "unknown"
-}
-
-_group_key_date() {
-  local f="$1"
-  date -d "@${item_mtime[$f]:-0}" "+%Y-%b-%d" 2>/dev/null || echo "unknown"
-}
-
-_get_level_key() {
-  local level="$1"
-  local f="$2"
-  case "$level" in
-    ext)   _group_key_ext   "$f" ;;
-    year)  _group_key_year  "$f" ;;
-    month) _group_key_month "$f" ;;
-    date)  _group_key_date  "$f" ;;
-    *)     echo "?" ;;
-  esac
-}
+_gk_year()  { date -d "@${item_mtime[$1]:-0}" "+%Y"       2>/dev/null || printf '?'; }
+_gk_month() { date -d "@${item_mtime[$1]:-0}" "+%Y-%b"    2>/dev/null || printf '?'; }
+_gk_date()  { date -d "@${item_mtime[$1]:-0}" "+%Y-%b-%d" 2>/dev/null || printf '?'; }
 
 _composite_key() {
-  local f="$1"
-  local key=""
+  local f="$1" key=""
   for lvl in "${group_view_levels[@]}"; do
-    local part
-    part=$(_get_level_key "$lvl" "$f")
-    key+="${part}|"
+    case "$lvl" in
+      ext)   key+="$(_gk_ext   "$f")|" ;;
+      year)  key+="$(_gk_year  "$f")|" ;;
+      month) key+="$(_gk_month "$f")|" ;;
+      date)  key+="$(_gk_date  "$f")|" ;;
+    esac
   done
-  echo "$key"
+  printf '%s' "$key"
 }
 
+# ─── flat display ─────────────────────────────────────────────────────────────
 _display_items_flat() {
-  local idx=1
+  local idx=1 f icon bn suffix
   for f in "${items[@]}"; do
-    local icon bn suffix
     [ -d "$f" ] && icon="📁" || icon="📄"
-    bn="$(basename "$f")"
-    suffix=$(_build_suffix "$f")
+    bn="${f##*/}"
+    if [ -n "${display_suffix_set:-}" ]; then
+      suffix=$(_build_suffix "$f")
+    else
+      suffix=""
+    fi
     printf " %2d) %s %s%s\n" "$idx" "$icon" "$bn" "$suffix"
-    idx=$((idx+1))
+    idx=$(( idx + 1 ))
   done
 }
 
+# ─── grouped display ──────────────────────────────────────────────────────────
 _display_grouped() {
-  local -a levels=("${group_view_levels[@]}")
-  local depth="${#levels[@]}"
+  local depth="${#group_view_levels[@]}"
   [ "$depth" -eq 0 ] && { _display_items_flat; return; }
 
-  # Build ordered unique composite keys while preserving item order
   local -a all_keys=()
   declare -A key_seen=()
-  declare -A key_items=()   # composite_key -> newline-separated paths
+  declare -A key_items=()
 
   for f in "${items[@]}"; do
-    local ck
-    ck=$(_composite_key "$f")
-    if [ -z "${key_seen[$ck]+x}" ]; then
-      all_keys+=("$ck")
-      key_seen["$ck"]=1
-    fi
+    local ck; ck=$(_composite_key "$f")
+    [ -z "${key_seen[$ck]+x}" ] && { all_keys+=("$ck"); key_seen["$ck"]=1; }
     key_items["$ck"]+="$f"$'\n'
   done
 
   local global_idx=1
+  local ck f icon bn suffix indent indent_items lvl_idx lvl part
+  local -a parts
 
   for ck in "${all_keys[@]}"; do
-    # Print hierarchical header
-    local header=""
-    local -a parts
     IFS='|' read -ra parts <<< "$ck"
-    local lvl_idx=0
-    for lvl in "${levels[@]}"; do
-      local part="${parts[$lvl_idx]:-?}"
-      local indent
-      indent=$(printf '%*s' "$((lvl_idx*2))" '')
-      echo "${indent}── ${lvl^^}: ${part}"
-      lvl_idx=$((lvl_idx+1))
+    lvl_idx=0
+    for lvl in "${group_view_levels[@]}"; do
+      indent=$(printf '%*s' "$(( lvl_idx * 2 ))" '')
+      printf "%s── %s: %s\n" "$indent" "${lvl^^}" "${parts[$lvl_idx]:-?}"
+      lvl_idx=$(( lvl_idx + 1 ))
     done
-
-    # Print items under this group
-    local indent_items
-    indent_items=$(printf '%*s' "$((depth*2))" '')
+    indent_items=$(printf '%*s' "$(( depth * 2 ))" '')
     while IFS= read -r f; do
       [ -z "$f" ] && continue
-      local icon bn suffix
       [ -d "$f" ] && icon="📁" || icon="📄"
-      bn="$(basename "$f")"
-      suffix=$(_build_suffix "$f")
+      bn="${f##*/}"
+      [ -n "${display_suffix_set:-}" ] && suffix=$(_build_suffix "$f") || suffix=""
       printf "%s%2d) %s %s%s\n" "$indent_items" "$global_idx" "$icon" "$bn" "$suffix"
-      global_idx=$((global_idx+1))
+      global_idx=$(( global_idx + 1 ))
     done <<< "${key_items[$ck]}"
     echo
   done
 }
 
+# ─── main entry point ─────────────────────────────────────────────────────────
 display_items() {
   if [ ${#items[@]} -eq 0 ]; then
     echo "🛑 This directory is empty"
     return
   fi
 
-  local use_group=false
-  if [ "${#group_view_levels[@]}" -gt 0 ] && $force_show; then
-    use_group=true
-  elif [ "${#group_view_levels[@]}" -gt 0 ] && ! ${imaginary_mode:-false}; then
-    use_group=true
+  # Load metadata now if display/grouping needs it
+  if _needs_metadata; then
+    _ensure_meta
   fi
+
+  local use_group=false
+  [ "${#group_view_levels[@]}" -gt 0 ] && ! ${imaginary_mode:-false} && use_group=true
 
   if $use_group; then
     _display_grouped
