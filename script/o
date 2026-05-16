@@ -173,34 +173,15 @@ count_items_in_path() {
 }
 
 build_items_for_prefix() {
-  local p="$1"
-  local pfx="$2"
-  items=()
-  while IFS= read -r -d '' f; do
-    local bn="${f##*/}"
-    [[ "$bn" == "." || "$bn" == ".." ]] && continue
-    ! $show_hidden_files && [[ "$bn" == .* ]] && continue
-    [[ "${bn,,}" != "$pfx"* ]] && continue
-    items+=("$f")
-  done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+  # Legacy shim: delegates to displayer's unified builder then sorts.
+  build_items_with_meta "$1" "$2"
+  apply_sort
 }
 
 build_all_items() {
-  local p="$1"
-  items=()
-  if $show_hidden_files; then
-    for f in "$p"/* "$p"/.*; do
-      [ -e "$f" ] || continue
-      local bn; bn=$(basename "$f")
-      [[ "$bn" == "." || "$bn" == ".." ]] && continue
-      items+=("$f")
-    done
-  else
-    for f in "$p"/*; do
-      [ -e "$f" ] || continue
-      items+=("$f")
-    done
-  fi
+  # Legacy shim: delegates to displayer's unified builder then sorts.
+  build_items_with_meta "$1" ""
+  apply_sort
 }
 
 get_imaginary_groups() {
@@ -349,7 +330,13 @@ while true; do
   imaginary_mode=false
   items=()
 
+  # ── threshold / imaginary / group-view decision ──────────────────────────
+  local _has_group_view=false
+  [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
+
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
+    # Above threshold and force_show is off:
+    # imaginary mode always takes presidency, even when group view is on.
     imaginary_mode=true
     if [ -n "$group_prefix" ]; then
       local_arr=()
@@ -364,30 +351,42 @@ while true; do
       if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
         imaginary_mode=false
         items=("${local_arr[@]}")
+        _collect_metadata
+        apply_sort
       else
         display_imaginary_groups "$path" "$group_prefix" "$pfx_count"
       fi
     else
       display_imaginary_groups "$path" "" "$total"
     fi
+  elif [ "$total" -gt "${index_mode_threshold:-200}" ] && $force_show; then
+    # Above threshold but force_show pressed:
+    # load everything and honour group view if active.
+    imaginary_mode=false
+    if [ -n "$group_prefix" ]; then
+      build_items_with_meta "$path" "$group_prefix"
+    else
+      build_items_with_meta "$path" ""
+    fi
+    apply_sort
   fi
 
   if ! $imaginary_mode; then
     if [ ${#items[@]} -eq 0 ] && [ -n "$group_prefix" ]; then
-      build_items_for_prefix "$path" "$group_prefix"
+      build_items_with_meta "$path" "$group_prefix"
+      apply_sort
     elif [ ${#items[@]} -eq 0 ]; then
-      build_all_items "$path"
+      build_items_with_meta "$path" ""
+      apply_sort
     fi
-    if [ ${#items[@]} -eq 0 ]; then
-      echo "🛑 This directory is empty"
-    else
-      idx=1
-      for item in "${items[@]}"; do
-        [ -d "$item" ] && icon="📁" || icon="📄"
-        printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
-        idx=$((idx+1))
-      done
+
+    # Show group-view label in header when active
+    if $_has_group_view; then
+      local _gv_chain="${group_view_levels[*]}"
+      echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
     fi
+
+    display_items
   fi
   echo
 
@@ -395,6 +394,10 @@ while true; do
   echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
   echo "q/h) Quit/Home   s) Settings   forceshow) Toggle force show all"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
+  # Show forceshow hint with group-view context when above threshold
+  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
+    echo "ℹ️  Group view is set but above threshold → press forceshow to enable grouped display"
+  fi
 
   read -p "Select: " choice
 
