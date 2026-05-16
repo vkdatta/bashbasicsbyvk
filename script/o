@@ -298,6 +298,8 @@ path=$(pwd)
 selected_items=()
 group_prefix=""
 force_show=false
+_has_group_view=false
+_gv_chain=""
 declare -a imaginary_map=()
 declare -a group_chars=()
 declare -A group_counts=()
@@ -331,7 +333,7 @@ while true; do
   items=()
 
   # ── threshold / imaginary / group-view decision ──────────────────────────
-  local _has_group_view=false
+  _has_group_view=false
   [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
 
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
@@ -382,7 +384,7 @@ while true; do
 
     # Show group-view label in header when active
     if $_has_group_view; then
-      local _gv_chain="${group_view_levels[*]}"
+      _gv_chain="${group_view_levels[*]}"
       echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
     fi
 
