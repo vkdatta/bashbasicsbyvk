@@ -1,6 +1,3 @@
-#!/usr/bin/env bash
-# bashbasicsbyvk_coresettings.sh
-
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk"
 SETTINGS_FILE="$CONFIG_DIR/config"
 mkdir -p "$CONFIG_DIR"
