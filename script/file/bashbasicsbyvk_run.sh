@@ -312,3 +312,83 @@ run_file() {
             ;;
     esac
 }
+
+rename_item() {
+  local target="$1"
+  local dir newname
+  if [ -d "$target" ]; then
+    dir=$(dirname -- "$target")
+    read -p "📝 Enter new folder name for '$(basename "$target")': " newname
+    mv -v "$target" "$dir/$newname"
+  elif [ -f "$target" ]; then
+    dir=$(dirname -- "$target")
+    read -p "📝 Enter new file name for '$(basename "$target")': " newname
+    mv -v "$target" "$dir/$newname"
+  else
+    echo "❌ Cannot rename: '$target' not found." >&2
+    return 1
+  fi
+}
+
+handle_rename() {
+  echo "Rename:"
+  echo "1) Select item number to rename (files/folders in current path)"
+  echo "2) Rename current path/folder"
+  read -p "Choice [1-2]: " ren_choice
+  case "$ren_choice" in
+    1)
+      if $imaginary_mode; then
+        echo "Select group number to browse for rename:"
+        read -p "Group number: " gnum
+        if [[ $gnum =~ ^[0-9]+$ ]] && [ "$gnum" -ge 1 ] && [ "$gnum" -le "${#imaginary_map[@]}" ]; then
+          ch="${imaginary_map[$((gnum-1))]}"
+          ch_lower="${ch,,}"
+          items=()
+          while IFS= read -r -d '' _f; do
+            _bn="${_f##*/}"
+            [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
+            ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
+            _bn_lower="${_bn,,}"
+            [[ "$_bn_lower" != "$group_prefix"* ]] && continue
+            _next="${_bn_lower:${#group_prefix}:1}"
+            if [ "$ch" == "#" ]; then
+              [[ "$_next" =~ ^[a-z]$ ]] && continue
+            else
+              [[ "$_next" != "$ch_lower" ]] && continue
+            fi
+            items+=("$_f")
+          done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+          idx=1
+          for item in "${items[@]}"; do
+            [ -d "$item" ] && icon="📁" || icon="📄"
+            printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
+            idx=$((idx+1))
+          done
+          read -p "Enter item number: " num
+          if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
+            rename_item "${items[$((num-1))]}"
+          else
+            echo "❌ Invalid number"
+          fi
+        else
+          echo "❌ Invalid group"
+        fi
+      elif [ ${#items[@]} -eq 0 ]; then
+        echo "❌ No items to rename"
+      else
+        read -p "Enter item number: " num
+        if [[ $num =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ]; then
+          rename_item "${items[$((num-1))]}"
+        else
+          echo "❌ Invalid number"
+        fi
+      fi
+      ;;
+    2)
+      rename_item "$path"
+      ;;
+    *)
+      echo "❌ Invalid choice"
+      ;;
+  esac
+}
