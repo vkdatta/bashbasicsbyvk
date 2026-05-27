@@ -394,7 +394,7 @@ while true; do
 
   echo "u) Up   cd) Change directory   t) Transfer m) Create Map"
   echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
-  echo "q/h) Quit/Home   s) Settings   forceshow) Toggle force show all"
+  echo "q/h) Quit/Home   s) Settings   forceshow) Toggle Group/Item Mode kl) kill all"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   # Show forceshow hint with group-view context when above threshold
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
@@ -417,6 +417,7 @@ while true; do
     r|R)                   handle_rename ;;
     cd|CD|cD|Cd)           cd "$path" && exec "$SHELL" ;;
     m|M)                   map_directory ;;
+    kl|KL|Kl|kL            kill -9 $PPID ;;
     *)                     handle_selection "$choice" ;;
   esac
 
