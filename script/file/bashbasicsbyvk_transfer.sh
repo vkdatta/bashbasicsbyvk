@@ -6,73 +6,59 @@ _in_selection() {
   return 1
 }
 
-_GCLOUD_CTL_SOCKET=""
+_gcloud_ssh_socket=""
+_gcloud_ssh_user=""
 
-_gcloud_init_mux() {
-  if [ -n "$_GCLOUD_CTL_SOCKET" ] && ssh -O check -o ControlPath="$_GCLOUD_CTL_SOCKET" dummy 2>/dev/null; then
-    return 0
-  fi
-  _GCLOUD_CTL_SOCKET=$(mktemp -u /tmp/gcloud_mux_XXXXXX)
-  local remote_user remote_host
-  read remote_user remote_host < <(gcloud cloud-shell ssh --dry-run 2>/dev/null | grep -oP '(?<=ssh )\S+@\S+' | head -1 | tr '@' ' ')
-  if [ -z "$remote_host" ]; then
-    read remote_user remote_host < <(gcloud cloud-shell ssh --dry-run 2>&1 | grep -oP '\S+@\S+\.cloudshell\.dev' | head -1 | tr '@' ' ')
-  fi
-  if [ -z "$remote_host" ]; then
-    echo "❌ Could not determine GCloud SSH host"
+_gcloud_open_persistent() {
+  local socket_path="/tmp/gcloud_nav_ssh_$$"
+  _gcloud_ssh_socket="$socket_path"
+  
+  local ssh_info
+  ssh_info=$(gcloud cloud-shell ssh --dry-run 2>/dev/null | grep -o 'ssh .*')
+  [ -z "$ssh_info" ] && ssh_info=$(gcloud cloud-shell ssh --authorize-session --dry-run 2>/dev/null | grep -o 'ssh .*')
+  
+  if [ -z "$ssh_info" ]; then
+    echo "Failed to get SSH info from gcloud"
     return 1
   fi
-  ssh -fNM \
-    -o ControlPath="$_GCLOUD_CTL_SOCKET" \
-    -o ControlPersist=600 \
-    -o ServerAliveInterval=5 \
-    -o ServerAliveCountMax=24 \
-    -o TCPKeepAlive=yes \
-    -o IPQoS=throughput \
-    -o GSSAPIAuthentication=no \
-    -o Compression=yes \
-    -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR \
-    -o ConnectTimeout=15 \
-    "${remote_user}@${remote_host}" 2>/dev/null
-  if [ $? -ne 0 ]; then
-    echo "❌ Failed to establish SSH mux"
-    return 1
-  fi
-  return 0
+  
+  local host
+  host=$(echo "$ssh_info" | grep -oP '[^\s]+@cs-\d+[^\s]*' | head -1)
+  [ -z "$host" ] && host=$(echo "$ssh_info" | grep -oE '[^[:space:]]+@cs-[0-9]+[^[:space:]]*' | head -1)
+  
+  _gcloud_ssh_user="${host%@*}"
+  [ "$_gcloud_ssh_user" == "$host" ] && _gcloud_ssh_user=""
+  
+  ssh -fN -o ControlMaster=yes -o ControlPersist=30s -o ControlPath="$socket_path" \
+      -o ServerAliveInterval=5 -o ServerAliveCountMax=24 \
+      -o TCPKeepAlive=yes -o IPQoS=throughput \
+      -o GSSAPIAuthentication=no -o Compression=yes \
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -o LogLevel=ERROR -o ConnectTimeout=15 \
+      "$host" 2>/dev/null
+  
+  sleep 0.5
+  [ -S "$socket_path" ] && return 0 || return 1
+}
+
+_gcloud_close_persistent() {
+  [ -S "$_gcloud_ssh_socket" ] && ssh -O exit -o ControlPath="$_gcloud_ssh_socket" "$_gcloud_ssh_user@localhost" 2>/dev/null
+  _gcloud_ssh_socket=""
+  _gcloud_ssh_user=""
 }
 
 _gcloud_cmd() {
-  if [ -n "$_GCLOUD_CTL_SOCKET" ] && ssh -O check -o ControlPath="$_GCLOUD_CTL_SOCKET" dummy 2>/dev/null; then
-    local remote_user remote_host
-    read remote_user remote_host < <(gcloud cloud-shell ssh --dry-run 2>/dev/null | grep -oP '(?<=ssh )\S+@\S+' | head -1 | tr '@' ' ')
-    ssh -o ControlPath="$_GCLOUD_CTL_SOCKET" \
-        -o ControlMaster=no \
-        -o LogLevel=ERROR \
-        "${remote_user}@${remote_host}" "$1" 2>/dev/null
-  else
-    gcloud cloud-shell ssh --authorize-session \
-      --ssh-flag="-o ServerAliveInterval=5" \
-      --ssh-flag="-o ServerAliveCountMax=24" \
-      --ssh-flag="-o TCPKeepAlive=yes" \
-      --ssh-flag="-o IPQoS=throughput" \
-      --ssh-flag="-o GSSAPIAuthentication=no" \
-      --ssh-flag="-o Compression=yes" \
-      --ssh-flag="-o StrictHostKeyChecking=no" \
-      --ssh-flag="-o UserKnownHostsFile=/dev/null" \
-      --ssh-flag="-o LogLevel=ERROR" \
-      --ssh-flag="-o ConnectTimeout=15" \
-      --command "$1" 2>/dev/null
+  if [ -z "$_gcloud_ssh_socket" ] || [ ! -S "$_gcloud_ssh_socket" ]; then
+    _gcloud_open_persistent || return 1
   fi
-}
-
-_gcloud_close_mux() {
-  if [ -n "$_GCLOUD_CTL_SOCKET" ]; then
-    ssh -O exit -o ControlPath="$_GCLOUD_CTL_SOCKET" dummy 2>/dev/null
-    rm -f "$_GCLOUD_CTL_SOCKET"
-    _GCLOUD_CTL_SOCKET=""
-  fi
+  
+  local host="$_gcloud_ssh_user@localhost"
+  [ -z "$_gcloud_ssh_user" ] && host="localhost"
+  
+  ssh -o ControlPath="$_gcloud_ssh_socket" \
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -o LogLevel=ERROR -o ConnectTimeout=15 \
+      "$host" "$1" 2>/dev/null
 }
 
 nav_last_browsed_path=""
@@ -83,9 +69,9 @@ _view_selections_menu() {
   while true; do
     echo
     if [ ${#_sel_ref[@]} -eq 0 ]; then
-      echo "📋 No items selected yet."
+      echo "No items selected yet."
     else
-      echo "📋 Current selections (${#_sel_ref[@]}):"
+      echo "Current selections (${#_sel_ref[@]}):"
       local i=1
       for s in "${_sel_ref[@]}"; do
         printf "  %2d) %s\n" "$i" "$(basename "$s")"
@@ -99,15 +85,15 @@ _view_selections_menu() {
     case "$sv_choice" in
       c|C)
         if [ ${#_sel_ref[@]} -eq 0 ]; then
-          echo "⚠️  Nothing selected — add items before confirming."
+          echo "Nothing selected."
         else
-          echo "✅ Selections confirmed (${#_sel_ref[@]} item(s))"
+          echo "Selections confirmed (${#_sel_ref[@]} item(s))"
           return 0
         fi
         ;;
       r|R)
         if [ ${#_sel_ref[@]} -eq 0 ]; then
-          echo "⚠️  Nothing to remove."
+          echo "Nothing to remove."
           continue
         fi
         echo "Enter item number(s) to remove (e.g. 1,3 or 2-5):"
@@ -115,7 +101,7 @@ _view_selections_menu() {
         local rm_indices
         rm_indices=($(parse_selection "$rm_input" "${#_sel_ref[@]}"))
         if [ ${#rm_indices[@]} -eq 0 ]; then
-          echo "❌ No valid numbers entered"
+          echo "No valid numbers entered"
           continue
         fi
         local -A _to_remove=()
@@ -129,7 +115,7 @@ _view_selections_menu() {
           j=$((j+1))
         done
         _sel_ref=("${new_sel[@]}")
-        echo "✅ Removed ${#rm_indices[@]} item(s). Remaining: ${#_sel_ref[@]}"
+        echo "Removed ${#rm_indices[@]} item(s). Remaining: ${#_sel_ref[@]}"
         ;;
       b|B)
         return 1
@@ -138,7 +124,7 @@ _view_selections_menu() {
         exit 0
         ;;
       *)
-        echo "⚠️  Invalid choice"
+        echo "Invalid choice"
         ;;
     esac
   done
@@ -159,9 +145,9 @@ local_navigator() {
 
     echo
     if [ "$mode" == "source" ]; then
-      echo "📂 SELECT SOURCE — Location: $nav_path${nav_prefix:+ [filter: ${nav_prefix^^}*]}"
+      echo "SELECT SOURCE — Location: $nav_path${nav_prefix:+ [filter: ${nav_prefix^^}*]}"
     else
-      echo "📂 SELECT DESTINATION — Location: $nav_path${nav_prefix:+ [filter: ${nav_prefix^^}*]}"
+      echo "SELECT DESTINATION — Location: $nav_path${nav_prefix:+ [filter: ${nav_prefix^^}*]}"
     fi
 
     local nav_total
@@ -201,11 +187,11 @@ local_navigator() {
         nav_items=("${items[@]}")
       fi
       if [ ${#nav_items[@]} -eq 0 ]; then
-        echo "🛑 This directory is empty"
+        echo "This directory is empty"
       else
         local idx=1
         for item in "${nav_items[@]}"; do
-          [ -d "$item" ] && icon="📁" || icon="📄"
+          [ -d "$item" ] && icon="[DIR]" || icon="[FILE]"
           printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
           idx=$((idx+1))
         done
@@ -214,8 +200,10 @@ local_navigator() {
 
     echo
     if [ "$mode" == "source" ]; then
-      echo "u) Up   v) View selections   x) Cancel   q) Quit   tip: use prefix 's' to select a folder"
+      echo "Enter number(s) to add to selection (supports ranges: 1-3,5)"
+      echo "u) Up   v) View selections   x) Cancel   q) Quit"
     else
+      echo "Enter number to enter a subfolder"
       echo "u) Up   n) New folder   c) Confirm destination   x) Cancel   q) Quit"
     fi
 
@@ -226,7 +214,7 @@ local_navigator() {
         exit 0
         ;;
       x|X)
-        echo "🚫 Navigation cancelled"
+        echo "Navigation cancelled"
         return 1
         ;;
       u|U)
@@ -238,14 +226,14 @@ local_navigator() {
         ;;
       n|N)
         if [ "$mode" == "dest" ]; then
-          read -p "📂 New folder name: " new_dir_name
+          read -p "New folder name: " new_dir_name
           if [ -n "$new_dir_name" ]; then
             mkdir -p "$nav_path/$new_dir_name"
-            echo "✅ Created: $nav_path/$new_dir_name"
+            echo "Created: $nav_path/$new_dir_name"
             nav_path="$nav_path/$new_dir_name"
           fi
         else
-          echo "⚠️  Invalid choice"
+          echo "Invalid choice"
         fi
         ;;
       v|V)
@@ -253,16 +241,16 @@ local_navigator() {
           _view_selections_menu nav_selected_items
           [ $? -eq 0 ] && return 0
         else
-          echo "⚠️  Invalid choice"
+          echo "Invalid choice"
         fi
         ;;
       c|C)
         if [ "$mode" == "dest" ]; then
           nav_result_path="$nav_path"
-          echo "✅ Destination confirmed: $nav_result_path"
+          echo "Destination confirmed: $nav_result_path"
           return 0
         else
-          echo "⚠️  Use v) to view and confirm your selections"
+          echo "Use v) to view and confirm your selections"
         fi
         ;;
       *)
@@ -283,7 +271,7 @@ local_navigator() {
             [ "$ch" == "#" ] && nav_prefix="${nav_prefix}#" || nav_prefix="${nav_prefix}${ch,,}"
             nav_force_show=false
           else
-            echo "⚠️  Invalid selection"
+            echo "Invalid selection"
           fi
         else
           if [[ "$nav_choice" =~ ^[0-9,\-]+$ ]]; then
@@ -291,7 +279,7 @@ local_navigator() {
               local indices
               indices=($(parse_selection "$nav_choice" "${#nav_items[@]}"))
               if [ ${#indices[@]} -eq 0 ]; then
-                echo "⚠️  No valid numbers"
+                echo "No valid numbers"
               else
                 local added=0 skipped=0
                 for idx in "${indices[@]}"; do
@@ -303,7 +291,7 @@ local_navigator() {
                     added=$((added+1))
                   fi
                 done
-                local msg="➕ Added $added item(s)"
+                local msg="Added $added item(s)"
                 [ $skipped -gt 0 ] && msg="$msg (skipped $skipped duplicate(s))"
                 echo "$msg — total selected: ${#nav_selected_items[@]}  (v to review)"
               fi
@@ -315,14 +303,14 @@ local_navigator() {
                   nav_prefix=""
                   nav_force_show=false
                 else
-                  echo "⚠️  Select a folder (📁) to navigate into, or c) to confirm this location"
+                  echo "Select a folder to navigate into, or c) to confirm this location"
                 fi
               else
-                echo "⚠️  Invalid selection"
+                echo "Invalid selection"
               fi
             fi
           else
-            echo "⚠️  Invalid selection"
+            echo "Invalid selection"
           fi
         fi
         ;;
@@ -334,10 +322,7 @@ gcloud_navigator() {
   local mode="$1"
   gcloud_nav_result_path=""
   gcloud_nav_selected_items=()
-  local -a _nav_history=()
-
-  echo "☁️  Connecting to GCloud Shell..."
-  _gcloud_init_mux || return 1
+  local -a _nav_history=() 
 
   local remote_path
   remote_path=$(_gcloud_cmd "echo \$HOME" | tail -1)
@@ -346,9 +331,9 @@ gcloud_navigator() {
   while true; do
     echo
     if [ "$mode" == "source" ]; then
-      echo "☁️  GCLOUD SOURCE — Location: $remote_path"
+      echo "GCLOUD SOURCE — Location: $remote_path"
     else
-      echo "☁️  GCLOUD DESTINATION — Location: $remote_path"
+      echo "GCLOUD DESTINATION — Location: $remote_path"
     fi
 
     local listing
@@ -361,14 +346,14 @@ gcloud_navigator() {
     done <<< "$listing"
 
     if [ ${#remote_items[@]} -eq 0 ]; then
-      echo "🛑 Remote directory is empty or inaccessible"
+      echo "Remote directory is empty or inaccessible"
     else
       local idx=1
       for item in "${remote_items[@]}"; do
         if [[ "$item" == */ ]]; then
-          printf "%2d) 📁 %s\n" "$idx" "${item%/}"
+          printf "%2d) [DIR] %s\n" "$idx" "${item%/}"
         else
-          printf "%2d) 📄 %s\n" "$idx" "$item"
+          printf "%2d) [FILE] %s\n" "$idx" "$item"
         fi
         idx=$((idx+1))
       done
@@ -376,8 +361,10 @@ gcloud_navigator() {
 
     echo
     if [ "$mode" == "source" ]; then
-      echo "u) Up   b) Back   v) View selections   x) Cancel   q) Quit   tip: use prefix 's' to select a folder"
+      echo "Tip: use prefix 's' to select a folder"
+      echo "u) Up   b) Back   v) View selections   x) Cancel   q) Remove all and quit"
     else
+      echo "Enter number to enter a subfolder"
       echo "u) Up   b) Back   n) New folder   c) Confirm destination   x) Cancel   q) Quit"
     fi
 
@@ -387,14 +374,14 @@ gcloud_navigator() {
 
       q|Q)
         gcloud_nav_selected_items=()
-        _gcloud_close_mux
-        echo "🗑️  All selections cleared. Exiting."
+        echo "All selections cleared. Exiting."
+        _gcloud_close_persistent
         exit 0
         ;;
 
       x|X)
-        _gcloud_close_mux
-        echo "🚫 GCloud navigation cancelled"
+        echo "GCloud navigation cancelled"
+        _gcloud_close_persistent
         return 1
         ;;
 
@@ -402,9 +389,9 @@ gcloud_navigator() {
         if [ ${#_nav_history[@]} -gt 0 ]; then
           remote_path="${_nav_history[-1]}"
           _nav_history=("${_nav_history[@]:0:${#_nav_history[@]}-1}")
-          echo "↩️  Back to: $remote_path"
+          echo "Back to: $remote_path"
         else
-          echo "⚠️  No navigation history"
+          echo "No navigation history"
         fi
         ;;
 
@@ -414,33 +401,34 @@ gcloud_navigator() {
 
       n|N)
         if [ "$mode" == "dest" ]; then
-          read -p "📂 New remote folder name: " new_rdir
+          read -p "New remote folder name: " new_rdir
           if [ -n "$new_rdir" ]; then
             _gcloud_cmd "mkdir -p '$remote_path/$new_rdir'"
-            echo "✅ Created remote: $remote_path/$new_rdir"
+            echo "Created remote: $remote_path/$new_rdir"
             remote_path="$remote_path/$new_rdir"
           fi
         else
-          echo "⚠️  Invalid choice"
+          echo "Invalid choice"
         fi
         ;;
 
       v|V)
         if [ "$mode" == "source" ]; then
           _view_selections_menu gcloud_nav_selected_items
-          [ $? -eq 0 ] && { _gcloud_close_mux; return 0; }
+          [ $? -eq 0 ] && return 0
         else
-          echo "⚠️  Invalid choice"
+          echo "Invalid choice"
         fi
         ;;
 
       c|C)
         if [ "$mode" == "dest" ]; then
           gcloud_nav_result_path="$remote_path"
-          echo "✅ GCloud destination confirmed: $gcloud_nav_result_path"
+          echo "GCloud destination confirmed: $gcloud_nav_result_path"
+          _gcloud_close_persistent
           return 0
         else
-          echo "⚠️  Use v) to view and confirm your selections"
+          echo "Use v) to view and confirm your selections"
         fi
         ;;
 
@@ -463,7 +451,7 @@ gcloud_navigator() {
               local indices
               indices=($(parse_selection "$cleaned_input" "${#remote_items[@]}"))
               if [ ${#indices[@]} -eq 0 ]; then
-                echo "⚠️  No valid numbers"
+                echo "No valid numbers"
               else
                 local added=0 skipped=0
                 for idx in "${indices[@]}"; do
@@ -476,7 +464,7 @@ gcloud_navigator() {
                     added=$((added+1))
                   fi
                 done
-                local msg="➕ Added $added item(s)"
+                local msg="Added $added item(s)"
                 [ $skipped -gt 0 ] && msg="$msg (skipped $skipped duplicate(s))"
                 echo "$msg — total selected: ${#gcloud_nav_selected_items[@]}  (v to review)"
               fi
@@ -492,19 +480,19 @@ gcloud_navigator() {
                 else
                   local full_path="$remote_path/$sel"
                   if _in_selection "$full_path" "${gcloud_nav_selected_items[@]}"; then
-                    echo "⚠️  Already selected: $sel — skipped"
+                    echo "Already selected: $sel — skipped"
                   else
                     gcloud_nav_selected_items+=("$full_path")
-                    echo "➕ Selected: $sel — total: ${#gcloud_nav_selected_items[@]}  (v to review)"
+                    echo "Selected: $sel — total: ${#gcloud_nav_selected_items[@]}  (v to review)"
                   fi
                 fi
               else
-                echo "⚠️  Invalid selection"
+                echo "Invalid selection"
               fi
             fi
 
           else
-            echo "⚠️  Invalid input"
+            echo "Invalid input"
           fi
 
         else
@@ -516,10 +504,10 @@ gcloud_navigator() {
               _nav_history+=("$remote_path")
               remote_path="$remote_path/${sel%/}"
             else
-              echo "⚠️  Select a folder (📁) to navigate into, or c) to confirm this location"
+              echo "Select a folder to navigate into, or c) to confirm this location"
             fi
           else
-            echo "⚠️  Invalid selection"
+            echo "Invalid selection"
           fi
         fi
         ;;
@@ -549,7 +537,7 @@ perform_copy() {
       count=$((count+1))
     done
     cp -r -- "$item" "$dest/$newbase"
-    echo "  ✅ Copied: $(basename "$item") → $dest/$newbase"
+    echo "Copied: $(basename "$item") → $dest/$newbase"
   done
 }
 
@@ -560,14 +548,14 @@ perform_move() {
   for item in "${src_items[@]}"; do
     [ ! -e "$item" ] && continue
     mv -- "$item" "$dest/"
-    echo "  ✅ Moved: $(basename "$item") → $dest/"
+    echo "Moved: $(basename "$item") → $dest/"
   done
 }
 
 transfer_menu() {
 
   echo
-  echo "📦 TRANSFER — Step 1: Choose mode"
+  echo "TRANSFER — Step 1: Choose mode"
   echo "1) Intra-location (Current CLI → Current CLI [Up Down])"
   echo "2) Intra-location (Current CLI → Current CLI [Down Up])"
   echo "3) Current CLI To Drive (Via rclone)"
@@ -578,24 +566,26 @@ transfer_menu() {
   case "$t_mode" in
     1|2|3|4|5) ;;
     *)
-      echo "❌ Invalid mode"
+      echo "Invalid mode"
       return
       ;;
   esac
 
   echo
-  echo "📦 TRANSFER — Step 2: Select source items"
+  echo "TRANSFER — Step 2: Select source items"
 
   local step2_ok=false
 
   if [ "$t_mode" == "5" ]; then
     if ! command -v gcloud >/dev/null 2>&1; then
-      echo "❌ gcloud not found in PATH."
+      echo "gcloud not found in PATH."
       return
     fi
+    echo "Establishing GCloud SSH for source navigation..."
+    _gcloud_cmd "echo 'SSH ready'" | tail -1
     gcloud_navigator "source"
     if [ $? -ne 0 ] || [ ${#gcloud_nav_selected_items[@]} -eq 0 ]; then
-      echo "🚫 Transfer cancelled"
+      echo "Transfer cancelled"
       return
     fi
     step2_ok=true
@@ -612,12 +602,12 @@ transfer_menu() {
   fi
 
   if ! $step2_ok; then
-    echo "🚫 Transfer cancelled — no items selected"
+    echo "Transfer cancelled — no items selected"
     return
   fi
 
   echo
-  echo "📦 TRANSFER — Step 3: Choose destination"
+  echo "TRANSFER — Step 3: Choose destination"
 
   local dest_ok=false
   local final_dest=""
@@ -639,19 +629,19 @@ transfer_menu() {
       ;;
     3)
       if ! command -v rclone >/dev/null 2>&1; then
-        echo "❌ rclone not found in PATH."
+        echo "rclone not found in PATH."
         return
       fi
       final_dest="gdrive:/rclone"
-      echo "📍 Destination: Google Drive ($final_dest)"
+      echo "Destination: Google Drive ($final_dest)"
       dest_ok=true
       ;;
     4)
       if ! command -v gcloud >/dev/null 2>&1; then
-        echo "❌ gcloud not found in PATH."
+        echo "gcloud not found in PATH."
         return
       fi
-      echo "☁️  Navigating GCloud for destination..."
+      echo "Navigating GCloud for destination..."
       gcloud_navigator "dest"
       if [ $? -eq 0 ]; then
         final_dest="$gcloud_nav_result_path"
@@ -668,12 +658,12 @@ transfer_menu() {
   esac
 
   if ! $dest_ok || [ -z "$final_dest" ]; then
-    echo "🚫 Transfer cancelled — no destination chosen"
+    echo "Transfer cancelled — no destination chosen"
     return
   fi
 
   echo
-  echo "📦 TRANSFER — Step 4: Action"
+  echo "TRANSFER — Step 4: Action"
   echo "c) Copy   m) Move"
   read -p "Action: " t_action
 
@@ -682,22 +672,22 @@ transfer_menu() {
     c|C) t_op="copy" ;;
     m|M) t_op="move" ;;
     *)
-      echo "❌ Invalid action. Transfer cancelled."
+      echo "Invalid action. Transfer cancelled."
       return
       ;;
   esac
 
   echo
-  echo "⚙️  Executing $t_op..."
+  echo "Executing $t_op..."
 
   case "$t_mode" in
     1|2)
       if [ "$t_op" == "copy" ]; then
         perform_copy "$final_dest" "${selected_items[@]}"
-        echo "✅ Copy complete → $final_dest"
+        echo "Copy complete → $final_dest"
       else
         perform_move "$final_dest" "${selected_items[@]}"
-        echo "✅ Move complete → $final_dest"
+        echo "Move complete → $final_dest"
       fi
       ;;
     3)
@@ -705,43 +695,42 @@ transfer_menu() {
         local base
         base=$(basename "$item")
         if [ "$t_op" == "copy" ]; then
-          echo "📤 rclone copy: $base → $final_dest/"
+          echo "rclone copy: $base → $final_dest/"
           rclone copy "$item" "$final_dest/" --progress --metadata
         else
-          echo "📤 rclone move: $base → $final_dest/"
+          echo "rclone move: $base → $final_dest/"
           rclone move "$item" "$final_dest/" --progress --metadata
         fi
       done
-      echo "✅ Drive transfer complete"
+      echo "Drive transfer complete"
       ;;
     4)
-      echo "☁️  Transferring to GCloud Shell..."
+      echo "Transferring to GCloud Shell..."
       for item in "${selected_items[@]}"; do
         local base
         base=$(basename "$item")
-        echo "📤 Sending $base → GCloud:$final_dest/"
+        echo "Sending $base → GCloud:$final_dest/"
         gcloud cloud-shell scp --recurse "localhost:$item" "cloudshell:$final_dest/"
         if [ $? -eq 0 ] && [ "$t_op" == "move" ]; then
           rm -rf -- "$item"
-          echo "  🗑️  Removed local: $item"
+          echo "Removed local: $item"
         fi
       done
-      echo "✅ Transfer to GCloud complete"
+      echo "Transfer to GCloud complete"
       ;;
     5)
-      echo "☁️  Transferring from GCloud Shell to local..."
+      echo "Transferring from GCloud Shell to local..."
       for remote_item in "${gcloud_nav_selected_items[@]}"; do
         local base
         base=$(basename "$remote_item")
-        echo "📥 Pulling $base → $final_dest/"
+        echo "Pulling $base → $final_dest/"
         gcloud cloud-shell scp --recurse "cloudshell:$remote_item" "localhost:$final_dest/"
         if [ $? -eq 0 ] && [ "$t_op" == "move" ]; then
           _gcloud_cmd "rm -rf '$remote_item'"
-          echo "  🗑️  Removed from GCloud: $remote_item"
+          echo "Removed from GCloud: $remote_item"
         fi
       done
-      _gcloud_close_mux
-      echo "✅ Transfer from GCloud complete"
+      echo "Transfer from GCloud complete"
       ;;
   esac
 
