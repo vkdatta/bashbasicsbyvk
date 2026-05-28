@@ -6,19 +6,73 @@ _in_selection() {
   return 1
 }
 
+_GCLOUD_CTL_SOCKET=""
+
+_gcloud_init_mux() {
+  if [ -n "$_GCLOUD_CTL_SOCKET" ] && ssh -O check -o ControlPath="$_GCLOUD_CTL_SOCKET" dummy 2>/dev/null; then
+    return 0
+  fi
+  _GCLOUD_CTL_SOCKET=$(mktemp -u /tmp/gcloud_mux_XXXXXX)
+  local remote_user remote_host
+  read remote_user remote_host < <(gcloud cloud-shell ssh --dry-run 2>/dev/null | grep -oP '(?<=ssh )\S+@\S+' | head -1 | tr '@' ' ')
+  if [ -z "$remote_host" ]; then
+    read remote_user remote_host < <(gcloud cloud-shell ssh --dry-run 2>&1 | grep -oP '\S+@\S+\.cloudshell\.dev' | head -1 | tr '@' ' ')
+  fi
+  if [ -z "$remote_host" ]; then
+    echo "❌ Could not determine GCloud SSH host"
+    return 1
+  fi
+  ssh -fNM \
+    -o ControlPath="$_GCLOUD_CTL_SOCKET" \
+    -o ControlPersist=600 \
+    -o ServerAliveInterval=5 \
+    -o ServerAliveCountMax=24 \
+    -o TCPKeepAlive=yes \
+    -o IPQoS=throughput \
+    -o GSSAPIAuthentication=no \
+    -o Compression=yes \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR \
+    -o ConnectTimeout=15 \
+    "${remote_user}@${remote_host}" 2>/dev/null
+  if [ $? -ne 0 ]; then
+    echo "❌ Failed to establish SSH mux"
+    return 1
+  fi
+  return 0
+}
+
 _gcloud_cmd() {
-  gcloud cloud-shell ssh --authorize-session \
-    --ssh-flag="-o ServerAliveInterval=5" \
-    --ssh-flag="-o ServerAliveCountMax=24" \
-    --ssh-flag="-o TCPKeepAlive=yes" \
-    --ssh-flag="-o IPQoS=throughput" \
-    --ssh-flag="-o GSSAPIAuthentication=no" \
-    --ssh-flag="-o Compression=yes" \
-    --ssh-flag="-o StrictHostKeyChecking=no" \
-    --ssh-flag="-o UserKnownHostsFile=/dev/null" \
-    --ssh-flag="-o LogLevel=ERROR" \
-    --ssh-flag="-o ConnectTimeout=15" \
-    --command "$1" 2>/dev/null
+  if [ -n "$_GCLOUD_CTL_SOCKET" ] && ssh -O check -o ControlPath="$_GCLOUD_CTL_SOCKET" dummy 2>/dev/null; then
+    local remote_user remote_host
+    read remote_user remote_host < <(gcloud cloud-shell ssh --dry-run 2>/dev/null | grep -oP '(?<=ssh )\S+@\S+' | head -1 | tr '@' ' ')
+    ssh -o ControlPath="$_GCLOUD_CTL_SOCKET" \
+        -o ControlMaster=no \
+        -o LogLevel=ERROR \
+        "${remote_user}@${remote_host}" "$1" 2>/dev/null
+  else
+    gcloud cloud-shell ssh --authorize-session \
+      --ssh-flag="-o ServerAliveInterval=5" \
+      --ssh-flag="-o ServerAliveCountMax=24" \
+      --ssh-flag="-o TCPKeepAlive=yes" \
+      --ssh-flag="-o IPQoS=throughput" \
+      --ssh-flag="-o GSSAPIAuthentication=no" \
+      --ssh-flag="-o Compression=yes" \
+      --ssh-flag="-o StrictHostKeyChecking=no" \
+      --ssh-flag="-o UserKnownHostsFile=/dev/null" \
+      --ssh-flag="-o LogLevel=ERROR" \
+      --ssh-flag="-o ConnectTimeout=15" \
+      --command "$1" 2>/dev/null
+  fi
+}
+
+_gcloud_close_mux() {
+  if [ -n "$_GCLOUD_CTL_SOCKET" ]; then
+    ssh -O exit -o ControlPath="$_GCLOUD_CTL_SOCKET" dummy 2>/dev/null
+    rm -f "$_GCLOUD_CTL_SOCKET"
+    _GCLOUD_CTL_SOCKET=""
+  fi
 }
 
 nav_last_browsed_path=""
@@ -39,7 +93,7 @@ _view_selections_menu() {
       done
     fi
     echo
-    echo "c) Confirm selections   r) Remove items   q) Quit"
+    echo "c) Confirm   r) Remove   b) Back   q) Quit"
     read -p "Selection view: " sv_choice
 
     case "$sv_choice" in
@@ -76,6 +130,9 @@ _view_selections_menu() {
         done
         _sel_ref=("${new_sel[@]}")
         echo "✅ Removed ${#rm_indices[@]} item(s). Remaining: ${#_sel_ref[@]}"
+        ;;
+      b|B)
+        return 1
         ;;
       q|Q)
         exit 0
@@ -157,10 +214,8 @@ local_navigator() {
 
     echo
     if [ "$mode" == "source" ]; then
-      echo "Enter number(s) to add to selection (supports ranges: 1-3,5)"
-      echo "u) Up   v) View selections   x) Cancel   q) Quit"
+      echo "u) Up   v) View selections   x) Cancel   q) Quit   tip: use prefix 's' to select a folder"
     else
-      echo "Enter number to enter a subfolder"
       echo "u) Up   n) New folder   c) Confirm destination   x) Cancel   q) Quit"
     fi
 
@@ -279,7 +334,10 @@ gcloud_navigator() {
   local mode="$1"
   gcloud_nav_result_path=""
   gcloud_nav_selected_items=()
-  local -a _nav_history=() 
+  local -a _nav_history=()
+
+  echo "☁️  Connecting to GCloud Shell..."
+  _gcloud_init_mux || return 1
 
   local remote_path
   remote_path=$(_gcloud_cmd "echo \$HOME" | tail -1)
@@ -318,12 +376,8 @@ gcloud_navigator() {
 
     echo
     if [ "$mode" == "source" ]; then
-      echo "  Plain number : navigate (folder) / auto-select (file)"
-      echo "  s<n>         : always select  (e.g. s4, s1-3, s3,4,5, s3,s4,s5, s1-s3)"
-      echo "  Multi-select : always select  (e.g. 3,4  or  1-3)"
-      echo "u) Up   b) Back   v) View selections   x) Cancel   q) Remove all and quit"
+      echo "u) Up   b) Back   v) View selections   x) Cancel   q) Quit   tip: use prefix 's' to select a folder"
     else
-      echo "Enter number to enter a subfolder"
       echo "u) Up   b) Back   n) New folder   c) Confirm destination   x) Cancel   q) Quit"
     fi
 
@@ -333,11 +387,13 @@ gcloud_navigator() {
 
       q|Q)
         gcloud_nav_selected_items=()
+        _gcloud_close_mux
         echo "🗑️  All selections cleared. Exiting."
         exit 0
         ;;
 
       x|X)
+        _gcloud_close_mux
         echo "🚫 GCloud navigation cancelled"
         return 1
         ;;
@@ -348,7 +404,7 @@ gcloud_navigator() {
           _nav_history=("${_nav_history[@]:0:${#_nav_history[@]}-1}")
           echo "↩️  Back to: $remote_path"
         else
-          echo "⚠️  No navigation history — already at starting point"
+          echo "⚠️  No navigation history"
         fi
         ;;
 
@@ -372,7 +428,7 @@ gcloud_navigator() {
       v|V)
         if [ "$mode" == "source" ]; then
           _view_selections_menu gcloud_nav_selected_items
-          [ $? -eq 0 ] && return 0
+          [ $? -eq 0 ] && { _gcloud_close_mux; return 0; }
         else
           echo "⚠️  Invalid choice"
         fi
@@ -537,8 +593,6 @@ transfer_menu() {
       echo "❌ gcloud not found in PATH."
       return
     fi
-    echo "☁️  Establishing GCloud SSH for source navigation..."
-    _gcloud_cmd "echo '✅ SSH ready'" | tail -1
     gcloud_navigator "source"
     if [ $? -ne 0 ] || [ ${#gcloud_nav_selected_items[@]} -eq 0 ]; then
       echo "🚫 Transfer cancelled"
@@ -686,6 +740,7 @@ transfer_menu() {
           echo "  🗑️  Removed from GCloud: $remote_item"
         fi
       done
+      _gcloud_close_mux
       echo "✅ Transfer from GCloud complete"
       ;;
   esac
