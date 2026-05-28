@@ -302,43 +302,75 @@ local_navigator() {
             echo "⚠️  Invalid selection"
           fi
         else
-          if [[ "$nav_choice" =~ ^[0-9,\-]+$ ]]; then
-            if [ "$mode" == "source" ]; then
-              local indices
-              indices=($(parse_selection "$nav_choice" "${#nav_items[@]}"))
-              if [ ${#indices[@]} -eq 0 ]; then
-                echo "⚠️  No valid numbers"
-              else
-                local added=0 skipped=0
-                for idx in "${indices[@]}"; do
-                  local new_item="${nav_items[$((idx-1))]}"
-                  if _in_selection "$new_item" "${nav_selected_items[@]}"; then
-                    skipped=$((skipped+1))
-                  else
-                    nav_selected_items+=("$new_item")
-                    added=$((added+1))
-                  fi
-                done
-                local msg="➕ Added $added item(s)"
-                [ $skipped -gt 0 ] && msg="$msg (skipped $skipped duplicate(s))"
-                echo "$msg — total selected: ${#nav_selected_items[@]}  (v to review)"
-              fi
-            else
-              if [[ "$nav_choice" =~ ^[0-9]+$ ]] && [ "$nav_choice" -ge 1 ] && [ "$nav_choice" -le "${#nav_items[@]}" ]; then
-                local sel="${nav_items[$((nav_choice-1))]}"
-                if [ -d "$sel" ]; then
-                  nav_path="$sel"
-                  nav_prefix=""
-                  nav_force_show=false
+          if [ "$mode" == "source" ]; then
+            local raw_input="$nav_choice"
+            local is_select=false
+
+            [[ "$raw_input" =~ ^[sS] ]] && is_select=true
+
+            local cleaned_input
+            cleaned_input=$(printf '%s' "$raw_input" | sed 's/[Ss]\([0-9]\)/\1/g; s/^[Ss]//')
+
+            [[ "$cleaned_input" =~ [,\-] ]] && is_select=true
+
+            if [[ "$cleaned_input" =~ ^[0-9,\-]+$ ]]; then
+              if $is_select; then
+                local indices
+                indices=($(parse_selection "$cleaned_input" "${#nav_items[@]}"))
+                if [ ${#indices[@]} -eq 0 ]; then
+                  echo "⚠️  No valid numbers"
                 else
-                  echo "⚠️  Select a folder (📁) to navigate into, or c) to confirm this location"
+                  local added=0 skipped=0
+                  for idx in "${indices[@]}"; do
+                    local new_item="${nav_items[$((idx-1))]}"
+                    if _in_selection "$new_item" "${nav_selected_items[@]}"; then
+                      skipped=$((skipped+1))
+                    else
+                      nav_selected_items+=("$new_item")
+                      added=$((added+1))
+                    fi
+                  done
+                  local msg="➕ Added $added item(s)"
+                  [ $skipped -gt 0 ] && msg="$msg (skipped $skipped duplicate(s))"
+                  echo "$msg — total selected: ${#nav_selected_items[@]}  (v to review)"
                 fi
               else
-                echo "⚠️  Invalid selection"
+                if [[ "$cleaned_input" =~ ^[0-9]+$ ]] && \
+                   [ "$cleaned_input" -ge 1 ] && \
+                   [ "$cleaned_input" -le "${#nav_items[@]}" ]; then
+                  local sel="${nav_items[$((cleaned_input-1))]}"
+                  if [ -d "$sel" ]; then
+                    nav_path="$sel"
+                    nav_prefix=""
+                    nav_force_show=false
+                  else
+                    if _in_selection "$sel" "${nav_selected_items[@]}"; then
+                      echo "⚠️  Already selected: $(basename "$sel") — skipped"
+                    else
+                      nav_selected_items+=("$sel")
+                      echo "➕ Selected: $(basename "$sel") — total: ${#nav_selected_items[@]}  (v to review)"
+                    fi
+                  fi
+                else
+                  echo "⚠️  Invalid selection"
+                fi
               fi
+            else
+              echo "⚠️  Invalid input"
             fi
           else
-            echo "⚠️  Invalid selection"
+            if [[ "$nav_choice" =~ ^[0-9]+$ ]] && [ "$nav_choice" -ge 1 ] && [ "$nav_choice" -le "${#nav_items[@]}" ]; then
+              local sel="${nav_items[$((nav_choice-1))]}"
+              if [ -d "$sel" ]; then
+                nav_path="$sel"
+                nav_prefix=""
+                nav_force_show=false
+              else
+                echo "⚠️  Select a folder (📁) to navigate into, or c) to confirm this location"
+              fi
+            else
+              echo "⚠️  Invalid selection"
+            fi
           fi
         fi
         ;;
