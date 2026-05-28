@@ -7,58 +7,89 @@ _in_selection() {
 }
 
 _gcloud_ssh_socket=""
-_gcloud_ssh_user=""
+_gcloud_ssh_host=""
 
 _gcloud_open_persistent() {
-  local socket_path="/tmp/gcloud_nav_ssh_$$"
-  _gcloud_ssh_socket="$socket_path"
-  
-  local ssh_info
-  ssh_info=$(gcloud cloud-shell ssh --dry-run 2>/dev/null | grep -o 'ssh .*')
-  [ -z "$ssh_info" ] && ssh_info=$(gcloud cloud-shell ssh --authorize-session --dry-run 2>/dev/null | grep -o 'ssh .*')
-  
-  if [ -z "$ssh_info" ]; then
-    echo "Failed to get SSH info from gcloud"
+  local socket_path="/tmp/.gcloud_nav_$$"
+  rm -f "$socket_path"
+
+  local dry_run_output
+  dry_run_output=$(gcloud cloud-shell ssh --dry-run 2>&1)
+
+  local ssh_cmd
+  ssh_cmd=$(echo "$dry_run_output" | tail -1)
+
+  if [[ "$ssh_cmd" != ssh* ]]; then
+    dry_run_output=$(gcloud cloud-shell ssh --authorize-session --dry-run 2>&1)
+    ssh_cmd=$(echo "$dry_run_output" | tail -1)
+  fi
+
+  if [[ "$ssh_cmd" != ssh* ]]; then
+    echo "Failed to get SSH command from gcloud dry-run" >&2
     return 1
   fi
-  
-  local host
-  host=$(echo "$ssh_info" | grep -oP '[^\s]+@cs-\d+[^\s]*' | head -1)
-  [ -z "$host" ] && host=$(echo "$ssh_info" | grep -oE '[^[:space:]]+@cs-[0-9]+[^[:space:]]*' | head -1)
-  
-  _gcloud_ssh_user="${host%@*}"
-  [ "$_gcloud_ssh_user" == "$host" ] && _gcloud_ssh_user=""
-  
-  ssh -fN -o ControlMaster=yes -o ControlPersist=30s -o ControlPath="$socket_path" \
-      -o ServerAliveInterval=5 -o ServerAliveCountMax=24 \
-      -o TCPKeepAlive=yes -o IPQoS=throughput \
-      -o GSSAPIAuthentication=no -o Compression=yes \
-      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-      -o LogLevel=ERROR -o ConnectTimeout=15 \
-      "$host" 2>/dev/null
-  
-  sleep 0.5
-  [ -S "$socket_path" ] && return 0 || return 1
+
+  local host_part
+  host_part=$(echo "$ssh_cmd" | grep -oE '[^[:space:]]+@[^[:space:]]+' | head -1)
+
+  if [ -z "$host_part" ]; then
+    echo "Failed to extract host from SSH command" >&2
+    return 1
+  fi
+
+  _gcloud_ssh_host="$host_part"
+  _gcloud_ssh_socket="$socket_path"
+
+  eval "$ssh_cmd -o ControlMaster=yes -o ControlPersist=60s -o ControlPath=\"$socket_path\" -fN" 2>/dev/null
+
+  sleep 1
+
+  if [ ! -S "$socket_path" ]; then
+    _gcloud_ssh_socket=""
+    _gcloud_ssh_host=""
+    return 1
+  fi
+
+  if [ "$(ssh -o ControlPath="$socket_path" -o ConnectTimeout=5 "$host_part" "echo OK" 2>/dev/null)" != "OK" ]; then
+    rm -f "$socket_path"
+    _gcloud_ssh_socket=""
+    _gcloud_ssh_host=""
+    return 1
+  fi
+
+  return 0
 }
 
 _gcloud_close_persistent() {
-  [ -S "$_gcloud_ssh_socket" ] && ssh -O exit -o ControlPath="$_gcloud_ssh_socket" "$_gcloud_ssh_user@localhost" 2>/dev/null
+  [ -n "$_gcloud_ssh_socket" ] && [ -S "$_gcloud_ssh_socket" ] && \
+    ssh -O exit -o ControlPath="$_gcloud_ssh_socket" "$_gcloud_ssh_host" 2>/dev/null
+  rm -f "/tmp/.gcloud_nav_$$"
   _gcloud_ssh_socket=""
-  _gcloud_ssh_user=""
+  _gcloud_ssh_host=""
 }
 
 _gcloud_cmd() {
-  if [ -z "$_gcloud_ssh_socket" ] || [ ! -S "$_gcloud_ssh_socket" ]; then
-    _gcloud_open_persistent || return 1
+  if [ -n "$_gcloud_ssh_socket" ] && [ -S "$_gcloud_ssh_socket" ]; then
+    local result
+    result=$(ssh -o ControlPath="$_gcloud_ssh_socket" \
+                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o LogLevel=ERROR -o ConnectTimeout=15 \
+                "$_gcloud_ssh_host" "$1" 2>/dev/null)
+    [ -n "$result" ] && { echo "$result"; return 0; }
   fi
-  
-  local host="$_gcloud_ssh_user@localhost"
-  [ -z "$_gcloud_ssh_user" ] && host="localhost"
-  
-  ssh -o ControlPath="$_gcloud_ssh_socket" \
-      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-      -o LogLevel=ERROR -o ConnectTimeout=15 \
-      "$host" "$1" 2>/dev/null
+
+  gcloud cloud-shell ssh --authorize-session \
+    --ssh-flag="-o ServerAliveInterval=5" \
+    --ssh-flag="-o ServerAliveCountMax=24" \
+    --ssh-flag="-o TCPKeepAlive=yes" \
+    --ssh-flag="-o IPQoS=throughput" \
+    --ssh-flag="-o GSSAPIAuthentication=no" \
+    --ssh-flag="-o Compression=yes" \
+    --ssh-flag="-o StrictHostKeyChecking=no" \
+    --ssh-flag="-o UserKnownHostsFile=/dev/null" \
+    --ssh-flag="-o LogLevel=ERROR" \
+    --ssh-flag="-o ConnectTimeout=15" \
+    --command "$1" 2>/dev/null
 }
 
 nav_last_browsed_path=""
@@ -296,7 +327,8 @@ local_navigator() {
                 echo "$msg — total selected: ${#nav_selected_items[@]}  (v to review)"
               fi
             else
-              if [[ "$nav_choice" =~ ^[0-9]+$ ]] && [ "$nav_choice" -ge 1 ] && [ "$nav_choice" -le "${#nav_items[@]}" ]; then
+              if [[ "$nav_choice" =~ ^[0-9]+$ ]] && \
+                 [ "$nav_choice" -ge 1 ] && [ "$nav_choice" -le "${#nav_items[@]}" ]; then
                 local sel="${nav_items[$((nav_choice-1))]}"
                 if [ -d "$sel" ]; then
                   nav_path="$sel"
@@ -337,7 +369,7 @@ gcloud_navigator() {
     fi
 
     local listing
-    listing=$(_gcloud_cmd "ls -1Ap '$remote_path' 2>/dev/null")
+    listing=$(_gcloud_cmd "ls -1Ap \"$remote_path\" 2>/dev/null")
 
     local -a remote_items=()
     while IFS= read -r line; do
@@ -403,7 +435,7 @@ gcloud_navigator() {
         if [ "$mode" == "dest" ]; then
           read -p "New remote folder name: " new_rdir
           if [ -n "$new_rdir" ]; then
-            _gcloud_cmd "mkdir -p '$remote_path/$new_rdir'"
+            _gcloud_cmd "mkdir -p \"$remote_path/$new_rdir\""
             echo "Created remote: $remote_path/$new_rdir"
             remote_path="$remote_path/$new_rdir"
           fi
@@ -582,10 +614,14 @@ transfer_menu() {
       return
     fi
     echo "Establishing GCloud SSH for source navigation..."
+    if ! _gcloud_open_persistent; then
+      echo "Persistent SSH failed. Using slow fallback."
+    fi
     _gcloud_cmd "echo 'SSH ready'" | tail -1
     gcloud_navigator "source"
     if [ $? -ne 0 ] || [ ${#gcloud_nav_selected_items[@]} -eq 0 ]; then
       echo "Transfer cancelled"
+      _gcloud_close_persistent
       return
     fi
     step2_ok=true
@@ -642,6 +678,9 @@ transfer_menu() {
         return
       fi
       echo "Navigating GCloud for destination..."
+      if ! _gcloud_open_persistent; then
+        echo "Persistent SSH failed. Using slow fallback."
+      fi
       gcloud_navigator "dest"
       if [ $? -eq 0 ]; then
         final_dest="$gcloud_nav_result_path"
@@ -659,6 +698,7 @@ transfer_menu() {
 
   if ! $dest_ok || [ -z "$final_dest" ]; then
     echo "Transfer cancelled — no destination chosen"
+    _gcloud_close_persistent
     return
   fi
 
@@ -673,6 +713,7 @@ transfer_menu() {
     m|M) t_op="move" ;;
     *)
       echo "Invalid action. Transfer cancelled."
+      _gcloud_close_persistent
       return
       ;;
   esac
@@ -726,7 +767,7 @@ transfer_menu() {
         echo "Pulling $base → $final_dest/"
         gcloud cloud-shell scp --recurse "cloudshell:$remote_item" "localhost:$final_dest/"
         if [ $? -eq 0 ] && [ "$t_op" == "move" ]; then
-          _gcloud_cmd "rm -rf '$remote_item'"
+          _gcloud_cmd "rm -rf \"$remote_item\""
           echo "Removed from GCloud: $remote_item"
         fi
       done
@@ -735,4 +776,5 @@ transfer_menu() {
   esac
 
   selected_items=()
+  _gcloud_close_persistent
 }
