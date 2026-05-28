@@ -726,12 +726,14 @@ transfer_menu() {
       for item in "${selected_items[@]}"; do
         local base
         base=$(basename "$item")
+        local rclone_dest="$final_dest"
+        [ -d "$item" ] && rclone_dest="$final_dest/$base"
         if [ "$t_op" == "copy" ]; then
-          echo "📤 rclone copy: $base → $final_dest/"
-          rclone copy "$item" "$final_dest/" --progress --metadata
+          echo "📤 rclone copy: $base → $rclone_dest/"
+          rclone copy "$item" "$rclone_dest" --progress --metadata
         else
-          echo "📤 rclone move: $base → $final_dest/"
-          rclone move "$item" "$final_dest/" --progress --metadata
+          echo "📤 rclone move: $base → $rclone_dest/"
+          rclone move "$item" "$rclone_dest" --progress --metadata
         fi
       done
       echo "✅ Drive transfer complete"
