@@ -1,6 +1,8 @@
 _GCLOUD_SOCKET=""
-_GCLOUD_HOST=""
-_GCLOUD_USER=""
+_GCLOUD_SSH_HOST=""
+_GCLOUD_SSH_PORT=""
+_GCLOUD_SSH_USER=""
+_GCLOUD_SSH_KEY=""
 
 _gcloud_init_master() {
   if [ -n "$_GCLOUD_SOCKET" ] && ssh -O check -o ControlPath="$_GCLOUD_SOCKET" dummy 2>/dev/null; then
@@ -8,37 +10,6 @@ _gcloud_init_master() {
   fi
 
   echo "☁️  Connecting to Cloud Shell (one-time)..."
-
-  local tmp_script
-  tmp_script=$(mktemp /tmp/gcloud_info.XXXXXX.sh)
-  cat > "$tmp_script" << 'EOF'
-#!/bin/bash
-gcloud cloud-shell ssh --authorize-session \
-  --ssh-flag="-o ServerAliveInterval=5" \
-  --ssh-flag="-o ServerAliveCountMax=24" \
-  --ssh-flag="-o TCPKeepAlive=yes" \
-  --ssh-flag="-o IPQoS=throughput" \
-  --ssh-flag="-o GSSAPIAuthentication=no" \
-  --ssh-flag="-o Compression=yes" \
-  --ssh-flag="-o StrictHostKeyChecking=no" \
-  --ssh-flag="-o UserKnownHostsFile=/dev/null" \
-  --ssh-flag="-o LogLevel=ERROR" \
-  --ssh-flag="-o ConnectTimeout=15" \
-  --command "echo HOSTINFO:\$(hostname):$(whoami)" 2>/dev/null
-EOF
-  chmod +x "$tmp_script"
-
-  local info
-  info=$("$tmp_script" | grep "^HOSTINFO:" | tail -1)
-  rm -f "$tmp_script"
-
-  if [ -z "$info" ]; then
-    echo "❌ Failed to connect to Cloud Shell"
-    return 1
-  fi
-
-  _GCLOUD_HOST=$(echo "$info" | cut -d: -f2)
-  _GCLOUD_USER=$(echo "$info" | cut -d: -f3)
 
   local raw_ssh_cmd
   raw_ssh_cmd=$(gcloud cloud-shell ssh --authorize-session --dry-run 2>/dev/null | tail -1)
@@ -48,15 +19,15 @@ EOF
     return 1
   fi
 
-  _GCLOUD_SOCKET="/tmp/gcloud_cm_$(date +%s).sock"
+  local _tmp_dir="${TMPDIR:-${PREFIX:-}/tmp}"
+  _GCLOUD_SOCKET="${_tmp_dir}/gcloud_cm_$(date +%s).sock"
 
-  local host port user keyfile
-  host=$(echo "$raw_ssh_cmd" | grep -oP '(?<=@)[^ ]+')
-  port=$(echo "$raw_ssh_cmd" | grep -oP '(?<=-p )\d+')
-  user=$(echo "$raw_ssh_cmd" | grep -oP '\w+(?=@)')
-  keyfile=$(echo "$raw_ssh_cmd" | grep -oP '(?<=-i )[^ ]+')
+  _GCLOUD_SSH_HOST=$(echo "$raw_ssh_cmd" | grep -oP '(?<=@)[^ ]+')
+  _GCLOUD_SSH_PORT=$(echo "$raw_ssh_cmd" | grep -oP '(?<=-p )\d+')
+  _GCLOUD_SSH_USER=$(echo "$raw_ssh_cmd" | grep -oP '\w+(?=@)')
+  _GCLOUD_SSH_KEY=$(echo "$raw_ssh_cmd" | grep -oP '(?<=-i )[^ ]+')
 
-  [ -z "$port" ] && port=22
+  [ -z "$_GCLOUD_SSH_PORT" ] && _GCLOUD_SSH_PORT=22
 
   ssh -fNM \
     -o ControlMaster=yes \
@@ -72,9 +43,9 @@ EOF
     -o UserKnownHostsFile=/dev/null \
     -o LogLevel=ERROR \
     -o ConnectTimeout=15 \
-    ${keyfile:+-i "$keyfile"} \
-    -p "$port" \
-    "$user@$host" 2>/dev/null
+    ${_GCLOUD_SSH_KEY:+-i "$_GCLOUD_SSH_KEY"} \
+    -p "$_GCLOUD_SSH_PORT" \
+    "$_GCLOUD_SSH_USER@$_GCLOUD_SSH_HOST" 2>/dev/null
 
   if [ $? -ne 0 ]; then
     echo "❌ ControlMaster failed to start"
@@ -88,23 +59,15 @@ EOF
 
 _gcloud_cmd() {
   if [ -n "$_GCLOUD_SOCKET" ] && ssh -O check -o ControlPath="$_GCLOUD_SOCKET" dummy 2>/dev/null; then
-    local host port user keyfile
-    local raw_ssh_cmd
-    raw_ssh_cmd=$(gcloud cloud-shell ssh --authorize-session --dry-run 2>/dev/null | tail -1)
-    host=$(echo "$raw_ssh_cmd" | grep -oP '(?<=@)[^ ]+')
-    port=$(echo "$raw_ssh_cmd" | grep -oP '(?<=-p )\d+')
-    user=$(echo "$raw_ssh_cmd" | grep -oP '\w+(?=@)')
-    keyfile=$(echo "$raw_ssh_cmd" | grep -oP '(?<=-i )[^ ]+')
-    [ -z "$port" ] && port=22
     ssh \
       -o ControlMaster=no \
       -o ControlPath="$_GCLOUD_SOCKET" \
       -o StrictHostKeyChecking=no \
       -o UserKnownHostsFile=/dev/null \
       -o LogLevel=ERROR \
-      ${keyfile:+-i "$keyfile"} \
-      -p "$port" \
-      "$user@$host" "$1" 2>/dev/null
+      ${_GCLOUD_SSH_KEY:+-i "$_GCLOUD_SSH_KEY"} \
+      -p "$_GCLOUD_SSH_PORT" \
+      "$_GCLOUD_SSH_USER@$_GCLOUD_SSH_HOST" "$1" 2>/dev/null
   else
     gcloud cloud-shell ssh --authorize-session \
       --ssh-flag="-o ServerAliveInterval=5" \
