@@ -447,11 +447,11 @@ settings_menu() {
 
   case "$main_choice" in
     1) hidden_file_settings # bashbasicsbyvk_hidefiles.sh;;
-    2) index_mode_threshold_settings ;;
+    2) index_mode_threshold_settings # bashbasicsbyvk_indexmode.sh;;
     3) terminal_bg_color_settings # bashbasicsbyvk_colors.sh;;
     4) terminal_text_color_settings # bashbasicsbyvk_colors.sh;;
-    5) restore_all_defaults ;;
-    6) import_nanorc_settings ;;
+    5) restore_all_defaults # Current;;
+    6) import_nanorc_settings # bashbasicsbyvk_importnano.sh;;
     7) sort_order_settings ;;
     8) display_suffix_settings ;;
     9) group_view_settings ;;
