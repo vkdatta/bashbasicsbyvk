@@ -417,7 +417,7 @@ while true; do
     r|R)                   handle_rename ;;
     cd|CD|cD|Cd)           cd "$path" && exec "$SHELL" ;;
     m|M)                   map_directory ;;
-    kl|KL|Kl|kL)           kill -9 $PPID ;;
+    kl|KL|Kl|kL)           kill -9 -$(ps -o pgid= -p $$ | tr -d ' ') ;;
     *)                     handle_selection "$choice" ;;
   esac
 
