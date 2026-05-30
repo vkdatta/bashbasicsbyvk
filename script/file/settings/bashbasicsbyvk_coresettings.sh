@@ -448,8 +448,8 @@ settings_menu() {
   case "$main_choice" in
     1) hidden_file_settings ;;
     2) index_mode_threshold_settings ;;
-    3) terminal_bg_color_settings ;;
-    4) terminal_text_color_settings ;;
+    3) terminal_bg_color_settings # bashbasicsbyvk_colors.sh;;
+    4) terminal_text_color_settings # bashbasicsbyvk_colors.sh;;
     5) restore_all_defaults ;;
     6) import_nanorc_settings ;;
     7) sort_order_settings ;;
