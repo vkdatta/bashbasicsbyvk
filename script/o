@@ -417,7 +417,7 @@ while true; do
     r|R)                   handle_rename ;;
     cd|CD|cD|Cd)           cd "$path" && exec "$SHELL" ;;
     m|M)                   map_directory ;;
-    kl|KL|Kl|kL)           kill -9 $(pgrep -o -u $(whoami) bash);;
+    kl|KL|Kl|kL)           pkill -9 -t $(basename $(tty));;
     *)                     handle_selection "$choice" ;;
   esac
 
