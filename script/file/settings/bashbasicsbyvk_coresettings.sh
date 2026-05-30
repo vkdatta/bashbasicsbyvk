@@ -446,7 +446,7 @@ settings_menu() {
   read -r -p "Enter choice [1-9]: " main_choice
 
   case "$main_choice" in
-    1) hidden_file_settings ;;
+    1) hidden_file_settings # bashbasicsbyvk_hidefiles.sh;;
     2) index_mode_threshold_settings ;;
     3) terminal_bg_color_settings # bashbasicsbyvk_colors.sh;;
     4) terminal_text_color_settings # bashbasicsbyvk_colors.sh;;
