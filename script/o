@@ -6,7 +6,6 @@ source "bashbasicsbyvk_find.sh"
 source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_transfer.sh"
 source "bashbasicsbyvk_mapper.sh"
-source "bashbasicsbyvk_copy.sh"
 
 parse_selection() {
   local input="$1"
