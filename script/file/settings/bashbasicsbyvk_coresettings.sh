@@ -128,12 +128,6 @@ restore_all_defaults() {
   echo "✅ All settings restored to defaults"
 }
 
-# ─── 6. Import nano settings ──────────────────────────────────────────────────
-import_nanorc_settings() {
-  # pre-existing stub — implement as needed
-  echo "Import nano settings: not yet implemented"
-}
-
 # ─── 7. Sort order ────────────────────────────────────────────────────────────
 sort_order_settings() {
   local modes=("az" "za" "new" "old" "big" "small")
