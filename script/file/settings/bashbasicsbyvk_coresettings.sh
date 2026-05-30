@@ -58,10 +58,6 @@ save_settings() {
   } > "$SETTINGS_FILE"
 }
 
-# ─── color helpers (pre-existing) ────────────────────────────────────────────
-_apply_bg_color()   { terminal_bg_color="$1"; }
-_apply_text_color() { terminal_text_color="$1"; }
-
 # ─── ANSI helpers ─────────────────────────────────────────────────────────────
 _GREEN='\033[0;32m'
 _RESET='\033[0m'
@@ -121,44 +117,6 @@ index_mode_threshold_settings() {
   else
     echo "No change"
   fi
-}
-
-# ─── 3. Terminal BG color ─────────────────────────────────────────────────────
-terminal_bg_color_settings() {
-  echo "Current BG color: #${terminal_bg_color}"
-  read -r -p "New hex color (without #, blank = no change): " v
-  if [[ "$v" =~ ^[0-9a-fA-F]{6}$ ]]; then
-    _apply_bg_color "$v"
-    save_settings
-    echo "✅ BG color set to #$v"
-  else
-    echo "No change"
-  fi
-}
-
-# ─── 4. Terminal text color ───────────────────────────────────────────────────
-terminal_text_color_settings() {
-  echo "Current text color: #${terminal_text_color}"
-  echo "1) Normal (#FFFFFF)"
-  echo "2) Coder  (#00D000)"
-  echo "3) Custom hex"
-  read -r -p "Choice: " c
-  case "$c" in
-    1) _apply_text_color "FFFFFF" ;;
-    2) _apply_text_color "00D000" ;;
-    3)
-      read -r -p "Hex (without #): " v
-      if [[ "$v" =~ ^[0-9a-fA-F]{6}$ ]]; then
-        _apply_text_color "$v"
-      else
-        echo "Invalid hex. No change."
-        return
-      fi
-      ;;
-    *) echo "No change"; return ;;
-  esac
-  save_settings
-  echo "✅ Text color updated"
 }
 
 # ─── 5. Restore all defaults ──────────────────────────────────────────────────
