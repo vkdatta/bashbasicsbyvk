@@ -1,8 +1,9 @@
+# Used Directly in O
+
 declare -gA item_size=()
 declare -gA item_mtime=()
 _meta_loaded=false
 
-# ─── need-metadata predicates ────────────────────────────────────────────────
 _needs_metadata() {
   [[ " ${display_suffix_set:-} " == *" size "* ]] && return 0
   [[ " ${display_suffix_set:-} " == *" time "* ]] && return 0
@@ -19,7 +20,6 @@ _needs_dir_size() {
   return 1
 }
 
-# ─── batch stat (one subprocess for all items) ───────────────────────────────
 _collect_metadata() {
   item_size=()
   item_mtime=()
@@ -33,7 +33,6 @@ _collect_metadata() {
     [ -d "$f" ] && dirs+=("$f") || files+=("$f")
   done
 
-  # All files in one stat call
   if [ ${#files[@]} -gt 0 ]; then
     while IFS='|' read -r fpath fsize fmtime; do
       item_size["$fpath"]="$fsize"
@@ -41,14 +40,12 @@ _collect_metadata() {
     done < <(stat -c "%n|%s|%Y" "${files[@]}" 2>/dev/null)
   fi
 
-  # All dirs in one stat call (size=0 placeholder)
   if [ ${#dirs[@]} -gt 0 ]; then
     while IFS='|' read -r fpath fmtime; do
       item_mtime["$fpath"]="$fmtime"
       item_size["$fpath"]=0
     done < <(stat -c "%n|%Y" "${dirs[@]}" 2>/dev/null)
 
-    # du only when size sorting or size suffix is active — all dirs at once
     if $need_dir_size; then
       while IFS=$'\t' read -r sz fpath; do
         item_size["$fpath"]="$sz"
@@ -64,7 +61,6 @@ _ensure_meta() {
   _collect_metadata
 }
 
-# ─── human-readable size (pure bash, no bc subshell) ─────────────────────────
 _fmt_size() {
   local b="${1:-0}"
   if   (( b < 1024 ));       then printf "%dB"  "$b"
@@ -74,7 +70,6 @@ _fmt_size() {
   fi
 }
 
-# ─── time formatter ───────────────────────────────────────────────────────────
 _fmt_time() {
   local epoch="${1:-0}"
   case "${display_time_format:-full}" in
@@ -87,7 +82,6 @@ _fmt_time() {
   esac
 }
 
-# ─── suffix builder ───────────────────────────────────────────────────────────
 _build_suffix() {
   local fpath="$1" out=""
   for token in ${display_suffix_set:-}; do
@@ -107,10 +101,6 @@ _build_suffix() {
   printf '%s' "$out"
 }
 
-# ─── build items ──────────────────────────────────────────────────────────────
-# Fast path: glob for normal (no hidden, no prefix) — zero subprocesses.
-# Slow path: find for hidden files or prefix filter.
-# Metadata is NOT collected here — lazy, only on first need.
 build_items_with_meta() {
   local p="$1"
   local pfx="${2:-}"
@@ -128,7 +118,6 @@ build_items_with_meta() {
       items+=("$f")
     done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
   else
-    # Original fast glob — same as pre-displayer code
     for f in "$p"/*; do
       [ -e "$f" ] || continue
       items+=("$f")
@@ -136,14 +125,12 @@ build_items_with_meta() {
   fi
 }
 
-# ─── sorting ──────────────────────────────────────────────────────────────────
 apply_sort() {
   local mode="${sort_mode:-az}"
   [ ${#items[@]} -eq 0 ] && return
 
   case "$mode" in
     az|za)
-      # No metadata needed — sort by basename only (one subprocess: sort)
       local flag; [ "$mode" = "za" ] && flag="-r" || flag=""
       local sorted_output
       sorted_output=$(for f in "${items[@]}"; do
@@ -155,7 +142,6 @@ apply_sort() {
       ;;
   esac
 
-  # Remaining modes need metadata
   _ensure_meta
 
   local -a records=()
@@ -178,7 +164,6 @@ apply_sort() {
   done < <(printf '%s\n' "${records[@]}" | sort -t$'\t' $flag | cut -f2-)
 }
 
-# ─── group key helpers ────────────────────────────────────────────────────────
 _gk_ext() {
   local bn="${1##*/}"
   [ -d "$1" ] && { printf '[dir]'; return; }
@@ -201,7 +186,6 @@ _composite_key() {
   printf '%s' "$key"
 }
 
-# ─── flat display ─────────────────────────────────────────────────────────────
 _display_items_flat() {
   local idx=1 f icon bn suffix
   for f in "${items[@]}"; do
@@ -217,7 +201,6 @@ _display_items_flat() {
   done
 }
 
-# ─── grouped display ──────────────────────────────────────────────────────────
 _display_grouped() {
   local depth="${#group_view_levels[@]}"
   [ "$depth" -eq 0 ] && { _display_items_flat; return; }
@@ -257,14 +240,12 @@ _display_grouped() {
   done
 }
 
-# ─── main entry point ─────────────────────────────────────────────────────────
 display_items() {
   if [ ${#items[@]} -eq 0 ]; then
     echo "🛑 This directory is empty"
     return
   fi
 
-  # Load metadata now if display/grouping needs it
   if _needs_metadata; then
     _ensure_meta
   fi
