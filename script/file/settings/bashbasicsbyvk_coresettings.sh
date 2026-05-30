@@ -92,19 +92,6 @@ _parse_multi_select() {
   printf '%s\n' "${out[@]}" | sort -n | tr '\n' ' '
 }
 
-# ─── 2. Index mode threshold ──────────────────────────────────────────────────
-index_mode_threshold_settings() {
-  echo "Current threshold: $index_mode_threshold"
-  read -r -p "New threshold (blank = no change): " v
-  if [[ "$v" =~ ^[0-9]+$ ]]; then
-    index_mode_threshold="$v"
-    save_settings
-    echo "✅ Threshold set to $v"
-  else
-    echo "No change"
-  fi
-}
-
 # ─── 5. Restore all defaults ──────────────────────────────────────────────────
 restore_all_defaults() {
   echo
