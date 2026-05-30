@@ -92,20 +92,6 @@ _parse_multi_select() {
   printf '%s\n' "${out[@]}" | sort -n | tr '\n' ' '
 }
 
-# ─── 1. Hidden file settings ──────────────────────────────────────────────────
-hidden_file_settings() {
-  echo "Hidden files: currently $([ "$show_hidden_files" = true ] && echo ON || echo OFF)"
-  echo "1) Show hidden files"
-  echo "2) Hide hidden files"
-  read -r -p "Choice: " c
-  case "$c" in
-    1) show_hidden_files=true  ;;
-    2) show_hidden_files=false ;;
-    *) echo "No change" ;;
-  esac
-  save_settings
-}
-
 # ─── 2. Index mode threshold ──────────────────────────────────────────────────
 index_mode_threshold_settings() {
   echo "Current threshold: $index_mode_threshold"
