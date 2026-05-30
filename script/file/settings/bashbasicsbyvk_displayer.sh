@@ -259,3 +259,316 @@ display_items() {
     _display_items_flat
   fi
 }
+
+# Used in Settings 
+
+_parse_multi_select() {
+  local input="$1"
+  local max="$2"
+  local -A seen=()
+  local -a out=()
+  IFS=',' read -ra parts <<< "$input"
+  for part in "${parts[@]}"; do
+    part="${part// /}"
+    if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      local s="${BASH_REMATCH[1]}" e="${BASH_REMATCH[2]}"
+      (( s > e )) && { local tmp=$s; s=$e; e=$tmp; }
+      for (( i=s; i<=e && i<=max; i++ )); do
+        [ -z "${seen[$i]+x}" ] && out+=("$i") && seen[$i]=1
+      done
+    elif [[ "$part" =~ ^[0-9]+$ ]]; then
+      (( part >= 1 && part <= max )) && [ -z "${seen[$part]+x}" ] && out+=("$part") && seen[$part]=1
+    fi
+  done
+  printf '%s\n' "${out[@]}" | sort -n | tr '\n' ' '
+}
+
+sort_order_settings() {
+  local modes=("az" "za" "new" "old" "big" "small")
+  local labels=("A → Z" "Z → A" "Newest first" "Oldest first" "Largest first" "Smallest first")
+  echo
+  echo "Sort order (current: ${sort_mode}):"
+  for i in "${!modes[@]}"; do
+    local num=$((i+1))
+    if [ "${modes[$i]}" = "$sort_mode" ]; then
+      printf " %d) $(_green "${labels[$i]} ✓")\n" "$num"
+    else
+      printf " %d) %s\n" "$num" "${labels[$i]}"
+    fi
+  done
+  read -r -p "Choice [1-6] (blank = no change): " c
+  if [[ "$c" =~ ^[1-6]$ ]]; then
+    sort_mode="${modes[$((c-1))]}"
+    save_settings
+    echo "✅ Sort mode set to: ${labels[$((c-1))]}"
+  else
+    echo "No change"
+  fi
+}
+
+_show_suffix_state() {
+  local tokens=("ext" "size" "time")
+  local labels=("Extension (.sh)" "File size (4.2K)" "Modified time")
+  echo
+  echo "Display suffix components:"
+  for i in "${!tokens[@]}"; do
+    local num=$((i+1))
+    local tok="${tokens[$i]}"
+    if [[ " $display_suffix_set " == *" $tok "* ]]; then
+      printf " %d) $(_green "${labels[$i]} ✓")\n" "$num"
+    else
+      printf " %d) %s\n" "$num" "${labels[$i]}"
+    fi
+  done
+  echo
+  echo "Time format (used when time is enabled):"
+  local tfmts=("year" "month" "date" "datetime" "monthdate" "full")
+  local tlabels=("Year only (2023)" "Month only (Mar)" "Date only (15)" "Date+Time (15 14:32)" "Month+Date+Time (Mar-15 14:32)" "Full (2023-Mar-15 14:32)")
+  for i in "${!tfmts[@]}"; do
+    local num=$((i+1))
+    if [ "${tfmts[$i]}" = "$display_time_format" ]; then
+      printf "  %d) $(_green "${tlabels[$i]} ✓")\n" "$num"
+    else
+      printf "  %d) %s\n" "$num" "${tlabels[$i]}"
+    fi
+  done
+}
+
+display_suffix_settings() {
+  local tokens=("ext" "size" "time")
+  local tfmts=("year" "month" "date" "datetime" "monthdate" "full")
+
+  while true; do
+    _show_suffix_state
+    echo
+    echo "a) Add components   r) Remove components   t) Set time format"
+    echo "n) Clear all (none)   q) Done"
+    read -r -p "Action: " action
+    action="${action,,}"
+
+    case "$action" in
+      q) break ;;
+
+      n)
+        display_suffix_set=""
+        save_settings
+        echo "✅ All suffixes cleared"
+        ;;
+
+      a)
+        echo "Add by number (comma/range, e.g. 1,3 or 1-2):"
+        read -r -p "Numbers: " inp
+        [ -z "$inp" ] && { echo "No change"; continue; }
+        local sel
+        sel=$(_parse_multi_select "$inp" 3)
+        local changed=false
+        for n in $sel; do
+          local tok="${tokens[$((n-1))]}"
+          if [[ " $display_suffix_set " != *" $tok "* ]]; then
+            display_suffix_set="${display_suffix_set:+$display_suffix_set }$tok"
+            changed=true
+          fi
+        done
+        display_suffix_set="${display_suffix_set## }"
+        display_suffix_set="${display_suffix_set%% }"
+        $changed && save_settings && echo "✅ Added" || echo "Already set — no change"
+        ;;
+
+      r)
+        if [ -z "$display_suffix_set" ]; then
+          echo "Nothing to remove"
+          continue
+        fi
+        echo "Remove by number (comma/range):"
+        read -r -p "Numbers: " inp
+        [ -z "$inp" ] && { echo "No change"; continue; }
+        local sel
+        sel=$(_parse_multi_select "$inp" 3)
+        local changed=false
+        for n in $sel; do
+          local tok="${tokens[$((n-1))]}"
+          if [[ " $display_suffix_set " == *" $tok "* ]]; then
+            display_suffix_set="${display_suffix_set//$tok/}"
+            changed=true
+          fi
+        done
+        read -ra _arr <<< "$display_suffix_set"
+        display_suffix_set="${_arr[*]}"
+        $changed && save_settings && echo "✅ Removed" || echo "Not present — no change"
+        ;;
+
+      t)
+        echo "Set time format [1-6] (blank = no change):"
+        read -r -p "Choice: " tc
+        if [[ "$tc" =~ ^[1-6]$ ]]; then
+          display_time_format="${tfmts[$((tc-1))]}"
+          save_settings
+          echo "✅ Time format set"
+        else
+          echo "No change"
+        fi
+        ;;
+
+      *)
+        echo "⚠️  Invalid action. Use a/r/t/n/q"
+        ;;
+    esac
+  done
+}
+
+_valid_level() {
+  case "$1" in ext|year|month|date) return 0 ;; *) return 1 ;; esac
+}
+
+_show_group_state() {
+  local all_levels=("ext" "year" "month" "date")
+  local all_labels=("Extension" "Year" "Month" "Date")
+  echo
+  if [ ${#group_view_levels[@]} -eq 0 ]; then
+    echo "Group view: OFF"
+  else
+    echo "Group view chain: ${group_view_levels[*]}"
+  fi
+  echo
+  echo "Available levels:"
+  for i in "${!all_levels[@]}"; do
+    local num=$((i+1))
+    local lvl="${all_levels[$i]}"
+    local in_chain=false
+    for gl in "${group_view_levels[@]}"; do
+      [ "$gl" = "$lvl" ] && in_chain=true && break
+    done
+    if $in_chain; then
+      local pos=0
+      for j in "${!group_view_levels[@]}"; do
+        [ "${group_view_levels[$j]}" = "$lvl" ] && pos=$((j+1))
+      done
+      printf " %d) $(_green "${all_labels[$i]} ✓ (position $pos)")\n" "$num"
+    else
+      printf " %d) %s\n" "$num" "${all_labels[$i]}"
+    fi
+  done
+}
+
+group_view_settings() {
+  local all_levels=("ext" "year" "month" "date")
+
+  while true; do
+    _show_group_state
+
+    if [ ${#group_view_levels[@]} -gt 0 ]; then
+      echo
+      echo "u) Ungroup (turn off all grouping)"
+    fi
+    echo "a) Add level to chain   r) Remove level from chain"
+    echo "o) Reorder chain   q) Done"
+    read -r -p "Action: " action
+    action="${action,,}"
+
+    case "$action" in
+      q) break ;;
+
+      u)
+        group_view_levels=()
+        group_view_levels_str=""
+        save_settings
+        echo "✅ Grouping turned off"
+        ;;
+
+      a)
+        echo "Add level(s) by number (comma/range):"
+        read -r -p "Numbers [1-4]: " inp
+        [ -z "$inp" ] && { echo "No change"; continue; }
+        local sel
+        sel=$(_parse_multi_select "$inp" 4)
+        local changed=false
+        for n in $sel; do
+          local lvl="${all_levels[$((n-1))]}"
+          local already=false
+          for gl in "${group_view_levels[@]}"; do
+            [ "$gl" = "$lvl" ] && already=true && break
+          done
+          if ! $already; then
+            group_view_levels+=("$lvl")
+            changed=true
+          fi
+        done
+        $changed || echo "All already in chain — no change"
+        $changed && group_view_levels_str="${group_view_levels[*]}" && save_settings && echo "✅ Level(s) added"
+        ;;
+
+      r)
+        if [ ${#group_view_levels[@]} -eq 0 ]; then
+          echo "Chain is empty"
+          continue
+        fi
+        echo "Remove level(s) by number (comma/range) [based on available levels list above]:"
+        read -r -p "Numbers [1-4]: " inp
+        [ -z "$inp" ] && { echo "No change"; continue; }
+        local sel
+        sel=$(_parse_multi_select "$inp" 4)
+        local changed=false
+        local -a new_chain=()
+        declare -A to_remove=()
+        for n in $sel; do
+          to_remove["${all_levels[$((n-1))]}"]="1"
+        done
+        for gl in "${group_view_levels[@]}"; do
+          if [ -z "${to_remove[$gl]+x}" ]; then
+            new_chain+=("$gl")
+          else
+            changed=true
+          fi
+        done
+        if $changed; then
+          group_view_levels=("${new_chain[@]}")
+          group_view_levels_str="${group_view_levels[*]}"
+          save_settings
+          echo "✅ Level(s) removed"
+        else
+          echo "None of those were in the chain — no change"
+        fi
+        ;;
+
+      o)
+        if [ ${#group_view_levels[@]} -le 1 ]; then
+          echo "Need at least 2 levels in chain to reorder"
+          continue
+        fi
+        echo "Current chain:"
+        for i in "${!group_view_levels[@]}"; do
+          printf "  %d) %s\n" "$((i+1))" "${group_view_levels[$i]}"
+        done
+        echo "Enter new order as position numbers (e.g. 2,1,3):"
+        read -r -p "Order: " inp
+        IFS=',' read -ra order_parts <<< "$inp"
+        local -a new_chain=()
+        local -A used_pos=()
+        local valid=true
+        for p in "${order_parts[@]}"; do
+          p="${p// /}"
+          if [[ "$p" =~ ^[0-9]+$ ]] && (( p >= 1 && p <= ${#group_view_levels[@]} )); then
+            if [ -z "${used_pos[$p]+x}" ]; then
+              new_chain+=("${group_view_levels[$((p-1))]}")
+              used_pos[$p]=1
+            fi
+          else
+            valid=false
+          fi
+        done
+        if [ "${#new_chain[@]}" -ne "${#group_view_levels[@]}" ]; then
+          echo "⚠️  Incomplete order — no change"
+        else
+          group_view_levels=("${new_chain[@]}")
+          group_view_levels_str="${group_view_levels[*]}"
+          save_settings
+          echo "✅ Chain reordered: ${group_view_levels[*]}"
+        fi
+        ;;
+
+      *)
+        echo "⚠️  Invalid action. Use a/r/o/u/q"
+        ;;
+    esac
+  done
+}
