@@ -1,3 +1,4 @@
+
 _GCLOUD_SOCKET=""
 _GCLOUD_SSH_HOST=""
 _GCLOUD_SSH_PORT=""
@@ -230,7 +231,7 @@ local_navigator() {
             local _sc_name
             _sc_name=$(_shortcut_read_field "$item" "SHORTCUT_NAME")
             [ -z "$_sc_name" ] && _sc_name="${_nav_bn%.shortcut}"
-            [ "$_sc_type" == "dir" ] && _nav_icon="🪄📁" || _nav_icon="🪄📄"
+            [ "$_sc_type" == "dir" ] && _nav_icon="🔑" || _nav_icon="🗝️"
             printf "%2d) %s %s\n" "$idx" "$_nav_icon" "$_sc_name"
           else
             [ -d "$item" ] && _nav_icon="📁" || _nav_icon="📄"
@@ -600,6 +601,7 @@ perform_move() {
   done
 }
 
+
 _shortcut_read_field() {
   local sc_file="$1"
   local field="$2"
@@ -632,7 +634,7 @@ _shortcut_write() {
     printf 'SHORTCUT_CREATED=%s\n' "$(date +%s)"
   } > "$sc_path"
 
-  printf '%s' "$sc_path" 
+  printf '%s' "$sc_path"   # return path of the created shortcut file
 }
 
 _shortcut_resolve() {
@@ -681,10 +683,11 @@ perform_shortcut() {
     sc_path=$(_shortcut_write "$dest" "$abs_target" "$display_name")
 
     local sc_icon
-    [ -d "$item" ] && sc_icon="🪄📁" || sc_icon="🪄📄"
+    [ -d "$item" ] && sc_icon="🔑" || sc_icon="🗝️"
     echo "  ✅ Shortcut created: ${sc_icon} ${display_name} → $dest/$(basename "$sc_path")"
   done
 }
+
 
 transfer_menu() {
   echo
