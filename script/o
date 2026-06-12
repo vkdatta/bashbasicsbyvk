@@ -130,6 +130,14 @@ delete_items() {
     select_items_common "DELETE" && _ok=true
   fi
   if $_ok; then
+    local _has_shortcuts=false
+    for _si in "${selected_items[@]}"; do
+      [[ "${_si##*/}" == *.shortcut ]] && _has_shortcuts=true && break
+    done
+    if $_has_shortcuts; then
+      echo "ℹ️  Note: shortcut(s) selected — only the shortcut pointer will be deleted, not the original file/folder."
+    fi
+
     read -p "Are you really sure you want to delete the selected files? This action can't be undone. (y/n): " confirm
     if [[ $confirm != "y" && $confirm != "Y" ]]; then
       echo "🚫 Deletion cancelled"
@@ -173,13 +181,11 @@ count_items_in_path() {
 }
 
 build_items_for_prefix() {
-  # Legacy shim: delegates to displayer's unified builder then sorts.
   build_items_with_meta "$1" "$2"
   apply_sort
 }
 
 build_all_items() {
-  # Legacy shim: delegates to displayer's unified builder then sorts.
   build_items_with_meta "$1" ""
   apply_sort
 }
@@ -251,6 +257,55 @@ handle_create() {
   [[ "$cr" == "2" ]] && create_files
 }
 
+handle_rename() {
+  if [ ${#items[@]} -eq 0 ]; then
+    echo "❌ No items to rename"
+    return
+  fi
+  select_items_common "RENAME"
+  [ $? -ne 0 ] && return
+
+  for item in "${selected_items[@]}"; do
+    local bn="${item##*/}"
+
+    if [[ "$bn" == *.shortcut ]]; then
+      local cur_name
+      cur_name=$(_shortcut_read_field "$item" "SHORTCUT_NAME")
+      [ -z "$cur_name" ] && cur_name="${bn%.shortcut}"
+      echo "🪄 Shortcut: $cur_name"
+      echo "ℹ️  Renaming a shortcut only changes the shortcut's name — the original is untouched."
+      read -p "New display name (blank = cancel): " new_name
+      [ -z "$new_name" ] && echo "🚫 Skipped" && continue
+      local tmp_file
+      tmp_file=$(mktemp)
+      sed "s|^SHORTCUT_NAME=.*|SHORTCUT_NAME=${new_name}|" "$item" > "$tmp_file" && mv "$tmp_file" "$item"
+      local new_sc_path
+      new_sc_path="$(dirname "$item")/${new_name}.shortcut"
+      local count=1
+      while [ -e "$new_sc_path" ] && [ "$new_sc_path" != "$item" ]; do
+        new_sc_path="$(dirname "$item")/${new_name}${count}.shortcut"
+        count=$((count+1))
+      done
+      if [ "$new_sc_path" != "$item" ]; then
+        mv -- "$item" "$new_sc_path"
+      fi
+      echo "✅ Shortcut renamed: $cur_name → $new_name"
+      continue
+    fi
+    echo "Current name: $bn"
+    read -p "New name (blank = cancel): " new_name
+    [ -z "$new_name" ] && echo "🚫 Skipped" && continue
+    local new_path
+    new_path="$(dirname "$item")/$new_name"
+    if [ -e "$new_path" ]; then
+      echo "⚠️  '$new_name' already exists — skipped"
+      continue
+    fi
+    mv -- "$item" "$new_path"
+    echo "✅ Renamed: $bn → $new_name"
+  done
+}
+
 handle_selection() {
   local choice="$1"
   if $imaginary_mode; then
@@ -279,6 +334,25 @@ handle_selection() {
   else
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
       selected="${items[$((choice-1))]}"
+      local bn="${selected##*/}"
+      if [[ "$bn" == *.shortcut ]]; then
+        local sc_target sc_type
+        sc_target=$(_shortcut_resolve "$selected")
+        if [ $? -ne 0 ]; then
+          echo "💡 The shortcut file is still present — you can delete or rename it."
+          return
+        fi
+        sc_type=$(_shortcut_read_field "$selected" "SHORTCUT_TYPE")
+
+        if [ "$sc_type" == "dir" ] || [ -d "$sc_target" ]; then
+          path="$sc_target"
+          group_prefix=""
+          force_show=false
+        else
+          handle_file "$sc_target"
+        fi
+        return
+      fi
       if [ -d "$selected" ]; then
         path="$selected"
         group_prefix=""
@@ -332,13 +406,10 @@ while true; do
   imaginary_mode=false
   items=()
 
-  # ── threshold / imaginary / group-view decision ──────────────────────────
   _has_group_view=false
   [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
 
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
-    # Above threshold and force_show is off:
-    # imaginary mode always takes presidency, even when group view is on.
     imaginary_mode=true
     if [ -n "$group_prefix" ]; then
       local_arr=()
@@ -362,8 +433,6 @@ while true; do
       display_imaginary_groups "$path" "" "$total"
     fi
   elif [ "$total" -gt "${index_mode_threshold:-200}" ] && $force_show; then
-    # Above threshold but force_show pressed:
-    # load everything and honour group view if active.
     imaginary_mode=false
     if [ -n "$group_prefix" ]; then
       build_items_with_meta "$path" "$group_prefix"
@@ -382,7 +451,6 @@ while true; do
       apply_sort
     fi
 
-    # Show group-view label in header when active
     if $_has_group_view; then
       _gv_chain="${group_view_levels[*]}"
       echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
@@ -396,7 +464,6 @@ while true; do
   echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
   echo "q/h) Quit/Home   s) Settings   forceshow) Toggle Group/Item Mode kl) kill all"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
-  # Show forceshow hint with group-view context when above threshold
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "ℹ️  Group view is set but above threshold → press forceshow to enable grouped display"
   fi
