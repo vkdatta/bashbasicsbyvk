@@ -88,7 +88,11 @@ _build_suffix() {
     case "$token" in
       ext)
         local bn="${fpath##*/}"
-        [[ "$bn" == *.* ]] && out+=" | .${bn##*.}" || out+=" | (no ext)"
+        if [[ "$bn" == *.shortcut ]]; then
+          out+=" | →shortcut"
+        else
+          [[ "$bn" == *.* ]] && out+=" | .${bn##*.}" || out+=" | (no ext)"
+        fi
         ;;
       size)
         out+=" | $(_fmt_size "${item_size[$fpath]:-0}")"
@@ -134,7 +138,13 @@ apply_sort() {
       local flag; [ "$mode" = "za" ] && flag="-r" || flag=""
       local sorted_output
       sorted_output=$(for f in "${items[@]}"; do
-                        printf '%s\t%s\n' "${f##*/}" "$f"
+                        local _sort_key
+                        _sort_key="${f##*/}"
+                        if [[ "$_sort_key" == *.shortcut ]]; then
+                          _sort_key=$(_shortcut_read_field "$f" "SHORTCUT_NAME" 2>/dev/null)
+                          [ -z "$_sort_key" ] && _sort_key="${f##*/}"
+                        fi
+                        printf '%s\t%s\n' "$_sort_key" "$f"
                       done | sort -f $flag -t$'\t' -k1,1 | cut -f2-)
       items=()
       while IFS= read -r line; do [ -n "$line" ] && items+=("$line"); done <<< "$sorted_output"
@@ -166,6 +176,10 @@ apply_sort() {
 
 _gk_ext() {
   local bn="${1##*/}"
+  if [[ "$bn" == *.shortcut ]]; then
+    printf '[shortcut]'
+    return
+  fi
   [ -d "$1" ] && { printf '[dir]'; return; }
   [[ "$bn" == *.* ]] && printf '.%s' "${bn##*.}" || printf '(no ext)'
 }
@@ -186,11 +200,39 @@ _composite_key() {
   printf '%s' "$key"
 }
 
+_shortcut_display_parts() {
+  local sc_file="$1"
+  local sc_type sc_name sc_target
+
+  sc_type=$(_shortcut_read_field "$sc_file" "SHORTCUT_TYPE")
+  sc_name=$(_shortcut_read_field "$sc_file" "SHORTCUT_NAME")
+  sc_target=$(_shortcut_read_field "$sc_file" "SHORTCUT_TARGET")
+
+  [ -z "$sc_name" ] && sc_name="${sc_file##*/}" && sc_name="${sc_name%.shortcut}"
+
+  local _broken=""
+  [ -n "$sc_target" ] && [ ! -e "$sc_target" ] && _broken=" ⚠️ (broken)"
+
+  if [ "$sc_type" == "dir" ]; then
+    _sc_icon="🪄📁"
+  else
+    _sc_icon="🪄📄"
+  fi
+  _sc_display="${sc_name}${_broken}"
+}
+
 _display_items_flat() {
   local idx=1 f icon bn suffix
+  local _sc_icon _sc_display
   for f in "${items[@]}"; do
-    [ -d "$f" ] && icon="📁" || icon="📄"
     bn="${f##*/}"
+    if [[ "$bn" == *.shortcut ]]; then
+      _shortcut_display_parts "$f"
+      icon="$_sc_icon"
+      bn="$_sc_display"
+    else
+      [ -d "$f" ] && icon="📁" || icon="📄"
+    fi
     if [ -n "${display_suffix_set:-}" ]; then
       suffix=$(_build_suffix "$f")
     else
@@ -218,6 +260,7 @@ _display_grouped() {
   local global_idx=1
   local ck f icon bn suffix indent indent_items lvl_idx lvl part
   local -a parts
+  local _sc_icon _sc_display
 
   for ck in "${all_keys[@]}"; do
     IFS='|' read -ra parts <<< "$ck"
@@ -230,8 +273,14 @@ _display_grouped() {
     indent_items=$(printf '%*s' "$(( depth * 2 ))" '')
     while IFS= read -r f; do
       [ -z "$f" ] && continue
-      [ -d "$f" ] && icon="📁" || icon="📄"
       bn="${f##*/}"
+      if [[ "$bn" == *.shortcut ]]; then
+        _shortcut_display_parts "$f"
+        icon="$_sc_icon"
+        bn="$_sc_display"
+      else
+        [ -d "$f" ] && icon="📁" || icon="📄"
+      fi
       [ -n "${display_suffix_set:-}" ] && suffix=$(_build_suffix "$f") || suffix=""
       printf "%s%2d) %s %s%s\n" "$indent_items" "$global_idx" "$icon" "$bn" "$suffix"
       global_idx=$(( global_idx + 1 ))
