@@ -222,8 +222,20 @@ local_navigator() {
       else
         local idx=1
         for item in "${nav_items[@]}"; do
-          [ -d "$item" ] && icon="📁" || icon="📄"
-          printf "%2d) %s %s\n" "$idx" "$icon" "$(basename "$item")"
+          local _nav_icon _nav_bn
+          _nav_bn="${item##*/}"
+          if [[ "$_nav_bn" == *.shortcut ]]; then
+            local _sc_type
+            _sc_type=$(_shortcut_read_field "$item" "SHORTCUT_TYPE")
+            local _sc_name
+            _sc_name=$(_shortcut_read_field "$item" "SHORTCUT_NAME")
+            [ -z "$_sc_name" ] && _sc_name="${_nav_bn%.shortcut}"
+            [ "$_sc_type" == "dir" ] && _nav_icon="🪄📁" || _nav_icon="🪄📄"
+            printf "%2d) %s %s\n" "$idx" "$_nav_icon" "$_sc_name"
+          else
+            [ -d "$item" ] && _nav_icon="📁" || _nav_icon="📄"
+            printf "%2d) %s %s\n" "$idx" "$_nav_icon" "$_nav_bn"
+          fi
           idx=$((idx+1))
         done
       fi
@@ -588,6 +600,92 @@ perform_move() {
   done
 }
 
+_shortcut_read_field() {
+  local sc_file="$1"
+  local field="$2"
+  [ ! -f "$sc_file" ] && return 1
+  local val
+  val=$(grep -m1 "^${field}=" "$sc_file" 2>/dev/null | cut -d'=' -f2-)
+  printf '%s' "$val"
+}
+
+_shortcut_write() {
+  local dest_dir="$1"
+  local target="$2"
+  local display_name="$3"
+
+  local sc_type="file"
+  [ -d "$target" ] && sc_type="dir"
+
+  local sc_base="${display_name}.shortcut"
+  local sc_path="$dest_dir/$sc_base"
+  local count=1
+  while [ -e "$sc_path" ]; do
+    sc_path="$dest_dir/${display_name}${count}.shortcut"
+    count=$((count+1))
+  done
+
+  {
+    printf 'SHORTCUT_TARGET=%s\n' "$target"
+    printf 'SHORTCUT_TYPE=%s\n'   "$sc_type"
+    printf 'SHORTCUT_NAME=%s\n'   "$display_name"
+    printf 'SHORTCUT_CREATED=%s\n' "$(date +%s)"
+  } > "$sc_path"
+
+  printf '%s' "$sc_path" 
+}
+
+_shortcut_resolve() {
+  local sc_file="$1"
+  local target
+  target=$(_shortcut_read_field "$sc_file" "SHORTCUT_TARGET")
+  if [ -z "$target" ]; then
+    echo "❌ Shortcut has no target recorded" >&2
+    return 1
+  fi
+  if [ ! -e "$target" ]; then
+    echo "⚠️  Shortcut target no longer exists: $target" >&2
+    return 1
+  fi
+  printf '%s' "$target"
+  return 0
+}
+
+perform_shortcut() {
+  local dest="$1"
+  shift
+  local src_items=("$@")
+
+  if [ ! -d "$dest" ]; then
+    echo "❌ Destination is not a directory: $dest"
+    return 1
+  fi
+
+  for item in "${src_items[@]}"; do
+    if [ ! -e "$item" ]; then
+      echo "  ⚠️  Skipped (not found): $item"
+      continue
+    fi
+
+    local abs_target
+    if [ -d "$item" ]; then
+      abs_target=$(cd -- "$item" && pwd)
+    else
+      abs_target=$(cd -- "$(dirname "$item")" && pwd)/$(basename -- "$item")
+    fi
+
+    local display_name
+    display_name=$(basename -- "$abs_target")
+
+    local sc_path
+    sc_path=$(_shortcut_write "$dest" "$abs_target" "$display_name")
+
+    local sc_icon
+    [ -d "$item" ] && sc_icon="🪄📁" || sc_icon="🪄📄"
+    echo "  ✅ Shortcut created: ${sc_icon} ${display_name} → $dest/$(basename "$sc_path")"
+  done
+}
+
 transfer_menu() {
   echo
   echo "📦 TRANSFER — Step 1: Choose mode"
@@ -696,13 +794,25 @@ transfer_menu() {
 
   echo
   echo "📦 TRANSFER — Step 4: Action"
-  echo "c) Copy   m) Move"
+  if [[ "$t_mode" == "1" || "$t_mode" == "2" ]]; then
+    echo "c) Copy   m) Move   s) Shortcut"
+  else
+    echo "c) Copy   m) Move"
+  fi
   read -p "Action: " t_action
 
   local t_op
   case "$t_action" in
     c|C) t_op="copy" ;;
     m|M) t_op="move" ;;
+    s|S)
+      if [[ "$t_mode" == "1" || "$t_mode" == "2" ]]; then
+        t_op="shortcut"
+      else
+        echo "❌ Shortcut is only available for intra-location transfers. Transfer cancelled."
+        return
+      fi
+      ;;
     *)
       echo "❌ Invalid action. Transfer cancelled."
       return
@@ -717,9 +827,12 @@ transfer_menu() {
       if [ "$t_op" == "copy" ]; then
         perform_copy "$final_dest" "${selected_items[@]}"
         echo "✅ Copy complete → $final_dest"
-      else
+      elif [ "$t_op" == "move" ]; then
         perform_move "$final_dest" "${selected_items[@]}"
         echo "✅ Move complete → $final_dest"
+      else
+        perform_shortcut "$final_dest" "${selected_items[@]}"
+        echo "✅ Shortcuts created → $final_dest"
       fi
       ;;
     3)
