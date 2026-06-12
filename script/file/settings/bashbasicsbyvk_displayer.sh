@@ -200,6 +200,7 @@ _composite_key() {
   printf '%s' "$key"
 }
 
+
 _shortcut_display_parts() {
   local sc_file="$1"
   local sc_type sc_name sc_target
@@ -214,9 +215,9 @@ _shortcut_display_parts() {
   [ -n "$sc_target" ] && [ ! -e "$sc_target" ] && _broken=" ⚠️ (broken)"
 
   if [ "$sc_type" == "dir" ]; then
-    _sc_icon="🪄📁"
+    _sc_icon="🔑"
   else
-    _sc_icon="🪄📄"
+    _sc_icon="🗝️"
   fi
   _sc_display="${sc_name}${_broken}"
 }
@@ -309,7 +310,6 @@ display_items() {
   fi
 }
 
-# Used in Settings 
 
 _parse_multi_select() {
   local input="$1"
