@@ -212,12 +212,24 @@ find_menu() {
                     echo "📋 Found ${#csv_finds[@]} mutation(s) to apply across: $path"
                     echo ""
 
+                    # Resolve absolute path of the CSV so we can exclude it from all operations
+                    local abs_csv_file
+                    abs_csv_file=$(cd "$(dirname "$csv_file")" && pwd)/$(basename "$csv_file")
+
                     for row_idx in "${!csv_finds[@]}"; do
                         local row_find="${csv_finds[$row_idx]}"
                         local row_rep="${csv_reps[$row_idx]}"
 
-                        # Count total instances across all matching files
-                        mapfile -t row_files < <(grep -rl "$row_find" "$path" 2>/dev/null)
+                        # Count total instances across all matching files, excluding the CSV itself
+                        local -a row_files=()
+                        while IFS= read -r rf; do
+                            local abs_rf
+                            abs_rf=$(cd "$(dirname "$rf")" && pwd)/$(basename "$rf")
+                            # Skip the mutation CSV itself
+                            [[ "$abs_rf" == "$abs_csv_file" ]] && continue
+                            row_files+=("$rf")
+                        done < <(grep -rl "$row_find" "$path" 2>/dev/null)
+
                         local total_instances=0
                         for rf in "${row_files[@]}"; do
                             local file_hits
