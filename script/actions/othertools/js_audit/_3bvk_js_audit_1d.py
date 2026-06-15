@@ -15,8 +15,8 @@ Two sub-cases:
 """
 
 import re
-from 3bvk_js_audit_helpers.py import resolve_js_path, rel
-from 3bvk_js_audit_constants.py import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN
+from 3bvk_js_audit_helpers import resolve_js_path, rel
+from 3bvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN
 
 
 # ---------------------------------------------------------------------------

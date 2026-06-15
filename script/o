@@ -318,12 +318,14 @@ infinity_stones_menu() {
   echo "1) Extract Tables and Links from Web"
   echo "2) Generate SQL"
   echo "3) JavaScript Audit"
+  echo "4) Git Push"
   echo "0) Back"
   read -p "Choice: " is_choice
   case "$is_choice" in
-    1) source "3bvk_xtract_core.sh" ;;
-    2) source "3bvk_gen_sql_core.sh" ;;
-    3) source "3bvk_js_audit_core.sh" ;;
+    1) python "_3bvk_xtract_core" ;;
+    2) python "_3bvk_gen_sql_core" ;;
+    3) python "_3bvk_js_audit_core" ;;
+    4) bash "_3bvk_gitpush_core";;
     0|"") return ;;
     *) echo "⚠️  Invalid choice" ;;
   esac

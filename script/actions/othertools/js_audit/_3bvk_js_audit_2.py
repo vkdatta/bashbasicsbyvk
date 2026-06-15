@@ -8,8 +8,8 @@ exported or in an IIFE file) are marked Dead; all others are Active.
 """
 
 import re
-from 3bvk_js_audit_helpers.py import rel
-from 3bvk_js_audit_helpers.py import _is_traditional_decl
+from 3bvk_js_audit_helpers import rel
+from 3bvk_js_audit_helpers import _is_traditional_decl
 
 
 def _count_calls(fname, src):

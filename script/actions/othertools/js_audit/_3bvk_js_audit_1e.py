@@ -16,8 +16,8 @@ suggested import statement.
 import re
 from pathlib import Path
 
-from 3bvk_js_audit_helpers.py import strip_comments, rel
-from 3bvk_js_audit_constants.py import (
+from 3bvk_js_audit_helpers import strip_comments, rel
+from 3bvk_js_audit_constants import (
     _JS_KEYWORDS, _NATIVE_GLOBALS, _SAFE_LITERALS,
     _RE_BARE_CALL, _RE_STRING_LITERAL,
 )

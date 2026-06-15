@@ -7,7 +7,7 @@ actually exports each requested name.  Mismatches are surfaced as Annexure
 entries on the Excel Annexure sheet.
 """
 
-from 3bvk_js_audit_helpers.py import resolve_js_path, rel
+from 3bvk_js_audit_helpers import resolve_js_path, rel
 
 # Module-level counter shared across all calls within a single run.
 _annexure_counter = [0]

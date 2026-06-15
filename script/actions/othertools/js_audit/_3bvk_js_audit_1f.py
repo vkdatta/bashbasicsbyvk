@@ -8,7 +8,7 @@ type="module"; if it already does but the file has no ES-module syntax, a
 warning is emitted.
 """
 
-from 3bvk_js_audit_helpers.py import resolve_script_ref, rel
+from 3bvk_js_audit_helpers import resolve_script_ref, rel
 
 
 def audit_1f_module_script_type(html_info, all_js, root):

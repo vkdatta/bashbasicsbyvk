@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+git add .
+git commit -m "Codebase Updated"
+git push

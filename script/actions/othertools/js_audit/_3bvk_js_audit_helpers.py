@@ -7,7 +7,7 @@ try:
 except ImportError:
     HAS_ESPRIMA = False
     print("[WARN] esprima not installed. Falling back to regex-based parsing.")
-from 3bvk_js_audit_constants.py import (
+from 3bvk_js_audit_constants import (
     CLR_OK_BG, CLR_OK_FG, CLR_ERROR_BG, CLR_ERROR_FG,
     CLR_WARN_BG, CLR_WARN_FG, CLR_INFO_BG, CLR_INFO_FG,
     CLR_DEAD_BG, CLR_DEAD_FG, CLR_ROW_ODD,

@@ -10,8 +10,8 @@ checks that the referenced function is:
   4. No duplicate definitions cause a load-order race condition.
 """
 
-from 3bvk_js_audit_helpers.py import resolve_script_ref, _find_index_html, rel
-from 3bvk_js_audit_helpers.py import HTMLFileInfo
+from 3bvk_js_audit_helpers import resolve_script_ref, _find_index_html, rel
+from 3bvk_js_audit_helpers import HTMLFileInfo
 
 
 def audit_1c_html_events(html_info, all_js, root):
