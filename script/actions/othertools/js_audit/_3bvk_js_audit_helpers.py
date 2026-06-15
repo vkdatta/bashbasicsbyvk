@@ -1,4 +1,5 @@
 import re
+import sys
 from pathlib import Path
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 try:
@@ -21,7 +22,7 @@ from _3bvk_js_audit_constants import (
     _RE_INLINE_EVT, _RE_FUNC_CALL,
     _JS_KEYWORDS, _HTML_KW,
 )
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
 def _fill(hex_color):
     return PatternFill("solid", fgColor=hex_color)
 def _font(bold=False, color="000000", size=10):

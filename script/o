@@ -366,7 +366,7 @@ infinity_stones_menu() {
   case "$is_choice" in
     1) python "$SCRIPT_DIR/_3bvk_xtract_core" ;;
     2) python "$SCRIPT_DIR/_3bvk_gen_sql_core" ;;
-    3) python "$SCRIPT_DIR/_3bvk_js_audit_core" ;;
+    3) python "$SCRIPT_DIR/_3bvk_js_audit_core" "$path" ;;
     4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" ;;
     0|"") return ;;
     *) echo "⚠️  Invalid choice" ;;
