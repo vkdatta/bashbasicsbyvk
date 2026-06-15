@@ -73,7 +73,10 @@ select_imaginary_items_common() {
       local next_char="${bn_lower:${#pfx}:1}"
       if [ "$ch" == "#" ]; then
         # # group: only items whose next char has no explicit group
-        [[ "$next_char" =~ ^[a-zA-Z0-9_.\-\(\)\[\]\{\}@\!\~\+\=\^\&\%\$\,\;\'\ ]$ ]] && continue
+        case "$next_char" in
+          [a-zA-Z0-9]|_|.|'-'|'('|')'|'['|']'|'{'|'}'|@|'!'|'~'|'+'|'='|'^'|'&'|'%'|'$'|','|';'|"'"|' ')
+            continue ;;
+        esac
       else
         [[ "$next_char" != "$ch_lower" ]] && continue
       fi
@@ -219,12 +222,17 @@ get_imaginary_groups() {
     elif [[ "$next" =~ ^[0-9]$ ]]; then
       group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
       [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
-    elif [[ "$next" =~ ^[_.\-\(\)\[\]\{\}@\!\~\+\=\^\&\%\$\,\;\'\ ]$ ]]; then
-      group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
-      [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
     else
-      group_counts["#"]=$(( ${group_counts["#"]:-0} + 1 ))
-      [ -z "${_seen_chars["#"]+x}" ] && chars+=("#") && _seen_chars["#"]=1
+      case "$next" in
+        _|.|'-'|'('|')'|'['|']'|'{'|'}'|@|'!'|'~'|'+'|'='|'^'|'&'|'%'|'$'|','|';'|"'"|' ')
+          group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
+          [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
+          ;;
+        *)
+          group_counts["#"]=$(( ${group_counts["#"]:-0} + 1 ))
+          [ -z "${_seen_chars["#"]+x}" ] && chars+=("#") && _seen_chars["#"]=1
+          ;;
+      esac
     fi
   done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
 
@@ -398,7 +406,10 @@ handle_selection() {
           [ -n "$group_prefix" ] && [[ "$_bn_lower" != "$group_prefix"* ]] && continue
           local _next="${_bn_lower:${#group_prefix}:1}"
           # only include items whose next char has no explicit group
-          [[ "$_next" =~ ^[a-zA-Z0-9_.\-\(\)\[\]\{\}@\!\~\+\=\^\&\%\$\,\;\'\ ]$ ]] && continue
+          case "$_next" in
+            [a-zA-Z0-9]|_|.|'-'|'('|')'|'['|']'|'{'|'}'|@|'!'|'~'|'+'|'='|'^'|'&'|'%'|'$'|','|';'|"'"|' ')
+              continue ;;
+          esac
           items+=("$_f")
         done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
         _collect_metadata
