@@ -7,6 +7,8 @@ source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_transfer.sh"
 source "bashbasicsbyvk_mapper.sh"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 parse_selection() {
   local input="$1"
   local max="$2"
@@ -70,7 +72,8 @@ select_imaginary_items_common() {
       [[ "$bn_lower" != "$pfx"* ]] && continue
       local next_char="${bn_lower:${#pfx}:1}"
       if [ "$ch" == "#" ]; then
-        [[ "$next_char" =~ ^[a-z]$ ]] && continue
+        # # group: only items whose next char has no explicit group
+        [[ "$next_char" =~ ^[a-zA-Z0-9_.\-\(\)\[\]\{\}@\!\~\+\=\^\&\%\$\,\;\'\ ]$ ]] && continue
       else
         [[ "$next_char" != "$ch_lower" ]] && continue
       fi
@@ -208,17 +211,23 @@ get_imaginary_groups() {
     local bn_lower="${bn,,}"
     [[ "$bn_lower" != "$pfx"* ]] && continue
     local next="${bn_lower:${#pfx}:1}"
-    local upper="${next^^}"
-    if [[ "$upper" =~ ^[A-Z]$ ]]; then
+
+    if [[ "$next" =~ ^[a-z]$ ]]; then
+      local upper="${next^^}"
       group_counts["$upper"]=$(( ${group_counts["$upper"]:-0} + 1 ))
       [ -z "${_seen_chars["$upper"]+x}" ] && chars+=("$upper") && _seen_chars["$upper"]=1
+    elif [[ "$next" =~ ^[0-9]$ ]]; then
+      group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
+      [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
+    elif [[ "$next" =~ ^[_.\-\(\)\[\]\{\}@\!\~\+\=\^\&\%\$\,\;\'\ ]$ ]]; then
+      group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
+      [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
     else
       group_counts["#"]=$(( ${group_counts["#"]:-0} + 1 ))
-      [ -z "${_seen_chars["#"]+x}" ] && _seen_chars["#"]=1
+      [ -z "${_seen_chars["#"]+x}" ] && chars+=("#") && _seen_chars["#"]=1
     fi
   done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
 
-  [ "${group_counts[#]:-0}" -gt 0 ] && chars+=("#")
   group_chars=("${chars[@]}")
 }
 
@@ -228,9 +237,35 @@ display_imaginary_groups() {
   local total="$3"
   echo "📂 Too many items ($total). Imaginary groups by next character:"
   get_imaginary_groups "$p" "$pfx"
+
+  # Sort: special chars → digits → letters → #
+  local specials=()
+  local digits=()
+  local letters=()
+  local fallback=()
+
+  for ch in "${group_chars[@]}"; do
+    if [[ "$ch" =~ ^[A-Z]$ ]]; then
+      letters+=("$ch")
+    elif [[ "$ch" =~ ^[0-9]$ ]]; then
+      digits+=("$ch")
+    elif [[ "$ch" == "#" ]]; then
+      fallback+=("$ch")
+    else
+      specials+=("$ch")
+    fi
+  done
+
+  IFS=$'\n' sorted_specials=($(printf '%s\n' "${specials[@]}" | sort))
+  IFS=$'\n' sorted_digits=($(printf '%s\n' "${digits[@]}" | sort))
+  IFS=$'\n' sorted_letters=($(printf '%s\n' "${letters[@]}" | sort))
+  unset IFS
+
+  local sorted=("${sorted_specials[@]}" "${sorted_digits[@]}" "${sorted_letters[@]}" "${fallback[@]}")
+
   imaginary_map=()
   local idx=1
-  for ch in "${group_chars[@]}"; do
+  for ch in "${sorted[@]}"; do
     local cnt="${group_counts[$ch]}"
     printf " %2d) 📁 %s (%d items)\n" "$idx" "$ch" "$cnt"
     imaginary_map+=("$ch")
@@ -256,7 +291,6 @@ handle_create() {
   [[ "$cr" == "1" ]] && create_dirs
   [[ "$cr" == "2" ]] && create_files
 }
-
 
 handle_rename() {
   if [ ${#items[@]} -eq 0 ]; then
@@ -322,10 +356,10 @@ infinity_stones_menu() {
   echo "0) Back"
   read -p "Choice: " is_choice
   case "$is_choice" in
-    1) python "_3bvk_xtract_core" ;;
-    2) python "_3bvk_gen_sql_core" ;;
-    3) python "_3bvk_js_audit_core" ;;
-    4) bash "_3bvk_gitpush_core";;
+    1) python "$SCRIPT_DIR/_3bvk_xtract_core" ;;
+    2) python "$SCRIPT_DIR/_3bvk_gen_sql_core" ;;
+    3) python "$SCRIPT_DIR/_3bvk_js_audit_core" ;;
+    4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" ;;
     0|"") return ;;
     *) echo "⚠️  Invalid choice" ;;
   esac
@@ -335,24 +369,48 @@ handle_selection() {
   local choice="$1"
   if $imaginary_mode; then
     local matched=false
+    local ch=""
+
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#imaginary_map[@]}" ]; then
       ch="${imaginary_map[$((choice-1))]}"
       matched=true
     elif [[ ${#choice} -eq 1 ]]; then
-      ch="${choice^^}"
-      for gc in "${group_chars[@]}"; do
-        [[ "$gc" == "$ch" ]] && matched=true && break
+      local uc="${choice^^}"
+      for gc in "${imaginary_map[@]}"; do
+        if [[ "$gc" == "$uc" ]] || [[ "$gc" == "$choice" ]]; then
+          ch="$gc"
+          matched=true
+          break
+        fi
       done
-      [[ "$matched" == false && "$choice" == "#" ]] && ch="#" && matched=true
     fi
 
     if $matched; then
       if [ "$ch" == "#" ]; then
-        group_prefix="${group_prefix}#"
-      else
+        # True fallback group — collect and display directly, don't append to prefix
+        imaginary_mode=false
+        items=()
+        while IFS= read -r -d '' _f; do
+          _bn="${_f##*/}"
+          [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
+          ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
+          local _bn_lower="${_bn,,}"
+          [ -n "$group_prefix" ] && [[ "$_bn_lower" != "$group_prefix"* ]] && continue
+          local _next="${_bn_lower:${#group_prefix}:1}"
+          # only include items whose next char has no explicit group
+          [[ "$_next" =~ ^[a-zA-Z0-9_.\-\(\)\[\]\{\}@\!\~\+\=\^\&\%\$\,\;\'\ ]$ ]] && continue
+          items+=("$_f")
+        done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+        _collect_metadata
+        apply_sort
+      elif [[ "$ch" =~ ^[A-Z]$ ]]; then
         group_prefix="${group_prefix}${ch,,}"
+        force_show=false
+      else
+        # digit or special char — append literally
+        group_prefix="${group_prefix}${ch}"
+        force_show=false
       fi
-      force_show=false
     else
       echo "⚠️  Invalid selection"
     fi
