@@ -550,6 +550,9 @@ def parse_comma_separated(input_str):
     return items if items else None
 
 def main():
+    work_dir = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+    os.chdir(work_dir)
+
     print("\n" + "="*50)
     print("🌐 XTRACT - WEB CONTENT EXTRACTOR".center(50))
     print("="*50)

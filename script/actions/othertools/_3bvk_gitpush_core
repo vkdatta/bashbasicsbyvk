@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+TARGET="${1:-$(pwd)}"
+cd "$TARGET" || { echo "❌ Cannot cd to $TARGET"; exit 1; }
+
 git add .
 git commit -m "Codebase Updated"
 git push

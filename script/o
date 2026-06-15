@@ -364,10 +364,10 @@ infinity_stones_menu() {
   echo "0) Back"
   read -p "Choice: " is_choice
   case "$is_choice" in
-    1) python "$SCRIPT_DIR/_3bvk_xtract_core" ;;
-    2) python "$SCRIPT_DIR/_3bvk_gen_sql_core" ;;
+    1) python "$SCRIPT_DIR/_3bvk_xtract_core" "$path";;
+    2) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path";;
     3) python "$SCRIPT_DIR/_3bvk_js_audit_core" "$path" ;;
-    4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" ;;
+    4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path";;
     0|"") return ;;
     *) echo "⚠️  Invalid choice" ;;
   esac
