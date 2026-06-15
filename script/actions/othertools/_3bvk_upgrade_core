@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+pip install -vvv --progress-bar on --upgrade --force-reinstall \
+git+https://github.com/vkdatta/bashbasicsbyvk.git

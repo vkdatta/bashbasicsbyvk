@@ -486,7 +486,7 @@ while true; do
   fi
   echo
 
-  echo "u) Up   cd) Change directory   t) Transfer m) Create Map"
+  echo "u) Up   cd) Change directory   t) Transfer m) Create Map -u) Upgrade"
   echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
   echo "q/h) Quit/Home   s) Settings   forceshow) Toggle Group/Item Mode kl) kill all"
   echo "i) Infinity Stones 💎"
@@ -513,6 +513,7 @@ while true; do
     m|M)                   map_directory ;;
     kl|KL|Kl|kL)           kill -9 -1 ;;
     i|I)                   infinity_stones_menu ;;
+    -u|-U)                 bash _3bvk_upgrade_core ;;
     *)                     handle_selection "$choice" ;;
   esac
 
