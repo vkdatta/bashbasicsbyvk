@@ -312,6 +312,22 @@ handle_rename() {
   done
 }
 
+infinity_stones_menu() {
+  echo
+  echo "💎 Infinity Stones"
+  echo "1) Extract Tables and Links from Web"
+  echo "2) Generate SQL"
+  echo "3) JavaScript Audit"
+  echo "0) Back"
+  read -p "Choice: " is_choice
+  case "$is_choice" in
+    1) source "3bvk_xtract_core.sh" ;;
+    2) source "3bvk_gen_sql_core.sh" ;;
+    3) source "3bvk_js_audit_core.sh" ;;
+    0|"") return ;;
+    *) echo "⚠️  Invalid choice" ;;
+  esac
+}
 
 handle_selection() {
   local choice="$1"
@@ -471,6 +487,7 @@ while true; do
   echo "u) Up   cd) Change directory   t) Transfer m) Create Map"
   echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
   echo "q/h) Quit/Home   s) Settings   forceshow) Toggle Group/Item Mode kl) kill all"
+  echo "i) Infinity Stones 💎"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold → press forceshow to enable grouped display"
@@ -492,7 +509,8 @@ while true; do
     r|R)                   handle_rename ;;
     cd|CD|cD|Cd)           cd "$path" && exec "$SHELL" ;;
     m|M)                   map_directory ;;
-    kl|KL|Kl|kL)           kill -9 -1;;
+    kl|KL|Kl|kL)           kill -9 -1 ;;
+    i|I)                   infinity_stones_menu ;;
     *)                     handle_selection "$choice" ;;
   esac
 

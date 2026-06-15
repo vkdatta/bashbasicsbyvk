@@ -1,0 +1,362 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
+from 3bvk_js_audit_constants.py import (
+    CLR_HEADER_BG, CLR_HEADER_FG, CLR_TITLE_BG, CLR_TITLE_FG,
+    CLR_OK_BG, CLR_OK_FG, CLR_ERROR_BG, CLR_ERROR_FG,
+    CLR_INFO_BG, CLR_INFO_FG, CLR_DEAD_BG, CLR_DEAD_FG,
+    CLR_ANN_BG, CLR_ANN_FG, CLR_1E_MERGE_BG, CLR_1E_MERGE_FG,
+    CLR_ROW_ODD, CLR_ROW_EVEN,
+    FONT_NAME,
+    _IE_KEY_FIELDS, _AD_KEY_FIELDS,
+)
+from 3bvk_js_audit_helpers.py import (
+    ROOT,
+    collect_files, rel,
+    JSFileInfo, HTMLFileInfo,
+    _fill, _font, _align, _border_thin, _status_style,
+    _dedup, _recompute_1e_merge_metadata,
+)
+from 3bvk_js_audit_1a.py import audit_1a_import_top
+from 3bvk_js_audit_1b.py import audit_1b_export_match
+from 3bvk_js_audit_1c.py import audit_1c_html_events
+from 3bvk_js_audit_1d.py import audit_1d_imported_in_html_string
+from 3bvk_js_audit_1e.py import audit_1e_missing_imports
+from 3bvk_js_audit_1f.py import audit_1f_module_script_type
+from 3bvk_js_audit_2.py import audit_2_active_dead
+
+
+def _write_title_row(ws, title, ncols):
+    ws.append([title])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+    cell           = ws.cell(1, 1)
+    cell.font      = Font(name=FONT_NAME, bold=True, size=13, color=CLR_TITLE_FG)
+    cell.fill      = _fill(CLR_TITLE_BG)
+    cell.alignment = _align(wrap=False, h='center')
+
+
+def _write_header_row(ws, headers, row=2):
+    for col_idx, h in enumerate(headers, 1):
+        cell           = ws.cell(row, col_idx, h)
+        cell.font      = Font(name=FONT_NAME, bold=True, size=10, color=CLR_HEADER_FG)
+        cell.fill      = _fill(CLR_HEADER_BG)
+        cell.alignment = _align(wrap=False, h='center')
+        cell.border    = _border_thin()
+
+
+def _write_data_row(ws, row_idx, values, status=None):
+    alt_fill = _fill(CLR_ROW_ODD if row_idx % 2 == 1 else CLR_ROW_EVEN)
+    for col_idx, val in enumerate(values, 1):
+        cell           = ws.cell(row_idx, col_idx, val)
+        cell.border    = _border_thin()
+        cell.alignment = _align(wrap=True)
+        cell.font      = _font()
+        cell.fill      = alt_fill
+    if status is not None:
+        stat_fill, stat_font = _status_style(status)
+        status_col = next(
+            (i for i, v in enumerate(values, 1)
+             if str(v).strip().upper() in ('OK', 'ERROR', 'INFO', 'WARN', 'ACTIVE', 'DEAD')),
+            None,
+        )
+        if status_col:
+            c           = ws.cell(row_idx, status_col)
+            c.fill      = stat_fill
+            c.font      = stat_font
+            c.alignment = _align(h='center', wrap=False)
+
+
+def _set_col_widths(ws, widths):
+    for col_idx, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+
+
+def _freeze(ws, header_row=2):
+    ws.freeze_panes = ws.cell(header_row + 1, 1)
+
+
+def _row_height(ws, row, height):
+    ws.row_dimensions[row].height = height
+
+
+IE_HEADERS = ['Sub Audit', 'Source File', 'Destination File', 'Status', 'Comment', 'Suggested Import']
+IE_WIDTHS  = [28, 38, 38, 12, 70, 55]
+
+
+def build_sheet_import_export(wb, ie_rows):
+    ws       = wb.active
+    ws.title = "Import Export"
+
+    _write_title_row(ws, "Audit Report -- Sheet 1: Import / Export", len(IE_HEADERS))
+    _row_height(ws, 1, 24)
+    _write_header_row(ws, IE_HEADERS, row=2)
+    _row_height(ws, 2, 18)
+
+    merge_tracker = {}
+
+    for i, row in enumerate(ie_rows, 1):
+        excel_row = i + 2
+        vals = [
+            row.get('Sub Audit', ''),
+            row.get('Source', ''),
+            row.get('Destination', ''),
+            row.get('Status', ''),
+            row.get('Comment', ''),
+            row.get('Suggested Import', ''),
+        ]
+        _write_data_row(ws, excel_row, vals, status=row.get('Status'))
+        ws.row_dimensions[excel_row].height = (
+            max(40, 20 + (vals[4].count('\n') * 14)) if len(vals[4]) > 80 else 20
+        )
+
+        f_cell = ws.cell(excel_row, 6)
+        if vals[5]:
+            f_cell.fill      = _fill(CLR_1E_MERGE_BG)
+            f_cell.font      = Font(name=FONT_NAME, size=9, color=CLR_1E_MERGE_FG, bold=False, italic=True)
+            f_cell.alignment = _align(wrap=True, h='left', v='top')
+        else:
+            f_cell.fill = _fill(CLR_ROW_ODD if i % 2 == 1 else CLR_ROW_EVEN)
+
+        if row.get('Sub Audit', '').startswith('1e'):
+            mk = row.get('_merge_key', (row.get('Source', ''), row.get('Destination', '')))
+            merge_tracker.setdefault(mk, []).append(excel_row)
+
+    for mk, excel_rows in merge_tracker.items():
+        if len(excel_rows) < 2:
+            continue
+        first_row = excel_rows[0]
+        last_row  = excel_rows[-1]
+        ws.merge_cells(start_row=first_row, start_column=6, end_row=last_row, end_column=6)
+        mc           = ws.cell(first_row, 6)
+        mc.fill      = _fill(CLR_1E_MERGE_BG)
+        mc.font      = Font(name=FONT_NAME, size=9, color=CLR_1E_MERGE_FG, bold=False, italic=True)
+        mc.alignment = _align(wrap=True, h='left', v='top')
+
+    _set_col_widths(ws, IE_WIDTHS)
+    _freeze(ws, header_row=2)
+    ws.sheet_view.showGridLines = False
+
+    ok_count    = sum(1 for r in ie_rows if r.get('Status') == 'OK')
+    err_count   = sum(1 for r in ie_rows if r.get('Status') == 'Error')
+    info_count  = sum(1 for r in ie_rows if r.get('Status') == 'Info')
+    summary_col = len(IE_HEADERS) + 2
+    for row_i, (label, val, bg, fg) in enumerate([
+        ('Total Rows', len(ie_rows), CLR_HEADER_BG, CLR_HEADER_FG),
+        ('OK',         ok_count,     CLR_OK_BG,     CLR_OK_FG),
+        ('Errors',     err_count,    CLR_ERROR_BG,  CLR_ERROR_FG),
+        ('Info',       info_count,   CLR_INFO_BG,   CLR_INFO_FG),
+    ], start=2):
+        lc           = ws.cell(row_i, summary_col, label)
+        lc.font      = Font(name=FONT_NAME, bold=True, size=10, color=CLR_HEADER_FG)
+        lc.fill      = _fill(CLR_HEADER_BG)
+        lc.alignment = _align(h='center', wrap=False)
+        lc.border    = _border_thin()
+        vc           = ws.cell(row_i, summary_col + 1, val)
+        vc.fill      = _fill(bg)
+        vc.font      = Font(name=FONT_NAME, bold=True, size=10, color=fg)
+        vc.alignment = _align(h='center', wrap=False)
+        vc.border    = _border_thin()
+    ws.column_dimensions[get_column_letter(summary_col)].width     = 14
+    ws.column_dimensions[get_column_letter(summary_col + 1)].width = 10
+
+
+AD_HEADERS = ['Source File', 'Function Name', 'Status', 'Usage Count', 'Comment']
+AD_WIDTHS  = [45, 35, 12, 14, 80]
+
+
+def build_sheet_active_dead(wb, ad_rows):
+    ws = wb.create_sheet("Active Dead")
+
+    _write_title_row(ws, "Audit Report -- Sheet 2: Active / Dead Function Analysis", len(AD_HEADERS))
+    _row_height(ws, 1, 24)
+    _write_header_row(ws, AD_HEADERS, row=2)
+    _row_height(ws, 2, 18)
+
+    for i, row in enumerate(ad_rows, 1):
+        vals = [
+            row.get('Source', ''),
+            row.get('Function Name', ''),
+            row.get('Status', ''),
+            row.get('Usage Count', 0),
+            row.get('Comment', ''),
+        ]
+        _write_data_row(ws, i + 2, vals, status=row.get('Status'))
+        ws.row_dimensions[i + 2].height = 20
+        ws.cell(i + 2, 4).alignment = _align(h='center', wrap=False)
+
+    _set_col_widths(ws, AD_WIDTHS)
+    ws.freeze_panes = ws.cell(3, 1)
+    ws.auto_filter.ref = f"A2:{get_column_letter(len(AD_HEADERS))}2"
+    ws.sheet_view.showGridLines = False
+
+    active_count = sum(1 for r in ad_rows if r.get('Status') == 'Active')
+    dead_count   = sum(1 for r in ad_rows if r.get('Status') == 'Dead')
+    summary_col  = len(AD_HEADERS) + 2
+    for row_i, (label, val, bg, fg) in enumerate([
+        ('Total Functions', len(ad_rows), CLR_HEADER_BG, CLR_HEADER_FG),
+        ('Active',          active_count, CLR_OK_BG,     CLR_OK_FG),
+        ('Dead',            dead_count,   CLR_DEAD_BG,   CLR_DEAD_FG),
+    ], start=2):
+        lc           = ws.cell(row_i, summary_col, label)
+        lc.font      = Font(name=FONT_NAME, bold=True, size=10, color=CLR_HEADER_FG)
+        lc.fill      = _fill(CLR_HEADER_BG)
+        lc.alignment = _align(h='center', wrap=False)
+        lc.border    = _border_thin()
+        vc           = ws.cell(row_i, summary_col + 1, val)
+        vc.fill      = _fill(bg)
+        vc.font      = Font(name=FONT_NAME, bold=True, size=10, color=fg)
+        vc.alignment = _align(h='center', wrap=False)
+        vc.border    = _border_thin()
+    ws.column_dimensions[get_column_letter(summary_col)].width     = 18
+    ws.column_dimensions[get_column_letter(summary_col + 1)].width = 10
+
+
+ANN_HEADERS = ['Annexure #', 'Source File', 'Destination File', 'Function Name', 'Comment']
+ANN_WIDTHS  = [12, 40, 40, 30, 80]
+
+
+def build_sheet_annexure(wb, annexures):
+    ws = wb.create_sheet("Annexure")
+
+    _write_title_row(ws, "Audit Report -- Sheet 3: Annexure (Export Mismatch Details)", len(ANN_HEADERS))
+    _row_height(ws, 1, 24)
+    _write_header_row(ws, ANN_HEADERS, row=2)
+    _row_height(ws, 2, 18)
+
+    data_row = 3
+    for ann_id, ann_rows in annexures:
+        label_cell           = ws.cell(data_row, 1, f"Annexure {ann_id}")
+        label_cell.font      = Font(name=FONT_NAME, bold=True, size=10, color=CLR_ANN_FG)
+        label_cell.fill      = _fill(CLR_ANN_BG)
+        label_cell.alignment = _align(h='center', wrap=False)
+        label_cell.border    = _border_thin()
+        ws.merge_cells(start_row=data_row, start_column=1,
+                       end_row=data_row, end_column=len(ANN_HEADERS))
+        for col in range(2, len(ANN_HEADERS) + 1):
+            c        = ws.cell(data_row, col)
+            c.fill   = _fill(CLR_ANN_BG)
+            c.border = _border_thin()
+        ws.row_dimensions[data_row].height = 18
+        data_row += 1
+
+        for i, row in enumerate(ann_rows):
+            vals = [
+                row.get('Annexure', ann_id),
+                row.get('Source', ''),
+                row.get('Destination', ''),
+                row.get('Function Name', ''),
+                row.get('Comment', ''),
+            ]
+            alt_fill = _fill(CLR_ROW_ODD if i % 2 == 0 else CLR_ROW_EVEN)
+            for col_idx, val in enumerate(vals, 1):
+                cell           = ws.cell(data_row, col_idx, val)
+                cell.font      = _font()
+                cell.fill      = alt_fill
+                cell.border    = _border_thin()
+                cell.alignment = _align(wrap=True)
+            ws.cell(data_row, 1).alignment = _align(h='center', wrap=False)
+            ws.row_dimensions[data_row].height = (
+                36 if len(row.get('Comment', '')) > 80 else 20
+            )
+            data_row += 1
+
+        data_row += 1
+
+    _set_col_widths(ws, ANN_WIDTHS)
+    ws.freeze_panes = ws.cell(3, 1)
+    ws.sheet_view.showGridLines = False
+
+    if not annexures:
+        notice           = ws.cell(3, 1, "No annexure entries -- all imports matched their exports.")
+        notice.font      = Font(name=FONT_NAME, italic=True, color="888888")
+        notice.alignment = _align(h='center', wrap=False)
+        ws.merge_cells(start_row=3, start_column=1, end_row=3, end_column=len(ANN_HEADERS))
+
+
+def main():
+    print(f'[INFO] Scanning from root: {ROOT}')
+    js_paths, html_paths = collect_files(ROOT)
+    print(f'[INFO] Found {len(js_paths)} JS files, {len(html_paths)} HTML files.')
+
+    print('[INFO] Parsing JS files ...')
+    all_js = {}
+    for p in js_paths:
+        try:
+            all_js[p] = JSFileInfo(p)
+        except Exception as e:
+            print(f'[WARN] Failed to parse {rel(p)}: {e}')
+
+    print('[INFO] Parsing HTML files ...')
+    all_html = []
+    for p in html_paths:
+        try:
+            all_html.append(HTMLFileInfo(p))
+        except Exception as e:
+            print(f'[WARN] Failed to parse {rel(p)}: {e}')
+
+    ie_rows   = []
+    ad_rows   = []
+    annexures = []
+
+    print('[INFO] Audit 1a -- Import at Top ...')
+    for js_info in all_js.values():
+        ie_rows.extend(audit_1a_import_top(js_info))
+
+    print('[INFO] Audit 1b -- Export Matching ...')
+    for js_info in all_js.values():
+        rows, anns = audit_1b_export_match(js_info, all_js, ROOT)
+        ie_rows.extend(rows)
+        annexures.extend(anns)
+
+    print('[INFO] Audit 1c -- HTML Inline Event Resolution ...')
+    for html_info in all_html:
+        ie_rows.extend(audit_1c_html_events(html_info, all_js, ROOT))
+
+    print('[INFO] Audit 1d -- Imported Function in JS-built HTML ...')
+    for js_info in all_js.values():
+        ie_rows.extend(audit_1d_imported_in_html_string(js_info, all_js, ROOT))
+
+    print('[INFO] Audit 1e -- Missing Imports ...')
+    for js_info in all_js.values():
+        ie_rows.extend(audit_1e_missing_imports(js_info, all_js, ROOT))
+
+    print('[INFO] Audit 1f -- Script Tag Module Type ...')
+    for html_info in all_html:
+        ie_rows.extend(audit_1f_module_script_type(html_info, all_js, ROOT))
+
+    print('[INFO] Audit 2 -- Active/Dead Functions ...')
+    ad_rows.extend(audit_2_active_dead(all_js, all_html))
+
+    raw_ie   = len(ie_rows)
+    raw_ad   = len(ad_rows)
+    ie_rows  = _dedup(ie_rows, _IE_KEY_FIELDS)
+    ad_rows  = _dedup(ad_rows, _AD_KEY_FIELDS)
+    dedup_ie = raw_ie - len(ie_rows)
+    dedup_ad = raw_ad - len(ad_rows)
+    if dedup_ie or dedup_ad:
+        print(f'[INFO] Deduplication removed {dedup_ie} IE row(s) and {dedup_ad} AD row(s).')
+
+    _recompute_1e_merge_metadata(ie_rows)
+
+    print('[INFO] Writing Excel report ...')
+    wb = Workbook()
+    build_sheet_import_export(wb, ie_rows)
+    build_sheet_active_dead(wb, ad_rows)
+    build_sheet_annexure(wb, annexures)
+
+    output_path = ROOT / 'audit_report.xlsx'
+    wb.save(str(output_path))
+
+    rows_1e = sum(1 for r in ie_rows if r.get('Sub Audit', '').startswith('1e'))
+    print(f'[DONE] Report written to: {output_path}')
+    print(f'       Sheet 1 (Import Export): {len(ie_rows)} rows  (was {raw_ie} before dedup)')
+    print(f'         -- of which 1e (Missing Imports): {rows_1e} rows')
+    print(f'       Sheet 2 (Active Dead):   {len(ad_rows)} rows  (was {raw_ad} before dedup)')
+    print(f'       Sheet 3 (Annexure):      {sum(len(a[1]) for a in annexures)} entries across {len(annexures)} annexures')
+
+
+if __name__ == '__main__':
+    main()
