@@ -1,5 +1,5 @@
 """
-3bvk_js_audit_1e.py.py
+_3bvk_js_audit_1e.py.py
 Audit 1e -- Missing Imports
 
 Scans every JS file for bare function calls whose names are not:
@@ -16,15 +16,15 @@ suggested import statement.
 import re
 from pathlib import Path
 
-from 3bvk_js_audit_helpers import strip_comments, rel
-from 3bvk_js_audit_constants import (
+from _3bvk_js_audit_helpers import strip_comments, rel
+from _3bvk_js_audit_constants import (
     _JS_KEYWORDS, _NATIVE_GLOBALS, _SAFE_LITERALS,
     _RE_BARE_CALL, _RE_STRING_LITERAL,
 )
 
 
 # ---------------------------------------------------------------------------
-# Internal 3bvk_js_audit_helpers.py
+# Internal _3bvk_js_audit_helpers.py
 # ---------------------------------------------------------------------------
 
 def _strip_strings(src):

@@ -1,5 +1,5 @@
 """
-3bvk_js_audit_1f.py.py
+_3bvk_js_audit_1f.py.py
 Audit 1f -- Script Tag Module Type
 
 For every <script src="..."> in an HTML file, checks whether the JS file it
@@ -8,7 +8,7 @@ type="module"; if it already does but the file has no ES-module syntax, a
 warning is emitted.
 """
 
-from 3bvk_js_audit_helpers import resolve_script_ref, rel
+from _3bvk_js_audit_helpers import resolve_script_ref, rel
 
 
 def audit_1f_module_script_type(html_info, all_js, root):

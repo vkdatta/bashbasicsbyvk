@@ -4,7 +4,7 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
-from 3bvk_js_audit_constants import (
+from _3bvk_js_audit_constants import (
     CLR_HEADER_BG, CLR_HEADER_FG, CLR_TITLE_BG, CLR_TITLE_FG,
     CLR_OK_BG, CLR_OK_FG, CLR_ERROR_BG, CLR_ERROR_FG,
     CLR_INFO_BG, CLR_INFO_FG, CLR_DEAD_BG, CLR_DEAD_FG,
@@ -13,20 +13,20 @@ from 3bvk_js_audit_constants import (
     FONT_NAME,
     _IE_KEY_FIELDS, _AD_KEY_FIELDS,
 )
-from 3bvk_js_audit_helpers import (
+from _3bvk_js_audit_helpers import (
     ROOT,
     collect_files, rel,
     JSFileInfo, HTMLFileInfo,
     _fill, _font, _align, _border_thin, _status_style,
     _dedup, _recompute_1e_merge_metadata,
 )
-from 3bvk_js_audit_1a import audit_1a_import_top
-from 3bvk_js_audit_1b import audit_1b_export_match
-from 3bvk_js_audit_1c import audit_1c_html_events
-from 3bvk_js_audit_1d import audit_1d_imported_in_html_string
-from 3bvk_js_audit_1e import audit_1e_missing_imports
-from 3bvk_js_audit_1f import audit_1f_module_script_type
-from 3bvk_js_audit_2 import audit_2_active_dead
+from _3bvk_js_audit_1a import audit_1a_import_top
+from _3bvk_js_audit_1b import audit_1b_export_match
+from _3bvk_js_audit_1c import audit_1c_html_events
+from _3bvk_js_audit_1d import audit_1d_imported_in_html_string
+from _3bvk_js_audit_1e import audit_1e_missing_imports
+from _3bvk_js_audit_1f import audit_1f_module_script_type
+from _3bvk_js_audit_2 import audit_2_active_dead
 
 
 def _write_title_row(ws, title, ncols):

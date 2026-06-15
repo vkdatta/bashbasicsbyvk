@@ -1,5 +1,5 @@
 """
-3bvk_js_audit_1d.py.py
+_3bvk_js_audit_1d.py.py
 Audit 1d -- Imported Function in JS-built HTML
            (also covers "1d - Local Func in ES Module HTML")
 
@@ -15,8 +15,8 @@ Two sub-cases:
 """
 
 import re
-from 3bvk_js_audit_helpers import resolve_js_path, rel
-from 3bvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN
+from _3bvk_js_audit_helpers import resolve_js_path, rel
+from _3bvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN
 
 
 # ---------------------------------------------------------------------------

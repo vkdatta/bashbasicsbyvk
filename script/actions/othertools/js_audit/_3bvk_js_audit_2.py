@@ -1,5 +1,5 @@
 """
-3bvk_js_audit_2.py.py
+_3bvk_js_audit_2.py.py
 Audit 2 -- Active / Dead Function Analysis
 
 For every function found in every JS file, counts how many times it is called
@@ -8,8 +8,8 @@ exported or in an IIFE file) are marked Dead; all others are Active.
 """
 
 import re
-from 3bvk_js_audit_helpers import rel
-from 3bvk_js_audit_helpers import _is_traditional_decl
+from _3bvk_js_audit_helpers import rel
+from _3bvk_js_audit_helpers import _is_traditional_decl
 
 
 def _count_calls(fname, src):

@@ -1,5 +1,5 @@
 """
-3bvk_js_audit_1c.py.py
+_3bvk_js_audit_1c.py.py
 Audit 1c -- HTML Inline Event Resolution
 
 For every inline event handler (onclick="...", etc.) found in an HTML file,
@@ -10,8 +10,8 @@ checks that the referenced function is:
   4. No duplicate definitions cause a load-order race condition.
 """
 
-from 3bvk_js_audit_helpers import resolve_script_ref, _find_index_html, rel
-from 3bvk_js_audit_helpers import HTMLFileInfo
+from _3bvk_js_audit_helpers import resolve_script_ref, _find_index_html, rel
+from _3bvk_js_audit_helpers import HTMLFileInfo
 
 
 def audit_1c_html_events(html_info, all_js, root):

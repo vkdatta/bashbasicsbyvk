@@ -1,5 +1,5 @@
 """
-3bvk_js_audit_1b.py.py
+_3bvk_js_audit_1b.py.py
 Audit 1b -- Export Matching
 
 For every named import in a JS file, verifies that the destination file
@@ -7,7 +7,7 @@ actually exports each requested name.  Mismatches are surfaced as Annexure
 entries on the Excel Annexure sheet.
 """
 
-from 3bvk_js_audit_helpers import resolve_js_path, rel
+from _3bvk_js_audit_helpers import resolve_js_path, rel
 
 # Module-level counter shared across all calls within a single run.
 _annexure_counter = [0]
