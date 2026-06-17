@@ -2,33 +2,29 @@
 _3bvk_js_audit_1e.py.py
 Audit 1e -- Missing Imports
 
-Scans every JS file for bare function calls whose names are not:
+Scans every JS file for bare function calls in REGULAR JS CODE (including
+${...} expressions inside template literals) whose names are not:
   • locally defined in the same file
   • already imported
   • a native JS global or keyword
   • a safe string literal
 
-For each unresolved call, searches all other JS files for where the function
-is defined (and whether it is exported), then emits Error rows with a
-suggested import statement.
+HTML-string calls inside template literals (e.g. onclick="foo()") are
+excluded because they are handled by Audit 1d and require window. exposure,
+not import/export.
 """
 
 import re
 from pathlib import Path
 
-from _3bvk_js_audit_helpers import strip_comments, rel, _extract_template_literals
+from _3bvk_js_audit_helpers import strip_comments, rel
 from _3bvk_js_audit_constants import (
     _JS_KEYWORDS, _NATIVE_GLOBALS, _SAFE_LITERALS,
     _RE_BARE_CALL, _RE_STRING_LITERAL,
 )
 
 
-# ---------------------------------------------------------------------------
-# Internal _3bvk_js_audit_helpers.py
-# ---------------------------------------------------------------------------
-
 def _strip_strings(src):
-    """Replace all string literals with spaces so their contents are ignored."""
     return _RE_STRING_LITERAL.sub(lambda m: ' ' * len(m.group()), src)
 
 
@@ -60,21 +56,116 @@ def _relative_import_path(source_path: Path, dest_path: Path, root: Path) -> str
     return s
 
 
-# ---------------------------------------------------------------------------
-# Audit 1e
-# ---------------------------------------------------------------------------
+def _neuter_template_literals(source: str) -> str:
+    """
+    Replace template literal text (outside ${...}) with spaces while
+    preserving ${...} expressions as regular JS code. This prevents
+    HTML-string calls like onclick="foo()" from leaking into the bare-call
+    scanner, while keeping real JS calls like ${foo()} visible.
+    """
+    chars = list(source)
+    i = 0
+    n = len(source)
+    while i < n:
+        if source[i] == '`':
+            chars[i] = ' '  # opening backtick
+            i += 1
+            depth = 0
+            while i < n:
+                ch = source[i]
+                if depth == 0:
+                    if ch == '\\':
+                        chars[i] = ' '
+                        if i + 1 < n:
+                            chars[i + 1] = ' '
+                        i += 2
+                        continue
+                    if ch == '`':
+                        chars[i] = ' '  # closing backtick
+                        i += 1
+                        break
+                    if ch == '$' and i + 1 < n and source[i + 1] == '{':
+                        depth += 1
+                        chars[i] = ' '
+                        chars[i + 1] = ' '
+                        i += 2
+                        continue
+                    # Literal text inside template literal
+                    chars[i] = ' '
+                    i += 1
+                else:
+                    # Inside ${...}
+                    if ch in ('"', "'", '`'):
+                        quote = ch
+                        i += 1
+                        while i < n:
+                            c2 = source[i]
+                            if c2 == '\\':
+                                i += 2
+                                continue
+                            if c2 == quote:
+                                i += 1
+                                break
+                            if quote == '`' and c2 == '$' and i + 1 < n and source[i + 1] == '{':
+                                i += 2
+                                inner = 1
+                                while i < n and inner:
+                                    if source[i] == '{':
+                                        inner += 1
+                                    elif source[i] == '}':
+                                        inner -= 1
+                                    i += 1
+                                continue
+                            i += 1
+                        continue
+                    if ch == '{':
+                        depth += 1
+                        i += 1
+                    elif ch == '}':
+                        depth -= 1
+                        if depth == 0:
+                            chars[i] = ' '  # closing brace of ${...}
+                        i += 1
+                    else:
+                        i += 1
+        else:
+            # Skip comments and regular strings so their backticks don't confuse us
+            if source[i:i + 2] == '//':
+                while i < n and source[i] != '\n':
+                    i += 1
+            elif source[i:i + 2] == '/*':
+                end = source.find('*/', i + 2)
+                i = end + 2 if end != -1 else n
+            elif source[i] in ('"', "'"):
+                q = source[i]
+                i += 1
+                while i < n:
+                    if source[i] == '\\':
+                        i += 2
+                        continue
+                    if source[i] == q:
+                        i += 1
+                        break
+                    i += 1
+            else:
+                i += 1
+    return ''.join(chars)
+
 
 def audit_1e_missing_imports(js_info, all_js, root):
     rows = []
 
-    clean  = strip_comments(js_info.source)
-    nosstr = _strip_strings(clean)
+    clean = strip_comments(js_info.source)
+    
+    # Neuter template literals: keep ${...} code, remove HTML text
+    neutered = _neuter_template_literals(clean)
+    nosstr = _strip_strings(neutered)
 
     locally_defined   = set(js_info.functions.keys())
     already_imported  = _get_imported_names(js_info)
     namespace_aliases = _get_namespace_prefixes(js_info)
 
-    # Broaden locally_defined with extra patterns the esprima/regex parser may miss
+    # Broaden locally_defined with extra patterns the parser may miss
     extra_locals = set()
     for m in re.finditer(r'\bfunction\s+(\w+)\s*\(', clean):
         extra_locals.add(m.group(1))
@@ -96,24 +187,11 @@ def audit_1e_missing_imports(js_info, all_js, root):
         | namespace_aliases
     )
 
-    # Collect all bare calls not in the known set
     called_names = set()
     for m in _RE_BARE_CALL.finditer(nosstr):
         name = m.group(1)
         if name not in known:
             called_names.add(name)
-
-    # Exclude calls that ONLY appear inside template literals (JS-built HTML).
-    # Those are audited by 1d, not 1e.
-    template_bodies = _extract_template_literals(clean)
-    tl_calls = set()
-    for tl_body in template_bodies:
-        for m in _RE_BARE_CALL.finditer(tl_body):
-            name = m.group(1)
-            if name not in known:
-                tl_calls.add(name)
-    
-    called_names -= tl_calls
 
     if not called_names:
         return rows
