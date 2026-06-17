@@ -73,6 +73,109 @@ def _is_traditional_decl(fname: str, source: str) -> bool:
         re.MULTILINE,
     )
     return bool(pat.search(source))
+
+# ---------------------------------------------------------------------------
+# NEW: Shared template-literal extractor
+# ---------------------------------------------------------------------------
+
+def _extract_template_literals(source: str) -> list:
+    """
+    Return the body text (between the backticks, excluding ${...} markers)
+    of every top-level template literal in *source*.
+
+    Uses a character-by-character state machine so that:
+      - Nested ${...} expressions (including nested template literals and
+        strings inside them) are handled correctly.
+      - A backtick inside a ${...} expression does NOT close the outer template.
+      - The returned body is the raw text as it appears in the source,
+        which is exactly what _RE_EVT_ATTR needs to find onclick="...".
+    """
+    results = []
+    i = 0
+    n = len(source)
+
+    while i < n:
+        if source[i] == '`':
+            # Start of a template literal
+            i          += 1
+            body_start  = i
+            depth       = 0
+            brace_stack = []
+
+            while i < n:
+                ch = source[i]
+
+                if depth == 0:
+                    if ch == '\\':
+                        i += 2
+                        continue
+                    if ch == '`':
+                        results.append(source[body_start:i])
+                        i += 1
+                        break
+                    if ch == '$' and i + 1 < n and source[i + 1] == '{':
+                        depth += 1
+                        brace_stack.append(1)
+                        i += 2
+                        continue
+                else:
+                    # Inside a ${...} expression
+                    if ch in ('"', "'", '`'):
+                        quote = ch
+                        i    += 1
+                        while i < n:
+                            c2 = source[i]
+                            if c2 == '\\':
+                                i += 2
+                                continue
+                            if c2 == quote:
+                                i += 1
+                                break
+                            if quote == '`' and c2 == '$' and i + 1 < n and source[i + 1] == '{':
+                                i    += 2
+                                inner = 1
+                                while i < n and inner:
+                                    if source[i] == '{':
+                                        inner += 1
+                                    elif source[i] == '}':
+                                        inner -= 1
+                                    i += 1
+                                continue
+                            i += 1
+                        continue
+                    if ch == '{':
+                        brace_stack[-1] += 1
+                    elif ch == '}':
+                        brace_stack[-1] -= 1
+                        if brace_stack[-1] == 0:
+                            brace_stack.pop()
+                            depth -= 1
+                i += 1
+        else:
+            # Skip comments and regular strings so their contents don't
+            # confuse the backtick scanner.
+            if source[i:i + 2] == '//':
+                while i < n and source[i] != '\n':
+                    i += 1
+            elif source[i:i + 2] == '/*':
+                end = source.find('*/', i + 2)
+                i   = end + 2 if end != -1 else n
+            elif source[i] in ('"', "'"):
+                q  = source[i]
+                i += 1
+                while i < n:
+                    if source[i] == '\\':
+                        i += 2
+                        continue
+                    if source[i] == q:
+                        i += 1
+                        break
+                    i += 1
+            else:
+                i += 1
+
+    return results
+
 class FuncInfo:
     def __init__(self, name, path):
         self.name = name

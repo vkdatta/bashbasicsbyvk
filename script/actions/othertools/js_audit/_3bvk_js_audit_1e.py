@@ -11,12 +11,15 @@ Scans every JS file for bare function calls whose names are not:
 For each unresolved call, searches all other JS files for where the function
 is defined (and whether it is exported), then emits Error rows with a
 suggested import statement.
+
+NOTE: Template literals are now extracted BEFORE stripping so that bare calls
+inside JS-generated HTML strings (e.g. onclick="foo()") are also audited.
 """
 
 import re
 from pathlib import Path
 
-from _3bvk_js_audit_helpers import strip_comments, rel
+from _3bvk_js_audit_helpers import strip_comments, rel, _extract_template_literals
 from _3bvk_js_audit_constants import (
     _JS_KEYWORDS, _NATIVE_GLOBALS, _SAFE_LITERALS,
     _RE_BARE_CALL, _RE_STRING_LITERAL,
@@ -24,7 +27,7 @@ from _3bvk_js_audit_constants import (
 
 
 # ---------------------------------------------------------------------------
-# Internal _3bvk_js_audit_helpers.py
+# Internal helpers
 # ---------------------------------------------------------------------------
 
 def _strip_strings(src):
@@ -68,6 +71,11 @@ def audit_1e_missing_imports(js_info, all_js, root):
     rows = []
 
     clean  = strip_comments(js_info.source)
+    
+    # Extract template literals BEFORE stripping strings so we can scan them
+    # for bare calls that appear inside HTML strings built by JS.
+    template_bodies = _extract_template_literals(clean)
+    
     nosstr = _strip_strings(clean)
 
     locally_defined   = set(js_info.functions.keys())
@@ -102,6 +110,13 @@ def audit_1e_missing_imports(js_info, all_js, root):
         name = m.group(1)
         if name not in known:
             called_names.add(name)
+
+    # Also scan template literals for bare calls (e.g. onclick="foo()")
+    for tl_body in template_bodies:
+        for m in _RE_BARE_CALL.finditer(tl_body):
+            name = m.group(1)
+            if name not in known:
+                called_names.add(name)
 
     if not called_names:
         return rows
