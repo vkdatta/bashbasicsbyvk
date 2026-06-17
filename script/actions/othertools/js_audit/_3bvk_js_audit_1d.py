@@ -1,22 +1,25 @@
 """
 _3bvk_js_audit_1d.py.py
 Audit 1d -- Imported Function in JS-built HTML
-           (also covers "1d - Local Func in ES Module HTML")
+           (also covers "1d - Local Func in ES Module HTML"
+            and       "1d - Unimported Func in JS-built HTML")
 
 Checks that any function referenced inside a JS template-literal HTML string
 (e.g.  `<button onclick="myFunc()">`)  is properly exposed via
 window.<name> = ...  when the calling file is an ES module.
 
-Two sub-cases:
+Three sub-cases:
   • Imported function used in a JS-built HTML string → must be window-exposed
     in the *destination* (exporting) file.
   • Locally defined function in an ES-module file used in a JS-built HTML
     string → must be window-exposed in *this* file.
+  • Function used in a JS-built HTML string that is neither imported nor
+    locally defined → missing import (cross-file onclick without import).
 """
 
 import re
 from _3bvk_js_audit_helpers import resolve_js_path, rel
-from _3bvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN
+from _3bvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN, _NATIVE_GLOBALS, _JS_KEYWORDS
 
 
 # ---------------------------------------------------------------------------
@@ -219,5 +222,82 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
                                 ),
                                 'Suggested Import': f'window.{fname} = {fname};',
                             })
+
+    # ------------------------------------------------------------------
+    # Sub-check C: function used in a JS-built HTML onclick that is
+    # neither imported into this file nor locally defined here.
+    # These are cross-file calls where the import statement is missing
+    # entirely. Search all_js for where the function is defined/exported
+    # and report it so the caller knows what to add.
+    # ------------------------------------------------------------------
+    already_covered = set(imported_names.keys()) | set(js_info.functions.keys())
+    # Also exclude pure JS globals / keywords that _EVT_KNOWN already filters,
+    # but _EVT_KNOWN is applied inside _extract_event_functions so by here
+    # every fname is already a user-defined name.
+    _ALL_KNOWN = _NATIVE_GLOBALS | _JS_KEYWORDS
+
+    for tl_body in template_bodies:
+        for attr_m in _RE_EVT_ATTR.finditer(tl_body):
+            attr_value = attr_m.group(1) or attr_m.group(2) or attr_m.group(3) or ''
+            for fname in _extract_event_functions(attr_value):
+                if fname in already_covered:
+                    continue
+                if fname in _ALL_KNOWN:
+                    continue
+
+                # Search all other JS files for definition / export
+                exported_in = []
+                defined_in  = []
+                for fpath, finfo in all_js.items():
+                    if fpath == js_info.path:
+                        continue
+                    if fname in finfo.exports:
+                        exported_in.append(finfo.rel_path)
+                    elif fname in finfo.functions:
+                        defined_in.append(finfo.rel_path)
+
+                if exported_in:
+                    origin      = exported_in[0]
+                    is_exported = True
+                    all_origins = exported_in
+                elif defined_in:
+                    origin      = defined_in[0]
+                    is_exported = False
+                    all_origins = defined_in
+                else:
+                    origin      = None
+                    is_exported = False
+                    all_origins = []
+
+                if origin:
+                    suggested = (
+                        f'import {{ {fname} }} from "{origin}";'
+                        if is_exported
+                        else f'// {fname} found in {origin} but not exported -- add export keyword first.'
+                    )
+                    comment = (
+                        f'Function {fname!r} is used in a JS-built HTML string (onclick) in '
+                        f'{js_info.rel_path} but is not imported into this file. '
+                        f'It is {"exported" if is_exported else "defined (not exported)"} '
+                        f'in: {", ".join(all_origins)}. '
+                        f'Add the import so the function is available to this module, '
+                        f'then also ensure window.{fname} = {fname} is set in that file.'
+                    )
+                else:
+                    suggested = '// Function not found in any scanned file -- verify name or add source file.'
+                    comment = (
+                        f'Function {fname!r} is used in a JS-built HTML string (onclick) in '
+                        f'{js_info.rel_path} but is not imported and was not found in any '
+                        f'scanned JS file. Verify the function name or add the missing source file.'
+                    )
+
+                rows.append({
+                    'Sub Audit': '1d - Unimported Func in JS-built HTML',
+                    'Source': js_info.rel_path,
+                    'Destination': origin or '',
+                    'Status': 'Error',
+                    'Comment': comment,
+                    'Suggested Import': suggested,
+                })
 
     return rows
