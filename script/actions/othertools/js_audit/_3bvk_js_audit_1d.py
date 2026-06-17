@@ -8,8 +8,8 @@ Checks that any function referenced inside a JS template-literal HTML string
 (e.g.  `<button onclick="myFunc()">`)  is properly reachable:
   A) If imported → must be window-exposed in the destination file.
   B) If local in an ES module → must be window-exposed in this file.
-  C) If neither imported nor local → must be imported from the file where
-     it is defined (and that file must export it).
+  C) If neither imported nor local → must be window-exposed in another file,
+     or imported from a file that exports it.
 """
 
 from _3bvk_js_audit_helpers import resolve_js_path, rel, _extract_template_literals
@@ -108,6 +108,7 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
                 # ------------------------------------------------------------------
                 found_in    = []
                 exported_in = []
+                window_in   = []
                 for fpath, finfo in all_js.items():
                     if fpath == js_info.path:
                         continue
@@ -115,9 +116,27 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
                         found_in.append(finfo.rel_path)
                         if fname in finfo.exports:
                             exported_in.append(finfo.rel_path)
+                        elif fname in finfo.window_globals:
+                            window_in.append(finfo.rel_path)
 
-                if found_in:
-                    primary = exported_in[0] if exported_in else found_in[0]
+                if not found_in:
+                    continue
+
+                if window_in:
+                    rows.append({
+                        'Sub Audit': '1d - Unimported Func in JS-built HTML',
+                        'Source': js_info.rel_path,
+                        'Destination': ', '.join(window_in),
+                        'Status': 'OK',
+                        'Comment': (
+                            f'Function {fname!r} is used in a JS-built HTML string '
+                            f'and is globally available via window.{fname} in '
+                            f'{", ".join(window_in)}. No import required for inline events.'
+                        ),
+                        'Suggested Import': '',
+                    })
+                elif exported_in:
+                    primary = exported_in[0]
                     rows.append({
                         'Sub Audit': '1d - Unimported Func in JS-built HTML',
                         'Source': js_info.rel_path,
@@ -126,15 +145,27 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
                         'Comment': (
                             f'Function {fname!r} is used in a JS-built HTML string '
                             f'(e.g. onclick="{fname}()") but is not imported into '
-                            f'{js_info.rel_path}. It is defined in: {", ".join(found_in)}. '
-                            f'{"It is exported from: " + ", ".join(exported_in) + ". " if exported_in else "It is NOT exported from any file. "}'
+                            f'{js_info.rel_path}. It is exported from: {", ".join(exported_in)}. '
                             f'Add an import statement or expose it via window.{fname} = ... '
                             f'in the defining file.'
                         ),
+                        'Suggested Import': f'import {{ {fname} }} from "{primary}";',
+                    })
+                else:
+                    rows.append({
+                        'Sub Audit': '1d - Unimported Func in JS-built HTML',
+                        'Source': js_info.rel_path,
+                        'Destination': ', '.join(found_in),
+                        'Status': 'Error',
+                        'Comment': (
+                            f'Function {fname!r} is used in a JS-built HTML string '
+                            f'(e.g. onclick="{fname}()") but is not imported into '
+                            f'{js_info.rel_path}. It is defined in: {", ".join(found_in)} '
+                            f'but NOT exported or window-exposed. '
+                            f'Add export or window.{fname} = {fname} to make it reachable.'
+                        ),
                         'Suggested Import': (
-                            f'import {{ {fname} }} from "{primary}";'
-                            if exported_in else
-                            f'// Add export keyword to {found_in[0]} first, then import {{ {fname} }} from "{found_in[0]}";'
+                            f'// Add export or window.{fname} = {fname} to {found_in[0]} first'
                         ),
                     })
 
