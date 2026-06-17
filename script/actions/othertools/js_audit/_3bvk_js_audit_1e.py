@@ -11,11 +11,6 @@ Scans every JS file for bare function calls whose names are not:
 For each unresolved call, searches all other JS files for where the function
 is defined (and whether it is exported), then emits Error rows with a
 suggested import statement.
-
-NOTE: Template literals are extracted BEFORE stripping so that bare calls
-inside JS-generated HTML strings (e.g. onclick="foo()") are also audited.
-However, functions used ONLY in template literals that are window-exposed
-in another file are NOT reported as missing imports (they are HTML-reachable).
 """
 
 import re
@@ -29,7 +24,7 @@ from _3bvk_js_audit_constants import (
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# Internal _3bvk_js_audit_helpers.py
 # ---------------------------------------------------------------------------
 
 def _strip_strings(src):
@@ -58,7 +53,7 @@ def _relative_import_path(source_path: Path, dest_path: Path, root: Path) -> str
         return dest_root_rel
     except ValueError:
         pass
-    rel_path = dest_path.relative_to(source_file.parent)
+    rel_path = dest_path.relative_to(source_path.parent)
     s = rel_path.as_posix()
     if not s.startswith('.'):
         s = './' + s
@@ -73,11 +68,6 @@ def audit_1e_missing_imports(js_info, all_js, root):
     rows = []
 
     clean  = strip_comments(js_info.source)
-    
-    # Extract template literals BEFORE stripping strings so we can scan them
-    # for bare calls that appear inside HTML strings built by JS.
-    template_bodies = _extract_template_literals(clean)
-    
     nosstr = _strip_strings(clean)
 
     locally_defined   = set(js_info.functions.keys())
@@ -106,22 +96,24 @@ def audit_1e_missing_imports(js_info, all_js, root):
         | namespace_aliases
     )
 
-    # Collect bare calls from regular JS code (these need import/export)
-    regular_calls = set()
+    # Collect all bare calls not in the known set
+    called_names = set()
     for m in _RE_BARE_CALL.finditer(nosstr):
         name = m.group(1)
         if name not in known:
-            regular_calls.add(name)
+            called_names.add(name)
 
-    # Collect bare calls from template literals (HTML context -- these need window.)
+    # Exclude calls that ONLY appear inside template literals (JS-built HTML).
+    # Those are audited by 1d, not 1e.
+    template_bodies = _extract_template_literals(clean)
     tl_calls = set()
     for tl_body in template_bodies:
         for m in _RE_BARE_CALL.finditer(tl_body):
             name = m.group(1)
             if name not in known:
                 tl_calls.add(name)
-
-    called_names = regular_calls | tl_calls
+    
+    called_names -= tl_calls
 
     if not called_names:
         return rows
@@ -131,22 +123,13 @@ def audit_1e_missing_imports(js_info, all_js, root):
     for fname in sorted(called_names):
         exported_in = []
         defined_in  = []
-        window_in   = []
         for fpath, finfo in all_js.items():
             if fpath == js_info.path:
                 continue
             if fname in finfo.exports:
                 exported_in.append((finfo.rel_path, fpath))
-            elif fname in finfo.window_globals:
-                window_in.append((finfo.rel_path, fpath))
             elif fname in finfo.functions:
                 defined_in.append((finfo.rel_path, fpath))
-
-        # If the function is ONLY used in template literals and is window-exposed,
-        # it is reachable for HTML inline events -- NOT a missing import.
-        if fname in tl_calls and fname not in regular_calls:
-            if window_in:
-                continue
 
         if exported_in:
             resolution[fname] = (exported_in[0][0], True,  exported_in[0][1], exported_in)
