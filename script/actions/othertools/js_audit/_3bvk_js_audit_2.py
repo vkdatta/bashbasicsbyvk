@@ -4,7 +4,7 @@ Audit 2 -- Active / Dead Function Analysis
 
 For every function found in every JS file, counts how many times it is called
 across all JS files and HTML files.  Functions with zero usage count (and not
-exported or in an IIFE file) are marked Dead; all others are Active.
+exported or in an IIFE file) are marked Dead; all others are Active. Test Case
 """
 
 import re
