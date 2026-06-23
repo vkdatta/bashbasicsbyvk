@@ -50,6 +50,7 @@ select_items_common() {
   return 0
 }
 
+
 select_imaginary_items_common() {
   local p="$1"
   local pfx="$2"
