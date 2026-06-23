@@ -895,39 +895,51 @@ transfer_menu() {
       ;;
     3)
       for item in "${selected_items[@]}"; do
-        local base mime_type
+        local base
         base=$(basename "$item")
-        local rclone_dest="$final_dest"
         local is_dir=false
         [ -d "$item" ] && is_dir=true
 
-        mime_type=$(_get_mime_type "$item")
-
         if $is_dir; then
-          rclone_dest="$final_dest/$base"
-          # Guard: if a file already exists at the exact target path with the
-          # same name as the source dir, refuse rather than nest wrongly.
-          if rclone lsf "$rclone_dest" --files-only 2>/dev/null | grep -qx "$base"; then
+          local dir_root="$final_dest/$base"
+          if rclone lsf "$dir_root" --files-only 2>/dev/null | grep -qx "$base"; then
             echo "⚠️  Skipping $base — a file with this name already exists at destination, refusing to nest."
             continue
           fi
-          if [ "$t_op" == "copy" ]; then
-            echo "📤 rclone copy (dir): $base → $rclone_dest/"
-            rclone copy "$item" "$rclone_dest" --progress \
-              --drive-upload-cutoff 0 \
-              --metadata \
-              --metadata-set "content-type=$mime_type"
-          else
-            echo "📤 rclone move (dir): $base → $rclone_dest/"
-            rclone move "$item" "$rclone_dest" --progress \
-              --drive-upload-cutoff 0 \
-              --metadata \
-              --metadata-set "content-type=$mime_type"
+          echo "📁 Walking folder: $base → $dir_root/"
+          # Walk every file individually instead of handing the whole
+          # directory to one rclone copy. A single whole-directory copy
+          # needs one mime_type for the whole tree, and computing that via
+          # _get_mime_type on a directory returns "inode/directory" (from
+          # `file --mime-type -b`), which if passed to --metadata-set stamps
+          # EVERY child file with content-type: inode/directory — Drive then
+          # creates each child as a folder instead of a file. Per-file walk
+          # avoids that entirely and lets each file get its own correct type.
+          while IFS= read -r -d '' f; do
+            local rel mime_type target_path
+            rel="${f#"$item"/}"
+            mime_type=$(_get_mime_type "$f")
+            target_path="$dir_root/$rel"
+            if [ "$t_op" == "copy" ]; then
+              rclone copyto "$f" "$target_path" --progress \
+                --drive-upload-cutoff 0 \
+                --metadata \
+                --metadata-set "content-type=$mime_type"
+            else
+              rclone moveto "$f" "$target_path" --progress \
+                --drive-upload-cutoff 0 \
+                --metadata \
+                --metadata-set "content-type=$mime_type"
+            fi
+            echo "  📤 ${rel} [${mime_type}]"
+          done < <(find "$item" -type f -print0)
+          if [ "$t_op" == "move" ]; then
+            find "$item" -type d -empty -delete 2>/dev/null
           fi
         else
-          # Single file: use copyto/moveto so rclone treats it as an exact
-          # file target, never as "copy contents of X into Y".
-          local target_path="$rclone_dest/$base"
+          local mime_type target_path
+          mime_type=$(_get_mime_type "$item")
+          target_path="$final_dest/$base"
           if rclone lsf "$target_path" --dirs-only 2>/dev/null | grep -q .; then
             echo "⚠️  Skipping $base — a folder with this exact name already exists at destination."
             continue
