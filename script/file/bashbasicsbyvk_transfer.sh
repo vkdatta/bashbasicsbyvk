@@ -695,11 +695,11 @@ _get_mime_type() {
   case "$ext" in
     js|mjs)       mime="application/javascript" ;;
     ts)           mime="application/typescript" ;;
-    py)           mime="text/x-python" ;;
+    py)           mime="application/x-python" ;;
     sh|bash)      mime="text/x-shellscript" ;;
     json)         mime="application/json" ;;
-    html|htm)     mime="text/html" ;;
-    css)          mime="text/css" ;;
+    html|htm)     mime="application/html" ;;
+    css)          mime="application/css" ;;
     md|markdown)  mime="text/markdown" ;;
     txt)          mime="text/plain" ;;
     csv)          mime="text/csv" ;;
@@ -717,8 +717,11 @@ _get_mime_type() {
     gz|tgz)       mime="application/gzip" ;;
     sql)          mime="application/sql" ;;
     java)         mime="text/x-java-source" ;;
-    c)            mime="text/x-c" ;;
-    cpp|cc|cxx)   mime="text/x-c++" ;;
+    c)            mime="application/x-c" ;;
+    cpp|cc|cxx)   mime="application/x-c++" ;;
+    wasm)         mime="application/wasm" ;;
+    wat)          mime="application/wat" ;;
+    asm|s)        mime="application/x-asm" ;;
     go)           mime="text/x-go" ;;
     rs)           mime="text/x-rust" ;;
     php)          mime="application/x-httpd-php" ;;
@@ -903,12 +906,14 @@ transfer_menu() {
           echo "📤 rclone copy: $base → $rclone_dest/ [${mime_type}]"
           rclone copy "$item" "$rclone_dest" --progress \
             --drive-upload-cutoff 0 \
-            --header-upload "Content-Type: $mime_type"
+            --metadata \
+            --metadata-set "content-type=$mime_type"
         else
           echo "📤 rclone move: $base → $rclone_dest/ [${mime_type}]"
           rclone move "$item" "$rclone_dest" --progress \
             --drive-upload-cutoff 0 \
-            --header-upload "Content-Type: $mime_type"
+            --metadata \
+            --metadata-set "content-type=$mime_type"
         fi
       done
       echo "✅ Drive transfer complete"
