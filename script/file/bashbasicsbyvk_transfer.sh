@@ -688,8 +688,26 @@ perform_shortcut() {
 
 _get_mime_type() {
   local file="$1"
-  local ext mime
-  ext="${file##*.}"
+  local base ext mime
+  base="${file##*/}"
+
+  # Dotfile rule: an extension only exists if there is a non-empty prefix
+  # before the LAST dot, and that prefix is not itself made up entirely of
+  # leading dots. e.g.:
+  #   name        -> no dot at all          -> no extension
+  #   .name       -> leading dot, no prefix -> no extension (whole thing is the filename)
+  #   ..name      -> still no real prefix   -> no extension
+  #   prefix.ext  -> real prefix before dot -> extension is "ext"
+  #   archive.tar.gz -> prefix "archive.tar", extension "gz"
+  local stripped="$base"
+  while [[ "$stripped" == .* ]]; do
+    stripped="${stripped#.}"
+  done
+  if [[ "$stripped" != *.* ]]; then
+    ext=""
+  else
+    ext="${base##*.}"
+  fi
   ext="${ext,,}"
 
   case "$ext" in
@@ -733,6 +751,14 @@ _get_mime_type() {
     yaml|yml)     mime="text/yaml" ;;
     toml)         mime="text/x-toml" ;;
     ini|cfg|conf) mime="text/plain" ;;
+    "")
+      # No extension at all (covers .name, ..name, and plain "name").
+      if [ -d "$file" ]; then
+        mime="inode/directory"
+      else
+        mime="application/octet-stream"
+      fi
+      ;;
     *)
       if command -v file >/dev/null 2>&1; then
         mime=$(file --mime-type -b "$file" 2>/dev/null)
@@ -894,8 +920,84 @@ transfer_menu() {
       fi
       ;;
     3)
-      local _batch_dir
-      _batch_dir=$(mktemp -d)
+      local _mapper_script="${TMPDIR:-/tmp}/_rclone_mime_mapper.py"
+      cat > "$_mapper_script" << 'MAPPER_EOF'
+#!/usr/bin/env python3
+import sys, json
+
+# Mirrors _get_mime_type()'s extension table and dotfile rule:
+#   name        -> no dot at all          -> no extension
+#   .name       -> leading dot, no prefix -> no extension (whole thing is filename)
+#   ..name      -> still no real prefix   -> no extension
+#   prefix.ext  -> real prefix before dot -> extension is "ext"
+EXT_MAP = {
+    "js": "application/javascript", "mjs": "application/javascript",
+    "ts": "application/typescript",
+    "py": "application/x-python",
+    "sh": "text/x-shellscript", "bash": "text/x-shellscript",
+    "json": "application/json",
+    "html": "application/html", "htm": "application/html",
+    "css": "application/css",
+    "md": "text/markdown", "markdown": "text/markdown",
+    "txt": "text/plain",
+    "csv": "text/csv",
+    "xml": "application/xml",
+    "pdf": "application/pdf",
+    "png": "image/png",
+    "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "svg": "image/svg+xml",
+    "webp": "image/webp",
+    "mp3": "audio/mpeg",
+    "mp4": "video/mp4",
+    "zip": "application/zip",
+    "tar": "application/x-tar",
+    "gz": "application/gzip", "tgz": "application/gzip",
+    "sql": "application/sql",
+    "java": "text/x-java-source",
+    "c": "application/x-c",
+    "cpp": "application/x-c++", "cc": "application/x-c++", "cxx": "application/x-c++",
+    "wasm": "application/wasm",
+    "wat": "application/wat",
+    "asm": "application/x-asm", "s": "application/x-asm",
+    "go": "text/x-go",
+    "rs": "text/x-rust",
+    "php": "application/x-httpd-php",
+    "rb": "text/x-ruby",
+    "kt": "text/x-kotlin", "kts": "text/x-kotlin",
+    "dart": "application/dart",
+    "lua": "text/x-lua",
+    "r": "text/x-r",
+    "yaml": "text/yaml", "yml": "text/yaml",
+    "toml": "text/x-toml",
+    "ini": "text/plain", "cfg": "text/plain", "conf": "text/plain",
+}
+
+def mime_for(name, is_dir):
+    if is_dir:
+        return "inode/directory"
+    base = name.rsplit("/", 1)[-1]
+    stripped = base.lstrip(".")
+    if "." not in stripped:
+        return "application/octet-stream"
+    ext = base.rsplit(".", 1)[-1].lower()
+    return EXT_MAP.get(ext, "application/octet-stream")
+
+def main():
+    data = json.load(sys.stdin)
+    is_dir = bool(data.get("IsDir", False))
+    name = data.get("Remote") or data.get("Name") or ""
+    mt = mime_for(name, is_dir)
+    meta = data.get("Metadata") or {}
+    if not is_dir:
+        meta["content-type"] = mt
+    data["Metadata"] = meta
+    json.dump(data, sys.stdout)
+
+if __name__ == "__main__":
+    main()
+MAPPER_EOF
+      chmod +x "$_mapper_script"
 
       for item in "${selected_items[@]}"; do
         local base
@@ -909,59 +1011,36 @@ transfer_menu() {
             echo "⚠️  Skipping $base — a file with this name already exists at destination, refusing to nest."
             continue
           fi
-          echo "📁 Queuing folder: $base → $dir_root/"
-          # Bucket every file under this folder by its target mime type into
-          # a manifest, instead of looping rclone per file. We still must
-          # never call _get_mime_type on the directory itself (it falls
-          # through to `file --mime-type -b`, returning "inode/directory" —
-          # applying that via --metadata-set would stamp every child file
-          # with content-type: inode/directory and Drive would create each
-          # one as a folder). Per-file typing is required; per-file PROCESS
-          # SPAWNING is not — that's what we're eliminating here.
-          while IFS= read -r -d '' f; do
-            local rel mime_type safe_mime manifest
-            rel="${f#"$item"/}"
-            mime_type=$(_get_mime_type "$f")
-            safe_mime=$(echo "$mime_type" | tr '/' '_')
-            manifest="$_batch_dir/${safe_mime}__${base}.list"
-            echo "$rel" >> "$manifest"
-            echo "${safe_mime}__${base}|$item|$dir_root|$mime_type" >> "$_batch_dir/_groups.meta"
-          done < <(find "$item" -type f -print0)
+          echo "📤 rclone $t_op (dir, single call): $base → $dir_root/"
+          if [ "$t_op" == "copy" ]; then
+            rclone copy "$item" "$dir_root" --progress \
+              --metadata \
+              --metadata-mapper "python3 $_mapper_script"
+          else
+            rclone move "$item" "$dir_root" --progress \
+              --metadata \
+              --metadata-mapper "python3 $_mapper_script"
+          fi
         else
-          local mime_type safe_mime manifest
-          mime_type=$(_get_mime_type "$item")
-          safe_mime=$(echo "$mime_type" | tr '/' '_')
-          local parent_dir
-          parent_dir=$(dirname "$item")
-          manifest="$_batch_dir/${safe_mime}__root.list"
-          echo "$base" >> "$manifest"
-          echo "${safe_mime}__root|$parent_dir|$final_dest|$mime_type" >> "$_batch_dir/_groups.meta"
+          local target_path="$final_dest/$base"
+          if rclone lsf "$target_path" --dirs-only 2>/dev/null | grep -q .; then
+            echo "⚠️  Skipping $base — a folder with this exact name already exists at destination."
+            continue
+          fi
+          echo "📤 rclone $t_op (file): $base → $target_path"
+          if [ "$t_op" == "copy" ]; then
+            rclone copyto "$item" "$target_path" --progress \
+              --metadata \
+              --metadata-mapper "python3 $_mapper_script"
+          else
+            rclone moveto "$item" "$target_path" --progress \
+              --metadata \
+              --metadata-mapper "python3 $_mapper_script"
+          fi
         fi
       done
 
-      if [ -f "$_batch_dir/_groups.meta" ]; then
-        sort -u "$_batch_dir/_groups.meta" -o "$_batch_dir/_groups.meta"
-        while IFS='|' read -r group_key src_root dst_root mime_type; do
-          local manifest="$_batch_dir/${group_key}.list"
-          [ -f "$manifest" ] || continue
-          local file_count
-          file_count=$(wc -l < "$manifest")
-          echo "📤 rclone $t_op: $file_count file(s) [${mime_type}] → $dst_root/"
-          if [ "$t_op" == "copy" ]; then
-            rclone copy "$src_root" "$dst_root" --progress \
-              --files-from "$manifest" \
-              --metadata \
-              --metadata-set "content-type=$mime_type"
-          else
-            rclone move "$src_root" "$dst_root" --progress \
-              --files-from "$manifest" \
-              --metadata \
-              --metadata-set "content-type=$mime_type"
-          fi
-        done < "$_batch_dir/_groups.meta"
-      fi
-
-      rm -rf "$_batch_dir"
+      rm -f "$_mapper_script"
       echo "✅ Drive transfer complete"
       ;;
     4)
