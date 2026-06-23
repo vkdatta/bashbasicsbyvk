@@ -1,11 +1,10 @@
 open_help() {
-  local SCRIPT_DIR HELP_FILE
+  local HELP_FILE
 
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  HELP_FILE="$SCRIPT_DIR/bashbasicsbyvk_help.xlsx"
+  HELP_FILE="$(find "${PREFIX:-/usr}" -type f -name "bashbasicsbyvk_help.xlsx" 2>/dev/null | head -n 1)"
 
-  if [ ! -f "$HELP_FILE" ]; then
-    echo "❌ bashbasicsbyvk_help.xlsx not found at: $HELP_FILE"
+  if [ -z "$HELP_FILE" ] || [ ! -f "$HELP_FILE" ]; then
+    echo "❌ bashbasicsbyvk_help.xlsx not found"
     return 1
   fi
 
