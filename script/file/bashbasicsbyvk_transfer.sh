@@ -898,22 +898,53 @@ transfer_menu() {
         local base mime_type
         base=$(basename "$item")
         local rclone_dest="$final_dest"
-        [ -d "$item" ] && rclone_dest="$final_dest/$base"
+        local is_dir=false
+        [ -d "$item" ] && is_dir=true
 
         mime_type=$(_get_mime_type "$item")
 
-        if [ "$t_op" == "copy" ]; then
-          echo "📤 rclone copy: $base → $rclone_dest/ [${mime_type}]"
-          rclone copy "$item" "$rclone_dest" --progress \
-            --drive-upload-cutoff 0 \
-            --metadata \
-            --metadata-set "content-type=$mime_type"
+        if $is_dir; then
+          rclone_dest="$final_dest/$base"
+          # Guard: if a file already exists at the exact target path with the
+          # same name as the source dir, refuse rather than nest wrongly.
+          if rclone lsf "$rclone_dest" --files-only 2>/dev/null | grep -qx "$base"; then
+            echo "⚠️  Skipping $base — a file with this name already exists at destination, refusing to nest."
+            continue
+          fi
+          if [ "$t_op" == "copy" ]; then
+            echo "📤 rclone copy (dir): $base → $rclone_dest/"
+            rclone copy "$item" "$rclone_dest" --progress \
+              --drive-upload-cutoff 0 \
+              --metadata \
+              --metadata-set "content-type=$mime_type"
+          else
+            echo "📤 rclone move (dir): $base → $rclone_dest/"
+            rclone move "$item" "$rclone_dest" --progress \
+              --drive-upload-cutoff 0 \
+              --metadata \
+              --metadata-set "content-type=$mime_type"
+          fi
         else
-          echo "📤 rclone move: $base → $rclone_dest/ [${mime_type}]"
-          rclone move "$item" "$rclone_dest" --progress \
-            --drive-upload-cutoff 0 \
-            --metadata \
-            --metadata-set "content-type=$mime_type"
+          # Single file: use copyto/moveto so rclone treats it as an exact
+          # file target, never as "copy contents of X into Y".
+          local target_path="$rclone_dest/$base"
+          if rclone lsf "$target_path" --dirs-only 2>/dev/null | grep -q .; then
+            echo "⚠️  Skipping $base — a folder with this exact name already exists at destination."
+            continue
+          fi
+          if [ "$t_op" == "copy" ]; then
+            echo "📤 rclone copyto: $base → $target_path [${mime_type}]"
+            rclone copyto "$item" "$target_path" --progress \
+              --drive-upload-cutoff 0 \
+              --metadata \
+              --metadata-set "content-type=$mime_type"
+          else
+            echo "📤 rclone moveto: $base → $target_path [${mime_type}]"
+            rclone moveto "$item" "$target_path" --progress \
+              --drive-upload-cutoff 0 \
+              --metadata \
+              --metadata-set "content-type=$mime_type"
+          fi
         fi
       done
       echo "✅ Drive transfer complete"
