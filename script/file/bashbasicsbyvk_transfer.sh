@@ -894,6 +894,9 @@ transfer_menu() {
       fi
       ;;
     3)
+      local _batch_dir
+      _batch_dir=$(mktemp -d)
+
       for item in "${selected_items[@]}"; do
         local base
         base=$(basename "$item")
@@ -906,59 +909,59 @@ transfer_menu() {
             echo "⚠️  Skipping $base — a file with this name already exists at destination, refusing to nest."
             continue
           fi
-          echo "📁 Walking folder: $base → $dir_root/"
-          # Walk every file individually instead of handing the whole
-          # directory to one rclone copy. A single whole-directory copy
-          # needs one mime_type for the whole tree, and computing that via
-          # _get_mime_type on a directory returns "inode/directory" (from
-          # `file --mime-type -b`), which if passed to --metadata-set stamps
-          # EVERY child file with content-type: inode/directory — Drive then
-          # creates each child as a folder instead of a file. Per-file walk
-          # avoids that entirely and lets each file get its own correct type.
+          echo "📁 Queuing folder: $base → $dir_root/"
+          # Bucket every file under this folder by its target mime type into
+          # a manifest, instead of looping rclone per file. We still must
+          # never call _get_mime_type on the directory itself (it falls
+          # through to `file --mime-type -b`, returning "inode/directory" —
+          # applying that via --metadata-set would stamp every child file
+          # with content-type: inode/directory and Drive would create each
+          # one as a folder). Per-file typing is required; per-file PROCESS
+          # SPAWNING is not — that's what we're eliminating here.
           while IFS= read -r -d '' f; do
-            local rel mime_type target_path
+            local rel mime_type safe_mime manifest
             rel="${f#"$item"/}"
             mime_type=$(_get_mime_type "$f")
-            target_path="$dir_root/$rel"
-            if [ "$t_op" == "copy" ]; then
-              rclone copyto "$f" "$target_path" --progress \
-                --drive-upload-cutoff 0 \
-                --metadata \
-                --metadata-set "content-type=$mime_type"
-            else
-              rclone moveto "$f" "$target_path" --progress \
-                --drive-upload-cutoff 0 \
-                --metadata \
-                --metadata-set "content-type=$mime_type"
-            fi
-            echo "  📤 ${rel} [${mime_type}]"
+            safe_mime=$(echo "$mime_type" | tr '/' '_')
+            manifest="$_batch_dir/${safe_mime}__${base}.list"
+            echo "$rel" >> "$manifest"
+            echo "${safe_mime}__${base}|$item|$dir_root|$mime_type" >> "$_batch_dir/_groups.meta"
           done < <(find "$item" -type f -print0)
-          if [ "$t_op" == "move" ]; then
-            find "$item" -type d -empty -delete 2>/dev/null
-          fi
         else
-          local mime_type target_path
+          local mime_type safe_mime manifest
           mime_type=$(_get_mime_type "$item")
-          target_path="$final_dest/$base"
-          if rclone lsf "$target_path" --dirs-only 2>/dev/null | grep -q .; then
-            echo "⚠️  Skipping $base — a folder with this exact name already exists at destination."
-            continue
-          fi
+          safe_mime=$(echo "$mime_type" | tr '/' '_')
+          local parent_dir
+          parent_dir=$(dirname "$item")
+          manifest="$_batch_dir/${safe_mime}__root.list"
+          echo "$base" >> "$manifest"
+          echo "${safe_mime}__root|$parent_dir|$final_dest|$mime_type" >> "$_batch_dir/_groups.meta"
+        fi
+      done
+
+      if [ -f "$_batch_dir/_groups.meta" ]; then
+        sort -u "$_batch_dir/_groups.meta" -o "$_batch_dir/_groups.meta"
+        while IFS='|' read -r group_key src_root dst_root mime_type; do
+          local manifest="$_batch_dir/${group_key}.list"
+          [ -f "$manifest" ] || continue
+          local file_count
+          file_count=$(wc -l < "$manifest")
+          echo "📤 rclone $t_op: $file_count file(s) [${mime_type}] → $dst_root/"
           if [ "$t_op" == "copy" ]; then
-            echo "📤 rclone copyto: $base → $target_path [${mime_type}]"
-            rclone copyto "$item" "$target_path" --progress \
-              --drive-upload-cutoff 0 \
+            rclone copy "$src_root" "$dst_root" --progress \
+              --files-from "$manifest" \
               --metadata \
               --metadata-set "content-type=$mime_type"
           else
-            echo "📤 rclone moveto: $base → $target_path [${mime_type}]"
-            rclone moveto "$item" "$target_path" --progress \
-              --drive-upload-cutoff 0 \
+            rclone move "$src_root" "$dst_root" --progress \
+              --files-from "$manifest" \
               --metadata \
               --metadata-set "content-type=$mime_type"
           fi
-        fi
-      done
+        done < "$_batch_dir/_groups.meta"
+      fi
+
+      rm -rf "$_batch_dir"
       echo "✅ Drive transfer complete"
       ;;
     4)
