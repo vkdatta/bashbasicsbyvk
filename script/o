@@ -115,8 +115,27 @@ create_files() {
   read -p "📄 Enter filenames (separated by ,): " filelist
   IFS=',' read -ra files <<< "$filelist"
   for file in "${files[@]}"; do
-    touch "$path/$file"
-    echo "✅ Created file: $file"
+    file=$(echo "$file" | xargs)
+    [ -z "$file" ] && continue
+
+    local base ext newname count target
+    base="${file%.*}"
+    ext="${file##*.}"
+    [[ "$file" == "$ext" ]] && ext=""
+
+    count=1
+    newname="$file"
+    while [ -e "$path/$newname" ]; do
+      if [ -n "$ext" ]; then
+        newname="${base} (${count}).${ext}"
+      else
+        newname="${base} (${count})"
+      fi
+      count=$((count+1))
+    done
+
+    touch "$path/$newname"
+    echo "✅ Created file: $newname"
   done
 }
 
