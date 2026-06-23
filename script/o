@@ -6,6 +6,7 @@ source "bashbasicsbyvk_find.sh"
 source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_transfer.sh"
 source "bashbasicsbyvk_mapper.sh"
+source "bashbasicsbyvk_help.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -575,10 +576,10 @@ while true; do
   fi
   echo
 
-  echo "u) Up   cd) Change directory   t) Transfer m) Create Map -u) Upgrade"
-  echo "d) Delete   c) Create   f) Find   x) Organise   r) Rename"
-  echo "q/h) Quit/Home   s) Settings   forceshow) Toggle Group/Item Mode kl) kill all"
-  echo "i) Infinity Stones 💎"
+  echo "u) Up   cd) Change directory   t) Transfer"
+  echo "d) Delete   c) Create   f) Find    r) Rename"
+  echo "q/h) Quit/Home   s) Settings   x) Organise"
+  echo "-h) Help   -u) Upgrade"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold → press forceshow to enable grouped display"
@@ -587,7 +588,8 @@ while true; do
   read -p "Select: " choice
 
   case "$choice" in
-    q|Q|h|H)               exit 0 ;;
+    q|Q)                   exit 0 ;;
+    -h|-H)                 open_help ;;
     u|U)                   if [ "$path" != "/" ]; then path=$(dirname "$path"); group_prefix=""; force_show=false; fi ;;
     back)                  if [ -n "$group_prefix" ]; then group_prefix="${group_prefix%?}"; force_show=false; fi ;;
     forceshow)             handle_force_show ;;
