@@ -600,7 +600,6 @@ perform_move() {
   done
 }
 
-
 _shortcut_read_field() {
   local sc_file="$1"
   local field="$2"
@@ -687,6 +686,60 @@ perform_shortcut() {
   done
 }
 
+_get_mime_type() {
+  local file="$1"
+  local ext mime
+  ext="${file##*.}"
+  ext="${ext,,}"
+
+  case "$ext" in
+    js|mjs)       mime="application/javascript" ;;
+    ts)           mime="application/typescript" ;;
+    py)           mime="text/x-python" ;;
+    sh|bash)      mime="text/x-shellscript" ;;
+    json)         mime="application/json" ;;
+    html|htm)     mime="text/html" ;;
+    css)          mime="text/css" ;;
+    md|markdown)  mime="text/markdown" ;;
+    txt)          mime="text/plain" ;;
+    csv)          mime="text/csv" ;;
+    xml)          mime="application/xml" ;;
+    pdf)          mime="application/pdf" ;;
+    png)          mime="image/png" ;;
+    jpg|jpeg)     mime="image/jpeg" ;;
+    gif)          mime="image/gif" ;;
+    svg)          mime="image/svg+xml" ;;
+    webp)         mime="image/webp" ;;
+    mp3)          mime="audio/mpeg" ;;
+    mp4)          mime="video/mp4" ;;
+    zip)          mime="application/zip" ;;
+    tar)          mime="application/x-tar" ;;
+    gz|tgz)       mime="application/gzip" ;;
+    sql)          mime="application/sql" ;;
+    java)         mime="text/x-java-source" ;;
+    c)            mime="text/x-c" ;;
+    cpp|cc|cxx)   mime="text/x-c++" ;;
+    go)           mime="text/x-go" ;;
+    rs)           mime="text/x-rust" ;;
+    php)          mime="application/x-httpd-php" ;;
+    rb)           mime="text/x-ruby" ;;
+    kt|kts)       mime="text/x-kotlin" ;;
+    dart)         mime="application/dart" ;;
+    lua)          mime="text/x-lua" ;;
+    r)            mime="text/x-r" ;;
+    yaml|yml)     mime="text/yaml" ;;
+    toml)         mime="text/x-toml" ;;
+    ini|cfg|conf) mime="text/plain" ;;
+    *)
+      if command -v file >/dev/null 2>&1; then
+        mime=$(file --mime-type -b "$file" 2>/dev/null)
+      fi
+      [ -z "$mime" ] && mime="application/octet-stream"
+      ;;
+  esac
+
+  echo "$mime"
+}
 
 transfer_menu() {
   echo
@@ -839,16 +892,23 @@ transfer_menu() {
       ;;
     3)
       for item in "${selected_items[@]}"; do
-        local base
+        local base mime_type
         base=$(basename "$item")
         local rclone_dest="$final_dest"
         [ -d "$item" ] && rclone_dest="$final_dest/$base"
+
+        mime_type=$(_get_mime_type "$item")
+
         if [ "$t_op" == "copy" ]; then
-          echo "📤 rclone copy: $base → $rclone_dest/"
-          rclone copy "$item" "$rclone_dest" --progress
+          echo "📤 rclone copy: $base → $rclone_dest/ [${mime_type}]"
+          rclone copy "$item" "$rclone_dest" --progress \
+            --drive-upload-cutoff 0 \
+            --header-upload "Content-Type: $mime_type"
         else
-          echo "📤 rclone move: $base → $rclone_dest/"
-          rclone move "$item" "$rclone_dest" --progress
+          echo "📤 rclone move: $base → $rclone_dest/ [${mime_type}]"
+          rclone move "$item" "$rclone_dest" --progress \
+            --drive-upload-cutoff 0 \
+            --header-upload "Content-Type: $mime_type"
         fi
       done
       echo "✅ Drive transfer complete"
