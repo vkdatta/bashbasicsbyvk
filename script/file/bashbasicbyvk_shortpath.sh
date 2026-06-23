@@ -1,26 +1,3 @@
-# bashbasicbyvk_shortpath.sh
-#
-# Fast in-place copy / move / shortcut buffer commands.
-# These sit ALONGSIDE the existing `t) Transfer` flow — that flow is untouched
-# and remains the full-featured guide for cross-location transfers (Drive,
-# GCloud, etc). This module only exists to remove the friction of the common
-# case: "copy/move/shortcut a few items that are already right here."
-#
-# Commands typed straight at the main prompt (no submenu, no navigator):
-#
-#   c-1,3,5      stage items 1,3,5 (from the currently displayed `items` list)
-#                into the COPY buffer
-#   c-1-7        stage items 1 through 7 into the COPY buffer
-#   m-2,4        stage items into the MOVE buffer
-#   s-6          stage items into the SHORTCUT buffer
-#   d-           paste/flush ALL staged buffers into the CURRENT path ($path)
-#   v-           view/manage the three buffers (remove items, clear, etc.)
-#
-# Buffers are plain text files on disk (one absolute path per line) so they
-# survive `q`uitting the script or the shell dying. They are only ever
-# cleared by explicit user action inside `v-` (remove/clear), never
-# automatically.
-
 _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 _SP_CP_FILE="${_SP_BUFFER_DIR}/copy.list"
 _SP_MV_FILE="${_SP_BUFFER_DIR}/move.list"
@@ -33,7 +10,6 @@ _sp_ensure_store() {
   [ -f "$_SP_SC_FILE" ] || : > "$_SP_SC_FILE"
 }
 
-# Read a buffer file into the named array variable (nameref), skipping blanks.
 _sp_load() {
   local -n _sp_out="$1"
   local file="$2"
@@ -45,7 +21,6 @@ _sp_load() {
   done < "$file"
 }
 
-# Write an array variable (nameref) back to a buffer file.
 _sp_save() {
   local -n _sp_in="$1"
   local file="$2"
@@ -56,7 +31,6 @@ _sp_save() {
   done
 }
 
-# Append unique paths to a buffer file. Reports added/duplicate counts.
 _sp_append() {
   local file="$1"; shift
   local -a existing=()
@@ -75,8 +49,6 @@ _sp_append() {
   echo "$added|$dupes|${#existing[@]}"
 }
 
-# Resolve a c-/m-/s- style item list ("1,3,5" or "1-7" or mixed) against the
-# currently displayed `items` array, returning absolute paths.
 _sp_resolve_itemlist() {
   local itemlist="$1"
   if [ ${#items[@]} -eq 0 ]; then
@@ -97,8 +69,6 @@ _sp_resolve_itemlist() {
   return 0
 }
 
-# Entry point for c-/m-/s- prefixed commands. Returns 0 if it handled the
-# input (whether successfully or not), 1 if the input wasn't one of ours.
 handle_shortpath_stage() {
   local raw="$1"
   local prefix="${raw:0:2}"
@@ -147,10 +117,6 @@ _sp_op_label() {
   esac
 }
 
-# Apply one buffer (copy/move/shortcut) to $dest. Filters out entries that no
-# longer exist on disk, warning about each. Leaves the buffer file untouched
-# on failure-to-resolve-dest; only clears entries that were actually applied
-# is NOT done automatically — buffer persists until user clears it via v-.
 _sp_apply_buffer() {
   local kind="$1" file="$2" dest="$3"
   local -a list=()
@@ -231,7 +197,7 @@ _sp_view_one_buffer() {
     fi
 
     echo
-    echo "r) Remove item(s)   x) Clear entire $label buffer   b) Back"
+    echo "r) Remove item(s)   x) Clear entire $label buffer   q) Back"
     read -p "$label buffer: " bv_choice
 
     case "$bv_choice" in
@@ -271,7 +237,7 @@ _sp_view_one_buffer() {
           echo "🚫 Cancelled"
         fi
         ;;
-      b|B|"")
+      q|Q|"")
         return 0
         ;;
       *)
@@ -295,7 +261,7 @@ handle_shortpath_view() {
     echo "  2) Move buffer      (${#mv_list[@]} item(s))"
     echo "  3) Shortcut buffer  (${#sc_list[@]} item(s))"
     echo "  a) Clear ALL buffers"
-    echo "  b) Back"
+    echo "  q) Back"
     read -p "View buffer: " v_choice
 
     case "$v_choice" in
@@ -313,7 +279,7 @@ handle_shortpath_view() {
           echo "🚫 Cancelled"
         fi
         ;;
-      b|B|"")
+      q|Q|"")
         return 0
         ;;
       *)
