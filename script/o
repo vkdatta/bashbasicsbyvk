@@ -5,6 +5,7 @@ source "bashbasicsbyvk_organise.sh"
 source "bashbasicsbyvk_find.sh"
 source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_transfer.sh"
+source "bashbasicbyvk_shortpath.sh"
 source "bashbasicsbyvk_mapper.sh"
 source "bashbasicsbyvk_help.sh"
 
@@ -579,6 +580,7 @@ while true; do
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
+  echo "c-/m-/s-) Quick copy/move/shortcut (e.g. c-1,3 or c-1-7)   d-) Apply buffers here   v-) View buffers"
   echo "-h) Help   -u) Upgrade"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
@@ -605,6 +607,9 @@ while true; do
     kl|KL|Kl|kL)           kill -9 -1 ;;
     i|I)                   infinity_stones_menu ;;
     -u|-U)                 bash _3bvk_upgrade_core ;;
+    d-)                    handle_shortpath_dispatch ;;
+    v-)                    handle_shortpath_view ;;
+    c-*|m-*|s-*)           handle_shortpath_stage "$choice" ;;
     *)                     handle_selection "$choice" ;;
   esac
 
