@@ -633,7 +633,7 @@ _shortcut_write() {
     printf 'SHORTCUT_CREATED=%s\n' "$(date +%s)"
   } > "$sc_path"
 
-  printf '%s' "$sc_path"   # return path of the created shortcut file
+  printf '%s' "$sc_path"
 }
 
 _shortcut_resolve() {
@@ -845,10 +845,10 @@ transfer_menu() {
         [ -d "$item" ] && rclone_dest="$final_dest/$base"
         if [ "$t_op" == "copy" ]; then
           echo "📤 rclone copy: $base → $rclone_dest/"
-          rclone copy "$item" "$rclone_dest" --progress --metadata
+          rclone copy "$item" "$rclone_dest" --progress
         else
           echo "📤 rclone move: $base → $rclone_dest/"
-          rclone move "$item" "$rclone_dest" --progress --metadata
+          rclone move "$item" "$rclone_dest" --progress
         fi
       done
       echo "✅ Drive transfer complete"
