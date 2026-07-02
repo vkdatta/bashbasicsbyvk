@@ -10,7 +10,7 @@
 
 ### bashbasicsbyvk
 
-bashbasicsbyvk is a lightweight, open-source collection of Bash-Python scripts made to optimize workflows and file management in shell environments. It offers comprehensive, high-performance file management with run, copy, erase, delete, overwrite, rename, move, batch-create and batch-delete, organise, and find functions via a simple interactive call — letting you do anything without confusion. The integrated `xtract` function automates extraction of HTML tables and links from single and multi-page sites, streamlining data harvesting from catalogues, reports, and dashboards.
+**bashbasicsbyvk** is a lightweight file manager for your shell environment. With its interactive design, it provides modern replacements for boring, monotonous commands that waste your time in the shell. From running, copying, erasing, deleting, overwriting, and renaming files to organizing, indexing, creating shortcuts, transferring data, finding and replacing content, mapping, and more, **bashbasicsbyvk** is an essential tool designed to make your life easier.
 
 ---
 
