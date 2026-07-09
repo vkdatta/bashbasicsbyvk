@@ -485,6 +485,99 @@ handle_selection() {
 }
 
 
+_orig_stty=$(stty -g 2>/dev/null)
+trap 'stty "$_orig_stty" 2>/dev/null' EXIT
+
+_redraw_menu() {
+  echo
+  echo "📂 Location: $path${group_prefix:+ [filter: ${group_prefix^^}*]}"
+  if $_has_group_view; then
+    _gv_chain="${group_view_levels[*]}"
+    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
+  fi
+  display_items
+  echo
+  echo "u) Up   cd) Change directory   t) Transfer"
+  echo "d) Delete   c) Create   f) Find    r) Rename"
+  echo "q/h) Quit/Home   s) Settings   x) Organise"
+  echo "-h) Help   -u) Upgrade"
+  [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
+  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
+    echo "Group view is set but above threshold → press forceshow to enable grouped display"
+  fi
+}
+
+# Reads the "Select:" input. Up/Down move a highlighted item and (when
+# Enter is pressed with nothing typed) submit that item's number. Any
+# typed character (letters, digits, commas, ranges) still works exactly
+# as before — arrows never interfere with that.
+_read_choice() {
+  choice=""
+  local can_nav=false
+  if ! $imaginary_mode && [ ${#items[@]} -gt 0 ]; then
+    can_nav=true
+    [ "${_hl_index:-0}" -lt 1 ] && _hl_index=1
+    [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index="${#items[@]}"
+  else
+    _hl_index=0
+  fi
+
+  stty -icanon -echo min 1 time 0 2>/dev/null
+
+  local buf="" key seq
+  printf "Select: "
+
+  while true; do
+    IFS= read -rsn1 key
+    if [[ "$key" == $'\x1b' ]]; then
+      IFS= read -rsn2 -t 0.01 seq
+      case "$seq" in
+        '[A'|'[B')
+          if $can_nav; then
+            if [ "$seq" = '[A' ]; then
+              _hl_index=$(( _hl_index - 1 ))
+              [ "$_hl_index" -lt 1 ] && _hl_index="${#items[@]}"
+            else
+              _hl_index=$(( _hl_index + 1 ))
+              [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index=1
+            fi
+            clear
+            _redraw_menu
+            printf "Select: %s" "$buf"
+          fi
+          ;;
+        *) : ;;  # left/right/unrecognized escape sequences are just swallowed
+      esac
+      continue
+    fi
+
+    case "$key" in
+      "")  # Enter
+        break
+        ;;
+      $'\x7f'|$'\x08')  # backspace
+        if [ -n "$buf" ]; then
+          buf="${buf%?}"
+          printf '\b \b'
+        fi
+        ;;
+      *)
+        buf+="$key"
+        printf '%s' "$key"
+        ;;
+    esac
+  done
+
+  stty "$_orig_stty" 2>/dev/null
+  echo
+
+  if [ -n "$buf" ]; then
+    choice="$buf"
+  elif $can_nav; then
+    choice="$_hl_index"
+  fi
+}
+
 path=$(pwd)
 selected_items=()
 group_prefix=""
@@ -522,6 +615,7 @@ while true; do
 
   imaginary_mode=false
   items=()
+  _hl_index=0
 
   _has_group_view=false
   [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
@@ -586,7 +680,7 @@ while true; do
     echo "Group view is set but above threshold → press forceshow to enable grouped display"
   fi
 
-  read -p "Select: " choice
+  _read_choice
 
   case "$choice" in
     q|Q)                   exit 0 ;;

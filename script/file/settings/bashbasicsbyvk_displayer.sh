@@ -3,6 +3,11 @@
 declare -gA item_size=()
 declare -gA item_mtime=()
 _meta_loaded=false
+declare -g _hl_index=0
+
+_bold() {
+  printf '\033[1m%s\033[0m' "$1"
+}
 
 _needs_metadata() {
   [[ " ${display_suffix_set:-} " == *" size "* ]] && return 0
@@ -223,7 +228,7 @@ _shortcut_display_parts() {
 }
 
 _display_items_flat() {
-  local idx=1 f icon bn suffix
+  local idx=1 f icon bn suffix line
   local _sc_icon _sc_display
   for f in "${items[@]}"; do
     bn="${f##*/}"
@@ -239,7 +244,12 @@ _display_items_flat() {
     else
       suffix=""
     fi
-    printf " %2d) %s %s%s\n" "$idx" "$icon" "$bn" "$suffix"
+    line=$(printf " %2d) %s %s%s" "$idx" "$icon" "$bn" "$suffix")
+    if [ "$idx" -eq "${_hl_index:-0}" ]; then
+      printf '%s\n' "$(_bold "$line")"
+    else
+      printf '%s\n' "$line"
+    fi
     idx=$(( idx + 1 ))
   done
 }
@@ -283,7 +293,13 @@ _display_grouped() {
         [ -d "$f" ] && icon="📁" || icon="📄"
       fi
       [ -n "${display_suffix_set:-}" ] && suffix=$(_build_suffix "$f") || suffix=""
-      printf "%s%2d) %s %s%s\n" "$indent_items" "$global_idx" "$icon" "$bn" "$suffix"
+      local line
+      line=$(printf "%s%2d) %s %s%s" "$indent_items" "$global_idx" "$icon" "$bn" "$suffix")
+      if [ "$global_idx" -eq "${_hl_index:-0}" ]; then
+        printf '%s\n' "$(_bold "$line")"
+      else
+        printf '%s\n' "$line"
+      fi
       global_idx=$(( global_idx + 1 ))
     done <<< "${key_items[$ck]}"
     echo
