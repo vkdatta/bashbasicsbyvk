@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
 
-pip install -vvv --progress-bar on --upgrade --force-reinstall \
-git+https://github.com/vkdatta/bashbasicsbyvk.git
+PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+EXT_MANAGED_FILE="/usr/lib/python${PYTHON_VERSION}/EXTERNALLY-MANAGED"
+
+BREAK_FLAG=""
+if [ -f "$EXT_MANAGED_FILE" ]; then
+    BREAK_FLAG="--break-system-packages"
+fi
+
+PREFIX=""
+if [ ! -w "/usr/local/bin" ]; then
+    PREFIX="sudo "
+fi
+
+$PREFIX pip install -vvv --progress-bar on --upgrade --force-reinstall \
+git+https://github.com/vkdatta/bashbasicsbyvk.git $BREAK_FLAG

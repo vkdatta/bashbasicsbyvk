@@ -151,6 +151,27 @@ git clone https://github.com/vkdatta/bashbasicsbyvk.git
 ```
 ---
 
+### Special Case for VMs
+
+Ensure python:
+
+```bash
+sudo apt update && sudo apt install python3 python3-pip python3-venv python3-dev -y
+```
+
+Install Via:
+
+```bash
+sudo pip install git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
+```
+
+Upgrade Via:
+
+```bash
+sudo pip install -vvv --progress-bar on --upgrade --force-reinstall git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
+```
+---
+
 ### Commands
 
 | Command | Purpose |
