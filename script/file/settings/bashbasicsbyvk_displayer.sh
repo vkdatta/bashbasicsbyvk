@@ -9,6 +9,40 @@ _bold() {
   printf '\033[1m%s\033[0m' "$1"
 }
 
+# Bold + reverse video — reads as a solid highlighted bar, unlike plain
+# bold which is too subtle to notice at a glance.
+_highlight() {
+  printf '\033[1;7m%s\033[0m' "$1"
+}
+
+# Returns (echoes, no trailing newline) the plain, unhighlighted line
+# text for a single item by its 1-indexed position in $items. Used to
+# redraw just one row in place without reprinting the whole list.
+_item_line_text() {
+  local target="$1" idx=1 f icon bn suffix
+  local _sc_icon _sc_display
+  for f in "${items[@]}"; do
+    if [ "$idx" -eq "$target" ]; then
+      bn="${f##*/}"
+      if [[ "$bn" == *.shortcut ]]; then
+        _shortcut_display_parts "$f"
+        icon="$_sc_icon"
+        bn="$_sc_display"
+      else
+        [ -d "$f" ] && icon="📁" || icon="📄"
+      fi
+      if [ -n "${display_suffix_set:-}" ]; then
+        suffix=$(_build_suffix "$f")
+      else
+        suffix=""
+      fi
+      printf " %2d) %s %s%s" "$idx" "$icon" "$bn" "$suffix"
+      return
+    fi
+    idx=$(( idx + 1 ))
+  done
+}
+
 _needs_metadata() {
   [[ " ${display_suffix_set:-} " == *" size "* ]] && return 0
   [[ " ${display_suffix_set:-} " == *" time "* ]] && return 0
@@ -246,7 +280,7 @@ _display_items_flat() {
     fi
     line=$(printf " %2d) %s %s%s" "$idx" "$icon" "$bn" "$suffix")
     if [ "$idx" -eq "${_hl_index:-0}" ]; then
-      printf '%s\n' "$(_bold "$line")"
+      printf '%s\n' "$(_highlight "$line")"
     else
       printf '%s\n' "$line"
     fi
@@ -296,7 +330,7 @@ _display_grouped() {
       local line
       line=$(printf "%s%2d) %s %s%s" "$indent_items" "$global_idx" "$icon" "$bn" "$suffix")
       if [ "$global_idx" -eq "${_hl_index:-0}" ]; then
-        printf '%s\n' "$(_bold "$line")"
+        printf '%s\n' "$(_highlight "$line")"
       else
         printf '%s\n' "$line"
       fi

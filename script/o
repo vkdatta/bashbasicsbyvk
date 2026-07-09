@@ -488,6 +488,45 @@ handle_selection() {
 _orig_stty=$(stty -g 2>/dev/null)
 trap 'stty "$_orig_stty" 2>/dev/null' EXIT
 
+# Number of lines printed AFTER the item list but before the "Select:"
+# line, so we can compute exactly how far to move the cursor to reach
+# a given item's row. Mirrors the footer section of _redraw_menu.
+_footer_line_count() {
+  local n=5   # blank line + the 4 "u) Up ..." style option lines
+  [ -n "$group_prefix" ] && n=$(( n + 1 ))
+  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
+    n=$(( n + 1 ))
+  fi
+  printf '%s' "$n"
+}
+
+# Un-highlights the old row and highlights the new row in place, without
+# touching or reprinting anything else on screen. Only valid for the
+# flat (non-grouped) item list, where each item occupies exactly one
+# line — grouped view falls back to a full redraw since group headers
+# make row positions harder to predict.
+_redraw_highlight_inplace() {
+  local old_idx="$1" new_idx="$2"
+  local n_items=${#items[@]}
+  local footer; footer=$(_footer_line_count)
+
+  tput sc 2>/dev/null
+
+  if [ "$old_idx" -ge 1 ] && [ "$old_idx" -le "$n_items" ]; then
+    local dist=$(( footer + (n_items - old_idx + 1) ))
+    printf '\033[%dA\r\033[K' "$dist"
+    printf '%s' "$(_item_line_text "$old_idx")"
+    tput rc 2>/dev/null
+  fi
+
+  if [ "$new_idx" -ge 1 ] && [ "$new_idx" -le "$n_items" ]; then
+    local dist=$(( footer + (n_items - new_idx + 1) ))
+    printf '\033[%dA\r\033[K' "$dist"
+    printf '%s' "$(_highlight "$(_item_line_text "$new_idx")")"
+    tput rc 2>/dev/null
+  fi
+}
+
 _redraw_menu() {
   echo
   echo "📂 Location: $path${group_prefix:+ [filter: ${group_prefix^^}*]}"
@@ -526,10 +565,16 @@ _sync_highlight_from_buf() {
   (( n < 1 )) && n=1
   (( n > ${#items[@]} )) && n=${#items[@]}
   if [ "$n" -ne "${_hl_index:-0}" ]; then
+    local old="$_hl_index"
     _hl_index=$n
-    clear
-    _redraw_menu
-    _print_input_line
+    if $_can_inplace; then
+      _redraw_highlight_inplace "$old" "$_hl_index"
+      _print_input_line
+    else
+      clear
+      _redraw_menu
+      _print_input_line
+    fi
   fi
 }
 
@@ -549,6 +594,8 @@ _read_choice() {
   else
     _hl_index=0
   fi
+  _can_inplace=false
+  $_can_nav && ! $_has_group_view && _can_inplace=true
 
   stty -icanon -echo min 1 time 0 2>/dev/null
 
@@ -564,18 +611,30 @@ _read_choice() {
       case "$seq" in
         '[A')  # Up
           if $_can_nav; then
+            local old="$_hl_index"
             _hl_index=$(( _hl_index - 1 ))
             [ "$_hl_index" -lt 1 ] && _hl_index="${#items[@]}"
             _buf="$_hl_index"; _pos=${#_buf}
-            clear; _redraw_menu; _print_input_line
+            if $_can_inplace; then
+              _redraw_highlight_inplace "$old" "$_hl_index"
+              _print_input_line
+            else
+              clear; _redraw_menu; _print_input_line
+            fi
           fi
           ;;
         '[B')  # Down
           if $_can_nav; then
+            local old="$_hl_index"
             _hl_index=$(( _hl_index + 1 ))
             [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index=1
             _buf="$_hl_index"; _pos=${#_buf}
-            clear; _redraw_menu; _print_input_line
+            if $_can_inplace; then
+              _redraw_highlight_inplace "$old" "$_hl_index"
+              _print_input_line
+            else
+              clear; _redraw_menu; _print_input_line
+            fi
           fi
           ;;
         '[C')  # Right — move cursor within typed text
