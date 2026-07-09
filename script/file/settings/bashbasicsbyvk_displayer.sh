@@ -369,6 +369,9 @@ _show_suffix_state() {
       printf " %d) %s\n" "$num" "${labels[$i]}"
     fi
   done
+}
+
+_show_time_format_state() {
   echo
   echo "Time format (used when time is enabled):"
   local tfmts=("year" "month" "date" "datetime" "monthdate" "full")
@@ -447,6 +450,7 @@ display_suffix_settings() {
         ;;
 
       t)
+        _show_time_format_state
         echo "Set time format [1-6] (blank = no change):"
         read -r -p "Choice: " tc
         if [[ "$tc" =~ ^[1-6]$ ]]; then
