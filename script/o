@@ -599,25 +599,12 @@ _read_choice() {
   _can_nav=false
   if ! $imaginary_mode && [ ${#items[@]} -gt 0 ]; then
     _can_nav=true
-    [ "${_hl_index:-0}" -lt 1 ] && _hl_index=1
     [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index="${#items[@]}"
   else
     _hl_index=0
   fi
   _can_inplace=false
   $_can_nav && ! $_has_group_view && _can_inplace=true
-
-  # The default highlighted row (_hl_index) was only set as internal
-  # state above — nothing has drawn it yet. Paint it now so item 1
-  # (or wherever the cursor lands) is actually highlighted from the
-  # start, not just assumed.
-  if $_can_nav; then
-    if $_can_inplace; then
-      _redraw_highlight_inplace 0 "$_hl_index"
-    else
-      clear; _redraw_menu
-    fi
-  fi
 
   stty -icanon -echo min 1 time 0 2>/dev/null
 
@@ -634,8 +621,12 @@ _read_choice() {
         '[A')  # Up
           if $_can_nav; then
             local old="$_hl_index"
-            _hl_index=$(( _hl_index - 1 ))
-            [ "$_hl_index" -lt 1 ] && _hl_index="${#items[@]}"
+            if [ "$_hl_index" -lt 1 ]; then
+              _hl_index="${#items[@]}"
+            else
+              _hl_index=$(( _hl_index - 1 ))
+              [ "$_hl_index" -lt 1 ] && _hl_index="${#items[@]}"
+            fi
             _buf="$_hl_index"; _pos=${#_buf}
             if $_can_inplace; then
               _redraw_highlight_inplace "$old" "$_hl_index"
@@ -648,8 +639,12 @@ _read_choice() {
         '[B')  # Down
           if $_can_nav; then
             local old="$_hl_index"
-            _hl_index=$(( _hl_index + 1 ))
-            [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index=1
+            if [ "$_hl_index" -lt 1 ]; then
+              _hl_index=1
+            else
+              _hl_index=$(( _hl_index + 1 ))
+              [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index=1
+            fi
             _buf="$_hl_index"; _pos=${#_buf}
             if $_can_inplace; then
               _redraw_highlight_inplace "$old" "$_hl_index"
@@ -702,7 +697,7 @@ _read_choice() {
 
   if [ -n "$_buf" ]; then
     choice="$_buf"
-  elif $_can_nav; then
+  elif $_can_nav && [ "$_hl_index" -ge 1 ]; then
     choice="$_hl_index"
   fi
 }
