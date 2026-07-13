@@ -1,31 +1,77 @@
 #!/usr/bin/env bash
-
-PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-EXT_MANAGED_FILE="/usr/lib/python${PYTHON_VERSION}/EXTERNALLY-MANAGED"
-
-BREAK_FLAG=""
-if [ -f "$EXT_MANAGED_FILE" ]; then
-    BREAK_FLAG="--break-system-packages"
-fi
+set -uo pipefail
 
 PKG_URL="git+https://github.com/vkdatta/bashbasicsbyvk.git"
 
-is_headless() {
-    if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
-        return 1
-    fi
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        return 1
-    fi
-    return 0
+is_termux()  { [ -n "${TERMUX_VERSION:-}" ] || [[ "${PREFIX:-}" == *com.termux* ]]; }
+is_ish()     { [ -f /etc/os-release ] && grep -qi "ish" /etc/os-release 2>/dev/null; }
+is_wsl()     { grep -qi microsoft /proc/version 2>/dev/null || [ -n "${WSL_DISTRO_NAME:-}" ]; }
+is_windows_posix() { [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; }
+is_macos()   { [[ "$OSTYPE" == darwin* ]]; }
+is_root()    { [ "$(id -u)" -eq 0 ]; }
+has_sudo()   { command -v sudo >/dev/null 2>&1; }
+sudo_passwordless() { has_sudo && sudo -n true 2>/dev/null; }
+
+PY_BIN=""
+PIP_BIN=""
+
+detect_python_pip() {
+    if command -v python3 >/dev/null 2>&1; then PY_BIN="python3";
+    elif command -v python >/dev/null 2>&1; then PY_BIN="python";
+    else echo "❌ No python3/python found on PATH."; exit 1; fi
+
+    if command -v pip >/dev/null 2>&1; then PIP_BIN="pip";
+    elif command -v pip3 >/dev/null 2>&1; then PIP_BIN="pip3";
+    else echo "❌ No pip/pip3 found on PATH."; exit 1; fi
 }
 
-if is_headless; then
-    echo "Headless environment detected (VM/CloudShell/CI) — using sudo + --break-system-packages"
-    sudo pip install -vvv --progress-bar on --upgrade --force-reinstall \
-        "$PKG_URL" $BREAK_FLAG
-else
-    echo "Non-headless environment detected — installing without sudo"
-    pip install -vvv --progress-bar on --upgrade --force-reinstall \
-        "$PKG_URL"
-fi
+get_break_flag() {
+    local pyver ext_managed
+    pyver=$("$PY_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    ext_managed="/usr/lib/python${pyver}/EXTERNALLY-MANAGED"
+    [ -f "$ext_managed" ] && echo "--break-system-packages" || echo ""
+}
+
+run_install() {
+    local use_sudo="$1"
+    local break_flag; break_flag=$(get_break_flag)
+    if [ "$use_sudo" = "yes" ]; then
+        sudo "$PIP_BIN" install -vvv --progress-bar on --upgrade --force-reinstall "$PKG_URL" $break_flag
+    else
+        "$PIP_BIN" install -vvv --progress-bar on --upgrade --force-reinstall "$PKG_URL" $break_flag
+    fi
+}
+
+main() {
+    detect_python_pip
+
+    if is_termux || is_ish || is_windows_posix; then
+        echo "No-root platform (Termux/iSH/Windows-posix) — installing in user space"
+        run_install "no"; return
+    fi
+
+    if is_macos; then
+        echo "macOS — avoiding sudo pip (breaks Homebrew/system site-packages permissions)"
+        run_install "no"; return
+    fi
+
+    if is_root; then
+        echo "Already running as root"
+        run_install "no"; return
+    fi
+
+    if has_sudo && sudo_passwordless; then
+        echo "Passwordless sudo available — using it"
+        run_install "yes"; return
+    fi
+
+    if has_sudo && [ -z "${CI:-}" ]; then
+        echo "sudo available (may prompt for password)"
+        run_install "yes"; return
+    fi
+
+    echo "No usable elevation path — installing without sudo"
+    run_install "no"
+}
+
+main
