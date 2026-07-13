@@ -488,16 +488,39 @@ handle_selection() {
 _orig_stty=$(stty -g 2>/dev/null)
 trap 'stty "$_orig_stty" 2>/dev/null' EXIT
 
+_menu_header() {
+  echo
+  echo "📂 Location: $path${group_prefix:+ [filter: ${group_prefix^^}*]}"
+}
+
+_menu_body_flat() {
+  if $_has_group_view; then
+    _gv_chain="${group_view_levels[*]}"
+    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
+  fi
+  display_items
+}
+
+_menu_footer_lines() {
+  echo
+  echo "u) Up   cd) Change directory   t) Transfer"
+  echo "d) Delete   c) Create   f) Find    r) Rename"
+  echo "q/h) Quit/Home   s) Settings   x) Organise"
+  echo "-h) Help   -u) Upgrade"
+  echo "up-1,3 / ups-1,3) Upload to cloud (multi-file/folder vs single merged file)   do-) Import a pasted link"
+  [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
+  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
+    echo "Group view is set but above threshold → press forceshow to enable grouped display"
+  fi
+}
+
 # Number of lines printed AFTER the item list but before the "Select:"
 # line, so we can compute exactly how far to move the cursor to reach
-# a given item's row. Mirrors the footer section of _redraw_menu.
+# a given item's row. Computed by actually running _menu_footer_lines
+# rather than a hardcoded number, so it can never drift out of sync
+# when the footer text changes.
 _footer_line_count() {
-  local n=5   # blank line + the 4 "u) Up ..." style option lines
-  [ -n "$group_prefix" ] && n=$(( n + 1 ))
-  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
-    n=$(( n + 1 ))
-  fi
-  printf '%s' "$n"
+  _menu_footer_lines | wc -l | tr -d ' '
 }
 
 # Un-highlights the old row and highlights the new row in place, without
@@ -528,23 +551,9 @@ _redraw_highlight_inplace() {
 }
 
 _redraw_menu() {
-  echo
-  echo "📂 Location: $path${group_prefix:+ [filter: ${group_prefix^^}*]}"
-  if $_has_group_view; then
-    _gv_chain="${group_view_levels[*]}"
-    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
-  fi
-  display_items
-  echo
-  echo "u) Up   cd) Change directory   t) Transfer"
-  echo "d) Delete   c) Create   f) Find    r) Rename"
-  echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade"
-  echo "up-1,3 / ups-1,3) Upload to cloud (multi-file/folder vs single merged file)   do-) Import a pasted link"
-  [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
-  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
-    echo "Group view is set but above threshold → press forceshow to enable grouped display"
-  fi
+  _menu_header
+  _menu_body_flat
+  _menu_footer_lines
 }
 
 # Redraws just the "Select: " input line in place (no full-screen clear),
@@ -716,8 +725,7 @@ fi
 
 shopt -s nullglob
 while true; do
-  echo
-  echo "📂 Location: $path${group_prefix:+ [filter: ${group_prefix^^}*]}"
+  _menu_header
 
   total=$(count_items_in_path "$path")
 
@@ -770,24 +778,10 @@ while true; do
       apply_sort
     fi
 
-    if $_has_group_view; then
-      _gv_chain="${group_view_levels[*]}"
-      echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
-    fi
-
-    display_items
+    _menu_body_flat
   fi
-  echo
 
-  echo "u) Up   cd) Change directory   t) Transfer"
-  echo "d) Delete   c) Create   f) Find    r) Rename"
-  echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade"
-  echo "up-1,3 / ups-1,3) Upload to cloud (multi-file/folder vs single merged file)   do-) Import a pasted link"
-  [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
-  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
-    echo "Group view is set but above threshold → press forceshow to enable grouped display"
-  fi
+  _menu_footer_lines
 
   _read_choice
 
