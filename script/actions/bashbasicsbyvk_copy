@@ -76,15 +76,13 @@ elif [ "$COPY_CMD" == "osc52-direct" ]; then
 
 else
 
-    ID=$(openssl rand -hex 3)
-
     echo "☁️ Large content detected. Uploading..."
 
     RESPONSE=$(curl -s --fail -w "\n%{http_code}" \
         -H "Expect:" \
         -X PUT \
         --data-binary "@$FILE" \
-        "$WORKER_URL/$ID")
+        "$WORKER_URL/copy")
 
     EXIT_CODE=$?
 
