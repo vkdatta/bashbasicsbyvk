@@ -1,5 +1,241 @@
 _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 
+# ---------------------------------------------------------------------------
+# up- / ups- / do-  — cloud upload + import, shared between local CLI and
+# headless environments. Unlike copy (which prefers a local clipboard tool
+# and only falls back to the cloud when headless), upload has no local
+# equivalent — it always goes through the worker, so the same code path
+# runs identically whether there's a TTY/clipboard available or not.
+# ---------------------------------------------------------------------------
+WORKER_URL="https://copy.bashbasics.workers.dev"
+_SP_MAX_UPLOAD_BYTES=$((20*1024*1024))
+
+# Copies a generated link to the clipboard (best effort, via OSC52 — works
+# the same whether the terminal is local or headless/SSH'd into) and tries
+# to open it in a browser. Never blocks or fails the upload if these don't work.
+_announce_link() {
+  local final_url="$1"
+  local url_payload
+  url_payload=$(printf "%s" "$final_url" | base64 | tr -d '\n')
+
+  if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
+    printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$url_payload"
+  else
+    printf "\033]52;c;%s\a" "$url_payload"
+  fi
+
+  echo "✅ Link copied to clipboard (best effort)."
+  echo "-------------------------------------------"
+  echo "Link: $final_url"
+  echo "-------------------------------------------"
+
+  ( open "$final_url" || xdg-open "$final_url" || termux-open-url "$final_url" ) &> /dev/null &
+}
+
+# Walks selected paths (files and/or folders), attaching each file to a
+# multipart PUT so the worker's /upload endpoint can rebuild the tree.
+_up_do_multipart_upload() {
+  local -a paths=("$@")
+  local -a form_args=()
+  local total_size=0 p file base rel sz
+
+  for p in "${paths[@]}"; do
+    if [ -d "$p" ]; then
+      base=$(basename -- "$p")
+      while IFS= read -r -d '' file; do
+        rel="${file#$p/}"
+        form_args+=(-F "files=@${file};filename=${base}/${rel}")
+        sz=$(stat -c%s "$file" 2>/dev/null || echo 0)
+        total_size=$((total_size + sz))
+      done < <(find "$p" -type f -print0)
+    elif [ -f "$p" ]; then
+      form_args+=(-F "files=@${p};filename=$(basename -- "$p")")
+      sz=$(stat -c%s "$p" 2>/dev/null || echo 0)
+      total_size=$((total_size + sz))
+    else
+      echo "  ⚠️  Skipping missing item: $p"
+    fi
+  done
+
+  if [ ${#form_args[@]} -eq 0 ]; then
+    echo "❌ No valid files found in selection"
+    return 1
+  fi
+
+  if [ "$total_size" -gt "$_SP_MAX_UPLOAD_BYTES" ]; then
+    echo "❌ Selection is $((total_size/1024/1024))MB — exceeds the 20MB upload limit"
+    return 1
+  fi
+
+  echo "☁️  Uploading $(( ${#form_args[@]} )) file entr(y/ies)..."
+  local response http_status final_url
+  response=$(curl -s --fail -w "\n%{http_code}" -H "Expect:" -X PUT "${form_args[@]}" "$WORKER_URL/upload")
+  http_status=$(echo "$response" | tail -n 1)
+  final_url=$(echo "$response" | head -n 1)
+
+  if [ "$http_status" == "201" ]; then
+    _announce_link "$final_url"
+  else
+    echo "❌ Upload failed (HTTP $http_status)."
+    return 1
+  fi
+}
+
+# up-1,3,7 / up-1-3,7  — upload the selected items (files AND/OR folders)
+# to the environment, preserving structure. Viewable/downloadable from any
+# browser as a tree, or reimportable elsewhere via do-.
+handle_up_upload() {
+  local raw="$1"
+  local itemlist="${raw#up-}"
+
+  if [ -z "$itemlist" ]; then
+    echo "⚠️  Usage: up-1,3,5  or  up-1-3,7  (files and folders both supported)"
+    return
+  fi
+  if $imaginary_mode; then
+    echo "⚠️  Too many items to index directly — narrow the view before using up-."
+    return
+  fi
+
+  _sp_resolve_itemlist "$itemlist" || return
+  _up_do_multipart_upload "${sp_resolved[@]}"
+}
+
+# ups-1,3,7 / ups-1-3,7  — upload the selected items merged into a SINGLE
+# text file. Files only; refuses immediately if any selected item is a folder.
+handle_ups_upload() {
+  local raw="$1"
+  local itemlist="${raw#ups-}"
+
+  if [ -z "$itemlist" ]; then
+    echo "⚠️  Usage: ups-1,3,5  or  ups-1-3,7  (files only — no folders)"
+    return
+  fi
+  if $imaginary_mode; then
+    echo "⚠️  Too many items to index directly — narrow the view before using ups-."
+    return
+  fi
+
+  _sp_resolve_itemlist "$itemlist" || return
+
+  local p
+  for p in "${sp_resolved[@]}"; do
+    if [ -d "$p" ]; then
+      echo "❌ ups- doesn't support folder upload. Try up- instead."
+      return 1
+    fi
+  done
+
+  local tmp
+  tmp=$(mktemp)
+  for p in "${sp_resolved[@]}"; do
+    if [ ! -f "$p" ]; then
+      echo "  ⚠️  Skipping missing item: $p"
+      continue
+    fi
+    echo "===== ${p##*/} =====" >> "$tmp"
+    cat -- "$p" >> "$tmp"
+    echo >> "$tmp"
+  done
+
+  if [ ! -s "$tmp" ]; then
+    echo "❌ No valid files found in selection"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  echo "☁️  Uploading ${#sp_resolved[@]} file(s) merged into a single text file..."
+  local response http_status final_url
+  response=$(curl -s --fail -w "\n%{http_code}" -H "Expect:" -X PUT --data-binary "@$tmp" "$WORKER_URL/copy")
+  http_status=$(echo "$response" | tail -n 1)
+  final_url=$(echo "$response" | head -n 1)
+  rm -f "$tmp"
+
+  if [ "$http_status" == "201" ]; then
+    _announce_link "$final_url"
+  else
+    echo "❌ Upload failed (HTTP $http_status)."
+    return 1
+  fi
+}
+
+# do-  — paste a link generated by up-/ups- (or the old copy tool) and
+# import its contents locally. Works identically in a local CLI or a
+# headless/piped shell: interactive shells get a save-as prompt, non-TTY
+# stdout just gets the raw content printed so it can be piped/captured.
+# The remote copy is nuked automatically by the worker as soon as it's
+# fetched (?raw=1 for text, /zip for file trees) — no separate delete needed.
+handle_do_import() {
+  read -p "🔗 Paste link to import: " link
+  [ -z "$link" ] && echo "🚫 Cancelled" && return
+
+  if [[ "$link" != http*://* ]]; then
+    link="$WORKER_URL/$link"
+  fi
+  link="${link%/}"
+
+  local tmp_headers tmp_body
+  tmp_headers=$(mktemp)
+  tmp_body=$(mktemp)
+
+  local raw_url="$link?raw=1"
+  local http_status
+  http_status=$(curl -s -o "$tmp_body" -D "$tmp_headers" -w "%{http_code}" "$raw_url")
+
+  if [ "$http_status" != "200" ]; then
+    echo "❌ Link expired, invalid, or already nuked."
+    rm -f "$tmp_headers" "$tmp_body"
+    return 1
+  fi
+
+  local ctype
+  ctype=$(grep -i '^content-type:' "$tmp_headers" | tail -1 | tr -d '\r' | cut -d' ' -f2-)
+  rm -f "$tmp_headers"
+
+  if [[ "$ctype" == application/json* ]]; then
+    echo "📦 Multi-file link detected. Fetching archive..."
+    local zip_status
+    zip_status=$(curl -s -o "${tmp_body}.zip" -w "%{http_code}" "$link/zip")
+
+    if [ "$zip_status" != "200" ]; then
+      echo "❌ Failed to fetch archive (HTTP $zip_status)."
+      rm -f "$tmp_body" "${tmp_body}.zip"
+      return 1
+    fi
+
+    local dest="$path"
+    if [ -t 0 ]; then
+      read -p "📂 Extract into which folder? (blank = current dir: $path): " dest_in
+      [ -n "$dest_in" ] && dest="$dest_in"
+    fi
+    mkdir -p "$dest"
+
+    if command -v unzip &>/dev/null; then
+      unzip -o -q "${tmp_body}.zip" -d "$dest"
+      echo "✅ Imported files into: $dest"
+    else
+      cp "${tmp_body}.zip" "$dest/imported_files.zip"
+      echo "⚠️  'unzip' not found — saved raw archive as: $dest/imported_files.zip"
+    fi
+    rm -f "$tmp_body" "${tmp_body}.zip"
+  else
+    echo "📄 Text link detected."
+    if [ -t 1 ] && [ -t 0 ]; then
+      read -p "💾 Save as filename in $path (blank = print to terminal): " fname
+    else
+      fname=""
+    fi
+
+    if [ -n "$fname" ]; then
+      mv "$tmp_body" "$path/$fname"
+      echo "✅ Imported as: $path/$fname"
+    else
+      cat "$tmp_body"
+      rm -f "$tmp_body"
+    fi
+  fi
+}
+
 # Persistent buffers (c--, m--, s--) — survive after d- applies them
 _SP_CP_FILE="${_SP_BUFFER_DIR}/copy.list"
 _SP_MV_FILE="${_SP_BUFFER_DIR}/move.list"

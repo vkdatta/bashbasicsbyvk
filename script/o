@@ -540,6 +540,7 @@ _redraw_menu() {
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
   echo "-h) Help   -u) Upgrade"
+  echo "up-1,3 / ups-1,3) Upload to cloud (multi-file/folder vs single merged file)   do-) Import a pasted link"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold → press forceshow to enable grouped display"
@@ -782,6 +783,7 @@ while true; do
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
   echo "-h) Help   -u) Upgrade"
+  echo "up-1,3 / ups-1,3) Upload to cloud (multi-file/folder vs single merged file)   do-) Import a pasted link"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold → press forceshow to enable grouped display"
@@ -810,6 +812,9 @@ while true; do
     d-)                    handle_shortpath_dispatch ;;
     v-)                    handle_shortpath_view ;;
     c-*|m-*|s-*)           handle_shortpath_stage "$choice" ;;
+    do-)                   handle_do_import ;;
+    ups-*)                 handle_ups_upload "$choice" ;;
+    up-*)                  handle_up_upload "$choice" ;;
     *)                     handle_selection "$choice" ;;
   esac
 
