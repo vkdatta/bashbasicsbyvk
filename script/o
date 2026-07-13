@@ -607,6 +607,18 @@ _read_choice() {
   _can_inplace=false
   $_can_nav && ! $_has_group_view && _can_inplace=true
 
+  # The default highlighted row (_hl_index) was only set as internal
+  # state above — nothing has drawn it yet. Paint it now so item 1
+  # (or wherever the cursor lands) is actually highlighted from the
+  # start, not just assumed.
+  if $_can_nav; then
+    if $_can_inplace; then
+      _redraw_highlight_inplace 0 "$_hl_index"
+    else
+      clear; _redraw_menu
+    fi
+  fi
+
   stty -icanon -echo min 1 time 0 2>/dev/null
 
   _buf=""
