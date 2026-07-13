@@ -8,10 +8,24 @@ if [ -f "$EXT_MANAGED_FILE" ]; then
     BREAK_FLAG="--break-system-packages"
 fi
 
-PREFIX=""
-if [ ! -w "/usr/local/bin" ]; then
-    PREFIX="sudo "
-fi
+PKG_URL="git+https://github.com/vkdatta/bashbasicsbyvk.git"
 
-$PREFIX pip install -vvv --progress-bar on --upgrade --force-reinstall \
-git+https://github.com/vkdatta/bashbasicsbyvk.git $BREAK_FLAG
+is_headless() {
+    if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
+        return 1
+    fi
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        return 1
+    fi
+    return 0
+}
+
+if is_headless; then
+    echo "Headless environment detected (VM/CloudShell/CI) — using sudo + --break-system-packages"
+    sudo pip install -vvv --progress-bar on --upgrade --force-reinstall \
+        "$PKG_URL" $BREAK_FLAG
+else
+    echo "Non-headless environment detected — installing without sudo"
+    pip install -vvv --progress-bar on --upgrade --force-reinstall \
+        "$PKG_URL"
+fi
