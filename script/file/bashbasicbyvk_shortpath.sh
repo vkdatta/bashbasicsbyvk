@@ -7,7 +7,7 @@ _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 # equivalent — it always goes through the worker, so the same code path
 # runs identically whether there's a TTY/clipboard available or not.
 # ---------------------------------------------------------------------------
-WORKER_URL="https://copy.bashbasics.workers.dev"
+WORKER_URL="https://fileapi.bashbasics.workers.dev"
 _SP_MAX_UPLOAD_BYTES=$((20*1024*1024))
 
 # Copies a generated link to the clipboard (best effort, via OSC52 — works

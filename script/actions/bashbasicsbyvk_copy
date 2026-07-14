@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-WORKER_URL="https://copy.bashbasics.workers.dev"
+WORKER_URL="https://fileapi.bashbasics.workers.dev"
 MAX_OSC52_BYTES=1024
 
 TEMP_MODE=false
