@@ -13,7 +13,7 @@ _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 # design, so the worker / R2 bucket owner never sees the key, filenames, or
 # content. Requires 'node' on PATH (used for its native crypto + fetch).
 # ---------------------------------------------------------------------------
-WORKER_URL="https://copy.bashbasics.workers.dev"
+WORKER_URL="https://fileapi.bashbasics.workers.dev"
 _SP_MAX_UPLOAD_BYTES=$((20*1024*1024))
 
 _crypto_check() {
