@@ -2,15 +2,7 @@
 set -uo pipefail
 
 PKG_URL="git+https://github.com/vkdatta/bashbasicsbyvk.git"
-
-is_termux()  { [ -n "${TERMUX_VERSION:-}" ] || [[ "${PREFIX:-}" == *com.termux* ]]; }
-is_ish()     { [ -f /etc/os-release ] && grep -qi "ish" /etc/os-release 2>/dev/null; }
-is_wsl()     { grep -qi microsoft /proc/version 2>/dev/null || [ -n "${WSL_DISTRO_NAME:-}" ]; }
-is_windows_posix() { [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; }
-is_macos()   { [[ "$OSTYPE" == darwin* ]]; }
-is_root()    { [ "$(id -u)" -eq 0 ]; }
-has_sudo()   { command -v sudo >/dev/null 2>&1; }
-sudo_passwordless() { has_sudo && sudo -n true 2>/dev/null; }
+CLI_ENTRY_POINT="bashbasicsbyvk_copy"   # adjust to your actual entry point name
 
 PY_BIN=""
 PIP_BIN=""
@@ -32,46 +24,31 @@ get_break_flag() {
     [ -f "$ext_managed" ] && echo "--break-system-packages" || echo ""
 }
 
+check_home_writable() {
+    [ -w "$HOME" ] || { echo "❌ \$HOME ($HOME) is not writable — cannot install."; exit 1; }
+}
+
 run_install() {
-    local use_sudo="$1"
     local break_flag; break_flag=$(get_break_flag)
-    if [ "$use_sudo" = "yes" ]; then
-        sudo "$PIP_BIN" install -vvv --progress-bar on --upgrade --force-reinstall "$PKG_URL" $break_flag
+    echo "Installing to user site-packages: $HOME/.local"
+    "$PIP_BIN" install --user -vvv --progress-bar on --upgrade --force-reinstall "$PKG_URL" $break_flag
+}
+
+verify_on_path() {
+    if command -v "$CLI_ENTRY_POINT" >/dev/null 2>&1; then
+        echo "✅ '$CLI_ENTRY_POINT' is installed and reachable on PATH."
     else
-        "$PIP_BIN" install -vvv --progress-bar on --upgrade --force-reinstall "$PKG_URL" $break_flag
+        echo "⚠️  Installed, but '$CLI_ENTRY_POINT' isn't on PATH."
+        echo "    Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+        echo '    export PATH="$HOME/.local/bin:$PATH"'
     fi
 }
 
 main() {
     detect_python_pip
-
-    if is_termux || is_ish || is_windows_posix; then
-        echo "No-root platform (Termux/iSH/Windows-posix) — installing in user space"
-        run_install "no"; return
-    fi
-
-    if is_macos; then
-        echo "macOS — avoiding sudo pip (breaks Homebrew/system site-packages permissions)"
-        run_install "no"; return
-    fi
-
-    if is_root; then
-        echo "Already running as root"
-        run_install "no"; return
-    fi
-
-    if has_sudo && sudo_passwordless; then
-        echo "Passwordless sudo available — using it"
-        run_install "yes"; return
-    fi
-
-    if has_sudo && [ -z "${CI:-}" ]; then
-        echo "sudo available (may prompt for password)"
-        run_install "yes"; return
-    fi
-
-    echo "No usable elevation path — installing without sudo"
-    run_install "no"
+    check_home_writable
+    run_install
+    verify_on_path
 }
 
 main
