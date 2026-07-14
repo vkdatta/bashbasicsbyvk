@@ -392,9 +392,10 @@ handle_ups_upload() {
 # and import its contents locally. Decryption happens entirely on this
 # machine. Works identically in a local CLI or a headless/piped shell:
 # interactive shells get a save-as/extract-to prompt, non-TTY stdout just
-# gets the decrypted text printed so it can be piped/captured. Copy links
-# nuke themselves the moment /raw is fetched (single-use); upload links are
-# nuked explicitly by this function right after a successful import.
+# gets the decrypted text printed so it can be piped/captured. Links are
+# NOT deleted by importing/downloading/copying them — the server deletes
+# every link automatically ~30 minutes after it was created, regardless of
+# how many times (if any) it was consumed.
 handle_do_import() {
   _crypto_check || return 1
 
@@ -473,8 +474,7 @@ handle_do_import() {
 
   if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ]; then
     echo "✅ Imported $n file(s) into: $dest"
-    curl -s -X DELETE "$link" -o /dev/null
-    echo "🔥 Remote copy nuked."
+    echo "ℹ️  The remote copy is left in place and will auto-delete on its own after 30 minutes."
   else
     echo "❌ Import failed — nothing was decrypted."
   fi
