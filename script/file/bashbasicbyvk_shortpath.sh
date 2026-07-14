@@ -6,9 +6,70 @@ _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 # and only falls back to the cloud when headless), upload has no local
 # equivalent — it always goes through the worker, so the same code path
 # runs identically whether there's a TTY/clipboard available or not.
+#
+# ZERO-KNOWLEDGE: everything is encrypted (AES-256-GCM) BEFORE it leaves this
+# machine. The key is generated locally and only ever appended to the link
+# as a URL fragment (#k=...) — fragments are never sent to any server by
+# design, so the worker / R2 bucket owner never sees the key, filenames, or
+# content. Requires 'node' on PATH (used for its native crypto + fetch).
 # ---------------------------------------------------------------------------
-WORKER_URL="https://fileapi.bashbasics.workers.dev"
+WORKER_URL="https://copy.bashbasics.workers.dev"
 _SP_MAX_UPLOAD_BYTES=$((20*1024*1024))
+
+_crypto_check() {
+  if ! command -v node &>/dev/null; then
+    echo "❌ 'node' is required for encryption (up-/ups-/do-) but wasn't found in PATH."
+    return 1
+  fi
+  return 0
+}
+
+# Encrypts stdin -> stdout as [12-byte IV][ciphertext][16-byte GCM tag],
+# exactly matching the browser's WebCrypto AES-256-GCM decrypt format.
+_crypto_encrypt_stdin() {
+  local keyb64url="$1"
+  node -e '
+    const crypto = require("crypto");
+    const chunks = [];
+    process.stdin.on("data", c => chunks.push(c));
+    process.stdin.on("end", () => {
+      const data = Buffer.concat(chunks);
+      const key = Buffer.from(process.argv[1].replace(/-/g,"+").replace(/_/g,"/"), "base64");
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+      const ct = Buffer.concat([cipher.update(data), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      process.stdout.write(Buffer.concat([iv, ct, tag]));
+    });
+  ' "$keyb64url"
+}
+
+# Decrypts stdin ([iv][ct][tag]) -> plaintext on stdout. Exits nonzero and
+# prints nothing on auth failure (wrong key / tampered / corrupted data).
+_crypto_decrypt_stdin() {
+  local keyb64url="$1"
+  node -e '
+    const crypto = require("crypto");
+    const chunks = [];
+    process.stdin.on("data", c => chunks.push(c));
+    process.stdin.on("end", () => {
+      const buf = Buffer.concat(chunks);
+      if (buf.length < 28) { process.exit(1); }
+      const iv = buf.subarray(0, 12);
+      const tag = buf.subarray(buf.length - 16);
+      const ct = buf.subarray(12, buf.length - 16);
+      const key = Buffer.from(process.argv[1].replace(/-/g,"+").replace(/_/g,"/"), "base64");
+      try {
+        const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+        decipher.setAuthTag(tag);
+        const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
+        process.stdout.write(pt);
+      } catch (e) {
+        process.exit(1);
+      }
+    });
+  ' "$keyb64url"
+}
 
 # Copies a generated link to the clipboard (best effort, via OSC52 — works
 # the same whether the terminal is local or headless/SSH'd into) and tries
@@ -24,7 +85,7 @@ _announce_link() {
     printf "\033]52;c;%s\a" "$url_payload"
   fi
 
-  echo "✅ Link copied to clipboard (best effort)."
+  echo "✅ Link copied to clipboard (best effort). Key is embedded after # — keep the whole link intact."
   echo "-------------------------------------------"
   echo "Link: $final_url"
   echo "-------------------------------------------"
@@ -32,11 +93,138 @@ _announce_link() {
   ( open "$final_url" || xdg-open "$final_url" || termux-open-url "$final_url" ) &> /dev/null &
 }
 
-# Walks selected paths (files and/or folders), attaching each file to a
-# multipart PUT so the worker's /upload endpoint can rebuild the tree.
+# One Node invocation does it all: walks the given (relpath, abspath) file
+# list, encrypts each file with a fresh random IV under one freshly-generated
+# key, writes ciphertext blobs + an encrypted manifest tree to $outdir, and
+# prints ONLY the generated base64url key to stdout. The plaintext manifest
+# (names/paths/sizes) never touches disk unencrypted and never reaches the
+# server — only this local process ever sees it.
+#   $1 = output directory (already created) to write blob0, blob1, ..., manifest.enc
+#   $2 = path to a file with lines "relpath<TAB>abspath" (files only)
+_crypto_pack_upload() {
+  local outdir="$1" listfile="$2"
+  node -e '
+    const fs = require("fs"), path = require("path"), crypto = require("crypto");
+    const outdir = process.argv[1];
+    const listfile = process.argv[2];
+    const lines = fs.readFileSync(listfile, "utf8").split("\n").filter(Boolean);
+
+    const key = crypto.randomBytes(32);
+    const keyB64url = key.toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+
+    function encrypt(buf) {
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+      const ct = Buffer.concat([cipher.update(buf), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      return Buffer.concat([iv, ct, tag]);
+    }
+
+    const entries = [];
+    lines.forEach((line, idx) => {
+      const tabIdx = line.indexOf("\t");
+      const relpath = line.slice(0, tabIdx);
+      const abspath = line.slice(tabIdx + 1);
+      const data = fs.readFileSync(abspath);
+      fs.writeFileSync(path.join(outdir, "blob" + idx), encrypt(data));
+      entries.push({ path: relpath, size: data.length, blobIndex: idx });
+    });
+
+    let idCounter = 0;
+    const nextId = () => "n" + (idCounter++);
+    const root = [];
+    const folderCache = new Map();
+    for (const entry of entries) {
+      const parts = entry.path.split("/").filter(Boolean);
+      let children = root, acc = "";
+      for (let i = 0; i < parts.length - 1; i++) {
+        acc += (acc ? "/" : "") + parts[i];
+        let folder = folderCache.get(acc);
+        if (!folder) {
+          folder = { id: nextId(), name: parts[i], type: "folder", children: [] };
+          children.push(folder);
+          folderCache.set(acc, folder);
+        }
+        children = folder.children;
+      }
+      const name = parts[parts.length - 1] || entry.path;
+      children.push({ id: nextId(), name, type: "file", size: entry.size, blobIndex: entry.blobIndex });
+    }
+
+    const manifest = { version: 1, fileCount: entries.length, tree: root };
+    fs.writeFileSync(path.join(outdir, "manifest.enc"), encrypt(Buffer.from(JSON.stringify(manifest), "utf8")));
+
+    process.stdout.write(keyB64url);
+  ' "$outdir" "$listfile"
+}
+
+# Given a base link + key, fetches /manifest, decrypts it, then fetches and
+# decrypts every file inside, writing them out under $3 with the original
+# folder structure restored. Prints the imported file count to stdout;
+# per-file progress goes to stderr so it's visible without polluting $().
+_crypto_import_upload() {
+  local link="$1" key="$2" dest="$3"
+  node -e '
+    const fs = require("fs"), path = require("path"), crypto = require("crypto");
+    const link = process.argv[1];
+    const key = Buffer.from(process.argv[2].replace(/-/g,"+").replace(/_/g,"/"), "base64");
+    const dest = process.argv[3];
+
+    function decrypt(buf) {
+      const iv = buf.subarray(0, 12);
+      const tag = buf.subarray(buf.length - 16);
+      const ct = buf.subarray(12, buf.length - 16);
+      const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+      decipher.setAuthTag(tag);
+      return Buffer.concat([decipher.update(ct), decipher.final()]);
+    }
+
+    (async () => {
+      const manifestRes = await fetch(link + "/manifest");
+      if (!manifestRes.ok) { console.error("Manifest fetch failed (HTTP " + manifestRes.status + ")"); console.log(0); return; }
+      let manifest;
+      try {
+        manifest = JSON.parse(decrypt(Buffer.from(await manifestRes.arrayBuffer())).toString("utf8"));
+      } catch (e) {
+        console.error("Decryption failed — wrong key or corrupted link.");
+        console.log(0);
+        return;
+      }
+
+      const files = [];
+      (function walk(nodes, prefix) {
+        for (const n of (nodes || [])) {
+          if (n.type === "file") files.push({ relpath: prefix + n.name, blobIndex: n.blobIndex });
+          if (n.children) walk(n.children, prefix + n.name + "/");
+        }
+      })(manifest.tree, "");
+
+      let ok = 0;
+      for (const f of files) {
+        const fileRes = await fetch(link + "/file/" + f.blobIndex);
+        if (!fileRes.ok) { console.error("  \u2717 " + f.relpath + " (HTTP " + fileRes.status + ")"); continue; }
+        let plain;
+        try { plain = decrypt(Buffer.from(await fileRes.arrayBuffer())); }
+        catch (e) { console.error("  \u2717 " + f.relpath + " (decrypt failed)"); continue; }
+        const outPath = path.join(dest, f.relpath);
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, plain);
+        console.error("  \u2713 " + f.relpath);
+        ok++;
+      }
+      console.log(ok);
+    })();
+  ' "$link" "$key" "$dest"
+}
+
+# Walks selected paths (files and/or folders) into a flat "relpath<TAB>abspath"
+# list, hands it to _crypto_pack_upload for local encryption, then uploads
+# only ciphertext + the encrypted manifest to /upload.
 _up_do_multipart_upload() {
   local -a paths=("$@")
-  local -a form_args=()
+  _crypto_check || return 1
+
+  local listfile; listfile=$(mktemp)
   local total_size=0 p file base rel sz
 
   for p in "${paths[@]}"; do
@@ -44,12 +232,12 @@ _up_do_multipart_upload() {
       base=$(basename -- "$p")
       while IFS= read -r -d '' file; do
         rel="${file#$p/}"
-        form_args+=(-F "files=@${file};filename=${base}/${rel}")
+        printf '%s\t%s\n' "${base}/${rel}" "$file" >> "$listfile"
         sz=$(stat -c%s "$file" 2>/dev/null || echo 0)
         total_size=$((total_size + sz))
       done < <(find "$p" -type f -print0)
     elif [ -f "$p" ]; then
-      form_args+=(-F "files=@${p};filename=$(basename -- "$p")")
+      printf '%s\t%s\n' "$(basename -- "$p")" "$p" >> "$listfile"
       sz=$(stat -c%s "$p" 2>/dev/null || echo 0)
       total_size=$((total_size + sz))
     else
@@ -57,24 +245,48 @@ _up_do_multipart_upload() {
     fi
   done
 
-  if [ ${#form_args[@]} -eq 0 ]; then
+  if [ ! -s "$listfile" ]; then
     echo "❌ No valid files found in selection"
+    rm -f "$listfile"
     return 1
   fi
 
   if [ "$total_size" -gt "$_SP_MAX_UPLOAD_BYTES" ]; then
     echo "❌ Selection is $((total_size/1024/1024))MB — exceeds the 20MB upload limit"
+    rm -f "$listfile"
     return 1
   fi
 
-  echo "☁️  Uploading $(( ${#form_args[@]} )) file entr(y/ies)..."
+  local file_count; file_count=$(wc -l < "$listfile" | tr -d ' ')
+  echo "🔐 Encrypting $file_count file entr(y/ies) locally (key never leaves this machine)..."
+
+  local tmpdir; tmpdir=$(mktemp -d)
+  local key; key=$(_crypto_pack_upload "$tmpdir" "$listfile")
+  rm -f "$listfile"
+
+  if [ -z "$key" ]; then
+    echo "❌ Local encryption failed"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+
+  local -a form_args=()
+  local i=0
+  while [ -f "$tmpdir/blob$i" ]; do
+    form_args+=(-F "files=@${tmpdir}/blob${i}")
+    i=$((i + 1))
+  done
+  form_args+=(-F "manifest=@${tmpdir}/manifest.enc")
+
+  echo "☁️  Uploading $i encrypted file entr(y/ies)..."
   local response http_status final_url
   response=$(curl -s --fail -w "\n%{http_code}" -H "Expect:" -X PUT "${form_args[@]}" "$WORKER_URL/upload")
   http_status=$(echo "$response" | tail -n 1)
   final_url=$(echo "$response" | head -n 1)
+  rm -rf "$tmpdir"
 
   if [ "$http_status" == "201" ]; then
-    _announce_link "$final_url"
+    _announce_link "${final_url}#k=${key}"
   else
     echo "❌ Upload failed (HTTP $http_status)."
     return 1
@@ -83,7 +295,8 @@ _up_do_multipart_upload() {
 
 # up-1,3,7 / up-1-3,7  — upload the selected items (files AND/OR folders)
 # to the environment, preserving structure. Viewable/downloadable from any
-# browser as a tree, or reimportable elsewhere via do-.
+# browser as a tree, or reimportable elsewhere via do-. Fully encrypted —
+# see the header note above.
 handle_up_upload() {
   local raw="$1"
   local itemlist="${raw#up-}"
@@ -102,7 +315,8 @@ handle_up_upload() {
 }
 
 # ups-1,3,7 / ups-1-3,7  — upload the selected items merged into a SINGLE
-# text file. Files only; refuses immediately if any selected item is a folder.
+# encrypted text file. Files only; refuses immediately if any selected item
+# is a folder.
 handle_ups_upload() {
   local raw="$1"
   local itemlist="${raw#ups-}"
@@ -126,6 +340,8 @@ handle_ups_upload() {
     fi
   done
 
+  _crypto_check || return 1
+
   local tmp
   tmp=$(mktemp)
   for p in "${sp_resolved[@]}"; do
@@ -144,82 +360,80 @@ handle_ups_upload() {
     return 1
   fi
 
-  echo "☁️  Uploading ${#sp_resolved[@]} file(s) merged into a single text file..."
-  local response http_status final_url
-  response=$(curl -s --fail -w "\n%{http_code}" -H "Expect:" -X PUT --data-binary "@$tmp" "$WORKER_URL/copy")
-  http_status=$(echo "$response" | tail -n 1)
-  final_url=$(echo "$response" | head -n 1)
+  echo "🔐 Encrypting merged text locally (key never leaves this machine)..."
+  local key
+  key=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+\$/,''))")
+  if [ -z "$key" ]; then
+    echo "❌ Local encryption failed"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  local enc_tmp; enc_tmp=$(mktemp)
+  _crypto_encrypt_stdin "$key" < "$tmp" > "$enc_tmp"
   rm -f "$tmp"
 
+  echo "☁️  Uploading ${#sp_resolved[@]} encrypted file(s) merged into a single blob..."
+  local response http_status final_url
+  response=$(curl -s --fail -w "\n%{http_code}" -H "Expect:" -X PUT --data-binary "@$enc_tmp" "$WORKER_URL/copy")
+  http_status=$(echo "$response" | tail -n 1)
+  final_url=$(echo "$response" | head -n 1)
+  rm -f "$enc_tmp"
+
   if [ "$http_status" == "201" ]; then
-    _announce_link "$final_url"
+    _announce_link "${final_url}#k=${key}"
   else
     echo "❌ Upload failed (HTTP $http_status)."
     return 1
   fi
 }
 
-# do-  — paste a link generated by up-/ups- (or the old copy tool) and
-# import its contents locally. Works identically in a local CLI or a
-# headless/piped shell: interactive shells get a save-as prompt, non-TTY
-# stdout just gets the raw content printed so it can be piped/captured.
-# The remote copy is nuked automatically by the worker as soon as it's
-# fetched (?raw=1 for text, /zip for file trees) — no separate delete needed.
+# do-  — paste a link generated by up-/ups- (including its #k=... fragment)
+# and import its contents locally. Decryption happens entirely on this
+# machine. Works identically in a local CLI or a headless/piped shell:
+# interactive shells get a save-as/extract-to prompt, non-TTY stdout just
+# gets the decrypted text printed so it can be piped/captured. Copy links
+# nuke themselves the moment /raw is fetched (single-use); upload links are
+# nuked explicitly by this function right after a successful import.
 handle_do_import() {
-  read -p "🔗 Paste link to import: " link
+  _crypto_check || return 1
+
+  read -p "🔗 Paste link to import (include the #k=... part): " link
   [ -z "$link" ] && echo "🚫 Cancelled" && return
 
   if [[ "$link" != http*://* ]]; then
     link="$WORKER_URL/$link"
   fi
+
+  local key=""
+  if [[ "$link" == *"#k="* ]]; then
+    key="${link#*#k=}"
+    link="${link%%#*}"
+  fi
   link="${link%/}"
 
-  local tmp_headers tmp_body
-  tmp_headers=$(mktemp)
-  tmp_body=$(mktemp)
-
-  local raw_url="$link?raw=1"
-  local http_status
-  http_status=$(curl -s -o "$tmp_body" -D "$tmp_headers" -w "%{http_code}" "$raw_url")
-
-  if [ "$http_status" != "200" ]; then
-    echo "❌ Link expired, invalid, or already nuked."
-    rm -f "$tmp_headers" "$tmp_body"
-    return 1
-  fi
-
-  local ctype
-  ctype=$(grep -i '^content-type:' "$tmp_headers" | tail -1 | tr -d '\r' | cut -d' ' -f2-)
-  rm -f "$tmp_headers"
-
-  if [[ "$ctype" == application/json* ]]; then
-    echo "📦 Multi-file link detected. Fetching archive..."
-    local zip_status
-    zip_status=$(curl -s -o "${tmp_body}.zip" -w "%{http_code}" "$link/zip")
-
-    if [ "$zip_status" != "200" ]; then
-      echo "❌ Failed to fetch archive (HTTP $zip_status)."
-      rm -f "$tmp_body" "${tmp_body}.zip"
+  if [ -z "$key" ]; then
+    read -p "🔑 No key found in the pasted link — paste the decryption key separately: " key
+    if [ -z "$key" ]; then
+      echo "❌ No decryption key — cannot proceed."
       return 1
     fi
+  fi
 
-    local dest="$path"
-    if [ -t 0 ]; then
-      read -p "📂 Extract into which folder? (blank = current dir: $path): " dest_in
-      [ -n "$dest_in" ] && dest="$dest_in"
-    fi
-    mkdir -p "$dest"
+  local tmp_body raw_status
+  tmp_body=$(mktemp)
+  raw_status=$(curl -s -o "$tmp_body" -w "%{http_code}" "$link/raw")
 
-    if command -v unzip &>/dev/null; then
-      unzip -o -q "${tmp_body}.zip" -d "$dest"
-      echo "✅ Imported files into: $dest"
-    else
-      cp "${tmp_body}.zip" "$dest/imported_files.zip"
-      echo "⚠️  'unzip' not found — saved raw archive as: $dest/imported_files.zip"
+  if [ "$raw_status" == "200" ]; then
+    echo "📄 Text link detected. Decrypting locally..."
+    local plain_tmp; plain_tmp=$(mktemp)
+    if ! _crypto_decrypt_stdin "$key" < "$tmp_body" > "$plain_tmp" 2>/dev/null; then
+      echo "❌ Decryption failed — wrong key, or the link was already used/corrupted."
+      rm -f "$tmp_body" "$plain_tmp"
+      return 1
     fi
-    rm -f "$tmp_body" "${tmp_body}.zip"
-  else
-    echo "📄 Text link detected."
+    rm -f "$tmp_body"
+
     if [ -t 1 ] && [ -t 0 ]; then
       read -p "💾 Save as filename in $path (blank = print to terminal): " fname
     else
@@ -227,14 +441,45 @@ handle_do_import() {
     fi
 
     if [ -n "$fname" ]; then
-      mv "$tmp_body" "$path/$fname"
+      mv "$plain_tmp" "$path/$fname"
       echo "✅ Imported as: $path/$fname"
     else
-      cat "$tmp_body"
-      rm -f "$tmp_body"
+      cat "$plain_tmp"
+      rm -f "$plain_tmp"
     fi
+    return 0
+  fi
+
+  rm -f "$tmp_body"
+
+  local manifest_status
+  manifest_status=$(curl -s -o /dev/null -w "%{http_code}" "$link/manifest")
+  if [ "$manifest_status" != "200" ]; then
+    echo "❌ Link expired, invalid, or already nuked."
+    return 1
+  fi
+
+  echo "📦 Multi-file link detected."
+  local dest="$path"
+  if [ -t 0 ]; then
+    read -p "📂 Extract into which folder? (blank = current dir: $path): " dest_in
+    [ -n "$dest_in" ] && dest="$dest_in"
+  fi
+  mkdir -p "$dest"
+
+  echo "🔐 Decrypting and importing..."
+  local n
+  n=$(_crypto_import_upload "$link" "$key" "$dest")
+
+  if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ]; then
+    echo "✅ Imported $n file(s) into: $dest"
+    curl -s -X DELETE "$link" -o /dev/null
+    echo "🔥 Remote copy nuked."
+  else
+    echo "❌ Import failed — nothing was decrypted."
   fi
 }
+
 
 # Persistent buffers (c--, m--, s--) — survive after d- applies them
 _SP_CP_FILE="${_SP_BUFFER_DIR}/copy.list"
