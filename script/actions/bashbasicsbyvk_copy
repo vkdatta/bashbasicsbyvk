@@ -76,19 +76,55 @@ elif [ "$COPY_CMD" == "osc52-direct" ]; then
 
 else
 
-    echo "☁️ Large content detected. Uploading..."
+    if ! command -v node &> /dev/null; then
+        echo "❌ Error: 'node' is required to encrypt before uploading, but wasn't found in PATH."
+        [ "$TEMP_MODE" = true ] && rm -f "$FILE"
+        exit 1
+    fi
+
+    echo "🔐 Encrypting locally (key never leaves this machine)..."
+
+    KEY=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+\$/,''))")
+
+    if [ -z "$KEY" ]; then
+        echo "❌ Error: Local encryption key generation failed."
+        [ "$TEMP_MODE" = true ] && rm -f "$FILE"
+        exit 1
+    fi
+
+    ENC_FILE=$(mktemp)
+
+    # [12-byte IV][ciphertext][16-byte GCM tag] — same format the browser
+    # viewer and do- expect, so it can decrypt using only the key in the URL
+    # fragment below. The server never sees KEY or the plaintext.
+    node -e '
+        const fs = require("fs"), crypto = require("crypto");
+        const key = Buffer.from(process.argv[2].replace(/-/g,"+").replace(/_/g,"/"), "base64");
+        const data = fs.readFileSync(process.argv[1]);
+        const iv = crypto.randomBytes(12);
+        const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+        const ct = Buffer.concat([cipher.update(data), cipher.final()]);
+        const tag = cipher.getAuthTag();
+        process.stdout.write(Buffer.concat([iv, ct, tag]));
+    ' "$FILE" "$KEY" > "$ENC_FILE"
+
+    echo "☁️ Uploading encrypted content..."
 
     RESPONSE=$(curl -s --fail -w "\n%{http_code}" \
         -H "Expect:" \
         -X PUT \
-        --data-binary "@$FILE" \
+        --data-binary "@$ENC_FILE" \
         "$WORKER_URL/copy")
 
     EXIT_CODE=$?
 
+    rm -f "$ENC_FILE"
+
     HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
 
-    FINAL_URL=$(echo "$RESPONSE" | head -n 1)
+    RAW_URL=$(echo "$RESPONSE" | head -n 1)
+
+    FINAL_URL="${RAW_URL}#k=${KEY}"
 
     if [ $EXIT_CODE -eq 0 ] && [ "$HTTP_STATUS" == "201" ]; then
 
@@ -102,7 +138,7 @@ else
 
         clear
 
-        echo "✅ Success: Sync link copied to clipboard."
+        echo "✅ Success: Sync link copied to clipboard (key embedded after #)."
         echo "-------------------------------------------"
         echo "Link: $FINAL_URL"
         echo "-------------------------------------------"
