@@ -14,7 +14,136 @@ _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 # content. Requires 'node' on PATH (used for its native crypto + fetch).
 # ---------------------------------------------------------------------------
 WORKER_URL="https://fileapi.bashbasics.workers.dev"
-_SP_MAX_UPLOAD_BYTES=$((20*1024*1024))
+
+# 10GB is a SOFT limit — the worker will still accept larger uploads, but
+# interactively asks for confirmation at 1.2x the normal credit rate (see
+# _bb_authed_put below). _SP_HARD_LIMIT_BYTES is just a local sanity ceiling
+# to avoid packing something absurd before even talking to the network.
+_SP_SOFT_UPLOAD_BYTES=$((10*1024*1024*1024))
+_SP_HARD_LIMIT_BYTES=$((32*1024*1024*1024))
+
+# ---------------------------------------------------------------------------
+# AUTH: every /copy and /upload request is authenticated against
+# fileapi.bashbasics.{email,key}. Since that dotted form isn't a legal shell
+# identifier, it's kept in the environment as FILEAPI_BASHBASICS_EMAIL /
+# FILEAPI_BASHBASICS_KEY. If those aren't already exported, we prompt for
+# them live on the terminal (API key input hidden) and export them for the
+# rest of this shell session only.
+# ---------------------------------------------------------------------------
+_bb_get_credentials() {
+  local email="${FILEAPI_BASHBASICS_EMAIL:-}"
+  local apikey="${FILEAPI_BASHBASICS_KEY:-}"
+
+  if [ -z "$email" ] || [ -z "$apikey" ]; then
+    if [ ! -t 0 ]; then
+      echo "❌ Error: fileapi.bashbasics.email / fileapi.bashbasics.key are not set, and no terminal is available to prompt for them."
+      echo "   Set them with: export FILEAPI_BASHBASICS_EMAIL=you@example.com; export FILEAPI_BASHBASICS_KEY=your_api_key"
+      return 1
+    fi
+    echo "🔑 No saved credentials found (FILEAPI_BASHBASICS_EMAIL / FILEAPI_BASHBASICS_KEY)."
+    [ -z "$email" ] && read -p "   Enter email: " email
+    if [ -z "$apikey" ]; then
+      read -s -p "   Enter API key: " apikey
+      echo
+    fi
+    if [ -z "$email" ] || [ -z "$apikey" ]; then
+      echo "❌ Email and API key are both required."
+      return 1
+    fi
+    export FILEAPI_BASHBASICS_EMAIL="$email"
+    export FILEAPI_BASHBASICS_KEY="$apikey"
+    echo "ℹ️  Using these for the rest of this session. Export them yourself beforehand to skip this prompt next time."
+  fi
+  return 0
+}
+
+# Pulls a top-level field out of a small JSON error body without requiring
+# jq — 'node' is already a hard requirement for the encryption path below.
+_bb_json_get() {
+  local json="$1" field="$2"
+  node -e '
+    let d = "";
+    process.stdin.on("data", c => d += c);
+    process.stdin.on("end", () => {
+      try {
+        const o = JSON.parse(d);
+        process.stdout.write(o[process.argv[1]] !== undefined ? String(o[process.argv[1]]) : "");
+      } catch (e) {}
+    });
+  ' "$field" <<< "$json"
+}
+
+# Authenticated PUT to the worker, transparently handling:
+#  - 401 (missing/invalid credentials): re-prompts and retries (up to 2x)
+#  - 409 (oversized-estimate confirmation, upload only): asks y/n, retries
+#    with X-Confirm-Oversized: yes if the user agrees
+# $1     = endpoint path, e.g. "/copy" or "/upload"
+# $2     = estimated size in bytes, or "" to omit X-Estimated-Size entirely
+# $3...  = remaining curl args, e.g. --data-binary @file, or -F ... -F ...
+# On success (HTTP 201) prints three lines to stdout: body(url), credits
+# deducted, new balance — and returns 0. On failure, prints the server's
+# error message to stderr and returns 1.
+_bb_authed_put() {
+  local endpoint="$1" est_size="$2"; shift 2
+  local -a extra_args=("$@")
+
+  _bb_get_credentials || return 1
+
+  local attempt=0 confirmed=false
+  while :; do
+    attempt=$((attempt + 1))
+
+    local -a hdrs=(
+      -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL"
+      -H "X-User-Key: $FILEAPI_BASHBASICS_KEY"
+    )
+    [ -n "$est_size" ] && hdrs+=(-H "X-Estimated-Size: $est_size")
+    $confirmed && hdrs+=(-H "X-Confirm-Oversized: yes")
+
+    local hdrfile response http_status body
+    hdrfile=$(mktemp)
+    response=$(curl -s -D "$hdrfile" -w "\n%{http_code}" -H "Expect:" -X PUT "${hdrs[@]}" "${extra_args[@]}" "$WORKER_URL$endpoint")
+    http_status=$(echo "$response" | tail -n 1)
+    body=$(echo "$response" | sed '$d')
+
+    if [ "$http_status" == "201" ]; then
+      local deducted balance
+      deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+      balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+      rm -f "$hdrfile"
+      printf '%s\n%s\n%s\n' "$body" "$deducted" "$balance"
+      return 0
+    fi
+    rm -f "$hdrfile"
+
+    local err_type msg
+    err_type=$(_bb_json_get "$body" error)
+    msg=$(_bb_json_get "$body" message)
+
+    if [ "$http_status" == "401" ] && [ "$attempt" -le 2 ]; then
+      echo "❌ ${msg:-Authentication failed.}" >&2
+      unset FILEAPI_BASHBASICS_EMAIL FILEAPI_BASHBASICS_KEY
+      echo "🔁 Please re-enter your credentials." >&2
+      _bb_get_credentials || return 1
+      continue
+    fi
+
+    if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
+      echo "⚠️  ${msg}" >&2
+      read -p "   Proceed at 1.2x credit cost? (y/n): " ans
+      if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
+        confirmed=true
+        continue
+      else
+        echo "🚫 Cancelled." >&2
+        return 1
+      fi
+    fi
+
+    echo "❌ ${msg:-Request failed (HTTP $http_status)}" >&2
+    return 1
+  done
+}
 
 _crypto_check() {
   if ! command -v node &>/dev/null; then
@@ -251,10 +380,13 @@ _up_do_multipart_upload() {
     return 1
   fi
 
-  if [ "$total_size" -gt "$_SP_MAX_UPLOAD_BYTES" ]; then
-    echo "❌ Selection is $((total_size/1024/1024))MB — exceeds the 20MB upload limit"
+  if [ "$total_size" -gt "$_SP_HARD_LIMIT_BYTES" ]; then
+    echo "❌ Selection is $((total_size/1024/1024/1024))GB — exceeds the absolute upload ceiling"
     rm -f "$listfile"
     return 1
+  fi
+  if [ "$total_size" -gt "$_SP_SOFT_UPLOAD_BYTES" ]; then
+    echo "ℹ️  Selection is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
   fi
 
   local file_count; file_count=$(wc -l < "$listfile" | tr -d ' ')
@@ -279,18 +411,19 @@ _up_do_multipart_upload() {
   form_args+=(-F "manifest=@${tmpdir}/manifest.enc")
 
   echo "☁️  Uploading $i encrypted file entr(y/ies)..."
-  local response http_status final_url
-  response=$(curl -s --fail -w "\n%{http_code}" -H "Expect:" -X PUT "${form_args[@]}" "$WORKER_URL/upload")
-  http_status=$(echo "$response" | tail -n 1)
-  final_url=$(echo "$response" | head -n 1)
-  rm -rf "$tmpdir"
-
-  if [ "$http_status" == "201" ]; then
-    _announce_link "${final_url}#k=${key}"
-  else
-    echo "❌ Upload failed (HTTP $http_status)."
+  local result final_url deducted balance
+  if ! result=$(_bb_authed_put "/upload" "$total_size" "${form_args[@]}"); then
+    rm -rf "$tmpdir"
     return 1
   fi
+  rm -rf "$tmpdir"
+
+  final_url=$(echo "$result" | sed -n '1p')
+  deducted=$(echo "$result" | sed -n '2p')
+  balance=$(echo "$result" | sed -n '3p')
+
+  _announce_link "${final_url}#k=${key}"
+  [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
 }
 
 # up-1,3,7 / up-1-3,7  — upload the selected items (files AND/OR folders)
@@ -374,18 +507,19 @@ handle_ups_upload() {
   rm -f "$tmp"
 
   echo "☁️  Uploading ${#sp_resolved[@]} encrypted file(s) merged into a single blob..."
-  local response http_status final_url
-  response=$(curl -s --fail -w "\n%{http_code}" -H "Expect:" -X PUT --data-binary "@$enc_tmp" "$WORKER_URL/copy")
-  http_status=$(echo "$response" | tail -n 1)
-  final_url=$(echo "$response" | head -n 1)
-  rm -f "$enc_tmp"
-
-  if [ "$http_status" == "201" ]; then
-    _announce_link "${final_url}#k=${key}"
-  else
-    echo "❌ Upload failed (HTTP $http_status)."
+  local result final_url deducted balance
+  if ! result=$(_bb_authed_put "/copy" "" --data-binary "@$enc_tmp"); then
+    rm -f "$enc_tmp"
     return 1
   fi
+  rm -f "$enc_tmp"
+
+  final_url=$(echo "$result" | sed -n '1p')
+  deducted=$(echo "$result" | sed -n '2p')
+  balance=$(echo "$result" | sed -n '3p')
+
+  _announce_link "${final_url}#k=${key}"
+  [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
 }
 
 # do-  — paste a link generated by up-/ups- (including its #k=... fragment)

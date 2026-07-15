@@ -5,6 +5,58 @@ MAX_OSC52_BYTES=1024
 
 TEMP_MODE=false
 
+# ---------------------------------------------------------------------------
+# AUTH: the worker now authenticates every /copy and /upload request against
+# fileapi.bashbasics.{email,key}. Since that dotted form isn't a legal shell
+# identifier, it's kept in the environment as FILEAPI_BASHBASICS_EMAIL /
+# FILEAPI_BASHBASICS_KEY. If those aren't already exported, we prompt for
+# them live on the terminal (API key input is hidden) and export them for
+# the rest of this shell session — nothing is written to disk here; add the
+# export lines to your shell profile yourself if you want them to persist.
+# ---------------------------------------------------------------------------
+_bb_get_credentials() {
+    local email="${FILEAPI_BASHBASICS_EMAIL:-}"
+    local apikey="${FILEAPI_BASHBASICS_KEY:-}"
+
+    if [ -z "$email" ] || [ -z "$apikey" ]; then
+        if [ ! -t 0 ]; then
+            echo "❌ Error: fileapi.bashbasics.email / fileapi.bashbasics.key are not set, and no terminal is available to prompt for them."
+            echo "   Set them with: export FILEAPI_BASHBASICS_EMAIL=you@example.com; export FILEAPI_BASHBASICS_KEY=your_api_key"
+            return 1
+        fi
+        echo "🔑 No saved credentials found (FILEAPI_BASHBASICS_EMAIL / FILEAPI_BASHBASICS_KEY)."
+        [ -z "$email" ] && read -p "   Enter email: " email
+        if [ -z "$apikey" ]; then
+            read -s -p "   Enter API key: " apikey
+            echo
+        fi
+        if [ -z "$email" ] || [ -z "$apikey" ]; then
+            echo "❌ Email and API key are both required."
+            return 1
+        fi
+        export FILEAPI_BASHBASICS_EMAIL="$email"
+        export FILEAPI_BASHBASICS_KEY="$apikey"
+        echo "ℹ️  Using these for the rest of this session. Export them yourself beforehand to skip this prompt next time."
+    fi
+    return 0
+}
+
+# Pulls a top-level field out of a small JSON error body without requiring
+# jq — 'node' is already a hard requirement for the encryption path below.
+_bb_json_get() {
+    local json="$1" field="$2"
+    node -e '
+        let d = "";
+        process.stdin.on("data", c => d += c);
+        process.stdin.on("end", () => {
+            try {
+                const o = JSON.parse(d);
+                process.stdout.write(o[process.argv[1]] !== undefined ? String(o[process.argv[1]]) : "");
+            } catch (e) {}
+        });
+    ' "$field" <<< "$json"
+}
+
 if [ -n "$1" ]; then
 
     if [ ! -f "$1" ]; then
@@ -82,6 +134,11 @@ else
         exit 1
     fi
 
+    if ! _bb_get_credentials; then
+        [ "$TEMP_MODE" = true ] && rm -f "$FILE"
+        exit 1
+    fi
+
     echo "🔐 Encrypting locally (key never leaves this machine)..."
 
     KEY=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+\$/,''))")
@@ -110,52 +167,79 @@ else
 
     echo "☁️ Uploading encrypted content..."
 
-    RESPONSE=$(curl -s --fail -w "\n%{http_code}" \
-        -H "Expect:" \
-        -X PUT \
-        --data-binary "@$ENC_FILE" \
-        "$WORKER_URL/copy")
+    CREDITS_DEDUCTED=""
+    CREDITS_BALANCE=""
+    ATTEMPT=0
 
-    EXIT_CODE=$?
+    while :; do
+        ATTEMPT=$((ATTEMPT + 1))
+
+        HDRFILE=$(mktemp)
+        RESPONSE=$(curl -s -D "$HDRFILE" -w "\n%{http_code}" \
+            -H "Expect:" \
+            -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL" \
+            -H "X-User-Key: $FILEAPI_BASHBASICS_KEY" \
+            -X PUT \
+            --data-binary "@$ENC_FILE" \
+            "$WORKER_URL/copy")
+
+        HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+
+        if [ "$HTTP_STATUS" == "201" ]; then
+            RAW_URL="$BODY"
+            CREDITS_DEDUCTED=$(grep -i '^X-Credits-Deducted:' "$HDRFILE" | tr -d '\r' | cut -d' ' -f2-)
+            CREDITS_BALANCE=$(grep -i '^X-Credits-Balance:' "$HDRFILE" | tr -d '\r' | cut -d' ' -f2-)
+            rm -f "$HDRFILE"
+            break
+        fi
+        rm -f "$HDRFILE"
+
+        if [ "$HTTP_STATUS" == "401" ] && [ "$ATTEMPT" -le 2 ]; then
+            MSG=$(_bb_json_get "$BODY" message)
+            echo "❌ ${MSG:-Authentication failed.}"
+            unset FILEAPI_BASHBASICS_EMAIL FILEAPI_BASHBASICS_KEY
+            echo "🔁 Please re-enter your credentials."
+            if ! _bb_get_credentials; then
+                rm -f "$ENC_FILE"
+                [ "$TEMP_MODE" = true ] && rm -f "$FILE"
+                exit 1
+            fi
+            continue
+        fi
+
+        MSG=$(_bb_json_get "$BODY" message)
+        echo "❌ Error: Cloud push failed (HTTP $HTTP_STATUS). ${MSG}"
+        rm -f "$ENC_FILE"
+        [ "$TEMP_MODE" = true ] && rm -f "$FILE"
+        exit 1
+    done
 
     rm -f "$ENC_FILE"
 
-    HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
-
-    RAW_URL=$(echo "$RESPONSE" | head -n 1)
-
     FINAL_URL="${RAW_URL}#k=${KEY}"
 
-    if [ $EXIT_CODE -eq 0 ] && [ "$HTTP_STATUS" == "201" ]; then
+    URL_PAYLOAD=$(printf "%s" "$FINAL_URL" | base64 | tr -d '\n')
 
-        URL_PAYLOAD=$(printf "%s" "$FINAL_URL" | base64 | tr -d '\n')
-
-        if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
-            printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$URL_PAYLOAD"
-        else
-            printf "\033]52;c;%s\a" "$URL_PAYLOAD"
-        fi
-
-        clear
-
-        echo "✅ Success: Sync link copied to clipboard (key embedded after #)."
-        echo "-------------------------------------------"
-        echo "Link: $FINAL_URL"
-        echo "-------------------------------------------"
-
-        (
-            open "$FINAL_URL" \
-            || xdg-open "$FINAL_URL" \
-            || termux-open-url "$FINAL_URL"
-        ) &> /dev/null &
-
+    if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
+        printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$URL_PAYLOAD"
     else
-        echo "❌ Error: Cloud push failed (HTTP $HTTP_STATUS)."
-
-        [ "$TEMP_MODE" = true ] && rm -f "$FILE"
-
-        exit 1
+        printf "\033]52;c;%s\a" "$URL_PAYLOAD"
     fi
+
+    clear
+
+    echo "✅ Success: Sync link copied to clipboard (key embedded after #)."
+    echo "-------------------------------------------"
+    echo "Link: $FINAL_URL"
+    [ -n "$CREDITS_DEDUCTED" ] && echo "💳 Credits deducted: $CREDITS_DEDUCTED   |   Balance: $CREDITS_BALANCE"
+    echo "-------------------------------------------"
+
+    (
+        open "$FINAL_URL" \
+        || xdg-open "$FINAL_URL" \
+        || termux-open-url "$FINAL_URL"
+    ) &> /dev/null &
 fi
 
 if [ "$TEMP_MODE" = true ]; then
