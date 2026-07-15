@@ -47,23 +47,46 @@ _multi_print_input_line() {
   [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
 }
 
+_multi_set_repr() {
+  local -a keys=("${!_msel_set[@]}")
+  [ "${#keys[@]}" -eq 0 ] && return
+  printf '%s\n' "${keys[@]}" | sort -n | tr '\n' ','
+}
+
 _multi_render() {
   _multi_compute_set
+  _msel_prev="$(_multi_set_repr)"
   clear
   _menu_header
-  local i line
-  for ((i=1; i<=${#items[@]}; i++)); do
-    line=$(_item_line_text "$i")
-    if [ -n "${_msel_set[$i]+x}" ]; then
-      printf '%s\n' "$(_highlight "$line")"
-    else
-      printf '%s\n' "$line"
-    fi
-  done
+  _render_items_with_highlight "${!_msel_set[@]}"
   echo
   echo "$_prompt (supports ranges: 1-10,15-20,33)"
   echo "up/down bump the nearby number, left/right move cursor"
   _multi_print_input_line
+}
+
+# Like _multi_render, but only clears/repaints the screen when the
+# actual set of highlighted items changed. If the buffer changed but
+# resolves to the same highlighted set (e.g. typing the second digit
+# of "10" in "1-10"), we just reposition the input line instead of
+# repainting the whole item list.
+_multi_sync() {
+  local old_repr="$_msel_prev"
+  _multi_compute_set
+  local new_repr
+  new_repr="$(_multi_set_repr)"
+  if [ "$new_repr" != "$old_repr" ]; then
+    _msel_prev="$new_repr"
+    clear
+    _menu_header
+    _render_items_with_highlight "${!_msel_set[@]}"
+    echo
+    echo "$_prompt (supports ranges: 1-10,15-20,33)"
+    echo "up/down bump the nearby number, left/right move cursor"
+    _multi_print_input_line
+  else
+    _multi_print_input_line
+  fi
 }
 
 _multi_number_token_bounds() {
@@ -80,7 +103,7 @@ _multi_adjust_number_at_cursor() {
   if [ -z "$bounds" ]; then
     if [ -z "$_buf" ]; then
       _buf="1"; _pos=1
-      _multi_render
+      _multi_sync
     fi
     return
   fi
@@ -96,7 +119,7 @@ _multi_adjust_number_at_cursor() {
   newnum="$n"
   _buf="${_buf:0:s}${newnum}${_buf:e}"
   _pos=$(( s + ${#newnum} ))
-  _multi_render
+  _multi_sync
 }
 
 select_items_common() {
@@ -108,7 +131,7 @@ select_items_common() {
 
   local _prompt="$prompt"
   local -A _msel_set=()
-  local _buf="" _pos=0
+  local _buf="" _pos=0 _msel_prev=""
   local key seq itemlist
 
   stty -icanon -echo min 1 time 0 2>/dev/null
@@ -146,13 +169,13 @@ select_items_common() {
         if [ "$_pos" -gt 0 ]; then
           _buf="${_buf:0:_pos-1}${_buf:_pos}"
           _pos=$(( _pos - 1 ))
-          _multi_render
+          _multi_sync
         fi
         ;;
       *)
         _buf="${_buf:0:_pos}${key}${_buf:_pos}"
         _pos=$(( _pos + 1 ))
-        _multi_render
+        _multi_sync
         ;;
     esac
   done
@@ -627,42 +650,36 @@ _menu_footer_lines() {
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade"
+  echo "-h) Help   -u) Upgrade cv 0.0"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
   fi
 }
 
-_footer_line_count() {
-  _menu_footer_lines | wc -l | tr -d ' '
+_render_items_with_highlight() {
+  local -A hl=()
+  local x
+  for x in "$@"; do hl["$x"]=1; done
+  local i line
+  for ((i=1; i<=${#items[@]}; i++)); do
+    line=$(_item_line_text "$i")
+    if [ -n "${hl[$i]+x}" ]; then
+      printf '%s\n' "$(_highlight "$line")"
+    else
+      printf '%s\n' "$line"
+    fi
+  done
 }
 
-_redraw_highlight_inplace() {
-  local old_idx="$1" new_idx="$2"
-  local n_items=${#items[@]}
-  local footer; footer=$(_footer_line_count)
-
-  tput sc 2>/dev/null
-
-  if [ "$old_idx" -ge 1 ] && [ "$old_idx" -le "$n_items" ]; then
-    local dist=$(( footer + (n_items - old_idx + 1) ))
-    printf '\033[%dA\r\033[K' "$dist"
-    printf '%s' "$(_item_line_text "$old_idx")"
-    tput rc 2>/dev/null
-  fi
-
-  if [ "$new_idx" -ge 1 ] && [ "$new_idx" -le "$n_items" ]; then
-    local dist=$(( footer + (n_items - new_idx + 1) ))
-    printf '\033[%dA\r\033[K' "$dist"
-    printf '%s' "$(_highlight "$(_item_line_text "$new_idx")")"
-    tput rc 2>/dev/null
-  fi
-}
-
-_redraw_menu() {
+_redraw_menu_full() {
+  clear
   _menu_header
-  _menu_body_flat
+  if $_has_group_view; then
+    _gv_chain="${group_view_levels[*]}"
+    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
+  fi
+  _render_items_with_highlight "$_hl_index"
   _menu_footer_lines
 }
 
@@ -680,16 +697,9 @@ _sync_highlight_from_buf() {
   (( n < 1 )) && n=1
   (( n > ${#items[@]} )) && n=${#items[@]}
   if [ "$n" -ne "${_hl_index:-0}" ]; then
-    local old="$_hl_index"
     _hl_index=$n
-    if $_can_inplace; then
-      _redraw_highlight_inplace "$old" "$_hl_index"
-      _print_input_line
-    else
-      clear
-      _redraw_menu
-      _print_input_line
-    fi
+    _redraw_menu_full
+    _print_input_line
   fi
 }
 
@@ -702,8 +712,6 @@ _read_choice() {
   else
     _hl_index=0
   fi
-  _can_inplace=false
-  $_can_nav && ! $_has_group_view && _can_inplace=true
 
   stty -icanon -echo min 1 time 0 2>/dev/null
 
@@ -719,7 +727,6 @@ _read_choice() {
       case "$seq" in
         '[A')  # Up
           if $_can_nav; then
-            local old="$_hl_index"
             if [ "$_hl_index" -lt 1 ]; then
               _hl_index="${#items[@]}"
             else
@@ -727,17 +734,12 @@ _read_choice() {
               [ "$_hl_index" -lt 1 ] && _hl_index="${#items[@]}"
             fi
             _buf="$_hl_index"; _pos=${#_buf}
-            if $_can_inplace; then
-              _redraw_highlight_inplace "$old" "$_hl_index"
-              _print_input_line
-            else
-              clear; _redraw_menu; _print_input_line
-            fi
+            _redraw_menu_full
+            _print_input_line
           fi
           ;;
         '[B')  # Down
           if $_can_nav; then
-            local old="$_hl_index"
             if [ "$_hl_index" -lt 1 ]; then
               _hl_index=1
             else
@@ -745,12 +747,8 @@ _read_choice() {
               [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index=1
             fi
             _buf="$_hl_index"; _pos=${#_buf}
-            if $_can_inplace; then
-              _redraw_highlight_inplace "$old" "$_hl_index"
-              _print_input_line
-            else
-              clear; _redraw_menu; _print_input_line
-            fi
+            _redraw_menu_full
+            _print_input_line
           fi
           ;;
         '[C')  # Right — move cursor within typed text
