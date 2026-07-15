@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+hash -r
+
 source "bashbasicsbyvk_run.sh"
 source "bashbasicsbyvk_organise.sh"
 source "bashbasicsbyvk_find.sh"
