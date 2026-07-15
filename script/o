@@ -38,20 +38,20 @@ _multi_redraw_inplace() {
   local footer; footer=$(_footer_line_count)
   local pair idx mode dist
 
-  tput sc 2>/dev/null
   for pair in "$@"; do
     idx="${pair%%:*}"
     mode="${pair##*:}"
     [ "$idx" -ge 1 ] && [ "$idx" -le "$n_items" ] || continue
     dist=$(( footer + (n_items - idx + 1) ))
+    tput sc 2>/dev/null
     printf '\033[%dA\r\033[K' "$dist"
     if [ "$mode" == "H" ]; then
       printf '%s' "$(_highlight "$(_item_line_text "$idx")")"
     else
       printf '%s' "$(_item_line_text "$idx")"
     fi
+    tput rc 2>/dev/null
   done
-  tput rc 2>/dev/null
 }
 
 _multi_sync_highlight() {
