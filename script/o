@@ -656,7 +656,7 @@ _menu_footer_lines() {
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade cv 0.2"
+  echo "-h) Help   -u) Upgrade cv 0.3"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
