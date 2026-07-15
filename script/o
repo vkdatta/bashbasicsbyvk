@@ -32,6 +32,96 @@ parse_selection() {
   echo "${indices[@]}"
 }
 
+_multi_redraw_inplace() {
+  # Args: any number of "idx:H" (highlight) / "idx:N" (normal) pairs.
+  local n_items=${#items[@]}
+  local footer; footer=$(_footer_line_count)
+  local pair idx mode dist
+
+  tput sc 2>/dev/null
+  for pair in "$@"; do
+    idx="${pair%%:*}"
+    mode="${pair##*:}"
+    [ "$idx" -ge 1 ] && [ "$idx" -le "$n_items" ] || continue
+    dist=$(( footer + (n_items - idx + 1) ))
+    printf '\033[%dA\r\033[K' "$dist"
+    if [ "$mode" == "H" ]; then
+      printf '%s' "$(_highlight "$(_item_line_text "$idx")")"
+    else
+      printf '%s' "$(_item_line_text "$idx")"
+    fi
+  done
+  tput rc 2>/dev/null
+}
+
+_multi_sync_highlight() {
+  # Diffs the currently-highlighted set against what $_buf now parses to,
+  # and only repaints the lines that actually changed.
+  local -A new_set=()
+  local idx changes=()
+
+  for idx in $(parse_selection "$_buf" "${#items[@]}"); do
+    new_set["$idx"]=1
+  done
+
+  for idx in "${!_msel_set[@]}"; do
+    [ -z "${new_set[$idx]+x}" ] && changes+=("$idx:N")
+  done
+  for idx in "${!new_set[@]}"; do
+    [ -z "${_msel_set[$idx]+x}" ] && changes+=("$idx:H")
+  done
+
+  [ "${#changes[@]}" -gt 0 ] && _multi_redraw_inplace "${changes[@]}"
+
+  _msel_set=()
+  for idx in "${!new_set[@]}"; do _msel_set["$idx"]=1; done
+}
+
+_multi_print_input_line() {
+  printf '\r\033[K'
+  printf "Item numbers: %s" "$_buf"
+  local back=$(( ${#_buf} - _pos ))
+  [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
+}
+
+_multi_number_token_bounds() {
+  # Finds the contiguous digit run touching the cursor, prints "start end".
+  local s=$_pos e=$_pos
+  while [ "$s" -gt 0 ] && [[ "${_buf:s-1:1}" =~ [0-9] ]]; do s=$((s-1)); done
+  while [ "$e" -lt "${#_buf}" ] && [[ "${_buf:e:1}" =~ [0-9] ]]; do e=$((e+1)); done
+  [ "$s" -eq "$e" ] && return 1
+  echo "$s $e"
+}
+
+_multi_adjust_number_at_cursor() {
+  # dir: up | down — bumps the number nearest the cursor (handles single
+  # numbers, and either end of an "a-b" range) and wraps within 1..max.
+  local dir="$1" bounds s e num n max newnum
+  bounds=$(_multi_number_token_bounds)
+  if [ -z "$bounds" ]; then
+    if [ -z "$_buf" ]; then
+      _buf="1"; _pos=1
+      _multi_print_input_line
+      _multi_sync_highlight
+    fi
+    return
+  fi
+  read -r s e <<< "$bounds"
+  num="${_buf:s:e-s}"
+  n=$((10#$num))
+  max="${#items[@]}"
+  if [ "$dir" == "up" ]; then
+    n=$((n+1)); [ "$n" -gt "$max" ] && n=1
+  else
+    n=$((n-1)); [ "$n" -lt 1 ] && n=$max
+  fi
+  newnum="$n"
+  _buf="${_buf:0:s}${newnum}${_buf:e}"
+  _pos=$(( s + ${#newnum} ))
+  _multi_print_input_line
+  _multi_sync_highlight
+}
+
 select_items_common() {
   local prompt="$1"
   if [ ${#items[@]} -eq 0 ]; then
@@ -39,7 +129,75 @@ select_items_common() {
     return 1
   fi
   echo "$prompt (supports ranges: 1-10,15-20,33)"
-  read -p "Item numbers: " itemlist
+  echo "↑/↓ bump the nearby number, ←/→ move cursor"
+
+  local -A _msel_set=()
+  local _buf="" _pos=0
+  local key seq itemlist
+
+  stty -icanon -echo min 1 time 0 2>/dev/null
+  _multi_print_input_line
+
+  while true; do
+    IFS= read -rsn1 key
+    if [[ "$key" == $'\x1b' ]]; then
+      IFS= read -rsn2 -t 0.05 seq
+      case "$seq" in
+        '[A')  # Up — bump nearby number
+          _multi_adjust_number_at_cursor up
+          ;;
+        '[B')  # Down — bump nearby number
+          _multi_adjust_number_at_cursor down
+          ;;
+        '[C')  # Right — move cursor within typed text
+          if [ "$_pos" -lt "${#_buf}" ]; then
+            _pos=$(( _pos + 1 ))
+            printf '\033[1C'
+          fi
+          ;;
+        '[D')  # Left — move cursor within typed text
+          if [ "$_pos" -gt 0 ]; then
+            _pos=$(( _pos - 1 ))
+            printf '\033[1D'
+          fi
+          ;;
+        *) : ;;  # unrecognized escape sequence, swallow it
+      esac
+      continue
+    fi
+
+    case "$key" in
+      "")  # Enter
+        break
+        ;;
+      $'\x7f'|$'\x08')  # backspace
+        if [ "$_pos" -gt 0 ]; then
+          _buf="${_buf:0:_pos-1}${_buf:_pos}"
+          _pos=$(( _pos - 1 ))
+          _multi_print_input_line
+          _multi_sync_highlight
+        fi
+        ;;
+      *)  # insert typed char at cursor position
+        _buf="${_buf:0:_pos}${key}${_buf:_pos}"
+        _pos=$(( _pos + 1 ))
+        _multi_print_input_line
+        _multi_sync_highlight
+        ;;
+    esac
+  done
+
+  stty "$_orig_stty" 2>/dev/null
+  echo
+
+  # Clear any leftover in-place highlighting before returning to the caller
+  if [ "${#_msel_set[@]}" -gt 0 ]; then
+    local _clear_pairs=()
+    for idx in "${!_msel_set[@]}"; do _clear_pairs+=("$idx:N"); done
+    _multi_redraw_inplace "${_clear_pairs[@]}"
+  fi
+
+  itemlist="$_buf"
   local indices=($(parse_selection "$itemlist" "${#items[@]}"))
   selected_items=()
   for idx in "${indices[@]}"; do
