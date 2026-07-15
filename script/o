@@ -507,27 +507,16 @@ _menu_footer_lines() {
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
   echo "-h) Help   -u) Upgrade"
-  echo "up-1,3 / ups-1,3) Upload to cloud (multi-file/folder vs single merged file)   do-) Import a pasted link"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
-    echo "Group view is set but above threshold → press forceshow to enable grouped display"
+    echo "Group view is set but above threshold. Press forceshow to enable grouped display"
   fi
 }
 
-# Number of lines printed AFTER the item list but before the "Select:"
-# line, so we can compute exactly how far to move the cursor to reach
-# a given item's row. Computed by actually running _menu_footer_lines
-# rather than a hardcoded number, so it can never drift out of sync
-# when the footer text changes.
 _footer_line_count() {
   _menu_footer_lines | wc -l | tr -d ' '
 }
 
-# Un-highlights the old row and highlights the new row in place, without
-# touching or reprinting anything else on screen. Only valid for the
-# flat (non-grouped) item list, where each item occupies exactly one
-# line — grouped view falls back to a full redraw since group headers
-# make row positions harder to predict.
 _redraw_highlight_inplace() {
   local old_idx="$1" new_idx="$2"
   local n_items=${#items[@]}
@@ -556,8 +545,6 @@ _redraw_menu() {
   _menu_footer_lines
 }
 
-# Redraws just the "Select: " input line in place (no full-screen clear),
-# leaving the terminal cursor at the correct character position.
 _print_input_line() {
   printf '\r\033[K'
   printf "Select: %s" "$_buf"
@@ -565,9 +552,6 @@ _print_input_line() {
   [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
 }
 
-# If what's been typed so far is a plain number, move the highlighted
-# item to match it live (so typing "2" highlights item 2 immediately,
-# before Enter is even pressed).
 _sync_highlight_from_buf() {
   $_can_nav || return
   [[ "$_buf" =~ ^[0-9]+$ ]] || return
@@ -588,12 +572,6 @@ _sync_highlight_from_buf() {
   fi
 }
 
-# Reads the "Select:" input.
-#  - Up/Down move the highlighted item; the number is written into the
-#    input line too, so pressing Down after typing "2" continues to "3".
-#  - Left/Right move the text cursor within what you've typed, like a
-#    normal text field, so you can edit in the middle of a number.
-#  - Enter with nothing typed submits the currently highlighted item.
 _read_choice() {
   choice=""
   _can_nav=false
@@ -792,31 +770,36 @@ while true; do
 
   _read_choice
 
-  case "$choice" in
-    q|Q)                   exit 0 ;;
-    -h|-H)                 open_help ;;
-    u|U)                   if [ "$path" != "/" ]; then path=$(dirname "$path"); group_prefix=""; force_show=false; fi ;;
-    back)                  if [ -n "$group_prefix" ]; then group_prefix="${group_prefix%?}"; force_show=false; fi ;;
-    forceshow)             handle_force_show ;;
-    c|C)                   handle_create ;;
-    t|T)                   transfer_menu ;;
-    d|D)                   delete_items ;;
-    f|F)                   find_menu ;;
-    x|X)                   organise_menu ;;
-    s|S)                   settings_menu ;;
-    r|R)                   handle_rename ;;
-    cd|CD|cD|Cd)           cd "$path" && exec "$SHELL" ;;
-    m|M)                   map_directory ;;
-    kl|KL|Kl|kL)           kill -9 -1 ;;
-    i|I)                   infinity_stones_menu ;;
-    -u|-U)                 bash _3bvk_upgrade_core ;;
-    d-)                    handle_shortpath_dispatch ;;
-    v-)                    handle_shortpath_view ;;
-    c-*|m-*|s-*)           handle_shortpath_stage "$choice" ;;
-    do-)                   handle_do_import ;;
-    ups-*)                 handle_ups_upload "$choice" ;;
-    up-*)                  handle_up_upload "$choice" ;;
-    *)                     handle_selection "$choice" ;;
-  esac
+shopt -s nocasematch
+
+case "$choice" in
+    q)                      exit 0 ;;
+    -h)                     open_help ;;
+    u)                      if [ "$path" != "/" ]; then path=$(dirname "$path"); group_prefix=""; force_show=false; fi ;;
+    back)                   if [ -n "$group_prefix" ]; then group_prefix="${group_prefix%?}"; force_show=false; fi ;;
+    forceshow)              handle_force_show ;;
+    c)                      handle_create ;;
+    t)                      transfer_menu ;;
+    d)                      delete_items ;;
+    f)                      find_menu ;;
+    x)                      organise_menu ;;
+    s)                      settings_menu ;;
+    r)                      handle_rename ;;
+    cd)                     cd "$path" && exec "$SHELL" ;;
+    m)                      map_directory ;;
+    kl)                     kill -9 -1 ;;
+    i)                      infinity_stones_menu ;;
+    -u)                     bash _3bvk_upgrade_core ;;
+    d-)                     handle_shortpath_dispatch ;;
+    v-)                     handle_shortpath_view ;;
+    c-*|m-*|s-*)            handle_shortpath_stage "$choice" ;;
+    do-)                    handle_do_import ;;
+    ups-*)                  handle_ups_upload "$choice" ;;
+    up-*)                   handle_up_upload "$choice" ;;
+    clear)                  hash -r ;;
+    disk)                   df -h ;;
+    ram)                    free -h ;;
+    *)                      handle_selection "$choice" ;;
+esac
 
 done
