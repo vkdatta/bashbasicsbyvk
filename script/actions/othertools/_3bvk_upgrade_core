@@ -1,78 +1,23 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
-PKG_URL="git+https://github.com/vkdatta/bashbasicsbyvk.git"
-CLI_ENTRY_POINT="bashbasicsbyvk_copy"   # adjust to your actual entry point name
-PKG_NAME="bashbasicsbyvk"               # adjust if the PyPI/dist name differs
+if [ -t 1 ]; then
+    echo "→ Local CLI detected (interactive terminal)."
+    PIP_CMD="pip"
+    EXTRA_ARGS=""
+else
+    echo "→ Headless environment detected."
 
-PY_BIN=""
-PIP_BIN=""
-
-detect_python_pip() {
-    if command -v python3 >/dev/null 2>&1; then PY_BIN="python3";
-    elif command -v python >/dev/null 2>&1; then PY_BIN="python";
-    else echo "❌ No python3/python found on PATH."; exit 1; fi
-
-    if command -v pip >/dev/null 2>&1; then PIP_BIN="pip";
-    elif command -v pip3 >/dev/null 2>&1; then PIP_BIN="pip3";
-    else echo "❌ No pip/pip3 found on PATH."; exit 1; fi
-}
-
-get_break_flag() {
-    local pyver ext_managed
-    pyver=$("$PY_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    ext_managed="/usr/lib/python${pyver}/EXTERNALLY-MANAGED"
-    [ -f "$ext_managed" ] && echo "--break-system-packages" || echo ""
-}
-
-check_home_writable() {
-    [ -w "$HOME" ] || { echo "❌ \$HOME ($HOME) is not writable — cannot install."; exit 1; }
-}
-
-purge_old_install() {
-    echo "Purging pip's build/wheel cache..."
-    "$PIP_BIN" cache purge >/dev/null 2>&1 || true
-
-    echo "Uninstalling any existing copy of $PKG_NAME..."
-    "$PIP_BIN" uninstall -y "$PKG_NAME" >/dev/null 2>&1 || true
-}
-
-run_install() {
-    local break_flag; break_flag=$(get_break_flag)
-    echo "Installing to user site-packages: $HOME/.local"
-    "$PIP_BIN" install --user --no-cache-dir -vvv --progress-bar on \
-        --upgrade --force-reinstall "$PKG_URL" $break_flag
-}
-
-verify_on_path() {
-    if command -v "$CLI_ENTRY_POINT" >/dev/null 2>&1; then
-        echo "✅ '$CLI_ENTRY_POINT' is installed and reachable on PATH."
-        echo "   Location: $(command -v "$CLI_ENTRY_POINT")"
+    if [ -f /.dockerenv ] || grep -qE 'docker|kubepods' /proc/1/cgroup 2>/dev/null; then
+        echo "   ↳ Ephemeral (container) – using pip without sudo."
+        PIP_CMD="pip"
+        EXTRA_ARGS=""
     else
-        echo "⚠️  Installed, but '$CLI_ENTRY_POINT' isn't on PATH."
-        echo "    Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-        echo '    export PATH="$HOME/.local/bin:$PATH"'
+        echo "   ↳ Persistent (non-ephemeral) – using sudo pip with --break-system-packages."
+        PIP_CMD="sudo pip"
+        EXTRA_ARGS="--break-system-packages"
     fi
-}
+fi
 
-check_for_duplicates() {
-    local hits
-    hits=$(which -a "$CLI_ENTRY_POINT" 2>/dev/null | wc -l)
-    if [ "$hits" -gt 1 ]; then
-        echo "⚠️  Multiple '$CLI_ENTRY_POINT' binaries found on PATH:"
-        which -a "$CLI_ENTRY_POINT"
-        echo "    The FIRST one in the list above is what actually runs."
-        echo "    Remove/rename the stale one(s) if it's not the intended install."
-    fi
-}
-
-main() {
-    detect_python_pip
-    check_home_writable
-    purge_old_install
-    run_install
-    verify_on_path
-    check_for_duplicates
-}
-
-main
+PACKAGE="git+https://github.com/vkdatta/bashbasicsbyvk.git"
+$PIP_CMD install -vvv --progress-bar on --upgrade --force-reinstall $EXTRA_ARGS "$PACKAGE"
