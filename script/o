@@ -32,14 +32,6 @@ parse_selection() {
   echo "${indices[@]}"
 }
 
-_multi_compute_set() {
-  _msel_set=()
-  local idx
-  for idx in $(parse_selection "$_buf" "${#items[@]}"); do
-    _msel_set["$idx"]=1
-  done
-}
-
 _multi_print_input_line() {
   printf '\r\033[K'
   printf "Item numbers: %s" "$_buf"
@@ -48,50 +40,32 @@ _multi_print_input_line() {
 }
 
 _multi_render() {
-  _multi_compute_set
+  _hl_want=()
+  local idx
+  for idx in $(parse_selection "$_buf" "${#items[@]}"); do
+    _hl_want["$idx"]=1
+  done
   clear
   _menu_header
-  _render_items_with_highlight "${!_msel_set[@]}"
+  _render_items_with_highlight "${!_hl_want[@]}"
   echo
   echo "$_prompt (supports ranges: 1-10,15-20,33)"
   echo "up/down bump the nearby number, left/right move cursor"
   _multi_print_input_line
+
+  # Item #1 sits right after _menu_header's 2 lines.
+  _hl_offset=2
+  _hl_prev=()
+  for idx in "${!_hl_want[@]}"; do _hl_prev["$idx"]=1; done
 }
 
-# Row (1-indexed, absolute on screen) that item $1 occupies, given the
-# fixed layout painted by _multi_render: _menu_header prints 2 lines,
-# then items are printed one per line starting immediately after.
-_multi_item_row() {
-  echo $(( $1 + 2 ))
-}
-
-# Repaints ONLY the item lines whose highlighted status actually
-# changed since the last sync — no clear, no header repaint, no
-# reprinting of unaffected items. Cursor is saved/restored around each
-# in-place line edit so the input line's cursor position is untouched.
 _multi_sync() {
-  local -A _old_set=()
-  local k
-  for k in "${!_msel_set[@]}"; do _old_set["$k"]=1; done
-
-  _multi_compute_set
-
-  local -A _changed=()
-  for k in "${!_old_set[@]}"; do
-    [ -z "${_msel_set[$k]+x}" ] && _changed["$k"]=1
+  _hl_want=()
+  local idx
+  for idx in $(parse_selection "$_buf" "${#items[@]}"); do
+    _hl_want["$idx"]=1
   done
-  for k in "${!_msel_set[@]}"; do
-    [ -z "${_old_set[$k]+x}" ] && _changed["$k"]=1
-  done
-
-  local idx row line
-  for idx in "${!_changed[@]}"; do
-    row=$(_multi_item_row "$idx")
-    line=$(_item_line_text "$idx")
-    [ -n "${_msel_set[$idx]+x}" ] && line="$(_highlight "$line")"
-    printf '\033[s\033[%d;1H\033[2K%s\033[u' "$row" "$line"
-  done
-
+  highlight_sync
   _multi_print_input_line
 }
 
@@ -136,7 +110,8 @@ select_items_common() {
   fi
 
   local _prompt="$prompt"
-  local -A _msel_set=()
+  local -A _hl_want=() _hl_prev=()
+  local _hl_offset=2
   local _buf="" _pos=0
   local key seq itemlist
 
@@ -196,7 +171,6 @@ select_items_common() {
     selected_items+=("${items[$((idx-1))]}")
   done
   if [ ${#selected_items[@]} -eq 0 ]; then
-    echo "❌ No valid items selected"
     return 1
   fi
   return 0
@@ -656,7 +630,7 @@ _menu_footer_lines() {
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade cv 0.1"
+  echo "-h) Help   -u) Upgrade"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
@@ -678,15 +652,50 @@ _render_items_with_highlight() {
   done
 }
 
-_redraw_menu_full() {
-  clear
-  _menu_header
-  if $_has_group_view; then
-    _gv_chain="${group_view_levels[*]}"
-    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
+# ===========================================================================
+# Unified in-place highlighter — single source of truth for painting
+# "selected/highlighted" background state onto an already-drawn item list.
+#
+# Repaints ONLY the item rows whose highlighted state changed since the
+# last call: no clearing, no repainting of header/footer/other items,
+# and every changed row is combined into a single terminal write so
+# updates feel instant even across large ranges.
+#
+# Caller contract (caller-scoped locals, visible here via dynamic scope):
+#   _hl_offset - screen row where item #1 currently sits (item i sits at
+#                row i + _hl_offset). Refresh it whenever the layout
+#                above the item list can change (e.g. an extra line).
+#   _hl_want   - assoc array of indices that SHOULD be highlighted now.
+#                Rebuild it fresh before every call.
+#   _hl_prev   - assoc array this function maintains across calls to
+#                remember what was highlighted last time. Caller must
+#                declare it once (`local -A _hl_prev=()`) before the
+#                first call for a given screen, and keep it in sync
+#                with any full repaint that bypasses this function.
+# ===========================================================================
+highlight_sync() {
+  local -A _changed=()
+  local k
+  for k in "${!_hl_prev[@]}"; do
+    [ -z "${_hl_want[$k]+x}" ] && _changed["$k"]=1
+  done
+  for k in "${!_hl_want[@]}"; do
+    [ -z "${_hl_prev[$k]+x}" ] && _changed["$k"]=1
+  done
+
+  if [ ${#_changed[@]} -gt 0 ]; then
+    local idx row line out=""
+    for idx in "${!_changed[@]}"; do
+      row=$(( idx + _hl_offset ))
+      line=$(_item_line_text "$idx")
+      [ -n "${_hl_want[$idx]+x}" ] && line="$(_highlight "$line")"
+      out+=$(printf '\033[s\033[%d;1H\033[2K%s\033[u' "$row" "$line")
+    done
+    printf '%s' "$out"
   fi
-  _render_items_with_highlight "$_hl_index"
-  _menu_footer_lines
+
+  _hl_prev=()
+  for k in "${!_hl_want[@]}"; do _hl_prev["$k"]=1; done
 }
 
 _print_input_line() {
@@ -704,7 +713,8 @@ _sync_highlight_from_buf() {
   (( n > ${#items[@]} )) && n=${#items[@]}
   if [ "$n" -ne "${_hl_index:-0}" ]; then
     _hl_index=$n
-    _redraw_menu_full
+    _hl_want=(); _hl_want["$_hl_index"]=1
+    highlight_sync
     _print_input_line
   fi
 }
@@ -718,6 +728,13 @@ _read_choice() {
   else
     _hl_index=0
   fi
+
+  # Item #1 sits right after _menu_header's 2 lines, plus one more line
+  # if the group-view banner is showing. The screen was just freshly
+  # painted with nothing highlighted, so _hl_prev starts empty.
+  _hl_offset=2
+  $_has_group_view && _hl_offset=3
+  _hl_prev=()
 
   stty -icanon -echo min 1 time 0 2>/dev/null
 
@@ -740,7 +757,8 @@ _read_choice() {
               [ "$_hl_index" -lt 1 ] && _hl_index="${#items[@]}"
             fi
             _buf="$_hl_index"; _pos=${#_buf}
-            _redraw_menu_full
+            _hl_want=(); _hl_want["$_hl_index"]=1
+            highlight_sync
             _print_input_line
           fi
           ;;
@@ -753,7 +771,8 @@ _read_choice() {
               [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index=1
             fi
             _buf="$_hl_index"; _pos=${#_buf}
-            _redraw_menu_full
+            _hl_want=(); _hl_want["$_hl_index"]=1
+            highlight_sync
             _print_input_line
           fi
           ;;
@@ -814,6 +833,9 @@ _gv_chain=""
 declare -a imaginary_map=()
 declare -a group_chars=()
 declare -A group_counts=()
+declare -A _hl_want=()
+declare -A _hl_prev=()
+_hl_offset=0
 nav_result_path=""
 nav_selected_items=()
 gcloud_nav_result_path=""
