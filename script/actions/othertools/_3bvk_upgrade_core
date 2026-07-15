@@ -3,6 +3,7 @@ set -uo pipefail
 
 PKG_URL="git+https://github.com/vkdatta/bashbasicsbyvk.git"
 CLI_ENTRY_POINT="bashbasicsbyvk_copy"   # adjust to your actual entry point name
+PKG_NAME="bashbasicsbyvk"               # adjust if the PyPI/dist name differs
 
 PY_BIN=""
 PIP_BIN=""
@@ -28,15 +29,25 @@ check_home_writable() {
     [ -w "$HOME" ] || { echo "❌ \$HOME ($HOME) is not writable — cannot install."; exit 1; }
 }
 
+purge_old_install() {
+    echo "Purging pip's build/wheel cache..."
+    "$PIP_BIN" cache purge >/dev/null 2>&1 || true
+
+    echo "Uninstalling any existing copy of $PKG_NAME..."
+    "$PIP_BIN" uninstall -y "$PKG_NAME" >/dev/null 2>&1 || true
+}
+
 run_install() {
     local break_flag; break_flag=$(get_break_flag)
     echo "Installing to user site-packages: $HOME/.local"
-    "$PIP_BIN" install --user -vvv --progress-bar on --upgrade --force-reinstall "$PKG_URL" $break_flag
+    "$PIP_BIN" install --user --no-cache-dir -vvv --progress-bar on \
+        --upgrade --force-reinstall "$PKG_URL" $break_flag
 }
 
 verify_on_path() {
     if command -v "$CLI_ENTRY_POINT" >/dev/null 2>&1; then
         echo "✅ '$CLI_ENTRY_POINT' is installed and reachable on PATH."
+        echo "   Location: $(command -v "$CLI_ENTRY_POINT")"
     else
         echo "⚠️  Installed, but '$CLI_ENTRY_POINT' isn't on PATH."
         echo "    Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
@@ -44,11 +55,24 @@ verify_on_path() {
     fi
 }
 
+check_for_duplicates() {
+    local hits
+    hits=$(which -a "$CLI_ENTRY_POINT" 2>/dev/null | wc -l)
+    if [ "$hits" -gt 1 ]; then
+        echo "⚠️  Multiple '$CLI_ENTRY_POINT' binaries found on PATH:"
+        which -a "$CLI_ENTRY_POINT"
+        echo "    The FIRST one in the list above is what actually runs."
+        echo "    Remove/rename the stale one(s) if it's not the intended install."
+    fi
+}
+
 main() {
     detect_python_pip
     check_home_writable
+    purge_old_install
     run_install
     verify_on_path
+    check_for_duplicates
 }
 
 main
