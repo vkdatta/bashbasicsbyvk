@@ -47,15 +47,8 @@ _multi_print_input_line() {
   [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
 }
 
-_multi_set_repr() {
-  local -a keys=("${!_msel_set[@]}")
-  [ "${#keys[@]}" -eq 0 ] && return
-  printf '%s\n' "${keys[@]}" | sort -n | tr '\n' ','
-}
-
 _multi_render() {
   _multi_compute_set
-  _msel_prev="$(_multi_set_repr)"
   clear
   _menu_header
   _render_items_with_highlight "${!_msel_set[@]}"
@@ -65,28 +58,41 @@ _multi_render() {
   _multi_print_input_line
 }
 
-# Like _multi_render, but only clears/repaints the screen when the
-# actual set of highlighted items changed. If the buffer changed but
-# resolves to the same highlighted set (e.g. typing the second digit
-# of "10" in "1-10"), we just reposition the input line instead of
-# repainting the whole item list.
+# Row (1-indexed, absolute on screen) that item $1 occupies, given the
+# fixed layout painted by _multi_render: _menu_header prints 2 lines,
+# then items are printed one per line starting immediately after.
+_multi_item_row() {
+  echo $(( $1 + 2 ))
+}
+
+# Repaints ONLY the item lines whose highlighted status actually
+# changed since the last sync — no clear, no header repaint, no
+# reprinting of unaffected items. Cursor is saved/restored around each
+# in-place line edit so the input line's cursor position is untouched.
 _multi_sync() {
-  local old_repr="$_msel_prev"
+  local -A _old_set=()
+  local k
+  for k in "${!_msel_set[@]}"; do _old_set["$k"]=1; done
+
   _multi_compute_set
-  local new_repr
-  new_repr="$(_multi_set_repr)"
-  if [ "$new_repr" != "$old_repr" ]; then
-    _msel_prev="$new_repr"
-    clear
-    _menu_header
-    _render_items_with_highlight "${!_msel_set[@]}"
-    echo
-    echo "$_prompt (supports ranges: 1-10,15-20,33)"
-    echo "up/down bump the nearby number, left/right move cursor"
-    _multi_print_input_line
-  else
-    _multi_print_input_line
-  fi
+
+  local -A _changed=()
+  for k in "${!_old_set[@]}"; do
+    [ -z "${_msel_set[$k]+x}" ] && _changed["$k"]=1
+  done
+  for k in "${!_msel_set[@]}"; do
+    [ -z "${_old_set[$k]+x}" ] && _changed["$k"]=1
+  done
+
+  local idx row line
+  for idx in "${!_changed[@]}"; do
+    row=$(_multi_item_row "$idx")
+    line=$(_item_line_text "$idx")
+    [ -n "${_msel_set[$idx]+x}" ] && line="$(_highlight "$line")"
+    printf '\033[s\033[%d;1H\033[2K%s\033[u' "$row" "$line"
+  done
+
+  _multi_print_input_line
 }
 
 _multi_number_token_bounds() {
@@ -131,7 +137,7 @@ select_items_common() {
 
   local _prompt="$prompt"
   local -A _msel_set=()
-  local _buf="" _pos=0 _msel_prev=""
+  local _buf="" _pos=0
   local key seq itemlist
 
   stty -icanon -echo min 1 time 0 2>/dev/null
@@ -650,7 +656,7 @@ _menu_footer_lines() {
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade cv 0.0"
+  echo "-h) Help   -u) Upgrade cv 0.1"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
