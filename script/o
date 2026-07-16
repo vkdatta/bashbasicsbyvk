@@ -114,11 +114,12 @@ _multi_render() {
 # Lines between item $1 and the multi-select input line: every item
 # below it, plus the three fixed lines _multi_render always prints
 # after the item list (a blank line, the prompt line, and the
-# up/down-hint line). Counted from the input line upward, not from the
-# top of the screen, so it stays correct no matter how the terminal
-# has scrolled.
+# up/down-hint line), plus 1 for the input line itself (the cursor
+# starts there, so it counts as one of the lines being moved past).
+# Counted from the input line upward, not from the top of the screen,
+# so it stays correct no matter how the terminal has scrolled.
 _multi_item_distance() {
-  echo $(( ${#items[@]} - $1 + 3 ))
+  echo $(( ${#items[@]} - $1 + 3 + 1 ))
 }
 
 # Total lines printed for one multi-select render: header (2) + items
@@ -766,9 +767,11 @@ _print_input_line() {
 
 # Lines between item $1 and the "Select: ..." input line: every item
 # below it, plus $2 (the current footer line count, passed in so it's
-# computed once per sync rather than once per item).
+# computed once per sync rather than once per item), plus 1 for the
+# input line itself (the cursor starts there, so it counts as one of
+# the lines being moved past).
 _item_distance_from_input() {
-  echo $(( ${#items[@]} - $1 + $2 ))
+  echo $(( ${#items[@]} - $1 + $2 + 1 ))
 }
 
 # Repaints ONLY the (up to) two item lines whose highlighted status
