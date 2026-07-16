@@ -1,23 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-if [ -t 1 ]; then
-    echo "→ Local CLI detected (interactive terminal)."
-    PIP_CMD="pip"
-    EXTRA_ARGS=""
-else
-    echo "→ Headless environment detected."
-
-    if [ -f /.dockerenv ] || grep -qE 'docker|kubepods' /proc/1/cgroup 2>/dev/null; then
-        echo "   ↳ Ephemeral (container) – using pip without sudo."
-        PIP_CMD="pip"
-        EXTRA_ARGS=""
-    else
-        echo "   ↳ Persistent (non-ephemeral) – using sudo pip with --break-system-packages."
-        PIP_CMD="sudo pip"
-        EXTRA_ARGS="--break-system-packages"
-    fi
-fi
-
-PACKAGE="git+https://github.com/vkdatta/bashbasicsbyvk.git"
-$PIP_CMD install -vvv --progress-bar on --upgrade --force-reinstall $EXTRA_ARGS "$PACKAGE"
+pip install -vvv --progress-bar on --upgrade --force-reinstall \
+git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
