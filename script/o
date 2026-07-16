@@ -11,6 +11,47 @@ source "bashbasicsbyvk_help.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ---------------------------------------------------------------------
+# In-place line repaint, without ever assuming a line's absolute screen
+# row. Absolute addressing (\033[row;colH counted from the top of the
+# viewport) only works while everything printed so far fits on screen.
+# Once a listing is taller than the terminal (very likely once the
+# on-screen keyboard is up), the terminal scrolls and "row 3" no longer
+# means "the 3rd line we printed" — it means whatever now occupies that
+# slot, which silently corrupts the display instead of erroring.
+#
+# Instead we always move RELATIVE to the cursor's current position,
+# which is reliably known: it's sitting on the input line. And before
+# touching anything, we ask the terminal (via a CPR / \033[6n query)
+# how many rows actually exist above the cursor right now. If the
+# target line is further away than that, it has scrolled out of view —
+# there is no on-screen row we could safely write to, so we skip it
+# rather than guess and overwrite the wrong content.
+# ---------------------------------------------------------------------
+
+# Queries the terminal for the cursor's row within the visible
+# viewport (Cursor Position Report). Sets global $_cur_row on success,
+# or clears it on failure/timeout/unsupported terminal so callers know
+# to treat "how much is visible" as unknown rather than assuming.
+_query_cursor_row() {
+  _cur_row=""
+  local resp
+  IFS='[;' read -rsd R -t 0.5 -p $'\033[6n' _ resp _ 2>/dev/null
+  [[ "$resp" =~ ^[0-9]+$ ]] && _cur_row="$resp"
+}
+
+# Rewrites the line $1 rows above the cursor's current position with
+# $2, but only if a prior _query_cursor_row confirmed that many rows
+# actually exist above the cursor on screen right now. Cursor is saved
+# and restored so the caller's (input-line) position is untouched.
+# Returns 1 (no-op) if the target isn't verifiably visible.
+_repaint_line_above() {
+  local dist="$1" content="$2"
+  [ -z "$_cur_row" ] && return 1
+  [ "$dist" -gt $(( _cur_row - 1 )) ] && return 1
+  printf '\033[s\033[%dA\r\033[2K%s\033[u' "$dist" "$content"
+}
+
 parse_selection() {
   local input="$1"
   local max="$2"
@@ -58,17 +99,22 @@ _multi_render() {
   _multi_print_input_line
 }
 
-# Row (1-indexed, absolute on screen) that item $1 occupies, given the
-# fixed layout painted by _multi_render: _menu_header prints 2 lines,
-# then items are printed one per line starting immediately after.
-_multi_item_row() {
-  echo $(( $1 + 2 ))
+# Lines between item $1 and the multi-select input line: every item
+# below it, plus the two fixed lines _multi_render always prints after
+# the item list (the prompt line and the up/down-hint line). Counted
+# from the input line upward, not from the top of the screen, so it
+# stays correct no matter how the terminal has scrolled.
+_multi_item_distance() {
+  echo $(( ${#items[@]} - $1 + 2 ))
 }
 
 # Repaints ONLY the item lines whose highlighted status actually
 # changed since the last sync — no clear, no header repaint, no
-# reprinting of unaffected items. Cursor is saved/restored around each
-# in-place line edit so the input line's cursor position is untouched.
+# reprinting of unaffected items — using relative cursor movement
+# verified against the live terminal (see _repaint_line_above above).
+# If a changed item has scrolled off-screen, it's simply skipped: nothing
+# was visibly wrong there to begin with. If the cursor row can't be
+# determined at all, we fall back to a full re-render just this once.
 _multi_sync() {
   local -A _old_set=()
   local k
@@ -84,13 +130,20 @@ _multi_sync() {
     [ -z "${_old_set[$k]+x}" ] && _changed["$k"]=1
   done
 
-  local idx row line
-  for idx in "${!_changed[@]}"; do
-    row=$(_multi_item_row "$idx")
-    line=$(_item_line_text "$idx")
-    [ -n "${_msel_set[$idx]+x}" ] && line="$(_highlight "$line")"
-    printf '\033[s\033[%d;1H\033[2K%s\033[u' "$row" "$line"
-  done
+  if [ "${#_changed[@]}" -gt 0 ]; then
+    _query_cursor_row
+    if [ -z "$_cur_row" ]; then
+      _multi_render
+      return
+    fi
+    local idx dist line
+    for idx in "${!_changed[@]}"; do
+      dist=$(_multi_item_distance "$idx")
+      line=$(_item_line_text "$idx")
+      [ -n "${_msel_set[$idx]+x}" ] && line="$(_highlight "$line")"
+      _repaint_line_above "$dist" "$line"
+    done
+  fi
 
   _multi_print_input_line
 }
@@ -656,7 +709,7 @@ _menu_footer_lines() {
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade"
+  echo "-h) Help   -u) Upgrade cv 0.4"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
@@ -696,32 +749,44 @@ _print_input_line() {
   [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
 }
 
-# Row (1-indexed, absolute on screen) that item $1 occupies in the
-# flat single-select menu. _menu_header prints 2 lines, followed by an
-# optional group-view line, then items start immediately after.
-_single_item_row() {
-  local base=2
-  $_has_group_view && base=$(( base + 1 ))
-  echo $(( $1 + base ))
+# Lines between item $1 and the "Select: ..." input line: every item
+# below it, plus however many lines the footer currently renders (it
+# varies with menu state — group filter active, threshold warning,
+# etc.). Deriving this from the real _menu_footer_lines output, rather
+# than hand-duplicating its conditionals, keeps it correct automatically
+# if the footer ever changes. Counted from the input line upward, so it
+# stays correct regardless of scrolling or terminal height.
+_item_distance_from_input() {
+  local footer_n
+  footer_n=$(_menu_footer_lines | wc -l)
+  echo $(( ${#items[@]} - $1 + footer_n ))
 }
 
 # Repaints ONLY the (up to) two item lines whose highlighted status
 # actually changed — previous highlight back to plain, new index to
-# highlighted — using cursor save/restore. No clear, no header/footer
-# repaint, no reprinting of unaffected items, so there's no full-screen
-# flash on every keystroke or arrow press.
+# highlighted — using relative cursor movement verified against the
+# live terminal (see _repaint_line_above above). No clear, no
+# header/footer repaint, no reprinting of unaffected items. If a target
+# line has scrolled off-screen, or the cursor row can't be determined
+# at all, we fall back to one full re-render rather than write to a
+# guessed, potentially wrong, row.
 _update_highlight() {
   local old="$1" new="$2"
-  local row line
+  _query_cursor_row
+  if [ -z "$_cur_row" ]; then
+    _redraw_menu_full
+    return
+  fi
+  local dist line
   if [ "$old" -ge 1 ] && [ "$old" -le "${#items[@]}" ] && [ "$old" -ne "$new" ]; then
-    row=$(_single_item_row "$old")
+    dist=$(_item_distance_from_input "$old")
     line=$(_item_line_text "$old")
-    printf '\033[s\033[%d;1H\033[2K%s\033[u' "$row" "$line"
+    _repaint_line_above "$dist" "$line"
   fi
   if [ "$new" -ge 1 ] && [ "$new" -le "${#items[@]}" ]; then
-    row=$(_single_item_row "$new")
+    dist=$(_item_distance_from_input "$new")
     line="$(_highlight "$(_item_line_text "$new")")"
-    printf '\033[s\033[%d;1H\033[2K%s\033[u' "$row" "$line"
+    _repaint_line_above "$dist" "$line"
   fi
 }
 
