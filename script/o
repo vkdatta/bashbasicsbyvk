@@ -20,35 +20,47 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # means "the 3rd line we printed" — it means whatever now occupies that
 # slot, which silently corrupts the display instead of erroring.
 #
-# Instead we always move RELATIVE to the cursor's current position,
-# which is reliably known: it's sitting on the input line. And before
-# touching anything, we ask the terminal (via a CPR / \033[6n query)
-# how many rows actually exist above the cursor right now. If the
-# target line is further away than that, it has scrolled out of view —
-# there is no on-screen row we could safely write to, so we skip it
-# rather than guess and overwrite the wrong content.
+# We do NOT ask the terminal where the cursor is (a CPR / \033[6n round
+# trip). Some terminal front-ends never answer that query, which means
+# every call blocks for its full timeout before giving up — that alone
+# is enough to make typing feel multiple seconds slower. Instead we
+# compute visibility ourselves, locally and instantly: we always know
+# exactly how many lines we printed for the current render, and
+# `tput lines` reports the terminal height via a local ioctl, no
+# terminal round-trip involved. Terminals keep the most-recently-
+# printed line on screen, scrolling older lines off the top once
+# content overflows — so from those two numbers we know precisely
+# which item rows are currently visible, deterministically.
 # ---------------------------------------------------------------------
 
-# Queries the terminal for the cursor's row within the visible
-# viewport (Cursor Position Report). Sets global $_cur_row on success,
-# or clears it on failure/timeout/unsupported terminal so callers know
-# to treat "how much is visible" as unknown rather than assuming.
-_query_cursor_row() {
-  _cur_row=""
-  local resp
-  IFS='[;' read -rsd R -t 0.5 -p $'\033[6n' _ resp _ 2>/dev/null
-  [[ "$resp" =~ ^[0-9]+$ ]] && _cur_row="$resp"
+# Current terminal height. Re-read each time (cheap, local) so it
+# stays correct as the on-screen keyboard opens/closes and resizes the
+# viewport mid-session.
+_term_rows() {
+  local rows
+  rows=$(tput lines 2>/dev/null)
+  [[ "$rows" =~ ^[0-9]+$ ]] || rows=24
+  echo "$rows"
 }
 
-# Rewrites the line $1 rows above the cursor's current position with
-# $2, but only if a prior _query_cursor_row confirmed that many rows
-# actually exist above the cursor on screen right now. Cursor is saved
-# and restored so the caller's (input-line) position is untouched.
-# Returns 1 (no-op) if the target isn't verifiably visible.
+# Given the total number of lines printed for the current render (up
+# to and including the input line), sets global $_available_above to
+# how many of those lines are currently visible above the input line.
+_set_available_above() {
+  local total_lines="$1" rows cur_row
+  rows=$(_term_rows)
+  cur_row=$(( total_lines < rows ? total_lines : rows ))
+  _available_above=$(( cur_row - 1 ))
+}
+
+# Rewrites the line $1 rows above the input line with $2 — but only if
+# _set_available_above already confirmed that many rows are actually
+# visible on screen right now. Cursor is saved/restored so the
+# caller's (input-line) position is untouched. No-ops (returns 1)
+# rather than guessing when the target has scrolled out of view.
 _repaint_line_above() {
   local dist="$1" content="$2"
-  [ -z "$_cur_row" ] && return 1
-  [ "$dist" -gt $(( _cur_row - 1 )) ] && return 1
+  [ "$dist" -gt "$_available_above" ] && return 1
   printf '\033[s\033[%dA\r\033[2K%s\033[u' "$dist" "$content"
 }
 
@@ -100,21 +112,28 @@ _multi_render() {
 }
 
 # Lines between item $1 and the multi-select input line: every item
-# below it, plus the two fixed lines _multi_render always prints after
-# the item list (the prompt line and the up/down-hint line). Counted
-# from the input line upward, not from the top of the screen, so it
-# stays correct no matter how the terminal has scrolled.
+# below it, plus the three fixed lines _multi_render always prints
+# after the item list (a blank line, the prompt line, and the
+# up/down-hint line). Counted from the input line upward, not from the
+# top of the screen, so it stays correct no matter how the terminal
+# has scrolled.
 _multi_item_distance() {
-  echo $(( ${#items[@]} - $1 + 2 ))
+  echo $(( ${#items[@]} - $1 + 3 ))
+}
+
+# Total lines printed for one multi-select render: header (2) + items
+# + the three fixed trailing lines + the input line itself.
+_multi_total_lines() {
+  echo $(( 2 + ${#items[@]} + 3 + 1 ))
 }
 
 # Repaints ONLY the item lines whose highlighted status actually
 # changed since the last sync — no clear, no header repaint, no
-# reprinting of unaffected items — using relative cursor movement
-# verified against the live terminal (see _repaint_line_above above).
-# If a changed item has scrolled off-screen, it's simply skipped: nothing
-# was visibly wrong there to begin with. If the cursor row can't be
-# determined at all, we fall back to a full re-render just this once.
+# reprinting of unaffected items — using relative cursor movement,
+# checked against the local, instant visibility computation (see
+# _set_available_above above; no terminal round-trip involved). A
+# changed item that has scrolled off-screen is simply skipped: nothing
+# was visibly wrong there to begin with.
 _multi_sync() {
   local -A _old_set=()
   local k
@@ -131,11 +150,7 @@ _multi_sync() {
   done
 
   if [ "${#_changed[@]}" -gt 0 ]; then
-    _query_cursor_row
-    if [ -z "$_cur_row" ]; then
-      _multi_render
-      return
-    fi
+    _set_available_above "$(_multi_total_lines)"
     local idx dist line
     for idx in "${!_changed[@]}"; do
       dist=$(_multi_item_distance "$idx")
@@ -750,41 +765,34 @@ _print_input_line() {
 }
 
 # Lines between item $1 and the "Select: ..." input line: every item
-# below it, plus however many lines the footer currently renders (it
-# varies with menu state — group filter active, threshold warning,
-# etc.). Deriving this from the real _menu_footer_lines output, rather
-# than hand-duplicating its conditionals, keeps it correct automatically
-# if the footer ever changes. Counted from the input line upward, so it
-# stays correct regardless of scrolling or terminal height.
+# below it, plus $2 (the current footer line count, passed in so it's
+# computed once per sync rather than once per item).
 _item_distance_from_input() {
-  local footer_n
-  footer_n=$(_menu_footer_lines | wc -l)
-  echo $(( ${#items[@]} - $1 + footer_n ))
+  echo $(( ${#items[@]} - $1 + $2 ))
 }
 
 # Repaints ONLY the (up to) two item lines whose highlighted status
 # actually changed — previous highlight back to plain, new index to
-# highlighted — using relative cursor movement verified against the
-# live terminal (see _repaint_line_above above). No clear, no
-# header/footer repaint, no reprinting of unaffected items. If a target
-# line has scrolled off-screen, or the cursor row can't be determined
-# at all, we fall back to one full re-render rather than write to a
-# guessed, potentially wrong, row.
+# highlighted — using relative cursor movement, checked against the
+# local, instant visibility computation (see _set_available_above
+# above; no terminal round-trip, no blocking). No clear, no
+# header/footer repaint, no reprinting of unaffected items. A target
+# line that has scrolled off-screen is simply skipped.
 _update_highlight() {
   local old="$1" new="$2"
-  _query_cursor_row
-  if [ -z "$_cur_row" ]; then
-    _redraw_menu_full
-    return
-  fi
-  local dist line
+  local footer_n base=2 total dist line
+  footer_n=$(_menu_footer_lines | wc -l)
+  $_has_group_view && base=$(( base + 1 ))
+  total=$(( base + ${#items[@]} + footer_n + 1 ))
+  _set_available_above "$total"
+
   if [ "$old" -ge 1 ] && [ "$old" -le "${#items[@]}" ] && [ "$old" -ne "$new" ]; then
-    dist=$(_item_distance_from_input "$old")
+    dist=$(_item_distance_from_input "$old" "$footer_n")
     line=$(_item_line_text "$old")
     _repaint_line_above "$dist" "$line"
   fi
   if [ "$new" -ge 1 ] && [ "$new" -le "${#items[@]}" ]; then
-    dist=$(_item_distance_from_input "$new")
+    dist=$(_item_distance_from_input "$new" "$footer_n")
     line="$(_highlight "$(_item_line_text "$new")")"
     _repaint_line_above "$dist" "$line"
   fi
