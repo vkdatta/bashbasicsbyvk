@@ -780,11 +780,11 @@ _item_distance_from_input() {
 # line that has scrolled off-screen is simply skipped.
 _update_highlight() {
   local old="$1" new="$2"
-  local footer_n base=2 total dist line
+  local footer_n base=2 _render_total dist line
   footer_n=$(_menu_footer_lines | wc -l)
   $_has_group_view && base=$(( base + 1 ))
-  total=$(( base + ${#items[@]} + footer_n + 1 ))
-  _set_available_above "$total"
+  _render_total=$(( base + ${#items[@]} + footer_n + 1 ))
+  _set_available_above "$_render_total"
 
   if [ "$old" -ge 1 ] && [ "$old" -le "${#items[@]}" ] && [ "$old" -ne "$new" ]; then
     dist=$(_item_distance_from_input "$old" "$footer_n")
