@@ -656,7 +656,7 @@ _menu_footer_lines() {
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade cv 0.4"
+  echo "-h) Help   -u) Upgrade"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
@@ -696,6 +696,35 @@ _print_input_line() {
   [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
 }
 
+# Row (1-indexed, absolute on screen) that item $1 occupies in the
+# flat single-select menu. _menu_header prints 2 lines, followed by an
+# optional group-view line, then items start immediately after.
+_single_item_row() {
+  local base=2
+  $_has_group_view && base=$(( base + 1 ))
+  echo $(( $1 + base ))
+}
+
+# Repaints ONLY the (up to) two item lines whose highlighted status
+# actually changed — previous highlight back to plain, new index to
+# highlighted — using cursor save/restore. No clear, no header/footer
+# repaint, no reprinting of unaffected items, so there's no full-screen
+# flash on every keystroke or arrow press.
+_update_highlight() {
+  local old="$1" new="$2"
+  local row line
+  if [ "$old" -ge 1 ] && [ "$old" -le "${#items[@]}" ] && [ "$old" -ne "$new" ]; then
+    row=$(_single_item_row "$old")
+    line=$(_item_line_text "$old")
+    printf '\033[s\033[%d;1H\033[2K%s\033[u' "$row" "$line"
+  fi
+  if [ "$new" -ge 1 ] && [ "$new" -le "${#items[@]}" ]; then
+    row=$(_single_item_row "$new")
+    line="$(_highlight "$(_item_line_text "$new")")"
+    printf '\033[s\033[%d;1H\033[2K%s\033[u' "$row" "$line"
+  fi
+}
+
 _sync_highlight_from_buf() {
   $_can_nav || return
   [[ "$_buf" =~ ^[0-9]+$ ]] || return
@@ -703,8 +732,9 @@ _sync_highlight_from_buf() {
   (( n < 1 )) && n=1
   (( n > ${#items[@]} )) && n=${#items[@]}
   if [ "$n" -ne "${_hl_index:-0}" ]; then
+    local old="${_hl_index:-0}"
     _hl_index=$n
-    _redraw_menu_full
+    _update_highlight "$old" "$_hl_index"
     _print_input_line
   fi
 }
@@ -733,6 +763,7 @@ _read_choice() {
       case "$seq" in
         '[A')  # Up
           if $_can_nav; then
+            local old="$_hl_index"
             if [ "$_hl_index" -lt 1 ]; then
               _hl_index="${#items[@]}"
             else
@@ -740,12 +771,13 @@ _read_choice() {
               [ "$_hl_index" -lt 1 ] && _hl_index="${#items[@]}"
             fi
             _buf="$_hl_index"; _pos=${#_buf}
-            _redraw_menu_full
+            _update_highlight "$old" "$_hl_index"
             _print_input_line
           fi
           ;;
         '[B')  # Down
           if $_can_nav; then
+            local old="$_hl_index"
             if [ "$_hl_index" -lt 1 ]; then
               _hl_index=1
             else
@@ -753,7 +785,7 @@ _read_choice() {
               [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index=1
             fi
             _buf="$_hl_index"; _pos=${#_buf}
-            _redraw_menu_full
+            _update_highlight "$old" "$_hl_index"
             _print_input_line
           fi
           ;;
