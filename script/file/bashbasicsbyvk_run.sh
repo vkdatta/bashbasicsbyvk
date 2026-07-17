@@ -2,11 +2,8 @@ _SP_LOGS_DIR="${HOME}/.bashbasicsbyvk/logs"
 _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffers"
 _SP_LOG_BUFFER_FILE="${_SP_BUFFER_DIR}/log-buffer"
 
-record_run_log() {
-    local file="$1"
-    local exit_code="$2"
-    local year month day datetimenow log_dir log_file
-
+_new_log_path() {
+    local year month day datetimenow log_dir
     year=$(date +%Y)
     month=$(date +%m)
     day=$(date +%d)
@@ -14,16 +11,13 @@ record_run_log() {
     mkdir -p "$log_dir" 2>/dev/null
 
     datetimenow=$(date +%Y%m%d_%H%M%S)
-    log_file="${log_dir}/${datetimenow}.txt"
+    echo "${log_dir}/${datetimenow}.txt"
+}
 
-    {
-        echo "File: $file"
-        echo "Run at: $(date)"
-        echo "Exit code: ${exit_code:-N/A}"
-    } > "$log_file"
+copy_to_clipboard() {
+    local content="$1"
 
-    mkdir -p "$_SP_BUFFER_DIR" 2>/dev/null
-    printf '%s\n' "$log_file" > "$_SP_LOG_BUFFER_FILE"
+    printf "%s" "$content" | bashbasicsbyvk_copy
 }
 
 print_log_action() {
@@ -47,15 +41,7 @@ print_log_action() {
 
     case "$print_choice" in
         1)
-            if command -v termux-clipboard-set >/dev/null 2>&1; then
-                termux-clipboard-set < "$log_file" && echo "✅ Log content copied to clipboard"
-            elif command -v xclip >/dev/null 2>&1; then
-                xclip -selection clipboard < "$log_file" && echo "✅ Log content copied to clipboard"
-            elif command -v pbcopy >/dev/null 2>&1; then
-                pbcopy < "$log_file" && echo "✅ Log content copied to clipboard"
-            else
-                echo "❌ No clipboard utility found (termux-clipboard-set/xclip/pbcopy)"
-            fi
+            copy_to_clipboard "$(cat "$log_file")" && echo "✅ Log content copied to clipboard"
             ;;
         2)
             local dest_dir="${path:-$(pwd)}"
@@ -86,7 +72,6 @@ handle_file() {
         echo "6) Replace With Clipboard Content"
         echo "7) Rename File" 
         echo "8) Share"
-        echo "p) Print (last run log)"
         echo "u) Back to Previous Menu"
         echo "q/h) Back to Home/Exit"
         read -p "Enter choice: " action
@@ -126,10 +111,6 @@ handle_file() {
                 ;;
             8)
                 force_share "$file"
-                return 1
-                ;;
-            p|P)
-                print_log_action
                 return 1
                 ;;
             u|U)
@@ -222,10 +203,25 @@ force_share() {
 
 run_file() {
     local file="$1"
-    _run_file_impl "$file"
-    local rc=$?
-    record_run_log "$file" "$rc"
-    return $rc
+    local log_file rc
+
+    log_file=$(_new_log_path)
+
+    {
+        echo "File: $file"
+        echo "Run at: $(date)"
+        echo "----- Output -----"
+    } > "$log_file"
+
+    _run_file_impl "$file" 2>&1 | tee -a "$log_file"
+    rc=${PIPESTATUS[0]}
+
+    echo "----- Exit code: $rc -----" >> "$log_file"
+
+    mkdir -p "$_SP_BUFFER_DIR" 2>/dev/null
+    printf '%s\n' "$log_file" > "$_SP_LOG_BUFFER_FILE"
+
+    return "$rc"
 }
 
 _run_file_impl() {
