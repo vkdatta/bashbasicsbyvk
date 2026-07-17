@@ -213,7 +213,13 @@ run_file() {
         echo "----- Output -----"
     } > "$log_file"
 
-    _run_file_impl "$file" 2>&1 | tee -a "$log_file"
+    export PYTHONUNBUFFERED=1
+
+    if command -v stdbuf >/dev/null 2>&1; then
+        stdbuf -oL -eL bash -c "$(declare -f _run_file_impl); _run_file_impl \"\$1\"" -- "$file" 2>&1 | tee -a "$log_file"
+    else
+        _run_file_impl "$file" 2>&1 | tee -a "$log_file"
+    fi
     rc=${PIPESTATUS[0]}
 
     echo "----- Exit code: $rc -----" >> "$log_file"
@@ -254,7 +260,7 @@ _run_file_impl() {
     ext="${file##*.}"
     case "$ext" in
         py)
-            if command -v python3 >/dev/null 2>&1; then python3 "$file"; elif command -v python >/dev/null 2>&1; then python "$file"; else echo "❌ python not found"; fi
+            if command -v python3 >/dev/null 2>&1; then python3 -u "$file"; elif command -v python >/dev/null 2>&1; then python -u "$file"; else echo "❌ python not found"; fi
             ;;
         pyc)
             echo "❌ Cannot run .pyc directly in Termux without proper interpreter setup"
