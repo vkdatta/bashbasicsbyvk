@@ -1,35 +1,10 @@
 _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 
-# ---------------------------------------------------------------------------
-# up- / ups- / do-  — cloud upload + import, shared between local CLI and
-# headless environments. Unlike copy (which prefers a local clipboard tool
-# and only falls back to the cloud when headless), upload has no local
-# equivalent — it always goes through the worker, so the same code path
-# runs identically whether there's a TTY/clipboard available or not.
-#
-# ZERO-KNOWLEDGE: everything is encrypted (AES-256-GCM) BEFORE it leaves this
-# machine. The key is generated locally and only ever appended to the link
-# as a URL fragment (#k=...) — fragments are never sent to any server by
-# design, so the worker / R2 bucket owner never sees the key, filenames, or
-# content. Requires 'node' on PATH (used for its native crypto + fetch).
-# ---------------------------------------------------------------------------
 WORKER_URL="https://fileapi.bashbasics.workers.dev"
 
-# 10GB is a SOFT limit — the worker will still accept larger uploads, but
-# interactively asks for confirmation at 1.2x the normal credit rate (see
-# _bb_authed_put below). _SP_HARD_LIMIT_BYTES is just a local sanity ceiling
-# to avoid packing something absurd before even talking to the network.
 _SP_SOFT_UPLOAD_BYTES=$((10*1024*1024*1024))
 _SP_HARD_LIMIT_BYTES=$((32*1024*1024*1024))
 
-# ---------------------------------------------------------------------------
-# AUTH: every /copy and /upload request is authenticated against
-# fileapi.bashbasics.{email,key}. Since that dotted form isn't a legal shell
-# identifier, it's kept in the environment as FILEAPI_BASHBASICS_EMAIL /
-# FILEAPI_BASHBASICS_KEY. If those aren't already exported, we prompt for
-# them live on the terminal (API key input hidden) and export them for the
-# rest of this shell session only.
-# ---------------------------------------------------------------------------
 _bb_get_credentials() {
   local email="${FILEAPI_BASHBASICS_EMAIL:-}"
   local apikey="${FILEAPI_BASHBASICS_KEY:-}"
@@ -57,8 +32,6 @@ _bb_get_credentials() {
   return 0
 }
 
-# Pulls a top-level field out of a small JSON error body without requiring
-# jq — 'node' is already a hard requirement for the encryption path below.
 _bb_json_get() {
   local json="$1" field="$2"
   node -e '
@@ -73,16 +46,23 @@ _bb_json_get() {
   ' "$field" <<< "$json"
 }
 
-# Authenticated PUT to the worker, transparently handling:
-#  - 401 (missing/invalid credentials): re-prompts and retries (up to 2x)
-#  - 409 (oversized-estimate confirmation, upload only): asks y/n, retries
-#    with X-Confirm-Oversized: yes if the user agrees
-# $1     = endpoint path, e.g. "/copy" or "/upload"
-# $2     = estimated size in bytes, or "" to omit X-Estimated-Size entirely
-# $3...  = remaining curl args, e.g. --data-binary @file, or -F ... -F ...
-# On success (HTTP 201) prints three lines to stdout: body(url), credits
-# deducted, new balance — and returns 0. On failure, prints the server's
-# error message to stderr and returns 1.
+_bb_fail_reason() {
+  local body="$1" http_status="$2"
+  local reason
+  reason=$(_bb_json_get "$body" message)
+  if [ -n "$reason" ]; then
+    printf '%s' "$reason"
+    return
+  fi
+  local trimmed
+  trimmed=$(printf '%s' "$body" | tr '\n\r' '  ' | sed 's/  */ /g; s/^ *//; s/ *$//')
+  if [ -n "$trimmed" ]; then
+    printf 'HTTP %s: %s' "$http_status" "${trimmed:0:300}"
+  else
+    printf 'Request failed (HTTP %s)' "$http_status"
+  fi
+}
+
 _bb_authed_put() {
   local endpoint="$1" est_size="$2"; shift 2
   local -a extra_args=("$@")
@@ -140,7 +120,7 @@ _bb_authed_put() {
       fi
     fi
 
-    echo "❌ ${msg:-Request failed (HTTP $http_status)}" >&2
+    echo "❌ $(_bb_fail_reason "$body" "$http_status")" >&2
     return 1
   done
 }
@@ -153,8 +133,6 @@ _crypto_check() {
   return 0
 }
 
-# Encrypts stdin -> stdout as [12-byte IV][ciphertext][16-byte GCM tag],
-# exactly matching the browser's WebCrypto AES-256-GCM decrypt format.
 _crypto_encrypt_stdin() {
   local keyb64url="$1"
   node -e '
@@ -173,8 +151,6 @@ _crypto_encrypt_stdin() {
   ' "$keyb64url"
 }
 
-# Decrypts stdin ([iv][ct][tag]) -> plaintext on stdout. Exits nonzero and
-# prints nothing on auth failure (wrong key / tampered / corrupted data).
 _crypto_decrypt_stdin() {
   local keyb64url="$1"
   node -e '
@@ -200,9 +176,6 @@ _crypto_decrypt_stdin() {
   ' "$keyb64url"
 }
 
-# Copies a generated link to the clipboard (best effort, via OSC52 — works
-# the same whether the terminal is local or headless/SSH'd into) and tries
-# to open it in a browser. Never blocks or fails the upload if these don't work.
 _announce_link() {
   local final_url="$1"
   local url_payload
@@ -222,14 +195,6 @@ _announce_link() {
   ( open "$final_url" || xdg-open "$final_url" || termux-open-url "$final_url" ) &> /dev/null &
 }
 
-# One Node invocation does it all: walks the given (relpath, abspath) file
-# list, encrypts each file with a fresh random IV under one freshly-generated
-# key, writes ciphertext blobs + an encrypted manifest tree to $outdir, and
-# prints ONLY the generated base64url key to stdout. The plaintext manifest
-# (names/paths/sizes) never touches disk unencrypted and never reaches the
-# server — only this local process ever sees it.
-#   $1 = output directory (already created) to write blob0, blob1, ..., manifest.enc
-#   $2 = path to a file with lines "relpath<TAB>abspath" (files only)
 _crypto_pack_upload() {
   local outdir="$1" listfile="$2"
   node -e '
@@ -287,10 +252,6 @@ _crypto_pack_upload() {
   ' "$outdir" "$listfile"
 }
 
-# Given a base link + key, fetches /manifest, decrypts it, then fetches and
-# decrypts every file inside, writing them out under $3 with the original
-# folder structure restored. Prints the imported file count to stdout;
-# per-file progress goes to stderr so it's visible without polluting $().
 _crypto_import_upload() {
   local link="$1" key="$2" dest="$3"
   node -e '
@@ -346,9 +307,6 @@ _crypto_import_upload() {
   ' "$link" "$key" "$dest"
 }
 
-# Walks selected paths (files and/or folders) into a flat "relpath<TAB>abspath"
-# list, hands it to _crypto_pack_upload for local encryption, then uploads
-# only ciphertext + the encrypted manifest to /upload.
 _up_do_multipart_upload() {
   local -a paths=("$@")
   _crypto_check || return 1
@@ -426,10 +384,6 @@ _up_do_multipart_upload() {
   [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
 }
 
-# up-1,3,7 / up-1-3,7  — upload the selected items (files AND/OR folders)
-# to the environment, preserving structure. Viewable/downloadable from any
-# browser as a tree, or reimportable elsewhere via do-. Fully encrypted —
-# see the header note above.
 handle_up_upload() {
   local raw="$1"
   local itemlist="${raw#up-}"
@@ -447,9 +401,6 @@ handle_up_upload() {
   _up_do_multipart_upload "${sp_resolved[@]}"
 }
 
-# ups-1,3,7 / ups-1-3,7  — upload the selected items merged into a SINGLE
-# encrypted text file. Files only; refuses immediately if any selected item
-# is a folder.
 handle_ups_upload() {
   local raw="$1"
   local itemlist="${raw#ups-}"
@@ -522,14 +473,6 @@ handle_ups_upload() {
   [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
 }
 
-# do-  — paste a link generated by up-/ups- (including its #k=... fragment)
-# and import its contents locally. Decryption happens entirely on this
-# machine. Works identically in a local CLI or a headless/piped shell:
-# interactive shells get a save-as/extract-to prompt, non-TTY stdout just
-# gets the decrypted text printed so it can be piped/captured. Links are
-# NOT deleted by importing/downloading/copying them — the server deletes
-# every link automatically ~30 minutes after it was created, regardless of
-# how many times (if any) it was consumed.
 handle_do_import() {
   _crypto_check || return 1
 
@@ -614,13 +557,10 @@ handle_do_import() {
   fi
 }
 
-
-# Persistent buffers (c--, m--, s--) — survive after d- applies them
 _SP_CP_FILE="${_SP_BUFFER_DIR}/copy.list"
 _SP_MV_FILE="${_SP_BUFFER_DIR}/move.list"
 _SP_SC_FILE="${_SP_BUFFER_DIR}/shortcut.list"
 
-# One-time buffers (c-, m-, s-) — cleared immediately after d- applies them
 _SP_CP_ONCE_FILE="${_SP_BUFFER_DIR}/copy.once.list"
 _SP_MV_ONCE_FILE="${_SP_BUFFER_DIR}/move.once.list"
 _SP_SC_ONCE_FILE="${_SP_BUFFER_DIR}/shortcut.once.list"
@@ -694,8 +634,6 @@ _sp_resolve_itemlist() {
   return 0
 }
 
-# Handles c-, m-, s- (one-time) AND c--, m--, s-- (persistent)
-# Longer/more-specific prefixes ("--") are matched first.
 handle_shortpath_stage() {
   local raw="$1"
   local prefix persistent label file itemlist
@@ -786,8 +724,6 @@ _sp_apply_buffer() {
   esac
 }
 
-# d- : apply every non-empty buffer (persistent + one-time) to the current $path.
-# Persistent buffers (--) are left intact. One-time buffers (-) are cleared right after applying.
 handle_shortpath_dispatch() {
   _sp_ensure_store
   local dest="$path"
@@ -809,12 +745,10 @@ handle_shortpath_dispatch() {
 
   echo "📦 Destination: $dest"
 
-  # Persistent buffers — applied, then left alone.
   [ ${#cp_list[@]} -gt 0 ] && _sp_apply_buffer cp "$_SP_CP_FILE" "$dest"
   [ ${#mv_list[@]} -gt 0 ] && _sp_apply_buffer mv "$_SP_MV_FILE" "$dest"
   [ ${#sc_list[@]} -gt 0 ] && _sp_apply_buffer sc "$_SP_SC_FILE" "$dest"
 
-  # One-time buffers — applied, then wiped immediately.
   if [ ${#cp_once[@]} -gt 0 ]; then
     _sp_apply_buffer cp "$_SP_CP_ONCE_FILE" "$dest"
     : > "$_SP_CP_ONCE_FILE"
@@ -831,7 +765,6 @@ handle_shortpath_dispatch() {
   echo "✅ Buffer apply complete. Persistent (--) buffers were kept. One-time (-) buffers were cleared."
 }
 
-# v- : view & manage all six buffers.
 _sp_view_one_buffer() {
   local label="$1" file="$2"
 

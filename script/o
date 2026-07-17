@@ -11,31 +11,6 @@ source "bashbasicsbyvk_help.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ---------------------------------------------------------------------
-# In-place line repaint, without ever assuming a line's absolute screen
-# row. Absolute addressing (\033[row;colH counted from the top of the
-# viewport) only works while everything printed so far fits on screen.
-# Once a listing is taller than the terminal (very likely once the
-# on-screen keyboard is up), the terminal scrolls and "row 3" no longer
-# means "the 3rd line we printed" — it means whatever now occupies that
-# slot, which silently corrupts the display instead of erroring.
-#
-# We do NOT ask the terminal where the cursor is (a CPR / \033[6n round
-# trip). Some terminal front-ends never answer that query, which means
-# every call blocks for its full timeout before giving up — that alone
-# is enough to make typing feel multiple seconds slower. Instead we
-# compute visibility ourselves, locally and instantly: we always know
-# exactly how many lines we printed for the current render, and
-# `tput lines` reports the terminal height via a local ioctl, no
-# terminal round-trip involved. Terminals keep the most-recently-
-# printed line on screen, scrolling older lines off the top once
-# content overflows — so from those two numbers we know precisely
-# which item rows are currently visible, deterministically.
-# ---------------------------------------------------------------------
-
-# Current terminal height. Re-read each time (cheap, local) so it
-# stays correct as the on-screen keyboard opens/closes and resizes the
-# viewport mid-session.
 _term_rows() {
   local rows
   rows=$(tput lines 2>/dev/null)
@@ -43,9 +18,6 @@ _term_rows() {
   echo "$rows"
 }
 
-# Given the total number of lines printed for the current render (up
-# to and including the input line), sets global $_available_above to
-# how many of those lines are currently visible above the input line.
 _set_available_above() {
   local total_lines="$1" rows cur_row
   rows=$(_term_rows)
@@ -53,11 +25,6 @@ _set_available_above() {
   _available_above=$(( cur_row - 1 ))
 }
 
-# Rewrites the line $1 rows above the input line with $2 — but only if
-# _set_available_above already confirmed that many rows are actually
-# visible on screen right now. Cursor is saved/restored so the
-# caller's (input-line) position is untouched. No-ops (returns 1)
-# rather than guessing when the target has scrolled out of view.
 _repaint_line_above() {
   local dist="$1" content="$2"
   [ "$dist" -gt "$_available_above" ] && return 1
@@ -111,30 +78,14 @@ _multi_render() {
   _multi_print_input_line
 }
 
-# Lines between item $1 and the multi-select input line: every item
-# below it, plus the three fixed lines _multi_render always prints
-# after the item list (a blank line, the prompt line, and the
-# up/down-hint line), plus 1 for the input line itself (the cursor
-# starts there, so it counts as one of the lines being moved past).
-# Counted from the input line upward, not from the top of the screen,
-# so it stays correct no matter how the terminal has scrolled.
 _multi_item_distance() {
   echo $(( ${#items[@]} - $1 + 3 + 1 ))
 }
 
-# Total lines printed for one multi-select render: header (2) + items
-# + the three fixed trailing lines + the input line itself.
 _multi_total_lines() {
   echo $(( 2 + ${#items[@]} + 3 + 1 ))
 }
 
-# Repaints ONLY the item lines whose highlighted status actually
-# changed since the last sync — no clear, no header repaint, no
-# reprinting of unaffected items — using relative cursor movement,
-# checked against the local, instant visibility computation (see
-# _set_available_above above; no terminal round-trip involved). A
-# changed item that has scrolled off-screen is simply skipped: nothing
-# was visibly wrong there to begin with.
 _multi_sync() {
   local -A _old_set=()
   local k
@@ -725,7 +676,7 @@ _menu_footer_lines() {
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "-h) Help   -u) Upgrade cv 0.4"
+  echo "-h) Help   -u) Upgrade"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
@@ -765,22 +716,10 @@ _print_input_line() {
   [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
 }
 
-# Lines between item $1 and the "Select: ..." input line: every item
-# below it, plus $2 (the current footer line count, passed in so it's
-# computed once per sync rather than once per item), plus 1 for the
-# input line itself (the cursor starts there, so it counts as one of
-# the lines being moved past).
 _item_distance_from_input() {
   echo $(( ${#items[@]} - $1 + $2 + 1 ))
 }
 
-# Repaints ONLY the (up to) two item lines whose highlighted status
-# actually changed — previous highlight back to plain, new index to
-# highlighted — using relative cursor movement, checked against the
-# local, instant visibility computation (see _set_available_above
-# above; no terminal round-trip, no blocking). No clear, no
-# header/footer repaint, no reprinting of unaffected items. A target
-# line that has scrolled off-screen is simply skipped.
 _update_highlight() {
   local old="$1" new="$2"
   local footer_n base=2 _render_total dist line

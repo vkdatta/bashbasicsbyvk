@@ -5,15 +5,6 @@ MAX_OSC52_BYTES=1024
 
 TEMP_MODE=false
 
-# ---------------------------------------------------------------------------
-# AUTH: the worker now authenticates every /copy and /upload request against
-# fileapi.bashbasics.{email,key}. Since that dotted form isn't a legal shell
-# identifier, it's kept in the environment as FILEAPI_BASHBASICS_EMAIL /
-# FILEAPI_BASHBASICS_KEY. If those aren't already exported, we prompt for
-# them live on the terminal (API key input is hidden) and export them for
-# the rest of this shell session — nothing is written to disk here; add the
-# export lines to your shell profile yourself if you want them to persist.
-# ---------------------------------------------------------------------------
 _bb_get_credentials() {
     local email="${FILEAPI_BASHBASICS_EMAIL:-}"
     local apikey="${FILEAPI_BASHBASICS_KEY:-}"
@@ -41,8 +32,6 @@ _bb_get_credentials() {
     return 0
 }
 
-# Pulls a top-level field out of a small JSON error body without requiring
-# jq — 'node' is already a hard requirement for the encryption path below.
 _bb_json_get() {
     local json="$1" field="$2"
     node -e '
@@ -55,6 +44,23 @@ _bb_json_get() {
             } catch (e) {}
         });
     ' "$field" <<< "$json"
+}
+
+_bb_fail_reason() {
+    local body="$1" http_status="$2"
+    local reason
+    reason=$(_bb_json_get "$body" message)
+    if [ -n "$reason" ]; then
+        printf '%s' "$reason"
+        return
+    fi
+    local trimmed
+    trimmed=$(printf '%s' "$body" | tr '\n\r' '  ' | sed 's/  */ /g; s/^ *//; s/ *$//')
+    if [ -n "$trimmed" ]; then
+        printf 'HTTP %s: %s' "$http_status" "${trimmed:0:300}"
+    else
+        printf 'Request failed (HTTP %s)' "$http_status"
+    fi
 }
 
 if [ -n "$1" ]; then
@@ -151,9 +157,6 @@ else
 
     ENC_FILE=$(mktemp)
 
-    # [12-byte IV][ciphertext][16-byte GCM tag] — same format the browser
-    # viewer and do- expect, so it can decrypt using only the key in the URL
-    # fragment below. The server never sees KEY or the plaintext.
     node -e '
         const fs = require("fs"), crypto = require("crypto");
         const key = Buffer.from(process.argv[2].replace(/-/g,"+").replace(/_/g,"/"), "base64");
@@ -208,8 +211,7 @@ else
             continue
         fi
 
-        MSG=$(_bb_json_get "$BODY" message)
-        echo "❌ Error: Cloud push failed (HTTP $HTTP_STATUS). ${MSG}"
+        echo "❌ Error: $(_bb_fail_reason "$BODY" "$HTTP_STATUS")"
         rm -f "$ENC_FILE"
         [ "$TEMP_MODE" = true ] && rm -f "$FILE"
         exit 1
