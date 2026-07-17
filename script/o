@@ -680,6 +680,7 @@ _menu_footer_lines() {
   echo "u) Up   cd) Change directory   t) Transfer"
   echo "d) Delete   c) Create   f) Find    r) Rename"
   echo "q/h) Quit/Home   s) Settings   x) Organise"
+  echo "p) Print (last run log)"
   echo "-h) Help   -u) Upgrade"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
@@ -965,6 +966,7 @@ case "$choice" in
     m)                      map_directory ;;
     kl)                     kill -9 -1 ;;
     i)                      infinity_stones_menu ;;
+    p)                      print_log_action ;;
     -u)                     bash _3bvk_upgrade_core ;;
     d-)                     handle_shortpath_dispatch ;;
     v-)                     handle_shortpath_view ;;

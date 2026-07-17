@@ -1,3 +1,76 @@
+_SP_LOGS_DIR="${HOME}/.bashbasicsbyvk/logs"
+_SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffers"
+_SP_LOG_BUFFER_FILE="${_SP_BUFFER_DIR}/log-buffer"
+
+record_run_log() {
+    local file="$1"
+    local exit_code="$2"
+    local year month day datetimenow log_dir log_file
+
+    year=$(date +%Y)
+    month=$(date +%m)
+    day=$(date +%d)
+    log_dir="${_SP_LOGS_DIR}/${year}/${month}/${day}"
+    mkdir -p "$log_dir" 2>/dev/null
+
+    datetimenow=$(date +%Y%m%d_%H%M%S)
+    log_file="${log_dir}/${datetimenow}.txt"
+
+    {
+        echo "File: $file"
+        echo "Run at: $(date)"
+        echo "Exit code: ${exit_code:-N/A}"
+    } > "$log_file"
+
+    mkdir -p "$_SP_BUFFER_DIR" 2>/dev/null
+    printf '%s\n' "$log_file" > "$_SP_LOG_BUFFER_FILE"
+}
+
+print_log_action() {
+    if [ ! -f "$_SP_LOG_BUFFER_FILE" ]; then
+        echo "❌ No log recorded yet. Run a file first."
+        return 1
+    fi
+
+    local log_file
+    log_file=$(head -n1 "$_SP_LOG_BUFFER_FILE")
+    if [ -z "$log_file" ] || [ ! -f "$log_file" ]; then
+        echo "❌ Log file not found: $log_file"
+        return 1
+    fi
+
+    echo
+    echo "🖨️  Print — $(basename "$log_file")"
+    echo "1) Copy log file to clipboard"
+    echo "2) Move log file to current path"
+    read -p "Enter choice: " print_choice
+
+    case "$print_choice" in
+        1)
+            if command -v termux-clipboard-set >/dev/null 2>&1; then
+                termux-clipboard-set < "$log_file" && echo "✅ Log content copied to clipboard"
+            elif command -v xclip >/dev/null 2>&1; then
+                xclip -selection clipboard < "$log_file" && echo "✅ Log content copied to clipboard"
+            elif command -v pbcopy >/dev/null 2>&1; then
+                pbcopy < "$log_file" && echo "✅ Log content copied to clipboard"
+            else
+                echo "❌ No clipboard utility found (termux-clipboard-set/xclip/pbcopy)"
+            fi
+            ;;
+        2)
+            local dest_dir="${path:-$(pwd)}"
+            local dest="${dest_dir}/$(basename "$log_file")"
+            mv -- "$log_file" "$dest" && {
+                echo "✅ Log file moved to: $dest"
+                printf '%s\n' "$dest" > "$_SP_LOG_BUFFER_FILE"
+            }
+            ;;
+        *)
+            echo "❌ Invalid choice"
+            ;;
+    esac
+}
+
 handle_file() {
     local file="$1"
     while true; do
@@ -13,6 +86,7 @@ handle_file() {
         echo "6) Replace With Clipboard Content"
         echo "7) Rename File" 
         echo "8) Share"
+        echo "p) Print (last run log)"
         echo "u) Back to Previous Menu"
         echo "q/h) Back to Home/Exit"
         read -p "Enter choice: " action
@@ -52,6 +126,10 @@ handle_file() {
                 ;;
             8)
                 force_share "$file"
+                return 1
+                ;;
+            p|P)
+                print_log_action
                 return 1
                 ;;
             u|U)
@@ -143,6 +221,14 @@ force_share() {
 
 
 run_file() {
+    local file="$1"
+    _run_file_impl "$file"
+    local rc=$?
+    record_run_log "$file" "$rc"
+    return $rc
+}
+
+_run_file_impl() {
     local file="$1"
     if [ ! -e "$file" ]; then
         echo "❌ File not found: $file"
