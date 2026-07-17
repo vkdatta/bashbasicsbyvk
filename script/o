@@ -550,18 +550,22 @@ infinity_stones_menu() {
   echo
   echo "💎 Infinity Stones"
   echo "1) Extract Tables and Links from Web"
-  echo "2) Generate SQL"
-  echo "3) JavaScript Audit"
+  echo "2) JavaScript Audit"
+  echo "3) Python Audit"
   echo "4) Git Push"
-  echo "0) Back"
+  echo "5) Generate SQL"
+  echo "q) Exit"
+
   read -p "Choice: " is_choice
+
   case "$is_choice" in
-    1) python "$SCRIPT_DIR/_3bvk_xtract_core" "$path";;
-    2) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path";;
-    3) python "$SCRIPT_DIR/_3bvk_js_audit_core" "$path" ;;
-    4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path";;
-    0|"") return ;;
-    *) echo "⚠️  Invalid choice" ;;
+    1) python "$SCRIPT_DIR/_3bvk_xtract_core" "$path" ;;
+    2) python "$SCRIPT_DIR/_3bvk_js_audit_core" "$path" ;;
+    3) bash "$SCRIPT_DIR/_3bvk_py_audit_core" "$path" ;;
+    4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path" ;;
+    5) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path" ;;
+    q|"") return ;;
+    *) echo "⚠️  Invalid choice"; return ;;
   esac
 }
 

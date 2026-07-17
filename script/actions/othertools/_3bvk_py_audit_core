@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+echo "This script uses the external packages 'pyright' and 'openpyxl'."
+read -r -p "Do you want to proceed? (Y/N): " REPLY
+
+case "$REPLY" in
+    [Yy]) ;;
+    *)
+        echo "Cancelled."
+        exit 0
+        ;;
+esac
+
+command -v python3 >/dev/null 2>&1 || {
+    echo "❌ python3 not found."
+    exit 1
+}
+
+TARGET="${1:-$(pwd)}"
+
+cd "$TARGET" || {
+    echo "❌ Cannot cd to $TARGET"
+    exit 1
+}
+
+echo "Working directory: $TARGET"
+
+pip_install() {
+    python3 -m pip install --break-system-packages "$@"
+}
+
+if ! command -v pyright >/dev/null 2>&1; then
+    echo "📦 Installing pyright..."
+    pip_install pyright
+fi
+
+python3 - <<'PY'
+import importlib.util
+import subprocess
+import sys
+
+if importlib.util.find_spec("openpyxl") is None:
+    print("Installing openpyxl...")
+    subprocess.check_call([
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--break-system-packages",
+        "openpyxl",
+    ])
+PY
+
+TMP_JSON="$(mktemp)"
+trap 'rm -f "$TMP_JSON"' EXIT
+
+echo "▶ Running Pyright..."
+
+set +e
+pyright --outputjson > "$TMP_JSON"
+PYRIGHT_EXIT=$?
+set -e
+
+echo "📊 Generating Excel report..."
+
+python3 - "$TMP_JSON" "$TARGET" <<'PY'
+import json
+import os
+import sys
+from collections import Counter
+
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+
+json_file = sys.argv[1]
+target = sys.argv[2]
+
+with open(json_file, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+diagnostics = data.get("generalDiagnostics", [])
+
+wb = Workbook()
+
+ws = wb.active
+ws.title = "Errors"
+
+headers = [
+    "Error Type",
+    "File",
+    "Line",
+    "Column",
+    "Severity",
+    "Message",
+]
+
+header_fill = PatternFill(fill_type="solid", start_color="D9EAD3")
+
+for col, header in enumerate(headers, start=1):
+    cell = ws.cell(row=1, column=col)
+    cell.value = header
+    cell.font = Font(bold=True)
+    cell.fill = header_fill
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+counter = Counter()
+
+for row, diag in enumerate(diagnostics, start=2):
+    rule = diag.get("rule") or "(no rule)"
+    counter[rule] += 1
+
+    file_path = diag.get("file", "")
+
+    try:
+        file_path = os.path.relpath(file_path, target)
+    except Exception:
+        pass
+
+    start = diag.get("range", {}).get("start", {})
+
+    ws.cell(row=row, column=1).value = rule
+    ws.cell(row=row, column=2).value = file_path
+    ws.cell(row=row, column=3).value = start.get("line", 0) + 1
+    ws.cell(row=row, column=4).value = start.get("character", 0) + 1
+    ws.cell(row=row, column=5).value = diag.get("severity", "")
+    ws.cell(row=row, column=6).value = diag.get("message", "")
+
+for row in ws.iter_rows(min_row=2):
+    for cell in row:
+        cell.alignment = Alignment(vertical="top")
+    row[5].alignment = Alignment(wrap_text=True, vertical="top")
+
+ws.freeze_panes = "A2"
+ws.auto_filter.ref = ws.dimensions
+
+for column in ws.columns:
+    max_len = max(
+        len(str(cell.value)) if cell.value is not None else 0
+        for cell in column
+    )
+
+    letter = get_column_letter(column[0].column)
+
+    if letter == "F":
+        ws.column_dimensions[letter].width = 80
+    else:
+        ws.column_dimensions[letter].width = min(max_len + 3, 50)
+
+summary = wb.create_sheet("Summary")
+
+summary["A1"] = "Metric"
+summary["B1"] = "Count"
+
+summary["A1"].font = Font(bold=True)
+summary["B1"].font = Font(bold=True)
+summary["A1"].fill = header_fill
+summary["B1"].fill = header_fill
+
+summary["A2"] = "Total Diagnostics"
+summary["B2"] = len(diagnostics)
+
+row = 4
+
+for rule, count in sorted(counter.items()):
+    summary.cell(row=row, column=1).value = rule
+    summary.cell(row=row, column=2).value = count
+    row += 1
+
+summary.freeze_panes = "A2"
+
+for column in summary.columns:
+    max_len = max(
+        len(str(cell.value)) if cell.value is not None else 0
+        for cell in column
+    )
+    summary.column_dimensions[get_column_letter(column[0].column)].width = max_len + 5
+
+output = os.path.join(target, "Python Report.xlsx")
+wb.save(output)
+
+print()
+print(f"Excel report written to:")
+print(output)
+print(f"Total diagnostics: {len(diagnostics)}")
+PY
+
+echo
+echo "=============================="
+echo "Pyright exit code : $PYRIGHT_EXIT"
+echo "Excel report      : $TARGET/Python Report.xlsx"
+echo "=============================="
+
+exit "$PYRIGHT_EXIT"
