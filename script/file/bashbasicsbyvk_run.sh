@@ -1,3 +1,62 @@
+_SP_LOGS_DIR="${HOME}/.bashbasicsbyvk/logs"
+_SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffers"
+_SP_LOG_BUFFER_FILE="${_SP_BUFFER_DIR}/log-buffer"
+
+_new_log_path() {
+    local year month day datetimenow log_dir
+    year=$(date +%Y)
+    month=$(date +%m)
+    day=$(date +%d)
+    log_dir="${_SP_LOGS_DIR}/${year}/${month}/${day}"
+    mkdir -p "$log_dir" 2>/dev/null
+
+    datetimenow=$(date +%Y%m%d_%H%M%S)
+    echo "${log_dir}/${datetimenow}.txt"
+}
+
+copy_to_clipboard() {
+    local content="$1"
+
+    printf "%s" "$content" | bashbasicsbyvk_copy
+}
+
+print_log_action() {
+    if [ ! -f "$_SP_LOG_BUFFER_FILE" ]; then
+        echo "❌ No log recorded yet. Run a file first."
+        return 1
+    fi
+
+    local log_file
+    log_file=$(head -n1 "$_SP_LOG_BUFFER_FILE")
+    if [ -z "$log_file" ] || [ ! -f "$log_file" ]; then
+        echo "❌ Log file not found: $log_file"
+        return 1
+    fi
+
+    echo
+    echo "🖨️  Print — $(basename "$log_file")"
+    echo "1) Copy log file to clipboard"
+    echo "2) Move log file to current path"
+    read -p "Enter choice: " print_choice
+
+    case "$print_choice" in
+        1)
+            copy_to_clipboard "$(cat "$log_file")" && echo "✅ Log content copied to clipboard"
+            ;;
+        2)
+            local dest_dir="${path:-$(pwd)}"
+            local dest="${dest_dir}/$(basename "$log_file")"
+            mv -- "$log_file" "$dest" && {
+                echo "✅ Log file moved to: $dest"
+                printf '%s\n' "$dest" > "$_SP_LOG_BUFFER_FILE"
+            }
+            ;;
+        *)
+            echo "❌ Invalid choice"
+            ;;
+    esac
+}
+
 handle_file() {
     local file="$1"
     while true; do
@@ -144,6 +203,49 @@ force_share() {
 
 run_file() {
     local file="$1"
+    local log_file rc wrapper
+
+    log_file=$(_new_log_path)
+
+    {
+        echo "File: $file"
+        echo "Run at: $(date)"
+        echo "----- Output -----"
+    } > "$log_file"
+
+    wrapper=$(mktemp)
+    {
+        echo "#!/usr/bin/env bash"
+        declare -f _run_file_impl
+        printf '_run_file_impl %q\n' "$file"
+    } > "$wrapper"
+    chmod +x "$wrapper"
+
+    if command -v script >/dev/null 2>&1; then
+        if script --help 2>&1 | grep -q -- '--return'; then
+            script -q -a -e "$log_file" -c "bash '$wrapper'" >/dev/null 2>&1
+            rc=$?
+        else
+            script -q -a "$log_file" -c "bash '$wrapper'" >/dev/null 2>&1
+            rc=$?
+        fi
+        sed -i '/^Script started on /d; /^Script done on /d' "$log_file" 2>/dev/null
+    else
+        bash "$wrapper" 2>&1 | tee -a "$log_file"
+        rc=${PIPESTATUS[0]}
+    fi
+    rm -f "$wrapper"
+
+    echo "----- Exit code: $rc -----" >> "$log_file"
+
+    mkdir -p "$_SP_BUFFER_DIR" 2>/dev/null
+    printf '%s\n' "$log_file" > "$_SP_LOG_BUFFER_FILE"
+
+    return "$rc"
+}
+
+_run_file_impl() {
+    local file="$1"
     if [ ! -e "$file" ]; then
         echo "❌ File not found: $file"
         return 1
@@ -172,7 +274,7 @@ run_file() {
     ext="${file##*.}"
     case "$ext" in
         py)
-            if command -v python3 >/dev/null 2>&1; then python3 "$file"; elif command -v python >/dev/null 2>&1; then python "$file"; else echo "❌ python not found"; fi
+            if command -v python3 >/dev/null 2>&1; then python3 -u "$file"; elif command -v python >/dev/null 2>&1; then python -u "$file"; else echo "❌ python not found"; fi
             ;;
         pyc)
             echo "❌ Cannot run .pyc directly in Termux without proper interpreter setup"
