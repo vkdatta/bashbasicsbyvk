@@ -201,6 +201,65 @@ force_share() {
 
 
 
+_SP_BIN_DIR="${HOME}/.bashbasicsbyvk/bin"
+_SP_PTY_TEE="${_SP_BIN_DIR}/pty_tee.py"
+
+_ensure_pty_tee() {
+    mkdir -p "$_SP_BIN_DIR" 2>/dev/null
+    if [ -f "$_SP_PTY_TEE" ]; then
+        return 0
+    fi
+    cat > "$_SP_PTY_TEE" << 'PYEOF'
+#!/usr/bin/env python3
+"""Run a command inside a real pty, forwarding output live to our stdout
+while also teeing raw bytes to a log file. Needed because libraries like
+rich/curses check isatty() and behave differently (or not at all) on a
+plain pipe. Usage: pty_tee.py <log_file> <cmd> [args...]"""
+import os
+import pty
+import sys
+
+
+def main():
+    if len(sys.argv) < 3:
+        sys.stderr.write("usage: pty_tee.py <log_file> <cmd> [args...]\n")
+        sys.exit(2)
+
+    log_path = sys.argv[1]
+    cmd = sys.argv[2:]
+    log_fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+
+    def master_read(fd):
+        data = os.read(fd, 4096)
+        if data:
+            try:
+                os.write(log_fd, data)
+            except OSError:
+                pass
+        return data
+
+    try:
+        status = pty.spawn(cmd, master_read)
+    finally:
+        os.close(log_fd)
+
+    if os.WIFEXITED(status):
+        code = os.WEXITSTATUS(status)
+    elif os.WIFSIGNALED(status):
+        code = 128 + os.WTERMSIG(status)
+    elif 0 <= status <= 255:
+        code = status
+    else:
+        code = 1
+
+    sys.exit(code)
+
+
+if __name__ == "__main__":
+    main()
+PYEOF
+}
+
 run_file() {
     local file="$1"
     local log_file rc
@@ -215,12 +274,17 @@ run_file() {
 
     export PYTHONUNBUFFERED=1
 
-    if command -v stdbuf >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1; then
+        _ensure_pty_tee
+        python3 "$_SP_PTY_TEE" "$log_file" bash -c "$(declare -f _run_file_impl); _run_file_impl \"\$1\"" -- "$file"
+        rc=$?
+    elif command -v stdbuf >/dev/null 2>&1; then
         stdbuf -oL -eL bash -c "$(declare -f _run_file_impl); _run_file_impl \"\$1\"" -- "$file" 2>&1 | tee -a "$log_file"
+        rc=${PIPESTATUS[0]}
     else
         _run_file_impl "$file" 2>&1 | tee -a "$log_file"
+        rc=${PIPESTATUS[0]}
     fi
-    rc=${PIPESTATUS[0]}
 
     echo "----- Exit code: $rc -----" >> "$log_file"
 
