@@ -260,9 +260,20 @@ if __name__ == "__main__":
 PYEOF
 }
 
+_is_tui_script() {
+    local file="$1"
+    grep -qE '^\s*(import|from)\s+(rich|curses|textual|urwid|blessed|npyscreen|asciimatics)\b' "$file" 2>/dev/null
+}
+
 run_file() {
     local file="$1"
     local log_file rc
+
+    if _is_tui_script "$file"; then
+        echo "⚠️  TUI/live-rendering script detected — running without log capture."
+        _run_file_impl "$file"
+        return $?
+    fi
 
     log_file=$(_new_log_path)
 
