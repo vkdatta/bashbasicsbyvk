@@ -1,62 +1,3 @@
-_SP_LOGS_DIR="${HOME}/.bashbasicsbyvk/logs"
-_SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffers"
-_SP_LOG_BUFFER_FILE="${_SP_BUFFER_DIR}/log-buffer"
-
-_new_log_path() {
-    local year month day datetimenow log_dir
-    year=$(date +%Y)
-    month=$(date +%m)
-    day=$(date +%d)
-    log_dir="${_SP_LOGS_DIR}/${year}/${month}/${day}"
-    mkdir -p "$log_dir" 2>/dev/null
-
-    datetimenow=$(date +%Y%m%d_%H%M%S)
-    echo "${log_dir}/${datetimenow}.txt"
-}
-
-copy_to_clipboard() {
-    local content="$1"
-
-    printf "%s" "$content" | bashbasicsbyvk_copy
-}
-
-print_log_action() {
-    if [ ! -f "$_SP_LOG_BUFFER_FILE" ]; then
-        echo "❌ No log recorded yet. Run a file first."
-        return 1
-    fi
-
-    local log_file
-    log_file=$(head -n1 "$_SP_LOG_BUFFER_FILE")
-    if [ -z "$log_file" ] || [ ! -f "$log_file" ]; then
-        echo "❌ Log file not found: $log_file"
-        return 1
-    fi
-
-    echo
-    echo "🖨️  Print — $(basename "$log_file")"
-    echo "1) Copy log file to clipboard"
-    echo "2) Move log file to current path"
-    read -p "Enter choice: " print_choice
-
-    case "$print_choice" in
-        1)
-            copy_to_clipboard "$(cat "$log_file")" && echo "✅ Log content copied to clipboard"
-            ;;
-        2)
-            local dest_dir="${path:-$(pwd)}"
-            local dest="${dest_dir}/$(basename "$log_file")"
-            mv -- "$log_file" "$dest" && {
-                echo "✅ Log file moved to: $dest"
-                printf '%s\n' "$dest" > "$_SP_LOG_BUFFER_FILE"
-            }
-            ;;
-        *)
-            echo "❌ Invalid choice"
-            ;;
-    esac
-}
-
 handle_file() {
     local file="$1"
     while true; do
@@ -201,111 +142,7 @@ force_share() {
 
 
 
-_SP_BIN_DIR="${HOME}/.bashbasicsbyvk/bin"
-_SP_PTY_TEE="${_SP_BIN_DIR}/pty_tee.py"
-
-_ensure_pty_tee() {
-    mkdir -p "$_SP_BIN_DIR" 2>/dev/null
-    if [ -f "$_SP_PTY_TEE" ]; then
-        return 0
-    fi
-    cat > "$_SP_PTY_TEE" << 'PYEOF'
-#!/usr/bin/env python3
-"""Run a command inside a real pty, forwarding output live to our stdout
-while also teeing raw bytes to a log file. Needed because libraries like
-rich/curses check isatty() and behave differently (or not at all) on a
-plain pipe. Usage: pty_tee.py <log_file> <cmd> [args...]"""
-import os
-import pty
-import sys
-
-
-def main():
-    if len(sys.argv) < 3:
-        sys.stderr.write("usage: pty_tee.py <log_file> <cmd> [args...]\n")
-        sys.exit(2)
-
-    log_path = sys.argv[1]
-    cmd = sys.argv[2:]
-    log_fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
-
-    def master_read(fd):
-        data = os.read(fd, 4096)
-        if data:
-            try:
-                os.write(log_fd, data)
-            except OSError:
-                pass
-        return data
-
-    try:
-        status = pty.spawn(cmd, master_read)
-    finally:
-        os.close(log_fd)
-
-    if os.WIFEXITED(status):
-        code = os.WEXITSTATUS(status)
-    elif os.WIFSIGNALED(status):
-        code = 128 + os.WTERMSIG(status)
-    elif 0 <= status <= 255:
-        code = status
-    else:
-        code = 1
-
-    sys.exit(code)
-
-
-if __name__ == "__main__":
-    main()
-PYEOF
-}
-
-_is_tui_script() {
-    local file="$1"
-    grep -qE '^\s*(import|from)\s+(rich|curses|textual|urwid|blessed|npyscreen|asciimatics)\b' "$file" 2>/dev/null
-}
-
 run_file() {
-    local file="$1"
-    local log_file rc
-
-    if _is_tui_script "$file"; then
-        echo "⚠️  TUI/live-rendering script detected — running without log capture."
-        _run_file_impl "$file"
-        return $?
-    fi
-
-    log_file=$(_new_log_path)
-
-    {
-        echo "File: $file"
-        echo "Run at: $(date)"
-        echo "----- Output -----"
-    } > "$log_file"
-
-    export PYTHONUNBUFFERED=1
-
-    if command -v python3 >/dev/null 2>&1; then
-        _ensure_pty_tee
-        python3 "$_SP_PTY_TEE" "$log_file" bash -c "$(declare -f _run_file_impl); _run_file_impl \"\$1\"" -- "$file"
-        rc=$?
-    elif command -v stdbuf >/dev/null 2>&1; then
-        stdbuf -oL -eL bash -c "$(declare -f _run_file_impl); _run_file_impl \"\$1\"" -- "$file" 2>&1 | tee -a "$log_file"
-        rc=${PIPESTATUS[0]}
-    else
-        _run_file_impl "$file" 2>&1 | tee -a "$log_file"
-        rc=${PIPESTATUS[0]}
-    fi
-
-    echo "----- Exit code: $rc -----" >> "$log_file"
-
-    mkdir -p "$_SP_BUFFER_DIR" 2>/dev/null
-    printf '%s\n' "$log_file" > "$_SP_LOG_BUFFER_FILE"
-
-    return "$rc"
-}
-
-_run_file_impl() {
     local file="$1"
     if [ ! -e "$file" ]; then
         echo "❌ File not found: $file"
@@ -335,7 +172,7 @@ _run_file_impl() {
     ext="${file##*.}"
     case "$ext" in
         py)
-            if command -v python3 >/dev/null 2>&1; then python3 -u "$file"; elif command -v python >/dev/null 2>&1; then python -u "$file"; else echo "❌ python not found"; fi
+            if command -v python3 >/dev/null 2>&1; then python3 "$file"; elif command -v python >/dev/null 2>&1; then python "$file"; else echo "❌ python not found"; fi
             ;;
         pyc)
             echo "❌ Cannot run .pyc directly in Termux without proper interpreter setup"
