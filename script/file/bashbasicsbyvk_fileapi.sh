@@ -218,14 +218,33 @@ _crypto_pack_upload() {
       return Buffer.concat([iv, ct, tag]);
     }
 
+    const COLS = 24, TTY = process.stderr.isTTY;
+    let lastPct = -1;
+    function bar(done, total, label) {
+      if (!TTY) return;
+      const pct = total > 0 ? Math.floor(done * 100 / total) : 100;
+      if (pct === lastPct && done < total) return;   // only redraw when % changes
+      lastPct = pct;
+      const filled = Math.floor(pct * COLS / 100);
+      const b = "\u2588".repeat(filled) + "\u2591".repeat(COLS - filled);
+      const color = done >= total ? "\u001b[32m" : "\u001b[36m";
+      process.stderr.write("\r\u001b[K" + color + "[" + b + "] " +
+        String(pct).padStart(3) + "%\u001b[0m  " + label + " " + done + "/" + total);
+      if (done >= total) process.stderr.write("\n");
+    }
+
     const entries = [];
+    let totalBytes = 0;
+    const totalFiles = lines.length;
     lines.forEach((line, idx) => {
       const tabIdx = line.indexOf("\t");
       const relpath = line.slice(0, tabIdx);
       const abspath = line.slice(tabIdx + 1);
       const data = fs.readFileSync(abspath);
+      totalBytes += data.length;
       fs.writeFileSync(path.join(outdir, "blob" + idx), encrypt(data));
       entries.push({ path: relpath, size: data.length, blobIndex: idx });
+      bar(idx + 1, totalFiles, "\uD83D\uDD10 Encrypting");
     });
 
     let idCounter = 0;
@@ -252,7 +271,7 @@ _crypto_pack_upload() {
     const manifest = { version: 1, fileCount: entries.length, tree: root };
     fs.writeFileSync(path.join(outdir, "manifest.enc"), encrypt(Buffer.from(JSON.stringify(manifest), "utf8")));
 
-    process.stdout.write(keyB64url);
+    process.stdout.write(keyB64url + "\n" + totalBytes);
   ' "$outdir" "$listfile"
 }
 
@@ -293,19 +312,37 @@ _crypto_import_upload() {
         }
       })(manifest.tree, "");
 
-      let ok = 0;
+      const COLS = 24, TTY = process.stderr.isTTY, TOTAL = files.length;
+      let lastPct = -1;
+      function bar(done) {
+        if (!TTY) return;
+        const pct = TOTAL > 0 ? Math.floor(done * 100 / TOTAL) : 100;
+        if (pct === lastPct && done < TOTAL) return;
+        lastPct = pct;
+        const filled = Math.floor(pct * COLS / 100);
+        const b = "\u2588".repeat(filled) + "\u2591".repeat(COLS - filled);
+        const color = done >= TOTAL ? "\u001b[32m" : "\u001b[36m";
+        process.stderr.write("\r\u001b[K" + color + "[" + b + "] " +
+          String(pct).padStart(3) + "%\u001b[0m  \uD83D\uDCE5 Downloading " + done + "/" + TOTAL);
+        if (done >= TOTAL) process.stderr.write("\n");
+      }
+
+      let ok = 0, done = 0, failed = 0;
       for (const f of files) {
+        done++;
         const fileRes = await fetch(link + "/file/" + f.blobIndex);
-        if (!fileRes.ok) { console.error("  \u2717 " + f.relpath + " (HTTP " + fileRes.status + ")"); continue; }
+        if (!fileRes.ok) { failed++; bar(done); continue; }
         let plain;
         try { plain = decrypt(Buffer.from(await fileRes.arrayBuffer())); }
-        catch (e) { console.error("  \u2717 " + f.relpath + " (decrypt failed)"); continue; }
+        catch (e) { failed++; bar(done); continue; }
         const outPath = path.join(dest, f.relpath);
         fs.mkdirSync(path.dirname(outPath), { recursive: true });
         fs.writeFileSync(outPath, plain);
-        console.error("  \u2713 " + f.relpath);
         ok++;
+        bar(done);
       }
+      if (TTY && TOTAL === 0) process.stderr.write("\n");
+      if (failed > 0) process.stderr.write("  \u26a0\ufe0f  " + failed + " file(s) failed to download.\n");
       console.log(ok);
     })();
   ' "$link" "$key" "$dest"
@@ -313,6 +350,32 @@ _crypto_import_upload() {
 
 _bb_stat_size() {
   stat -c%s "$1" 2>/dev/null || stat -f%z "$1" 2>/dev/null || echo 0
+}
+
+# ---- progress bar (same look as the gcloud-fast bar: [████░░░░] NN%  label X/N) ----
+_bb_bar_line() {
+  local done="$1" total="$2" label="$3"
+  local cols=24 pct filled empty bar i color
+  if [ "$total" -le 0 ]; then pct=100; else pct=$((done * 100 / total)); fi
+  [ "$pct" -gt 100 ] && pct=100
+  filled=$((pct * cols / 100)); empty=$((cols - filled))
+  bar=""
+  for ((i = 0; i < filled; i++)); do bar="${bar}█"; done
+  for ((i = 0; i < empty;  i++)); do bar="${bar}░"; done
+  if [ "$done" -ge "$total" ]; then color=$'\033[32m'; else color=$'\033[36m'; fi
+  printf '\r\033[K%s[%s] %3d%%\033[0m  %s %d/%d' "$color" "$bar" "$pct" "$label" "$done" "$total" >&2
+}
+
+# Watches a directory of per-item marker files and redraws the bar until done.
+# Meant to run in the background while parallel jobs each `touch` a marker.
+_bb_progress_watch() {
+  local markerdir="$1" total="$2" label="$3" done=0
+  while :; do
+    done=$(ls -1 "$markerdir" 2>/dev/null | wc -l | tr -d ' ')
+    _bb_bar_line "$done" "$total" "$label"
+    [ "$done" -ge "$total" ] && break
+    sleep 0.15
+  done
 }
 
 # Phase 1: authorize + credit precheck, get an upload id back. Echoes the id.
@@ -473,26 +536,27 @@ _up_do_multipart_upload() {
   local -a paths=("$@")
   _crypto_check || return 1
 
+  echo "🔎 Scanning selection..."
   local listfile; listfile=$(mktemp)
-  local total_size=0 p file base rel sz
-
-  for p in "${paths[@]}"; do
-    if [ -d "$p" ]; then
-      base=$(basename -- "$p")
-      while IFS= read -r -d '' file; do
-        rel="${file#$p/}"
-        printf '%s\t%s\n' "${base}/${rel}" "$file" >> "$listfile"
-        sz=$(_bb_stat_size "$file")
-        total_size=$((total_size + sz))
-      done < <(find "$p" -type f -print0)
-    elif [ -f "$p" ]; then
-      printf '%s\t%s\n' "$(basename -- "$p")" "$p" >> "$listfile"
-      sz=$(_bb_stat_size "$p")
-      total_size=$((total_size + sz))
-    else
-      echo "  ⚠️  Skipping missing item: $p"
-    fi
-  done
+  local p base file
+  # Build the file list WITHOUT forking a `stat` per file. For a 50k-file tree
+  # that per-file subprocess was why nothing printed for minutes. The whole
+  # loop redirects to the list once (one open, not one per line), and the exact
+  # byte total is computed by the encryption pass instead.
+  {
+    for p in "${paths[@]}"; do
+      if [ -d "$p" ]; then
+        base=$(basename -- "$p")
+        while IFS= read -r -d '' file; do
+          printf '%s\t%s\n' "${base}/${file#$p/}" "$file"
+        done < <(find "$p" -type f -print0)
+      elif [ -f "$p" ]; then
+        printf '%s\t%s\n' "$(basename -- "$p")" "$p"
+      else
+        echo "  ⚠️  Skipping missing item: $p" >&2
+      fi
+    done
+  } >> "$listfile"
 
   if [ ! -s "$listfile" ]; then
     echo "❌ No valid files found in selection"
@@ -500,28 +564,34 @@ _up_do_multipart_upload() {
     return 1
   fi
 
+  local file_count; file_count=$(wc -l < "$listfile" | tr -d ' ')
+  if [ "$file_count" -gt 2000 ]; then
+    echo "⏳ $file_count files — this is packed one blob per file, so it will take a while."
+  fi
+
+  local tmpdir; tmpdir=$(mktemp -d)
+  local packout; packout=$(_crypto_pack_upload "$tmpdir" "$listfile")
+  rm -f "$listfile"
+
+  local key total_size
+  key=$(printf '%s' "$packout" | sed -n '1p')
+  total_size=$(printf '%s' "$packout" | sed -n '2p')
+
+  if [ -z "$key" ] || [ -z "$total_size" ]; then
+    echo "❌ Local encryption failed"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+
   if [ "$total_size" -gt "$_SP_HARD_LIMIT_BYTES" ]; then
     echo "❌ Selection is $((total_size/1024/1024/1024))GB — exceeds the absolute upload ceiling"
-    rm -f "$listfile"
+    rm -rf "$tmpdir"
     return 1
   fi
   local oversized=0
   if [ "$total_size" -gt "$_SP_SOFT_UPLOAD_BYTES" ]; then
     oversized=1
     echo "ℹ️  Selection is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
-  fi
-
-  local file_count; file_count=$(wc -l < "$listfile" | tr -d ' ')
-  echo "🔐 Encrypting $file_count file entr(y/ies) locally (key never leaves this machine)..."
-
-  local tmpdir; tmpdir=$(mktemp -d)
-  local key; key=$(_crypto_pack_upload "$tmpdir" "$listfile")
-  rm -f "$listfile"
-
-  if [ -z "$key" ]; then
-    echo "❌ Local encryption failed"
-    rm -rf "$tmpdir"
-    return 1
   fi
 
   local nblobs=0
@@ -537,18 +607,42 @@ _up_do_multipart_upload() {
   fi
 
   # ---- Phase 2: parallel streaming blob uploads ----
-  echo "☁️  Uploading $nblobs encrypted file entr(y/ies) — up to $_BB_MAX_PAR in parallel..."
   local failflag; failflag=$(mktemp); : > "$failflag"
+  local markerdir; markerdir=$(mktemp -d)   # one marker file per finished blob
+
+  # Background progress bar (only when writing to a real terminal).
+  local watchpid=""
+  if [ -t 2 ]; then
+    _bb_progress_watch "$markerdir" "$nblobs" "☁️  Uploading" &
+    watchpid=$!
+  else
+    echo "☁️  Uploading $nblobs encrypted file entr(y/ies) — up to $_BB_MAX_PAR in parallel..."
+  fi
+
   local -a pids=()
   local i=0 running=0
   while [ "$i" -lt "$nblobs" ]; do
-    ( _bb_upload_one_blob "$id" "$i" "$tmpdir/blob$i" || echo 1 >> "$failflag" ) &
+    (
+      if _bb_upload_one_blob "$id" "$i" "$tmpdir/blob$i"; then
+        : > "$markerdir/$i"       # mark this blob done (race-free; unique filename)
+      else
+        echo 1 >> "$failflag"
+      fi
+    ) &
     pids+=($!)
     running=$((running + 1))
     if [ "$running" -ge "$_BB_MAX_PAR" ]; then wait "${pids[@]}"; pids=(); running=0; fi
     i=$((i + 1))
   done
   [ "${#pids[@]}" -gt 0 ] && wait "${pids[@]}"
+
+  # Stop the bar and finish its line.
+  if [ -n "$watchpid" ]; then
+    _bb_bar_line "$(ls -1 "$markerdir" | wc -l | tr -d ' ')" "$nblobs" "☁️  Uploading"
+    kill "$watchpid" 2>/dev/null; wait "$watchpid" 2>/dev/null
+    printf '\n' >&2
+  fi
+  rm -rf "$markerdir"
 
   if [ -s "$failflag" ]; then
     rm -f "$failflag"; rm -rf "$tmpdir"
