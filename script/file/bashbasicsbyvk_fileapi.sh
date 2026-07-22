@@ -282,6 +282,7 @@ _crypto_import_upload() {
     const link = process.argv[1];
     const key = Buffer.from(process.argv[2].replace(/-/g,"+").replace(/_/g,"/"), "base64");
     const dest = process.argv[3];
+    const CONC = Math.max(1, parseInt(process.argv[4], 10) || 16);
 
     function decrypt(buf) {
       const iv = buf.subarray(0, 12);
@@ -327,25 +328,33 @@ _crypto_import_upload() {
         if (done >= TOTAL) process.stderr.write("\n");
       }
 
-      let ok = 0, done = 0, failed = 0;
-      for (const f of files) {
-        done++;
-        const fileRes = await fetch(link + "/file/" + f.blobIndex);
-        if (!fileRes.ok) { failed++; bar(done); continue; }
-        let plain;
-        try { plain = decrypt(Buffer.from(await fileRes.arrayBuffer())); }
-        catch (e) { failed++; bar(done); continue; }
-        const outPath = path.join(dest, f.relpath);
-        fs.mkdirSync(path.dirname(outPath), { recursive: true });
-        fs.writeFileSync(outPath, plain);
-        ok++;
-        bar(done);
+      let ok = 0, done = 0, failed = 0, next = 0;
+      async function worker() {
+        while (true) {
+          const i = next++;
+          if (i >= files.length) return;
+          const f = files[i];
+          try {
+            const fileRes = await fetch(link + "/file/" + f.blobIndex);
+            if (!fileRes.ok) { failed++; done++; bar(done); continue; }
+            const plain = decrypt(Buffer.from(await fileRes.arrayBuffer()));
+            const outPath = path.join(dest, f.relpath);
+            fs.mkdirSync(path.dirname(outPath), { recursive: true });
+            fs.writeFileSync(outPath, plain);
+            ok++; done++; bar(done);
+          } catch (e) {
+            failed++; done++; bar(done);
+          }
+        }
       }
+      // Fetch + decrypt + write up to CONC files at once instead of one-by-one.
+      await Promise.all(Array.from({ length: Math.min(CONC, files.length || 1) }, worker));
+
       if (TTY && TOTAL === 0) process.stderr.write("\n");
       if (failed > 0) process.stderr.write("  \u26a0\ufe0f  " + failed + " file(s) failed to download.\n");
       console.log(ok);
     })();
-  ' "$link" "$key" "$dest"
+  ' "$link" "$key" "$dest" "$_BB_MAX_PAR"
 }
 
 _bb_stat_size() {
