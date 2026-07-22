@@ -3,6 +3,12 @@ WORKER_URL="https://fileapi.bashbasics.workers.dev"
 _SP_SOFT_UPLOAD_BYTES=$((10*1024*1024*1024))
 _SP_HARD_LIMIT_BYTES=$((32*1024*1024*1024))
 
+# Streaming-upload tuning. CHUNK_BYTES must match the worker's CHUNK_BYTES (90 MiB):
+# any blob at or below this goes up in one PUT, anything larger uses R2 multipart.
+# _BB_MAX_PAR is how many blobs/parts upload concurrently.
+_BB_CHUNK_BYTES=$((90*1024*1024))
+_BB_MAX_PAR="${FILEAPI_BASHBASICS_PARALLEL:-16}"
+
 _bb_get_credentials() {
   local email="${FILEAPI_BASHBASICS_EMAIL:-}"
   local apikey="${FILEAPI_BASHBASICS_KEY:-}"
@@ -305,6 +311,164 @@ _crypto_import_upload() {
   ' "$link" "$key" "$dest"
 }
 
+_bb_stat_size() {
+  stat -c%s "$1" 2>/dev/null || stat -f%z "$1" 2>/dev/null || echo 0
+}
+
+# Phase 1: authorize + credit precheck, get an upload id back. Echoes the id.
+_bb_upload_init() {
+  local est_size="$1"
+  _bb_get_credentials || return 1
+
+  local attempt=0 confirmed=false
+  while :; do
+    attempt=$((attempt + 1))
+    local -a hdrs=(
+      -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL"
+      -H "X-User-Key: $FILEAPI_BASHBASICS_KEY"
+      -H "X-Estimated-Size: $est_size"
+    )
+    $confirmed && hdrs+=(-H "X-Confirm-Oversized: yes")
+
+    local response http_status body
+    response=$(curl -s -w "\n%{http_code}" -H "Expect:" -X PUT "${hdrs[@]}" "$WORKER_URL/upload/init")
+    http_status=$(echo "$response" | tail -n 1)
+    body=$(echo "$response" | sed '$d')
+
+    if [ "$http_status" == "200" ]; then
+      _bb_json_get "$body" id
+      return 0
+    fi
+
+    local err_type msg
+    err_type=$(_bb_json_get "$body" error)
+    msg=$(_bb_json_get "$body" message)
+
+    if [ "$http_status" == "401" ] && [ "$attempt" -le 2 ]; then
+      echo "❌ ${msg:-Authentication failed.}" >&2
+      unset FILEAPI_BASHBASICS_EMAIL FILEAPI_BASHBASICS_KEY
+      echo "🔁 Please re-enter your credentials." >&2
+      _bb_get_credentials || return 1
+      continue
+    fi
+
+    if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
+      echo "⚠️  ${msg}" >&2
+      read -p "   Proceed at 1.2x credit cost? (y/n): " ans
+      if [[ "$ans" == "y" || "$ans" == "Y" ]]; then confirmed=true; continue; fi
+      echo "🚫 Cancelled." >&2
+      return 1
+    fi
+
+    echo "❌ $(_bb_fail_reason "$body" "$http_status")" >&2
+    return 1
+  done
+}
+
+# Phase 2: upload ONE encrypted blob. Small blobs go in a single PUT; anything
+# larger than the chunk size uses R2 multipart (parts uploaded in parallel).
+_bb_upload_one_blob() {
+  local id="$1" idx="$2" blob="$3"
+  local -a auth=(
+    -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL"
+    -H "X-User-Key: $FILEAPI_BASHBASICS_KEY"
+  )
+  local sz; sz=$(_bb_stat_size "$blob")
+
+  if [ "$sz" -le "$_BB_CHUNK_BYTES" ]; then
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" -H "Expect:" "${auth[@]}" \
+      -X PUT --data-binary "@$blob" "$WORKER_URL/upload/$id/blob/$idx")
+    [ "$code" == "201" ] || [ "$code" == "200" ] && return 0
+    echo "❌ blob $idx failed (HTTP $code)" >&2
+    return 1
+  fi
+
+  # ---- large blob: R2 multipart ----
+  local resp uploadId
+  resp=$(curl -s -H "Expect:" "${auth[@]}" -X POST "$WORKER_URL/upload/$id/blob/$idx/mpu")
+  uploadId=$(_bb_json_get "$resp" uploadId)
+  [ -z "$uploadId" ] && { echo "❌ blob $idx: could not start multipart upload" >&2; return 1; }
+
+  local partdir; partdir=$(mktemp -d)
+  split -b "$_BB_CHUNK_BYTES" "$blob" "$partdir/part."
+
+  local -a partfiles=()
+  local pf
+  while IFS= read -r pf; do partfiles+=("$pf"); done < <(ls "$partdir"/part.* 2>/dev/null | sort)
+
+  local partmeta; partmeta=$(mktemp)
+  local -a ppids=()
+  local pn=0 running=0
+  for pf in "${partfiles[@]}"; do
+    pn=$((pn + 1))
+    (
+      c=$(curl -s -w "\n%{http_code}" -H "Expect:" "${auth[@]}" \
+          -X PUT --data-binary "@$pf" "$WORKER_URL/upload/$id/blob/$idx/mpu/$uploadId/$pn")
+      st=$(echo "$c" | tail -n 1); bd=$(echo "$c" | sed '$d')
+      if [ "$st" == "200" ]; then
+        printf '%s\t%s\n' "$pn" "$(_bb_json_get "$bd" etag)" >> "$partmeta"
+      else
+        printf '%s\tFAILED\n' "$pn" >> "$partmeta"
+      fi
+    ) &
+    ppids+=($!)
+    running=$((running + 1))
+    if [ "$running" -ge "$_BB_MAX_PAR" ]; then wait "${ppids[@]}"; ppids=(); running=0; fi
+  done
+  [ "${#ppids[@]}" -gt 0 ] && wait "${ppids[@]}"
+  rm -rf "$partdir"
+
+  if grep -q 'FAILED' "$partmeta"; then
+    rm -f "$partmeta"; echo "❌ blob $idx: a part failed to upload" >&2; return 1
+  fi
+
+  local partsjson
+  partsjson=$(sort -n "$partmeta" | awk -F'\t' \
+    'BEGIN{printf "["} {printf "%s{\"partNumber\":%s,\"etag\":\"%s\"}", (NR>1?",":""), $1, $2} END{printf "]"}')
+  rm -f "$partmeta"
+
+  local code
+  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Expect:" "${auth[@]}" \
+    -H "Content-Type: application/json" -X POST --data "$partsjson" \
+    "$WORKER_URL/upload/$id/blob/$idx/mpu/$uploadId/complete")
+  [ "$code" == "200" ] && return 0
+  echo "❌ blob $idx: multipart completion failed (HTTP $code)" >&2
+  return 1
+}
+
+# Phase 3: upload the manifest, settle credits, return the link + credit headers.
+_bb_upload_commit() {
+  local id="$1" est="$2" total="$3" fcount="$4" mpath="$5" oversized="$6"
+  local -a hdrs=(
+    -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL"
+    -H "X-User-Key: $FILEAPI_BASHBASICS_KEY"
+    -H "X-Estimated-Size: $est"
+    -H "X-Total-Size: $total"
+    -H "X-File-Count: $fcount"
+  )
+  [ "$oversized" == "1" ] && hdrs+=(-H "X-Confirm-Oversized: yes")
+
+  local hdrfile response http_status body
+  hdrfile=$(mktemp)
+  response=$(curl -s -D "$hdrfile" -w "\n%{http_code}" -H "Expect:" -X PUT "${hdrs[@]}" \
+    --data-binary "@$mpath" "$WORKER_URL/upload/$id/commit")
+  http_status=$(echo "$response" | tail -n 1)
+  body=$(echo "$response" | sed '$d')
+
+  if [ "$http_status" == "201" ]; then
+    local deducted balance
+    deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+    balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+    rm -f "$hdrfile"
+    printf '%s\n%s\n%s\n' "$body" "$deducted" "$balance"
+    return 0
+  fi
+  rm -f "$hdrfile"
+  echo "❌ $(_bb_fail_reason "$body" "$http_status")" >&2
+  return 1
+}
+
 _up_do_multipart_upload() {
   local -a paths=("$@")
   _crypto_check || return 1
@@ -318,12 +482,12 @@ _up_do_multipart_upload() {
       while IFS= read -r -d '' file; do
         rel="${file#$p/}"
         printf '%s\t%s\n' "${base}/${rel}" "$file" >> "$listfile"
-        sz=$(stat -c%s "$file" 2>/dev/null || echo 0)
+        sz=$(_bb_stat_size "$file")
         total_size=$((total_size + sz))
       done < <(find "$p" -type f -print0)
     elif [ -f "$p" ]; then
       printf '%s\t%s\n' "$(basename -- "$p")" "$p" >> "$listfile"
-      sz=$(stat -c%s "$p" 2>/dev/null || echo 0)
+      sz=$(_bb_stat_size "$p")
       total_size=$((total_size + sz))
     else
       echo "  ⚠️  Skipping missing item: $p"
@@ -341,7 +505,9 @@ _up_do_multipart_upload() {
     rm -f "$listfile"
     return 1
   fi
+  local oversized=0
   if [ "$total_size" -gt "$_SP_SOFT_UPLOAD_BYTES" ]; then
+    oversized=1
     echo "ℹ️  Selection is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
   fi
 
@@ -358,20 +524,43 @@ _up_do_multipart_upload() {
     return 1
   fi
 
-  local -a form_args=()
-  local i=0
-  while [ -f "$tmpdir/blob$i" ]; do
-    form_args+=(-F "files=@${tmpdir}/blob${i}")
-    i=$((i + 1))
-  done
-  form_args+=(-F "manifest=@${tmpdir}/manifest.enc")
+  local nblobs=0
+  while [ -f "$tmpdir/blob$nblobs" ]; do nblobs=$((nblobs + 1)); done
 
-  echo "☁️  Uploading $i encrypted file entr(y/ies)..."
-  local result final_url deducted balance
-  if ! result=$(_bb_authed_put "/upload" "$total_size" "${form_args[@]}"); then
+  # ---- Phase 1: init (auth + credit precheck) ----
+  local id
+  id=$(_bb_upload_init "$total_size") || { rm -rf "$tmpdir"; return 1; }
+  if [ -z "$id" ]; then
+    echo "❌ Upload init failed (no id returned)"
     rm -rf "$tmpdir"
     return 1
   fi
+
+  # ---- Phase 2: parallel streaming blob uploads ----
+  echo "☁️  Uploading $nblobs encrypted file entr(y/ies) — up to $_BB_MAX_PAR in parallel..."
+  local failflag; failflag=$(mktemp); : > "$failflag"
+  local -a pids=()
+  local i=0 running=0
+  while [ "$i" -lt "$nblobs" ]; do
+    ( _bb_upload_one_blob "$id" "$i" "$tmpdir/blob$i" || echo 1 >> "$failflag" ) &
+    pids+=($!)
+    running=$((running + 1))
+    if [ "$running" -ge "$_BB_MAX_PAR" ]; then wait "${pids[@]}"; pids=(); running=0; fi
+    i=$((i + 1))
+  done
+  [ "${#pids[@]}" -gt 0 ] && wait "${pids[@]}"
+
+  if [ -s "$failflag" ]; then
+    rm -f "$failflag"; rm -rf "$tmpdir"
+    echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects auto-expire in 30 min."
+    return 1
+  fi
+  rm -f "$failflag"
+
+  # ---- Phase 3: commit (manifest + credit settlement) ----
+  local result final_url deducted balance
+  result=$(_bb_upload_commit "$id" "$total_size" "$total_size" "$nblobs" "$tmpdir/manifest.enc" "$oversized") \
+    || { rm -rf "$tmpdir"; return 1; }
   rm -rf "$tmpdir"
 
   final_url=$(echo "$result" | sed -n '1p')
