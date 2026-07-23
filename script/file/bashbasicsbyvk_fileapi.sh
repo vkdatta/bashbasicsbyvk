@@ -357,36 +357,6 @@ _crypto_import_upload() {
   ' "$link" "$key" "$dest" "$_BB_MAX_PAR"
 }
 
-_bb_stat_size() {
-  stat -c%s "$1" 2>/dev/null || stat -f%z "$1" 2>/dev/null || echo 0
-}
-
-# ---- progress bar (same look as the gcloud-fast bar: [████░░░░] NN%  label X/N) ----
-_bb_bar_line() {
-  local done="$1" total="$2" label="$3"
-  local cols=24 pct filled empty bar i color
-  if [ "$total" -le 0 ]; then pct=100; else pct=$((done * 100 / total)); fi
-  [ "$pct" -gt 100 ] && pct=100
-  filled=$((pct * cols / 100)); empty=$((cols - filled))
-  bar=""
-  for ((i = 0; i < filled; i++)); do bar="${bar}█"; done
-  for ((i = 0; i < empty;  i++)); do bar="${bar}░"; done
-  if [ "$done" -ge "$total" ]; then color=$'\033[32m'; else color=$'\033[36m'; fi
-  printf '\r\033[K%s[%s] %3d%%\033[0m  %s %d/%d' "$color" "$bar" "$pct" "$label" "$done" "$total" >&2
-}
-
-# Watches a directory of per-item marker files and redraws the bar until done.
-# Meant to run in the background while parallel jobs each `touch` a marker.
-_bb_progress_watch() {
-  local markerdir="$1" total="$2" label="$3" done=0
-  while :; do
-    done=$(ls -1 "$markerdir" 2>/dev/null | wc -l | tr -d ' ')
-    _bb_bar_line "$done" "$total" "$label"
-    [ "$done" -ge "$total" ] && break
-    sleep 0.15
-  done
-}
-
 # Phase 1: authorize + credit precheck, get an upload id back. Echoes the id.
 _bb_upload_init() {
   local est_size="$1"
@@ -437,76 +407,152 @@ _bb_upload_init() {
   done
 }
 
-# Phase 2: upload ONE encrypted blob. Small blobs go in a single PUT; anything
-# larger than the chunk size uses R2 multipart (parts uploaded in parallel).
-_bb_upload_one_blob() {
-  local id="$1" idx="$2" blob="$3"
-  local -a auth=(
-    -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL"
-    -H "X-User-Key: $FILEAPI_BASHBASICS_KEY"
-  )
-  local sz; sz=$(_bb_stat_size "$blob")
+# Phase 2: upload ALL encrypted blobs from a single Node process.
+#
+# This used to fork one `curl` per blob from bash. That was the reason upload
+# lagged download so badly:
+#   * one process spawn per blob (forking is expensive on Termux/Android)
+#   * a fresh TCP + TLS handshake per blob — no connection reuse at all
+#   * a `wait` barrier every _BB_MAX_PAR blobs, so each batch ran at the speed
+#     of its slowest member (convoy effect) instead of refilling continuously
+#   * `split` writing a second full copy of every large blob to disk
+# Node keeps one process, reuses keep-alive connections across all workers,
+# refills the pool the instant any slot frees, and streams byte ranges straight
+# off the original file. Same pool design the download path uses.
+_bb_upload_blobs() {
+  local id="$1" tmpdir="$2" nblobs="$3"
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const { Readable } = require("stream");
 
-  if [ "$sz" -le "$_BB_CHUNK_BYTES" ]; then
-    local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" -H "Expect:" "${auth[@]}" \
-      -X PUT --data-binary "@$blob" "$WORKER_URL/upload/$id/blob/$idx")
-    [ "$code" == "201" ] || [ "$code" == "200" ] && return 0
-    echo "❌ blob $idx failed (HTTP $code)" >&2
-    return 1
-  fi
+    const base   = process.argv[1];
+    const id     = process.argv[2];
+    const dir    = process.argv[3];
+    const N      = parseInt(process.argv[4], 10);
+    const CONC   = Math.max(1, parseInt(process.argv[5], 10) || 16);
+    const email  = process.argv[6];
+    const ukey   = process.argv[7];
+    const CHUNK  = parseInt(process.argv[8], 10);
+    const INLINE = 4 * 1024 * 1024;   // read small blobs into memory; stream bigger ones
 
-  # ---- large blob: R2 multipart ----
-  local resp uploadId
-  resp=$(curl -s -H "Expect:" "${auth[@]}" -X POST "$WORKER_URL/upload/$id/blob/$idx/mpu")
-  uploadId=$(_bb_json_get "$resp" uploadId)
-  [ -z "$uploadId" ] && { echo "❌ blob $idx: could not start multipart upload" >&2; return 1; }
+    const auth = { "X-User-Email": email, "X-User-Key": ukey };
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  local partdir; partdir=$(mktemp -d)
-  split -b "$_BB_CHUNK_BYTES" "$blob" "$partdir/part."
+    // Fresh body each attempt: a stream can only be consumed once, so retries
+    // need a factory rather than a reusable body value.
+    function bodyFor(fp, size, start, end) {
+      if (start === undefined && size <= INLINE) return fs.readFileSync(fp);
+      const opts = (start === undefined) ? {} : { start, end };
+      return Readable.toWeb(fs.createReadStream(fp, opts));
+    }
 
-  local -a partfiles=()
-  local pf
-  while IFS= read -r pf; do partfiles+=("$pf"); done < <(ls "$partdir"/part.* 2>/dev/null | sort)
+    async function send(url, method, makeBody, extraHeaders) {
+      let lastErr;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const body = makeBody();
+          const init = {
+            method,
+            headers: Object.assign({}, auth, extraHeaders || {}),
+            body,
+            duplex: "half"
+          };
+          const res = await fetch(url, init);
+          if (res.ok) return res;
+          // 4xx other than 429 will not fix themselves — fail fast.
+          if (res.status < 500 && res.status !== 429) {
+            throw new Error("HTTP " + res.status);
+          }
+          lastErr = new Error("HTTP " + res.status);
+        } catch (e) {
+          lastErr = e;
+        }
+        await sleep(250 * Math.pow(2, attempt));
+      }
+      throw lastErr;
+    }
 
-  local partmeta; partmeta=$(mktemp)
-  local -a ppids=()
-  local pn=0 running=0
-  for pf in "${partfiles[@]}"; do
-    pn=$((pn + 1))
-    (
-      c=$(curl -s -w "\n%{http_code}" -H "Expect:" "${auth[@]}" \
-          -X PUT --data-binary "@$pf" "$WORKER_URL/upload/$id/blob/$idx/mpu/$uploadId/$pn")
-      st=$(echo "$c" | tail -n 1); bd=$(echo "$c" | sed '$d')
-      if [ "$st" == "200" ]; then
-        printf '%s\t%s\n' "$pn" "$(_bb_json_get "$bd" etag)" >> "$partmeta"
-      else
-        printf '%s\tFAILED\n' "$pn" >> "$partmeta"
-      fi
-    ) &
-    ppids+=($!)
-    running=$((running + 1))
-    if [ "$running" -ge "$_BB_MAX_PAR" ]; then wait "${ppids[@]}"; ppids=(); running=0; fi
-  done
-  [ "${#ppids[@]}" -gt 0 ] && wait "${ppids[@]}"
-  rm -rf "$partdir"
+    const COLS = 24, TTY = process.stderr.isTTY;
+    let lastPct = -1, done = 0;
+    function bar() {
+      if (!TTY) return;
+      const pct = N > 0 ? Math.floor(done * 100 / N) : 100;
+      if (pct === lastPct && done < N) return;
+      lastPct = pct;
+      const filled = Math.floor(pct * COLS / 100);
+      const b = "\u2588".repeat(filled) + "\u2591".repeat(COLS - filled);
+      const color = done >= N ? "\u001b[32m" : "\u001b[36m";
+      process.stderr.write("\r\u001b[K" + color + "[" + b + "] " +
+        String(pct).padStart(3) + "%\u001b[0m  \u2601\uFE0F  Uploading " + done + "/" + N);
+      if (done >= N) process.stderr.write("\n");
+    }
 
-  if grep -q 'FAILED' "$partmeta"; then
-    rm -f "$partmeta"; echo "❌ blob $idx: a part failed to upload" >&2; return 1
-  fi
+    async function uploadOne(idx) {
+      const fp = path.join(dir, "blob" + idx);
+      const size = fs.statSync(fp).size;
 
-  local partsjson
-  partsjson=$(sort -n "$partmeta" | awk -F'\t' \
-    'BEGIN{printf "["} {printf "%s{\"partNumber\":%s,\"etag\":\"%s\"}", (NR>1?",":""), $1, $2} END{printf "]"}')
-  rm -f "$partmeta"
+      if (size <= CHUNK) {
+        await send(base + "/upload/" + id + "/blob/" + idx, "PUT",
+                   () => bodyFor(fp, size));
+        return;
+      }
 
-  local code
-  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Expect:" "${auth[@]}" \
-    -H "Content-Type: application/json" -X POST --data "$partsjson" \
-    "$WORKER_URL/upload/$id/blob/$idx/mpu/$uploadId/complete")
-  [ "$code" == "200" ] && return 0
-  echo "❌ blob $idx: multipart completion failed (HTTP $code)" >&2
-  return 1
+      // Large blob -> R2 multipart. Ranges are streamed straight off the
+      // original file, so nothing extra is written to disk.
+      const cRes = await send(base + "/upload/" + id + "/blob/" + idx + "/mpu", "POST", () => undefined);
+      const uploadId = (await cRes.json()).uploadId;
+      if (!uploadId) throw new Error("no uploadId");
+
+      const ranges = [];
+      for (let off = 0, pn = 1; off < size; off += CHUNK, pn++) {
+        ranges.push({ pn, start: off, end: Math.min(off + CHUNK, size) - 1 });
+      }
+
+      const parts = new Array(ranges.length);
+      let nextPart = 0;
+      async function partWorker() {
+        while (true) {
+          const i = nextPart++;
+          if (i >= ranges.length) return;
+          const r = ranges[i];
+          const res = await send(
+            base + "/upload/" + id + "/blob/" + idx + "/mpu/" + uploadId + "/" + r.pn,
+            "PUT", () => bodyFor(fp, size, r.start, r.end));
+          const j = await res.json();
+          parts[i] = { partNumber: j.partNumber, etag: j.etag };
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CONC, ranges.length) }, partWorker));
+
+      await send(base + "/upload/" + id + "/blob/" + idx + "/mpu/" + uploadId + "/complete",
+                 "POST", () => JSON.stringify(parts), { "Content-Type": "application/json" });
+    }
+
+    (async () => {
+      let next = 0, failed = 0;
+      const errors = [];
+      async function worker() {
+        while (true) {
+          const i = next++;
+          if (i >= N) return;
+          try {
+            await uploadOne(i);
+          } catch (e) {
+            failed++;
+            if (errors.length < 3) errors.push("blob " + i + ": " + (e && e.message ? e.message : e));
+          }
+          done++; bar();
+        }
+      }
+      bar();
+      await Promise.all(Array.from({ length: Math.min(CONC, N || 1) }, worker));
+      if (TTY && N === 0) process.stderr.write("\n");
+      for (const m of errors) process.stderr.write("  \u26a0\uFE0F  " + m + "\n");
+      console.log(failed === 0 ? "OK" : "FAIL");
+    })();
+  ' "$WORKER_URL" "$id" "$tmpdir" "$nblobs" "$_BB_MAX_PAR" \
+    "$FILEAPI_BASHBASICS_EMAIL" "$FILEAPI_BASHBASICS_KEY" "$_BB_CHUNK_BYTES"
 }
 
 # Phase 3: upload the manifest, settle credits, return the link + credit headers.
@@ -615,50 +661,16 @@ _up_do_multipart_upload() {
     return 1
   fi
 
-  # ---- Phase 2: parallel streaming blob uploads ----
-  local failflag; failflag=$(mktemp); : > "$failflag"
-  local markerdir; markerdir=$(mktemp -d)   # one marker file per finished blob
+  # ---- Phase 2: parallel streaming blob uploads (single Node process) ----
+  [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted file entr(y/ies) — up to $_BB_MAX_PAR in parallel..."
 
-  # Background progress bar (only when writing to a real terminal).
-  local watchpid=""
-  if [ -t 2 ]; then
-    _bb_progress_watch "$markerdir" "$nblobs" "☁️  Uploading" &
-    watchpid=$!
-  else
-    echo "☁️  Uploading $nblobs encrypted file entr(y/ies) — up to $_BB_MAX_PAR in parallel..."
-  fi
-
-  local -a pids=()
-  local i=0 running=0
-  while [ "$i" -lt "$nblobs" ]; do
-    (
-      if _bb_upload_one_blob "$id" "$i" "$tmpdir/blob$i"; then
-        : > "$markerdir/$i"       # mark this blob done (race-free; unique filename)
-      else
-        echo 1 >> "$failflag"
-      fi
-    ) &
-    pids+=($!)
-    running=$((running + 1))
-    if [ "$running" -ge "$_BB_MAX_PAR" ]; then wait "${pids[@]}"; pids=(); running=0; fi
-    i=$((i + 1))
-  done
-  [ "${#pids[@]}" -gt 0 ] && wait "${pids[@]}"
-
-  # Stop the bar and finish its line.
-  if [ -n "$watchpid" ]; then
-    _bb_bar_line "$(ls -1 "$markerdir" | wc -l | tr -d ' ')" "$nblobs" "☁️  Uploading"
-    kill "$watchpid" 2>/dev/null; wait "$watchpid" 2>/dev/null
-    printf '\n' >&2
-  fi
-  rm -rf "$markerdir"
-
-  if [ -s "$failflag" ]; then
-    rm -f "$failflag"; rm -rf "$tmpdir"
+  local upres
+  upres=$(_bb_upload_blobs "$id" "$tmpdir" "$nblobs")
+  if [ "$upres" != "OK" ]; then
+    rm -rf "$tmpdir"
     echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects auto-expire in 30 min."
     return 1
   fi
-  rm -f "$failflag"
 
   # ---- Phase 3: commit (manifest + credit settlement) ----
   local result final_url deducted balance
