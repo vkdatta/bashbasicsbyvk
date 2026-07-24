@@ -86,6 +86,12 @@ _gcloud_cmd() {
 
 _in_selection() {
   local item="$1"; shift
+  # 'existing' MUST be local. Bash uses dynamic scoping, so without this the
+  # loop writes into any caller variable of the same name -- _sp_append() in
+  # bashbasicbyvk_shortpath.sh keeps its buffer in `local -a existing`, and
+  # this loop was silently overwriting existing[0] on every call, dropping the
+  # first staged item whenever 3+ items were staged at once.
+  local existing
   for existing in "$@"; do
     [[ "$existing" == "$item" ]] && return 0
   done
@@ -567,8 +573,12 @@ perform_copy() {
   local dest="$1"
   shift
   local src_items=("$@")
+  local item err
   for item in "${src_items[@]}"; do
-    [ ! -e "$item" ] && continue
+    if [ ! -e "$item" ]; then
+      echo "  ⚠️  Skipped (not found): $item"
+      continue
+    fi
     local base name ext count newbase
     base=$(basename -- "$item")
     name="${base%.*}"
@@ -584,8 +594,11 @@ perform_copy() {
       fi
       count=$((count+1))
     done
-    cp -r -- "$item" "$dest/$newbase"
-    echo "  ✅ Copied: $(basename "$item") → $dest/$newbase"
+    if err=$(cp -r -- "$item" "$dest/$newbase" 2>&1); then
+      echo "  ✅ Copied: $(basename -- "$item") → $dest/$newbase"
+    else
+      echo "  ❌ Failed: $(basename -- "$item") — ${err:-cp returned $?}"
+    fi
   done
 }
 
@@ -593,10 +606,17 @@ perform_move() {
   local dest="$1"
   shift
   local src_items=("$@")
+  local item err
   for item in "${src_items[@]}"; do
-    [ ! -e "$item" ] && continue
-    mv -- "$item" "$dest/"
-    echo "  ✅ Moved: $(basename "$item") → $dest/"
+    if [ ! -e "$item" ]; then
+      echo "  ⚠️  Skipped (not found): $item"
+      continue
+    fi
+    if err=$(mv -- "$item" "$dest/" 2>&1); then
+      echo "  ✅ Moved: $(basename -- "$item") → $dest/"
+    else
+      echo "  ❌ Failed: $(basename -- "$item") — ${err:-mv returned $?}"
+    fi
   done
 }
 
