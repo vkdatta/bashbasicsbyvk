@@ -11,11 +11,49 @@ source "bashbasicsbyvk_help.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+_vp_rows_now=0
+_vp_cols_now=0
+
+# Probe the real tty size. bash traps fired during a blocked `read`
+# are unreliable (read gets restarted, and tput inside a trap can
+# report the terminfo default), so the size is polled instead.
+_vp_probe_size() {
+  local sz r c
+  sz=$(stty size 2>/dev/null)
+  r="${sz%% *}"
+  c="${sz##* }"
+  if [[ "$r" =~ ^[0-9]+$ ]] && [ "$r" -gt 0 ]; then
+    _vp_rows_now="$r"
+  else
+    r=$(tput lines 2>/dev/null)
+    [[ "$r" =~ ^[0-9]+$ ]] || r=24
+    _vp_rows_now="$r"
+  fi
+  if [[ "$c" =~ ^[0-9]+$ ]] && [ "$c" -gt 0 ]; then
+    _vp_cols_now="$c"
+  else
+    c=$(tput cols 2>/dev/null)
+    [[ "$c" =~ ^[0-9]+$ ]] || c=80
+    _vp_cols_now="$c"
+  fi
+}
+
 _term_rows() {
-  local rows
-  rows=$(tput lines 2>/dev/null)
-  [[ "$rows" =~ ^[0-9]+$ ]] || rows=24
-  echo "$rows"
+  [ "$_vp_rows_now" -gt 0 ] 2>/dev/null || _vp_probe_size
+  echo "$_vp_rows_now"
+}
+
+_term_cols() {
+  [ "$_vp_cols_now" -gt 0 ] 2>/dev/null || _vp_probe_size
+  echo "$_vp_cols_now"
+}
+
+# Returns 0 if the terminal changed size since the last render.
+_vp_check_resize() {
+  local pr="$_vp_rows_now" pc="$_vp_cols_now"
+  _vp_probe_size
+  _vp_resized=false
+  [ "$_vp_rows_now" != "$pr" ] || [ "$_vp_cols_now" != "$pc" ]
 }
 
 _set_available_above() {
@@ -30,6 +68,307 @@ _repaint_line_above() {
   [ "$dist" -gt "$_available_above" ] && return 1
   printf '\033[s\033[%dA\r\033[2K%s\033[u' "$dist" "$content"
 }
+
+# ============================================================
+#  VIEWPORT ENGINE
+#  Renders a scrollable window over a row list so that the
+#  highlighted row is ALWAYS on screen, no matter how many
+#  rows exist. Replaces the old "print everything and hope it
+#  fits" model, which silently dropped the highlight for any
+#  row that had scrolled off the top of the terminal.
+# ============================================================
+
+declare -gA _vp_rowcache=()
+declare -ga _vp_hdr_arr=()
+declare -ga _vp_ftr_arr=()
+_vp_mode="items"        # items | imaginary
+_vp_start=1             # first row currently on screen (1-based)
+_vp_end=0               # last row currently on screen
+_vp_page=0              # how many rows fit on screen
+_vp_n=0                 # total row count
+_vp_top_n=0             # header line count
+_vp_footer_n=0          # footer line count
+_vp_rows_printed=0
+_blk_h=0                # total height of the rendered block (incl. input line)
+_vp_cols=80
+_vp_width_margin=2
+_vp_line=""
+_vp_resized=false
+_vp_poll_fast="0.5"
+_vp_poll_slow="4"
+_vp_poll_cur="0.5"
+_vp_idle=0
+_vp_rule="   ─────────────────────────────"
+
+# Poll quickly right after activity (when the soft keyboard is most
+# likely to open or close), then back off so an idle menu is not
+# waking up twice a second forever.
+_vp_poll_active() { _vp_idle=0; _vp_poll_cur="$_vp_poll_fast"; }
+_vp_poll_tick() {
+  _vp_idle=$(( _vp_idle + 1 ))
+  (( _vp_idle > 12 )) && _vp_poll_cur="$_vp_poll_slow"
+}
+
+# --- pure-bash ANSI strip (no subshell: sets _vp_plain) ---
+_vp_strip_ansi() {
+  local s="$1" out=""
+  while [[ "$s" == *$'\033['* ]]; do
+    out+="${s%%$'\033['*}"
+    s="${s#*$'\033['}"
+    s="${s#*[a-zA-Z]}"
+  done
+  _vp_plain="$out$s"
+}
+
+# --- clamp a row to one physical terminal line (sets _vp_line) ---
+# A wrapped line would desync every distance calculation below.
+_vp_fit() {
+  local text="$1" limit
+  limit=$(( _vp_cols - _vp_width_margin ))
+  (( limit < 8 )) && limit=8
+  _vp_strip_ansi "$text"
+  if [ "${#_vp_plain}" -gt "$limit" ]; then
+    _vp_line="${_vp_plain:0:limit-1}…"
+  else
+    _vp_line="$text"
+  fi
+}
+
+_vp_count() {
+  if [ "$_vp_mode" == "imaginary" ]; then
+    _vp_n=${#imaginary_map[@]}
+  else
+    _vp_n=${#items[@]}
+  fi
+}
+
+# --- row text, cached (sets _vp_line) ---
+_vp_row_text() {
+  local i="$1" t
+  if [ -n "${_vp_rowcache[$i]+x}" ]; then
+    _vp_line="${_vp_rowcache[$i]}"
+    return 0
+  fi
+  if [ "$_vp_mode" == "imaginary" ]; then
+    t="${imaginary_lines[$((i-1))]}"
+  else
+    t="$(_item_line_text "$i")"
+  fi
+  _vp_fit "$t"
+  _vp_rowcache[$i]="$_vp_line"
+  return 0
+}
+
+_vp_cache_reset() {
+  unset _vp_rowcache
+  declare -gA _vp_rowcache=()
+  _vp_disp_ok=false
+}
+
+# Prime the row cache from display_items in ONE subshell rather than
+# N calls to _item_line_text. Also acts as a consistency check: if
+# display_items emits anything other than exactly one line per item
+# (a legend, a group separator), the counts disagree and we fall back
+# to per-row rendering instead of silently desyncing the line math.
+_vp_prime_rows() {
+  [ "$_vp_mode" == "items" ] || return 0
+  declare -F display_items >/dev/null 2>&1 || return 0
+  _vp_count
+  (( _vp_n == 0 )) && return 0
+  local -a _dl=()
+  mapfile -t _dl < <(display_items)
+  if [ "${#_dl[@]}" -eq "$_vp_n" ]; then
+    local i
+    for ((i=1; i<=_vp_n; i++)); do
+      _vp_fit "${_dl[$((i-1))]}"
+      _vp_rowcache[$i]="$_vp_line"
+    done
+    _vp_disp_ok=true
+  else
+    _vp_disp_ok=false
+    [ -n "$BVK_VP_DEBUG" ] && \
+      echo "⚠️  display_items emitted ${#_dl[@]} lines for $_vp_n items — using _item_line_text" >&2
+  fi
+  return 0
+}
+
+# --- highlight predicates ---
+_vp_is_hl_single() { [ "$1" -eq "${_hl_index:-0}" ]; }
+_vp_is_hl_multi()  { [ -n "${_msel_set[$1]+x}" ]; }
+_vp_is_hl() { $_vp_hl_fn "$1"; }
+
+_vp_build_chrome() {
+  mapfile -t _vp_hdr_arr < <($_vp_header_fn)
+  mapfile -t _vp_ftr_arr < <($_vp_footer_fn)
+  _vp_top_n=${#_vp_hdr_arr[@]}
+  _vp_footer_n=${#_vp_ftr_arr[@]}
+}
+
+# On a very short terminal (soft keyboard open) the header+footer
+# alone can exceed the screen. Trim blank lines, then surplus
+# footer/header lines, so the list never gets squeezed off screen.
+_vp_apply_chrome_budget() {
+  local i n k tmp=()
+  _vp_hdr_out=()
+  _vp_ftr_out=()
+
+  if (( _vp_hdr_show >= _vp_top_n )); then
+    _vp_hdr_out=("${_vp_hdr_arr[@]}")
+  else
+    tmp=()
+    for i in "${_vp_hdr_arr[@]}"; do [ -n "${i// /}" ] && tmp+=("$i"); done
+    n=${#tmp[@]}
+    k=$(( n - _vp_hdr_show )); (( k < 0 )) && k=0
+    for ((i=k; i<n; i++)); do _vp_hdr_out+=("${tmp[$i]}"); done
+  fi
+
+  if (( _vp_ftr_show >= _vp_footer_n )); then
+    _vp_ftr_out=("${_vp_ftr_arr[@]}")
+  else
+    tmp=()
+    for i in "${_vp_ftr_arr[@]}"; do [ -n "${i// /}" ] && tmp+=("$i"); done
+    n=${#tmp[@]}
+    k=0
+    for ((i=0; i<n && k<_vp_ftr_show; i++)); do _vp_ftr_out+=("${tmp[$i]}"); k=$((k+1)); done
+  fi
+
+  _vp_hdr_show=${#_vp_hdr_out[@]}
+  _vp_ftr_show=${#_vp_ftr_out[@]}
+}
+
+# --- how many rows actually fit, given current terminal size ---
+# Recomputed on every build and whenever the polled tty size
+# changes, so opening the soft keyboard (which shrinks the
+# terminal) re-flows the list.
+_vp_geometry() {
+  local rows chrome min_rows
+  _vp_probe_size
+  rows="$_vp_rows_now"
+  _vp_cols="$_vp_cols_now"
+  _vp_count
+
+  _vp_ind=1
+  _vp_hdr_show=$_vp_top_n
+  _vp_ftr_show=$_vp_footer_n
+
+  min_rows=3
+  (( _vp_n > 0 && _vp_n < min_rows )) && min_rows=$_vp_n
+  (( min_rows < 1 )) && min_rows=1
+
+  while :; do
+    chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 ))
+    (( rows - chrome >= min_rows )) && break
+    if   (( _vp_ftr_show > 0 ));  then _vp_ftr_show=$(( _vp_ftr_show - 1 ))
+    elif (( _vp_ind > 0 ));       then _vp_ind=0
+    elif (( _vp_hdr_show > 1 ));  then _vp_hdr_show=$(( _vp_hdr_show - 1 ))
+    else break
+    fi
+  done
+
+  _vp_apply_chrome_budget
+
+  chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 ))
+  _vp_page=$(( rows - chrome ))
+  (( _vp_page < 1 )) && _vp_page=1
+  (( _vp_page > _vp_n )) && _vp_page=$_vp_n
+  _vp_rows_printed=$_vp_page
+  (( _vp_n == 0 )) && _vp_rows_printed=1
+  _blk_h=$(( _vp_hdr_show + _vp_ind + _vp_rows_printed + _vp_ind + _vp_ftr_show + 1 ))
+}
+
+# --- scroll the window so row $1 is visible. returns 0 if it moved ---
+_vp_ensure_visible() {
+  local sel="$1" old="$_vp_start" max_start
+  (( _vp_n == 0 )) && { _vp_start=1; return 1; }
+  (( sel < 1 )) && sel=1
+  (( sel > _vp_n )) && sel=$_vp_n
+  if (( sel < _vp_start )); then
+    _vp_start=$sel                        # jumped backwards: land it at the top
+  elif (( sel > _vp_start + _vp_page - 1 )); then
+    _vp_start=$(( sel - _vp_page + 1 ))   # jumped forwards: land it at the bottom
+  fi
+  max_start=$(( _vp_n - _vp_page + 1 ))
+  (( max_start < 1 )) && max_start=1
+  (( _vp_start > max_start )) && _vp_start=$max_start
+  (( _vp_start < 1 )) && _vp_start=1
+  _vp_end=$(( _vp_start + _vp_page - 1 ))
+  (( _vp_end > _vp_n )) && _vp_end=$_vp_n
+  [ "$_vp_start" -ne "$old" ]
+}
+
+_vp_el() { printf '\r\033[2K%s\n' "$1"; }
+
+# --- paint the whole block at the cursor ---
+_vp_emit() {
+  local i line
+  _vp_count
+  _vp_end=$(( _vp_start + _vp_page - 1 ))
+  (( _vp_end > _vp_n )) && _vp_end=$_vp_n
+
+  for line in "${_vp_hdr_out[@]}"; do _vp_el "$line"; done
+
+  if (( _vp_ind > 0 )); then
+    if (( _vp_start > 1 )); then
+      _vp_el "   ▲ $(( _vp_start - 1 )) more above"
+    else
+      _vp_el "$_vp_rule"
+    fi
+  fi
+
+  if (( _vp_n == 0 )); then
+    _vp_el "   (no items)"
+  else
+    for ((i=_vp_start; i<=_vp_end; i++)); do
+      _vp_row_text "$i"
+      line="$_vp_line"
+      _vp_is_hl "$i" && line="$(_highlight "$line")"
+      _vp_el "$line"
+    done
+  fi
+
+  if (( _vp_ind > 0 )); then
+    if (( _vp_end < _vp_n )); then
+      _vp_el "   ▼ $(( _vp_n - _vp_end )) more below"
+    else
+      _vp_el "$_vp_rule"
+    fi
+  fi
+
+  for line in "${_vp_ftr_out[@]}"; do _vp_el "$line"; done
+  _set_available_above "$_blk_h"
+  return 0
+}
+
+# --- repaint the block in place (block top is _blk_h-1 lines up) ---
+_vp_rerender() {
+  printf '\033[%dA\r' "$(( _blk_h - 1 ))"
+  _vp_emit
+  $_vp_input_fn
+}
+
+# --- fresh block appended below whatever is on screen ---
+_vp_render_fresh() {
+  _vp_build_chrome
+  _vp_geometry
+  _vp_ensure_visible "${_hl_index:-1}"
+  _vp_emit
+  $_vp_input_fn
+}
+
+# --- distance in lines from the input line up to row $1 ---
+_vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + 1 )); }
+
+_vp_repaint_row() {
+  local i="$1" line
+  (( i < _vp_start || i > _vp_end )) && return 1
+  _vp_row_text "$i"
+  line="$_vp_line"
+  _vp_is_hl "$i" && line="$(_highlight "$line")"
+  _repaint_line_above "$(_vp_dist "$i")" "$line"
+  return 0
+}
+
+_vp_on_resize() { _vp_resized=true; }
 
 parse_selection() {
   local input="$1"
@@ -55,35 +394,59 @@ parse_selection() {
 _multi_compute_set() {
   _msel_set=()
   local idx
-  for idx in $(parse_selection "$_buf" "${#items[@]}"); do
+  _vp_count
+  for idx in $(parse_selection "$_buf" "$_vp_n"); do
     _msel_set["$idx"]=1
   done
 }
 
 _multi_print_input_line() {
   printf '\r\033[K'
-  printf "Item numbers: %s" "$_buf"
+  if [ "$_vp_mode" == "imaginary" ]; then
+    printf "Group numbers: %s" "$_buf"
+  else
+    printf "Item numbers: %s" "$_buf"
+  fi
   local back=$(( ${#_buf} - _pos ))
   [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
+}
+
+_multi_header_fn() {
+  _menu_header
+  [ "$_vp_mode" == "imaginary" ] && echo "$_imag_banner"
+  return 0
+}
+
+_multi_footer_fn() {
+  echo
+  echo "$_prompt (supports ranges: 1-10,15-20,33)"
+  echo "up/down bump the nearby number, left/right move cursor"
 }
 
 _multi_render() {
   _multi_compute_set
   clear
-  _menu_header
-  _render_items_with_highlight "${!_msel_set[@]}"
-  echo
-  echo "$_prompt (supports ranges: 1-10,15-20,33)"
-  echo "up/down bump the nearby number, left/right move cursor"
-  _multi_print_input_line
+  _vp_header_fn=_multi_header_fn
+  _vp_footer_fn=_multi_footer_fn
+  _vp_hl_fn=_vp_is_hl_multi
+  _vp_input_fn=_multi_print_input_line
+  _vp_start=1
+  _vp_cache_reset
+  _vp_prime_rows
+  _vp_render_fresh
 }
 
-_multi_item_distance() {
-  echo $(( ${#items[@]} - $1 + 3 + 1 ))
-}
-
-_multi_total_lines() {
-  echo $(( 2 + ${#items[@]} + 3 + 1 ))
+# index of the number token the cursor is sitting on — that is
+# the one we scroll to, so typing 900 then editing it to 10
+# pulls the window back to 10.
+_multi_cursor_index() {
+  local bounds s e num
+  bounds=$(_multi_number_token_bounds) || return 1
+  [ -z "$bounds" ] && return 1
+  read -r s e <<< "$bounds"
+  num="${_buf:s:e-s}"
+  [ -z "$num" ] && return 1
+  echo $((10#$num))
 }
 
 _multi_sync() {
@@ -101,14 +464,18 @@ _multi_sync() {
     [ -z "${_old_set[$k]+x}" ] && _changed["$k"]=1
   done
 
+  # scroll the window to follow the number being edited
+  local target
+  target=$(_multi_cursor_index)
+  if [ -n "$target" ] && _vp_ensure_visible "$target"; then
+    _vp_rerender
+    return 0
+  fi
+
   if [ "${#_changed[@]}" -gt 0 ]; then
-    _set_available_above "$(_multi_total_lines)"
-    local idx dist line
+    local idx
     for idx in "${!_changed[@]}"; do
-      dist=$(_multi_item_distance "$idx")
-      line=$(_item_line_text "$idx")
-      [ -n "${_msel_set[$idx]+x}" ] && line="$(_highlight "$line")"
-      _repaint_line_above "$dist" "$line"
+      _vp_repaint_row "$idx"
     done
   fi
 
@@ -136,7 +503,8 @@ _multi_adjust_number_at_cursor() {
   read -r s e <<< "$bounds"
   num="${_buf:s:e-s}"
   n=$((10#$num))
-  max="${#items[@]}"
+  _vp_count
+  max="$_vp_n"
   if [ "$dir" == "up" ]; then
     n=$((n+1)); [ "$n" -gt "$max" ] && n=1
   else
@@ -148,23 +516,25 @@ _multi_adjust_number_at_cursor() {
   _multi_sync
 }
 
-select_items_common() {
-  local prompt="$1"
-  if [ ${#items[@]} -eq 0 ]; then
-    echo "❌ No items available"
-    return 1
-  fi
-
-  local _prompt="$prompt"
-  local -A _msel_set=()
-  local _buf="" _pos=0
-  local key seq itemlist
+_multi_prompt_loop() {
+  local key seq _rc
+  _buf=""
+  _pos=0
 
   stty -icanon -echo min 1 time 0 2>/dev/null
+  trap '_vp_on_resize' WINCH
   _multi_render
 
   while true; do
-    IFS= read -rsn1 key
+    IFS= read -rsn1 -t "$_vp_poll_cur" key
+    _rc=$?
+    if [ "$_rc" -gt 128 ]; then
+      _vp_poll_tick
+      if _vp_check_resize; then _multi_render; _vp_poll_active; fi
+      continue
+    fi
+    [ "$_rc" -ne 0 ] && break
+    _vp_poll_active
     if [[ "$key" == $'\x1b' ]]; then
       IFS= read -rsn2 -t 0.05 seq
       case "$seq" in
@@ -206,8 +576,24 @@ select_items_common() {
     esac
   done
 
+  trap - WINCH
   stty "$_orig_stty" 2>/dev/null
   echo
+}
+
+select_items_common() {
+  local prompt="$1"
+  if [ ${#items[@]} -eq 0 ]; then
+    echo "❌ No items available"
+    return 1
+  fi
+
+  local _prompt="$prompt"
+  local -A _msel_set=()
+  local _buf _pos itemlist
+
+  _vp_mode="items"
+  _multi_prompt_loop
 
   itemlist="$_buf"
   local indices=($(parse_selection "$itemlist" "${#items[@]}"))
@@ -226,9 +612,21 @@ select_items_common() {
 select_imaginary_items_common() {
   local p="$1"
   local pfx="$2"
-  echo "Select group numbers (supports ranges: 1-3,5):"
-  read -p "Group numbers: " grplist
-  local indices=($(parse_selection "$grplist" "${#imaginary_map[@]}"))
+  local prompt="${3:-DELETE}"
+
+  if [ "${#imaginary_map[@]}" -eq 0 ]; then
+    echo "❌ No groups available"
+    return 1
+  fi
+
+  local _prompt="$prompt"
+  local -A _msel_set=()
+  local _buf _pos
+
+  _vp_mode="imaginary"
+  _multi_prompt_loop
+
+  local indices=($(parse_selection "$_buf" "${#imaginary_map[@]}"))
   if [ "${#indices[@]}" -eq 0 ]; then
     echo "❌ No valid groups selected"
     return 1
@@ -431,11 +829,11 @@ get_imaginary_groups() {
   group_chars=("${chars[@]}")
 }
 
-display_imaginary_groups() {
+build_imaginary_groups() {
   local p="$1"
   local pfx="$2"
   local total="$3"
-  echo "📂 Too many items ($total). Imaginary groups by next character:"
+  _imag_banner="📂 Too many items ($total). Imaginary groups by next character:"
   get_imaginary_groups "$p" "$pfx"
 
   # Sort: special chars → digits → letters → #
@@ -464,13 +862,22 @@ display_imaginary_groups() {
   local sorted=("${sorted_specials[@]}" "${sorted_digits[@]}" "${sorted_letters[@]}" "${fallback[@]}")
 
   imaginary_map=()
+  imaginary_lines=()
   local idx=1
   for ch in "${sorted[@]}"; do
     local cnt="${group_counts[$ch]}"
-    printf " %2d) 📁 %s (%d items)\n" "$idx" "$ch" "$cnt"
+    imaginary_lines+=("$(printf ' %2d) 📁 %s (%d items)' "$idx" "$ch" "$cnt")")
     imaginary_map+=("$ch")
     idx=$((idx+1))
   done
+}
+
+# kept for any caller that still wants the old print-immediately behaviour
+display_imaginary_groups() {
+  build_imaginary_groups "$1" "$2" "$3"
+  echo "$_imag_banner"
+  local l
+  for l in "${imaginary_lines[@]}"; do echo "$l"; done
 }
 
 handle_force_show() {
@@ -703,15 +1110,17 @@ _render_items_with_highlight() {
   done
 }
 
-_redraw_menu_full() {
-  clear
+_menu_header_flat() {
   _menu_header
   if $_has_group_view; then
     _gv_chain="${group_view_levels[*]}"
     echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
   fi
-  _render_items_with_highlight "$_hl_index"
-  _menu_footer_lines
+}
+
+_menu_header_imaginary() {
+  _menu_header
+  echo "$_imag_banner"
 }
 
 _print_input_line() {
@@ -721,63 +1130,81 @@ _print_input_line() {
   [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
 }
 
-_item_distance_from_input() {
-  echo $(( ${#items[@]} - $1 + $2 + 1 ))
-}
-
 _update_highlight() {
   local old="$1" new="$2"
-  local footer_n base=2 _render_total dist line
-  footer_n=$(_menu_footer_lines | wc -l)
-  $_has_group_view && base=$(( base + 1 ))
-  _render_total=$(( base + ${#items[@]} + footer_n + 1 ))
-  _set_available_above "$_render_total"
-
-  if [ "$old" -ge 1 ] && [ "$old" -le "${#items[@]}" ] && [ "$old" -ne "$new" ]; then
-    dist=$(_item_distance_from_input "$old" "$footer_n")
-    line=$(_item_line_text "$old")
-    _repaint_line_above "$dist" "$line"
+  if [ "$old" -ge 1 ] && [ "$old" -ne "$new" ]; then
+    _vp_repaint_row "$old"
   fi
-  if [ "$new" -ge 1 ] && [ "$new" -le "${#items[@]}" ]; then
-    dist=$(_item_distance_from_input "$new" "$footer_n")
-    line="$(_highlight "$(_item_line_text "$new")")"
-    _repaint_line_above "$dist" "$line"
+  if [ "$new" -ge 1 ]; then
+    _vp_repaint_row "$new"
+  fi
+  return 0
+}
+
+# Move the highlight to $2, scrolling the window if $2 is off screen.
+_vp_goto() {
+  local old="$1" new="$2"
+  if _vp_ensure_visible "$new"; then
+    _vp_rerender
+  else
+    _update_highlight "$old" "$new"
+    _print_input_line
   fi
 }
 
 _sync_highlight_from_buf() {
   $_can_nav || return
   [[ "$_buf" =~ ^[0-9]+$ ]] || return
+  _vp_count
+  (( _vp_n == 0 )) && return
   local n=$((10#$_buf))
   (( n < 1 )) && n=1
-  (( n > ${#items[@]} )) && n=${#items[@]}
+  (( n > _vp_n )) && n=$_vp_n
   if [ "$n" -ne "${_hl_index:-0}" ]; then
     local old="${_hl_index:-0}"
     _hl_index=$n
-    _update_highlight "$old" "$_hl_index"
-    _print_input_line
+    _vp_goto "$old" "$_hl_index"
   fi
 }
 
 _read_choice() {
   choice=""
   _can_nav=false
-  if ! $imaginary_mode && [ ${#items[@]} -gt 0 ]; then
+  # Grouped ("imaginary") rows are navigable and highlightable too —
+  # they are just a different row source for the same viewport.
+  _vp_count
+  if [ "$_vp_n" -gt 0 ]; then
     _can_nav=true
-    [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index="${#items[@]}"
+    [ "${_hl_index:-0}" -gt "$_vp_n" ] && _hl_index="$_vp_n"
   else
     _hl_index=0
   fi
 
   stty -icanon -echo min 1 time 0 2>/dev/null
+  trap '_vp_on_resize' WINCH
 
   _buf=""
   _pos=0
-  local key seq
+  local key seq _rc
   _print_input_line
 
   while true; do
-    IFS= read -rsn1 key
+    IFS= read -rsn1 -t "$_vp_poll_cur" key
+    _rc=$?
+    if [ "$_rc" -gt 128 ]; then
+      # read timed out: re-check the tty size so opening or closing
+      # the soft keyboard re-flows the list
+      _vp_poll_tick
+      if _vp_check_resize; then
+        _vp_cache_reset
+        _vp_prime_rows
+        _vp_render_fresh
+        _vp_poll_active
+      fi
+      continue
+    fi
+    [ "$_rc" -ne 0 ] && break
+    _vp_poll_active
     if [[ "$key" == $'\x1b' ]]; then
       IFS= read -rsn2 -t 0.05 seq
       case "$seq" in
@@ -785,14 +1212,13 @@ _read_choice() {
           if $_can_nav; then
             local old="$_hl_index"
             if [ "$_hl_index" -lt 1 ]; then
-              _hl_index="${#items[@]}"
+              _hl_index="$_vp_n"
             else
               _hl_index=$(( _hl_index - 1 ))
-              [ "$_hl_index" -lt 1 ] && _hl_index="${#items[@]}"
+              [ "$_hl_index" -lt 1 ] && _hl_index="$_vp_n"
             fi
             _buf="$_hl_index"; _pos=${#_buf}
-            _update_highlight "$old" "$_hl_index"
-            _print_input_line
+            _vp_goto "$old" "$_hl_index"
           fi
           ;;
         '[B')  # Down
@@ -802,11 +1228,10 @@ _read_choice() {
               _hl_index=1
             else
               _hl_index=$(( _hl_index + 1 ))
-              [ "$_hl_index" -gt "${#items[@]}" ] && _hl_index=1
+              [ "$_hl_index" -gt "$_vp_n" ] && _hl_index=1
             fi
             _buf="$_hl_index"; _pos=${#_buf}
-            _update_highlight "$old" "$_hl_index"
-            _print_input_line
+            _vp_goto "$old" "$_hl_index"
           fi
           ;;
         '[C')  # Right — move cursor within typed text
@@ -847,6 +1272,7 @@ _read_choice() {
     esac
   done
 
+  trap - WINCH
   stty "$_orig_stty" 2>/dev/null
   echo
 
@@ -864,6 +1290,8 @@ force_show=false
 _has_group_view=false
 _gv_chain=""
 declare -a imaginary_map=()
+declare -a imaginary_lines=()
+_imag_banner=""
 declare -a group_chars=()
 declare -A group_counts=()
 nav_result_path=""
@@ -887,8 +1315,6 @@ fi
 
 shopt -s nullglob
 while true; do
-  _menu_header
-
   total=$(count_items_in_path "$path")
 
   imaginary_mode=false
@@ -916,10 +1342,10 @@ while true; do
         _collect_metadata
         apply_sort
       else
-        display_imaginary_groups "$path" "$group_prefix" "$pfx_count"
+        build_imaginary_groups "$path" "$group_prefix" "$pfx_count"
       fi
     else
-      display_imaginary_groups "$path" "" "$total"
+      build_imaginary_groups "$path" "" "$total"
     fi
   elif [ "$total" -gt "${index_mode_threshold:-200}" ] && $force_show; then
     imaginary_mode=false
@@ -939,11 +1365,23 @@ while true; do
       build_items_with_meta "$path" ""
       apply_sort
     fi
-
-    _menu_body_flat
   fi
 
-  _menu_footer_lines
+  # ---- viewport setup for this menu ----
+  if $imaginary_mode; then
+    _vp_mode="imaginary"
+    _vp_header_fn=_menu_header_imaginary
+  else
+    _vp_mode="items"
+    _vp_header_fn=_menu_header_flat
+  fi
+  _vp_footer_fn=_menu_footer_lines
+  _vp_hl_fn=_vp_is_hl_single
+  _vp_input_fn=_print_input_line
+  _vp_start=1
+  _vp_cache_reset
+  _vp_prime_rows
+  _vp_render_fresh
 
   _read_choice
 
