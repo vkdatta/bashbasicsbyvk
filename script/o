@@ -370,6 +370,90 @@ _vp_repaint_row() {
 
 _vp_on_resize() { _vp_resized=true; }
 
+# ============================================================
+#  KEY DECODING
+#  Terminals emit variable-length escape sequences: arrows are
+#  3 bytes (ESC [ A) but PgUp/PgDn/Home/End can be 4 (ESC [ 5 ~)
+#  or come in application-cursor form (ESC O H). Reading a fixed
+#  2 bytes after ESC leaves the trailing '~' in the stream, which
+#  then gets typed into the input buffer as literal text.
+#  _read_key_seq consumes exactly one full sequence instead.
+# ============================================================
+
+# How far PgUp/PgDn travel, in items.
+_vp_page_step="${BVK_PAGE_STEP:-10}"
+
+_read_key_seq() {
+  local c
+  _esc=""
+  IFS= read -rsn1 -t 0.08 c || return 1     # bare ESC keypress
+  _esc="$c"
+  case "$c" in
+    '[')
+      # CSI: parameter bytes (digits and ';') then one final byte
+      while IFS= read -rsn1 -t 0.08 c; do
+        _esc+="$c"
+        case "$c" in
+          [0-9]|';') continue ;;
+          *) break ;;
+        esac
+      done
+      ;;
+    'O')
+      IFS= read -rsn1 -t 0.08 c && _esc+="$c"
+      ;;
+  esac
+  return 0
+}
+
+# Classify a sequence body into a logical key name in _kname.
+_key_name() {
+  local s="$1" fin body num
+  _kname=""
+  [ -z "$s" ] && return 1
+  fin="${s: -1}"
+  case "$s" in
+    'O'*)
+      case "$fin" in
+        A) _kname=up ;; B) _kname=down ;;
+        C) _kname=right ;; D) _kname=left ;;
+        H) _kname=home ;; F) _kname=end ;;
+      esac
+      return 0
+      ;;
+    '['*) ;;
+    *) return 1 ;;
+  esac
+  body="${s:1}"
+  num="${body%"$fin"}"    # parameters without the final byte
+  num="${num%%;*}"        # keep only the first parameter
+  case "$fin" in
+    A) _kname=up ;;
+    B) _kname=down ;;
+    C) _kname=right ;;
+    D) _kname=left ;;
+    H) _kname=home ;;
+    F) _kname=end ;;
+    '~')
+      case "$num" in
+        1|7) _kname=home ;;
+        4|8) _kname=end ;;
+        5)   _kname=pgup ;;
+        6)   _kname=pgdn ;;
+      esac
+      ;;
+  esac
+  return 0
+}
+
+# True for bytes that must never be inserted into an input buffer.
+_is_ctrl_char() {
+  case "$1" in
+    [[:cntrl:]]) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 parse_selection() {
   local input="$1"
   local max="$2"
@@ -420,7 +504,7 @@ _multi_header_fn() {
 _multi_footer_fn() {
   echo
   echo "$_prompt (supports ranges: 1-10,15-20,33)"
-  echo "up/down bump the nearby number, left/right move cursor"
+  echo "up/down ±1, PgUp/PgDn ±${_vp_page_step}, Home/End first/last, left/right move cursor"
 }
 
 _multi_render() {
@@ -505,11 +589,15 @@ _multi_adjust_number_at_cursor() {
   n=$((10#$num))
   _vp_count
   max="$_vp_n"
-  if [ "$dir" == "up" ]; then
-    n=$((n+1)); [ "$n" -gt "$max" ] && n=1
-  else
-    n=$((n-1)); [ "$n" -lt 1 ] && n=$max
-  fi
+  case "$dir" in
+    up)   n=$((n+1)); [ "$n" -gt "$max" ] && n=1 ;;
+    down) n=$((n-1)); [ "$n" -lt 1 ] && n=$max ;;
+    # page/home/end clamp rather than wrap
+    pgup) n=$(( n + _vp_page_step )); [ "$n" -gt "$max" ] && n=$max ;;
+    pgdn) n=$(( n - _vp_page_step )); [ "$n" -lt 1 ] && n=1 ;;
+    home) n=1 ;;
+    end)  n=$max ;;
+  esac
   newnum="$n"
   _buf="${_buf:0:s}${newnum}${_buf:e}"
   _pos=$(( s + ${#newnum} ))
@@ -536,17 +624,22 @@ _multi_prompt_loop() {
     [ "$_rc" -ne 0 ] && break
     _vp_poll_active
     if [[ "$key" == $'\x1b' ]]; then
-      IFS= read -rsn2 -t 0.05 seq
-      case "$seq" in
-        '[A') _multi_adjust_number_at_cursor up ;;
-        '[B') _multi_adjust_number_at_cursor down ;;
-        '[C')
+      _read_key_seq || continue
+      _key_name "$_esc"
+      case "$_kname" in
+        up)   _multi_adjust_number_at_cursor up ;;
+        down) _multi_adjust_number_at_cursor down ;;
+        pgup) _multi_adjust_number_at_cursor pgup ;;
+        pgdn) _multi_adjust_number_at_cursor pgdn ;;
+        home) _multi_adjust_number_at_cursor home ;;
+        end)  _multi_adjust_number_at_cursor end ;;
+        right)
           if [ "$_pos" -lt "${#_buf}" ]; then
             _pos=$(( _pos + 1 ))
             printf '\033[1C'
           fi
           ;;
-        '[D')
+        left)
           if [ "$_pos" -gt 0 ]; then
             _pos=$(( _pos - 1 ))
             printf '\033[1D'
@@ -568,7 +661,11 @@ _multi_prompt_loop() {
           _multi_sync
         fi
         ;;
+      $'\x01') _multi_adjust_number_at_cursor home ;;   # Ctrl-A
+      $'\x05') _multi_adjust_number_at_cursor end ;;    # Ctrl-E
       *)
+        # never let stray control bytes into the buffer
+        _is_ctrl_char "$key" && continue
         _buf="${_buf:0:_pos}${key}${_buf:_pos}"
         _pos=$(( _pos + 1 ))
         _multi_sync
@@ -1152,6 +1249,26 @@ _vp_goto() {
   fi
 }
 
+# Jump the highlight to an absolute row, clamped to the list
+# bounds (page/home/end do not wrap the way the arrows do).
+_nav_jump_to() {
+  $_can_nav || return 0
+  _vp_count
+  (( _vp_n == 0 )) && return 0
+  local target="$1" old="${_hl_index:-0}"
+  (( target < 1 )) && target=1
+  (( target > _vp_n )) && target=$_vp_n
+  _hl_index=$target
+  _buf="$_hl_index"; _pos=${#_buf}
+  if [ "$target" -eq "$old" ]; then
+    # index unchanged, but the buffer was just rewritten
+    _print_input_line
+  else
+    _vp_goto "$old" "$_hl_index"
+  fi
+  return 0
+}
+
 _sync_highlight_from_buf() {
   $_can_nav || return
   [[ "$_buf" =~ ^[0-9]+$ ]] || return
@@ -1206,9 +1323,10 @@ _read_choice() {
     [ "$_rc" -ne 0 ] && break
     _vp_poll_active
     if [[ "$key" == $'\x1b' ]]; then
-      IFS= read -rsn2 -t 0.05 seq
-      case "$seq" in
-        '[A')  # Up
+      _read_key_seq || continue
+      _key_name "$_esc"
+      case "$_kname" in
+        up)
           if $_can_nav; then
             local old="$_hl_index"
             if [ "$_hl_index" -lt 1 ]; then
@@ -1221,7 +1339,7 @@ _read_choice() {
             _vp_goto "$old" "$_hl_index"
           fi
           ;;
-        '[B')  # Down
+        down)
           if $_can_nav; then
             local old="$_hl_index"
             if [ "$_hl_index" -lt 1 ]; then
@@ -1234,13 +1352,17 @@ _read_choice() {
             _vp_goto "$old" "$_hl_index"
           fi
           ;;
-        '[C')  # Right — move cursor within typed text
+        pgup)   _nav_jump_to $(( _hl_index - _vp_page_step )) ;;
+        pgdn)   _nav_jump_to $(( _hl_index + _vp_page_step )) ;;
+        home)   _nav_jump_to 1 ;;
+        end)    _nav_jump_to "$_vp_n" ;;
+        right)  # move cursor within typed text
           if [ "$_pos" -lt "${#_buf}" ]; then
             _pos=$(( _pos + 1 ))
             printf '\033[1C'
           fi
           ;;
-        '[D')  # Left — move cursor within typed text
+        left)   # move cursor within typed text
           if [ "$_pos" -gt 0 ]; then
             _pos=$(( _pos - 1 ))
             printf '\033[1D'
@@ -1263,7 +1385,11 @@ _read_choice() {
           _sync_highlight_from_buf
         fi
         ;;
+      $'\x01') _nav_jump_to 1 ;;          # Ctrl-A — first item
+      $'\x05') _nav_jump_to "$_vp_n" ;;   # Ctrl-E — last item
       *)  # insert typed char at cursor position
+        # never let stray control bytes into the buffer
+        _is_ctrl_char "$key" && continue
         _buf="${_buf:0:_pos}${key}${_buf:_pos}"
         _pos=$(( _pos + 1 ))
         _print_input_line
