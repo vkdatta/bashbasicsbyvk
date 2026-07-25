@@ -325,18 +325,36 @@ _sm_looks_multi() {
   return 1
 }
 
-# does the surrounding menu advertise a command-prefix grammar
-# like  c-1,3  /  m--2-4 ? We look at the option tokens: if the
-# real choices are single letters AND the help text shows a
-# "letter-<digits>" example, treat typed input as command mode.
+# Does the surrounding menu advertise a command-prefix grammar?
+# Two shapes are recognised:
+#   dashed  — c-1,3 / m--2-4  (shortpath staging)
+#   bare    — s1-5 / s1,3     (transfer "prefix s to select")
+# We look at help text for either a literal "letter-digit" example
+# or an explicit "prefix <x>" tip, and remember which letters are
+# valid command prefixes so the splitter can strip exactly those.
+_sm_cmd_letters=""
+
 _sm_looks_command() {
-  local l
+  _sm_cmd_letters=""
+  local l ch
   for l in "${_sm_hdr[@]}" "${_sm_ftr[@]}" "${_sm_lines[@]}"; do
+    # dashed grammar, e.g. c-1,3  m--2-4
     case "$l" in
-      *[A-Za-z]-[0-9]*|*[A-Za-z]--[0-9]*|*[A-Za-z]-1,*|*[A-Za-z]-1-*) return 0 ;;
+      *[A-Za-z]-[0-9]*|*[A-Za-z]--[0-9]*|*[A-Za-z]-1,*|*[A-Za-z]-1-*)
+        # capture the leading letter(s) of the example
+        if [[ "$l" =~ ([A-Za-z]+)-{1,2}[0-9] ]]; then
+          ch="${BASH_REMATCH[1]}"
+          [[ "$_sm_cmd_letters" == *"$ch"* ]] || _sm_cmd_letters+="$ch"
+        fi
+        ;;
     esac
+    # bare grammar advertised as: prefix 's' / use prefix s / 's' to select
+    if [[ "$l" =~ [Pp]refix[[:space:]]+.?([A-Za-z]).? ]]; then
+      ch="${BASH_REMATCH[1]}"
+      [[ "$_sm_cmd_letters" == *"$ch"* ]] || _sm_cmd_letters+="$ch"
+    fi
   done
-  return 1
+  [ -n "$_sm_cmd_letters" ]
 }
 
 _sm_classify_mode() {
@@ -357,15 +375,27 @@ _sm_classify_mode() {
 # the same grammar delete/rename uses.
 declare -gA _msel_set=()
 
-# strip a command prefix (letters, then one or two '-') off the
-# buffer, leaving just the selection list. Sets _sm_cmd_prefix and
-# _sm_sel_body.
+# Strip a command prefix off the buffer, leaving just the selection
+# list. Handles both  c-1,3 / m--2-4  (dashed) and  s1-5  (bare, when
+# 's' was advertised as a prefix). Sets _sm_cmd_prefix, _sm_sel_body.
 _sm_split_command() {
   local b="$1"
   _sm_cmd_prefix=""; _sm_sel_body="$b"
-  if [[ "$b" =~ ^([A-Za-z]+-{1,2})(.*)$ ]]; then
+  # dashed form first: one or more letters then one/two dashes
+  if [[ "$b" =~ ^([A-Za-z]+-{1,2})([0-9].*)?$ ]]; then
     _sm_cmd_prefix="${BASH_REMATCH[1]}"
     _sm_sel_body="${BASH_REMATCH[2]}"
+    return
+  fi
+  # bare form: a single advertised command letter immediately
+  # followed by a digit, e.g. s1-5  (only strip letters we know are
+  # command prefixes, so a stray leading digit is never touched)
+  if [ -n "$_sm_cmd_letters" ] && [[ "$b" =~ ^([A-Za-z])([0-9].*)$ ]]; then
+    local lead="${BASH_REMATCH[1]}"
+    if [[ "$_sm_cmd_letters" == *"$lead"* ]]; then
+      _sm_cmd_prefix="$lead"
+      _sm_sel_body="${BASH_REMATCH[2]}"
+    fi
   fi
 }
 
@@ -738,7 +768,7 @@ read() {
   local _vp_hl_fn _vp_input_fn _blk_h _vp_erase
   local -a _sm_hdr=() _sm_ftr=() _sm_rows_text=() _sm_rows_token=()
   local _sm_erase=0 _sm_len=0 _sm_rows_of=0
-  local _sm_mode="single" _sm_cmd_prefix="" _sm_sel_body=""
+  local _sm_mode="single" _sm_cmd_prefix="" _sm_sel_body="" _sm_cmd_letters=""
   local -A _msel_set=()
 
   local -a __smr_a=("$@")
