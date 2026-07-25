@@ -15,32 +15,43 @@ _highlight() {
   printf '\033[1;7m%s\033[0m' "$1"
 }
 
+# variable-setting form used by hot render loops (avoids $( ))
+_highlight_v() { _hl_out=$'\033[1;7m'"$1"$'\033[0m'; }
+
 # Returns (echoes, no trailing newline) the plain, unhighlighted line
 # text for a single item by its 1-indexed position in $items. Used to
 # redraw just one row in place without reprinting the whole list.
+# Row text for ONE row. The old version walked the whole items
+# array to find row N, making a full-screen render O(N x rows);
+# on a 1000-item listing that was ~50,000 iterations per repaint.
+# items is a plain 0-based array, so the row is a direct index.
 _item_line_text() {
-  local target="$1" idx=1 f icon bn suffix
-  local _sc_icon _sc_display
-  for f in "${items[@]}"; do
-    if [ "$idx" -eq "$target" ]; then
-      bn="${f##*/}"
-      if [[ "$bn" == *.shortcut ]]; then
-        _shortcut_display_parts "$f"
-        icon="$_sc_icon"
-        bn="$_sc_display"
-      else
-        [ -d "$f" ] && icon="📁" || icon="📄"
-      fi
-      if [ -n "${display_suffix_set:-}" ]; then
-        suffix=$(_build_suffix "$f")
-      else
-        suffix=""
-      fi
-      printf " %2d) %s %s%s" "$idx" "$icon" "$bn" "$suffix"
-      return
-    fi
-    idx=$(( idx + 1 ))
-  done
+  local _ilt_out
+  _item_line_text_v "$1"
+  printf '%s' "$_ilt_out"
+}
+
+# variable-setting form: sets _ilt_out, no fork
+_item_line_text_v() {
+  local target="$1" f icon bn
+  local _sc_icon _sc_display _bs_out
+  _ilt_out=""
+  (( target < 1 || target > ${#items[@]} )) && return
+  f="${items[$((target-1))]}"
+  bn="${f##*/}"
+  if [[ "$bn" == *.shortcut ]]; then
+    _shortcut_display_parts "$f"
+    icon="$_sc_icon"
+    bn="$_sc_display"
+  else
+    [ -d "$f" ] && icon="📁" || icon="📄"
+  fi
+  if [ -n "${display_suffix_set:-}" ]; then
+    _build_suffix_v "$f"
+  else
+    _bs_out=""
+  fi
+  printf -v _ilt_out " %2d) %s %s%s" "$target" "$icon" "$bn" "$_bs_out"
 }
 
 _needs_metadata() {
@@ -100,49 +111,81 @@ _ensure_meta() {
   _collect_metadata
 }
 
-_fmt_size() {
+# Fast path: sets _fs_out instead of writing to stdout, so callers
+# never need $( ) — a fork per item in the old code.
+_fmt_size_v() {
   local b="${1:-0}"
-  if   (( b < 1024 ));       then printf "%dB"  "$b"
-  elif (( b < 1048576 ));    then printf "%dK"  "$(( b / 1024 ))"
-  elif (( b < 1073741824 )); then printf "%dM"  "$(( b / 1048576 ))"
-  else                            printf "%dG"  "$(( b / 1073741824 ))"
+  if   (( b < 1024 ));       then _fs_out="${b}B"
+  elif (( b < 1048576 ));    then _fs_out="$(( b / 1024 ))K"
+  elif (( b < 1073741824 )); then _fs_out="$(( b / 1048576 ))M"
+  else                            _fs_out="$(( b / 1073741824 ))G"
   fi
 }
 
-_fmt_time() {
-  local epoch="${1:-0}"
+# kept for any external caller that still expects stdout
+_fmt_size() { local _fs_out; _fmt_size_v "$1"; printf '%s' "$_fs_out"; }
+
+# Fast path: sets _ft_out using bash's built-in time formatting
+# (printf '%(...)T', bash 4.2+). The old version ran an external
+# `date` process for EVERY row, which dominated render time on
+# large directories. Falls back to `date` on ancient bash.
+if printf -v _bvk_tfmt_probe '%(%Y)T' 0 2>/dev/null; then
+  _BVK_HAS_TFMT=1
+else
+  _BVK_HAS_TFMT=0
+fi
+unset _bvk_tfmt_probe
+
+_fmt_time_v() {
+  local epoch="${1:-0}" f
   case "${display_time_format:-full}" in
-    year)      date -d "@$epoch" "+%Y" ;;
-    month)     date -d "@$epoch" "+%b" ;;
-    date)      date -d "@$epoch" "+%d" ;;
-    datetime)  date -d "@$epoch" "+%d %H:%M" ;;
-    monthdate) date -d "@$epoch" "+%b-%d %H:%M" ;;
-    full|*)    date -d "@$epoch" "+%Y-%b-%d %H:%M" ;;
+    year)      f='%Y' ;;
+    month)     f='%b' ;;
+    date)      f='%d' ;;
+    datetime)  f='%d %H:%M' ;;
+    monthdate) f='%b-%d %H:%M' ;;
+    full|*)    f='%Y-%b-%d %H:%M' ;;
   esac
+  if [ "$_BVK_HAS_TFMT" = 1 ]; then
+    printf -v _ft_out "%($f)T" "$epoch"
+  else
+    _ft_out=$(date -d "@$epoch" "+$f")
+  fi
 }
 
-_build_suffix() {
-  local fpath="$1" out=""
+_fmt_time() { local _ft_out; _fmt_time_v "$1"; printf '%s' "$_ft_out"; }
+
+# Fast path: sets _bs_out. The old version used $( ) for both the
+# size and time fields AND was itself called via $( ) per row —
+# three forks per item. Now zero.
+_build_suffix_v() {
+  local fpath="$1" token bn
+  local _fs_out _ft_out
+  _bs_out=""
   for token in ${display_suffix_set:-}; do
     case "$token" in
       ext)
-        local bn="${fpath##*/}"
+        bn="${fpath##*/}"
         if [[ "$bn" == *.shortcut ]]; then
-          out+=" | →shortcut"
+          _bs_out+=" | →shortcut"
         else
-          [[ "$bn" == *.* ]] && out+=" | .${bn##*.}" || out+=" | (no ext)"
+          [[ "$bn" == *.* ]] && _bs_out+=" | .${bn##*.}" || _bs_out+=" | (no ext)"
         fi
         ;;
       size)
-        out+=" | $(_fmt_size "${item_size[$fpath]:-0}")"
+        _fmt_size_v "${item_size[$fpath]:-0}"
+        _bs_out+=" | $_fs_out"
         ;;
       time)
-        out+=" | $(_fmt_time "${item_mtime[$fpath]:-0}")"
+        _fmt_time_v "${item_mtime[$fpath]:-0}"
+        _bs_out+=" | $_ft_out"
         ;;
     esac
   done
-  printf '%s' "$out"
 }
+
+_build_suffix() { local _bs_out; _build_suffix_v "$1"; printf '%s' "$_bs_out"; }
+
 
 build_items_with_meta() {
   local p="$1"
@@ -262,8 +305,11 @@ _shortcut_display_parts() {
 }
 
 _display_items_flat() {
-  local idx=1 f icon bn suffix line
-  local _sc_icon _sc_display
+  local idx=1 f icon bn line
+  local _sc_icon _sc_display _bs_out
+  local want_suffix=0
+  [ -n "${display_suffix_set:-}" ] && want_suffix=1
+  local hl="${_hl_index:-0}"
   for f in "${items[@]}"; do
     bn="${f##*/}"
     if [[ "$bn" == *.shortcut ]]; then
@@ -273,14 +319,17 @@ _display_items_flat() {
     else
       [ -d "$f" ] && icon="📁" || icon="📄"
     fi
-    if [ -n "${display_suffix_set:-}" ]; then
-      suffix=$(_build_suffix "$f")
+    if [ "$want_suffix" = 1 ]; then
+      _build_suffix_v "$f"
     else
-      suffix=""
+      _bs_out=""
     fi
-    line=$(printf " %2d) %s %s%s" "$idx" "$icon" "$bn" "$suffix")
-    if [ "$idx" -eq "${_hl_index:-0}" ]; then
-      printf '%s\n' "$(_highlight "$line")"
+    # printf -v keeps this in-process; the old line=$(printf ...)
+    # forked a subshell for every single item
+    printf -v line " %2d) %s %s%s" "$idx" "$icon" "$bn" "$_bs_out"
+    if [ "$idx" -eq "$hl" ]; then
+      _highlight_v "$line"
+      printf '%s\n' "$_hl_out"
     else
       printf '%s\n' "$line"
     fi
