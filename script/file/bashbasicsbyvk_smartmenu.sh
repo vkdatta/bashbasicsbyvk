@@ -179,16 +179,55 @@ _sm_detect() {
   done
 
   _sm_rows_text=(); _sm_rows_token=(); _sm_hdr=(); _sm_ftr=()
+  local -a blk_text=() blk_tok=()
   for ((i=first; i<=last; i++)); do
     if _sm_is_option "${_sm_lines[$i]}"; then
-      _sm_rows_text+=("${_sm_lines[$i]}")
-      _sm_rows_token+=("$_sm_tok")
+      blk_text+=("${_sm_lines[$i]}")
+      blk_tok+=("$_sm_tok")
     else
-      # interleaved blank/sub-heading: keep it attached to the row above
-      _sm_rows_text+=("${_sm_lines[$i]}")
-      _sm_rows_token+=("")
+      blk_text+=("${_sm_lines[$i]}")
+      blk_tok+=("")
     fi
   done
+
+  # A menu is either numeric (1,2,3…) or lettered (a,b,q…). Real
+  # menus mix the two only as "numbered data rows + lettered action
+  # row" (e.g. a buffer list with r/x/q at the bottom). Decide the
+  # dominant kind; if numeric dominates, any trailing lettered
+  # options are actions and belong in the footer, not the row set.
+  local numc=0 altc=0 t
+  for t in "${blk_tok[@]}"; do
+    [ -z "$t" ] && continue
+    if [[ "$t" =~ ^[0-9]+$ ]]; then numc=$(( numc + 1 )); else altc=$(( altc + 1 )); fi
+  done
+
+  local cut=${#blk_tok[@]}   # index (exclusive) where rows end
+  if (( numc >= 2 && numc >= altc )); then
+    # walk back over any trailing lettered/blank lines
+    local j
+    for ((j=${#blk_tok[@]}-1; j>=0; j--)); do
+      t="${blk_tok[$j]}"
+      if [ -z "$t" ]; then cut=$j; continue; fi
+      if [[ "$t" =~ ^[0-9]+$ ]]; then break; fi
+      cut=$j                      # a lettered action → push into footer
+    done
+  fi
+
+  # trailing blanks just before the cut are spacing, not rows
+  while (( cut > 0 )); do
+    _sm_plain_len "${blk_text[$((cut-1))]}"
+    [ "$_sm_len" -eq 0 ] || break
+    cut=$(( cut - 1 ))
+  done
+
+  for ((i=0; i<cut; i++)); do
+    _sm_rows_text+=("${blk_text[$i]}")
+    _sm_rows_token+=("${blk_tok[$i]}")
+  done
+  # Recompute where the rows actually end in the original buffer.
+  # Everything from here to end-of-buffer is picked up by the footer
+  # loop below, so trailing lettered actions land in the footer once.
+  last=$(( first + cut - 1 ))
 
   # need at least two real choices to be worth taking over
   local real=0
@@ -226,8 +265,135 @@ _sm_detect() {
 # ------------------------------------------------------------
 _sm_count()   { _vp_n=${#_sm_rows_text[@]}; }
 _sm_rowtext() { _vp_line="${_sm_rows_text[$(($1-1))]}"; }
+
+# In multi/command mode a row can be in two independent states:
+# selected (in _msel_set) and/or under the cursor (_hl_index). We
+# show selection with reverse video (via _vp_hl_fn) and the cursor
+# with a leading marker baked into the row text, so both are visible
+# at once without needing a second highlight channel in the engine.
+_sm_rowtext_multi() {
+  local i="$1" base="${_sm_rows_text[$((i-1))]}" mark="  "
+  [ "$i" -eq "${_hl_index:-0}" ] && _sm_row_selectable "$i" && mark="▶ "
+  _vp_line="${mark}${base}"
+}
 _sm_header_fn() { local l; for l in "${_sm_hdr[@]}"; do builtin echo "$l"; done; return 0; }
-_sm_footer_fn() { local l; for l in "${_sm_ftr[@]}"; do builtin echo "$l"; done; return 0; }
+_sm_footer_fn() {
+  local l
+  for l in "${_sm_ftr[@]}"; do builtin echo "$l"; done
+  case "$_sm_mode" in
+    multi)   builtin echo "  ↑↓ move · Space select · type 1,3-5 · Enter confirm" ;;
+    command) builtin echo "  ↑↓ move · Space add to list · type e.g. c-1,3 · Enter run" ;;
+  esac
+  return 0
+}
+
+# ------------------------------------------------------------
+# selection mode
+# ------------------------------------------------------------
+# A menu can want one of three input styles, inferred from its
+# prompt text so no menu code has to declare anything:
+#
+#   single   pick one option            (default)
+#   multi    pick several: 1,3 or 2-4   (delete/rename philosophy)
+#   command  a letter/word prefix plus a selection, e.g. c-1-4,
+#            m--2,5 — the free-text head is preserved verbatim and
+#            only the trailing number list drives the highlight
+#
+# _sm_mode is set by _sm_classify_mode from _sm_prompt (+ footer
+# hints picked up in detection). Override per-call if ever needed
+# by exporting VK_MENU_MODE before the read.
+_sm_mode="single"
+
+# does the prompt or nearby help text invite a multi/range pick?
+# We must NOT trip on a plain choice label like "[1-9]" or "[0-2]",
+# which denotes the valid single-choice span, not a range example.
+_sm_looks_multi() {
+  local hay="$1"
+  # blank out any "[...]" range label before pattern-matching
+  local scrubbed="${hay//\[+([0-9])-+([0-9])\]/}"
+  # (the extglob form above only works with extglob; do it safely)
+  scrubbed="$hay"
+  while [[ "$scrubbed" =~ \[[0-9]+-[0-9]+\] ]]; do
+    scrubbed="${scrubbed/${BASH_REMATCH[0]}/}"
+  done
+  case "$scrubbed" in
+    *[Nn]umber\(s\)*|*[Nn]umbers*|*separated\ by*|*comma*|*ranges*) return 0 ;;
+    *[Oo]rder:*) return 0 ;;
+    *[0-9],[0-9]*) return 0 ;;               # a literal "1,3" example
+    *[0-9]-[0-9]*) return 0 ;;               # a literal "2-4" example (label already scrubbed)
+  esac
+  return 1
+}
+
+# does the surrounding menu advertise a command-prefix grammar
+# like  c-1,3  /  m--2-4 ? We look at the option tokens: if the
+# real choices are single letters AND the help text shows a
+# "letter-<digits>" example, treat typed input as command mode.
+_sm_looks_command() {
+  local l
+  for l in "${_sm_hdr[@]}" "${_sm_ftr[@]}" "${_sm_lines[@]}"; do
+    case "$l" in
+      *[A-Za-z]-[0-9]*|*[A-Za-z]--[0-9]*|*[A-Za-z]-1,*|*[A-Za-z]-1-*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+_sm_classify_mode() {
+  if [ -n "${VK_MENU_MODE:-}" ]; then _sm_mode="$VK_MENU_MODE"; return; fi
+  local hint="$_sm_prompt ${_sm_ftr[*]}"
+  if _sm_looks_command; then
+    _sm_mode="command"
+  elif _sm_looks_multi "$hint"; then
+    _sm_mode="multi"
+  else
+    _sm_mode="single"
+  fi
+}
+
+# ---- multi-select highlight set ----
+# _msel_set maps 1-based row -> 1 for every row the current buffer
+# selects. Built by parsing the numeric part of the buffer through
+# the same grammar delete/rename uses.
+declare -gA _msel_set=()
+
+# strip a command prefix (letters, then one or two '-') off the
+# buffer, leaving just the selection list. Sets _sm_cmd_prefix and
+# _sm_sel_body.
+_sm_split_command() {
+  local b="$1"
+  _sm_cmd_prefix=""; _sm_sel_body="$b"
+  if [[ "$b" =~ ^([A-Za-z]+-{1,2})(.*)$ ]]; then
+    _sm_cmd_prefix="${BASH_REMATCH[1]}"
+    _sm_sel_body="${BASH_REMATCH[2]}"
+  fi
+}
+
+# expand "1,3-5" -> set bits, clamped to row count. Pure bash, no
+# subshell, so it is cheap to call on every keystroke.
+_sm_compute_msel() {
+  _msel_set=()
+  local body="$1" n=${#_sm_rows_text[@]} part a z i
+  local IFS=','
+  local -a parts
+  read -ra parts <<< "$body"
+  for part in "${parts[@]}"; do
+    part="${part// /}"
+    [ -z "$part" ] && continue
+    if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      a=$((10#${BASH_REMATCH[1]})); z=$((10#${BASH_REMATCH[2]}))
+      (( a > z )) && { i=$a; a=$z; z=$i; }
+      for ((i=a; i<=z; i++)); do
+        (( i>=1 && i<=n )) && _msel_set[$i]=1
+      done
+    elif [[ "$part" =~ ^[0-9]+$ ]]; then
+      i=$((10#$part))
+      (( i>=1 && i<=n )) && _msel_set[$i]=1
+    fi
+  done
+}
+
+_sm_is_hl_multi() { [ -n "${_msel_set[$1]+x}" ]; }
 
 _sm_input_fn() {
   builtin printf '\r\033[K%s%s' "$_sm_prompt" "$_buf"
@@ -251,7 +417,7 @@ _sm_next_selectable() {
 }
 
 # map the typed buffer onto the row whose token matches, so a
-# menu numbered 0..2 highlights correctly
+# menu numbered 0..2 highlights correctly (single-select mode)
 _sm_sync_from_buf() {
   [ -z "$_buf" ] && return 0
   local i n=${#_sm_rows_token[@]} old="${_hl_index:-0}"
@@ -267,6 +433,56 @@ _sm_sync_from_buf() {
   return 0
 }
 
+# the index of the digit-run the cursor currently sits in — used to
+# scroll the window to whichever number is being edited, exactly as
+# the delete/rename prompt does
+_sm_cursor_number() {
+  local s=$_pos e=$_pos
+  while [ "$s" -gt 0 ] && [[ "${_buf:s-1:1}" =~ [0-9] ]]; do s=$((s-1)); done
+  while [ "$e" -lt "${#_buf}" ] && [[ "${_buf:e:1}" =~ [0-9] ]]; do e=$((e+1)); done
+  [ "$s" -eq "$e" ] && return 1
+  builtin echo "$(( 10#${_buf:s:e-s} ))"
+}
+
+# multi/command mode: rebuild the selection set, repaint only what
+# changed, and scroll to the number under the cursor
+_sm_sync_multi() {
+  local -A _old=()
+  local k body target
+  for k in "${!_msel_set[@]}"; do _old[$k]=1; done
+
+  if [ "$_sm_mode" = "command" ]; then
+    _sm_split_command "$_buf"; body="$_sm_sel_body"
+  else
+    body="$_buf"
+  fi
+  _sm_compute_msel "$body"
+
+  target=$(_sm_cursor_number)
+  if [ -n "$target" ] && _vp_ensure_visible "$target"; then
+    _vp_rerender
+    return 0
+  fi
+
+  local -A _chg=()
+  for k in "${!_old[@]}";      do [ -z "${_msel_set[$k]+x}" ] && _chg[$k]=1; done
+  for k in "${!_msel_set[@]}"; do [ -z "${_old[$k]+x}"      ] && _chg[$k]=1; done
+  for k in "${!_chg[@]}"; do _vp_repaint_row "$k"; done
+
+  _sm_input_fn
+  return 0
+}
+
+# unified dispatch: single vs multi/command
+_sm_after_edit() {
+  if [ "$_sm_mode" = "single" ]; then
+    _sm_input_fn
+    _sm_sync_from_buf
+  else
+    _sm_sync_multi
+  fi
+}
+
 _sm_set_index() {
   local old="${_hl_index:-0}" new="$1"
   _hl_index="$new"
@@ -274,6 +490,66 @@ _sm_set_index() {
   _pos=${#_buf}
   if [ "$new" -eq "$old" ]; then _sm_input_fn; else _vp_goto "$old" "$new"; fi
 }
+
+# In multi/command mode the arrows do not replace the buffer — they
+# just move a "cursor row" and toggling is done with space/enter.
+# _sm_cursor_row tracks that highlighted-but-not-yet-selected row.
+_sm_move_cursor() {
+  local old="${_hl_index:-0}" new="$1"
+  _hl_index="$new"
+  # the caret lives in the row text, so both rows must be re-rendered
+  unset "_vp_rowcache[$old]" "_vp_rowcache[$new]"
+  if _vp_ensure_visible "$new"; then
+    _vp_rerender
+  else
+    _vp_repaint_row "$old"
+    _vp_repaint_row "$new"
+    _sm_input_fn
+  fi
+}
+
+# toggle the cursor row into/out of the typed buffer, keeping the
+# buffer human-readable (sorted, de-duped, ranges collapsed)
+_sm_toggle_cursor() {
+  local row="${_hl_index:-0}"
+  (( row < 1 )) && return 0
+  local body
+  if [ "$_sm_mode" = "command" ]; then
+    _sm_split_command "$_buf"; body="$_sm_sel_body"
+  else
+    _sm_cmd_prefix=""; body="$_buf"
+  fi
+  _sm_compute_msel "$body"
+  if [ -n "${_msel_set[$row]+x}" ]; then
+    unset '_msel_set[$row]'
+  else
+    _msel_set[$row]=1
+  fi
+  _buf="${_sm_cmd_prefix}$(_sm_render_set)"
+  _pos=${#_buf}
+  _sm_sync_multi
+}
+
+# render the current _msel_set back to a compact "1-3,7" string
+_sm_render_set() {
+  local -a keys=()
+  local k
+  for k in "${!_msel_set[@]}"; do keys+=("$k"); done
+  (( ${#keys[@]} == 0 )) && { builtin echo ""; return; }
+  IFS=$'\n' keys=($(builtin printf '%s\n' "${keys[@]}" | sort -n)); unset IFS
+  local out="" start=-1 prev=-1 v
+  for v in "${keys[@]}"; do
+    if (( start < 0 )); then start=$v; prev=$v
+    elif (( v == prev + 1 )); then prev=$v
+    else
+      out+="${out:+,}$(_sm_range $start $prev)"
+      start=$v; prev=$v
+    fi
+  done
+  out+="${out:+,}$(_sm_range $start $prev)"
+  builtin echo "$out"
+}
+_sm_range() { if [ "$1" = "$2" ]; then builtin echo "$1"; else builtin echo "$1-$2"; fi; }
 
 # ------------------------------------------------------------
 # the interactive loop
@@ -287,10 +563,21 @@ _sm_run() {
   _vp_rowtext_fn=_sm_rowtext
   _vp_header_fn=_sm_header_fn
   _vp_footer_fn=_sm_footer_fn
-  _vp_hl_fn=_vp_is_hl_single
   _vp_input_fn=_sm_input_fn
   _vp_start=1
   _vp_cache_reset
+
+  _sm_classify_mode
+  local multi=false
+  [ "$_sm_mode" != "single" ] && multi=true
+  if $multi; then
+    _vp_hl_fn=_sm_is_hl_multi
+    _vp_rowtext_fn=_sm_rowtext_multi
+    _msel_set=()
+  else
+    _vp_hl_fn=_vp_is_hl_single
+    _vp_rowtext_fn=_sm_rowtext
+  fi
 
   # wipe the already-printed copy of the menu, then draw our own
   local up="$_sm_erase" rows
@@ -305,6 +592,15 @@ _sm_run() {
   _vp_render_fresh
   _sm_count
   n="$_vp_n"
+
+  # multi/command modes show a moving cursor row from the start, so
+  # Space has something to toggle immediately and the first row is
+  # visibly highlighted the moment the menu appears
+  if $multi && [ "$n" -ge 1 ]; then
+    _hl_index="$(_sm_next_selectable 1 1)"
+    _vp_repaint_row "$_hl_index"
+    _sm_input_fn
+  fi
 
   stty -icanon -echo min 1 time 0 2>/dev/null
   while true; do
@@ -325,40 +621,74 @@ _sm_run() {
     if [[ "$key" == $'\x1b' ]]; then
       _read_key_seq || continue
       _key_name "$_esc"
-      case "$_kname" in
-        up)   _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-1} <= 1 ? n : _hl_index - 1 )) -1)" ;;
-        down) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-0} >= n ? 1 : _hl_index + 1 )) 1)" ;;
-        pgup) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-1} - ${_vp_page_step:-10} < 1 ? 1 : _hl_index - _vp_page_step )) 1)" ;;
-        pgdn) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-0} + ${_vp_page_step:-10} > n ? n : _hl_index + _vp_page_step )) -1)" ;;
-        home) _sm_set_index "$(_sm_next_selectable 1 1)" ;;
-        end)  _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
-        right)
-          if [ "$_pos" -lt "${#_buf}" ]; then _pos=$(( _pos + 1 )); builtin printf '\033[1C'; fi ;;
-        left)
-          if [ "$_pos" -gt 0 ]; then _pos=$(( _pos - 1 )); builtin printf '\033[1D'; fi ;;
-        *) : ;;
-      esac
+      if $multi; then
+        # arrows move a cursor row; they do NOT overwrite the buffer
+        case "$_kname" in
+          up)   _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-1} <= 1 ? n : _hl_index - 1 )) -1)" ;;
+          down) _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-0} >= n ? 1 : _hl_index + 1 )) 1)" ;;
+          pgup) _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-1} - ${_vp_page_step:-10} < 1 ? 1 : _hl_index - _vp_page_step )) 1)" ;;
+          pgdn) _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-0} + ${_vp_page_step:-10} > n ? n : _hl_index + _vp_page_step )) -1)" ;;
+          home) _sm_move_cursor "$(_sm_next_selectable 1 1)" ;;
+          end)  _sm_move_cursor "$(_sm_next_selectable "$n" -1)" ;;
+          right)
+            if [ "$_pos" -lt "${#_buf}" ]; then _pos=$(( _pos + 1 )); builtin printf '\033[1C'; fi ;;
+          left)
+            if [ "$_pos" -gt 0 ]; then _pos=$(( _pos - 1 )); builtin printf '\033[1D'; fi ;;
+          *) : ;;
+        esac
+      else
+        case "$_kname" in
+          up)   _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-1} <= 1 ? n : _hl_index - 1 )) -1)" ;;
+          down) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-0} >= n ? 1 : _hl_index + 1 )) 1)" ;;
+          pgup) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-1} - ${_vp_page_step:-10} < 1 ? 1 : _hl_index - _vp_page_step )) 1)" ;;
+          pgdn) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-0} + ${_vp_page_step:-10} > n ? n : _hl_index + _vp_page_step )) -1)" ;;
+          home) _sm_set_index "$(_sm_next_selectable 1 1)" ;;
+          end)  _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
+          right)
+            if [ "$_pos" -lt "${#_buf}" ]; then _pos=$(( _pos + 1 )); builtin printf '\033[1C'; fi ;;
+          left)
+            if [ "$_pos" -gt 0 ]; then _pos=$(( _pos - 1 )); builtin printf '\033[1D'; fi ;;
+          *) : ;;
+        esac
+      fi
       continue
     fi
 
     case "$key" in
-      "") break ;;
+      "") break ;;                                 # Enter — accept
+      ' ')
+        if $multi; then _sm_toggle_cursor          # Space toggles cursor row
+        else
+          _is_ctrl_char " " && continue
+          _buf="${_buf:0:_pos} ${_buf:_pos}"; _pos=$(( _pos + 1 )); _sm_after_edit
+        fi
+        ;;
       $'\x7f'|$'\x08')
         if [ "$_pos" -gt 0 ]; then
           _buf="${_buf:0:_pos-1}${_buf:_pos}"
           _pos=$(( _pos - 1 ))
-          _sm_input_fn
-          _sm_sync_from_buf
+          _sm_after_edit
         fi
         ;;
-      $'\x01') _sm_set_index "$(_sm_next_selectable 1 1)" ;;
-      $'\x05') _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
+      $'\x01')  # Ctrl-A — first item (single) / select-all (multi)
+        if $multi; then
+          local __i
+          _msel_set=()
+          for ((__i=1; __i<=n; __i++)); do _sm_row_selectable "$__i" && _msel_set[$__i]=1; done
+          _sm_cmd_prefix=""
+          [ "$_sm_mode" = "command" ] && { _sm_split_command "$_buf"; }
+          _buf="${_sm_cmd_prefix}$(_sm_render_set)"; _pos=${#_buf}
+          _sm_sync_multi
+        else
+          _sm_set_index "$(_sm_next_selectable 1 1)"
+        fi
+        ;;
+      $'\x05') $multi || _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
       *)
         _is_ctrl_char "$key" && continue
         _buf="${_buf:0:_pos}${key}${_buf:_pos}"
         _pos=$(( _pos + 1 ))
-        _sm_input_fn
-        _sm_sync_from_buf
+        _sm_after_edit
         ;;
     esac
   done
@@ -366,12 +696,25 @@ _sm_run() {
   [ -n "${_orig_stty:-}" ] && stty "$_orig_stty" 2>/dev/null
   builtin echo
 
-  if [ -n "$_buf" ]; then
-    _sm_result="$_buf"
-  elif [ "${_hl_index:-0}" -ge 1 ]; then
-    _sm_result="${_sm_rows_token[$((_hl_index-1))]}"
+  if $multi; then
+    # buffer already carries the full selection (with any command
+    # prefix). If the user toggled nothing and typed nothing, fall
+    # back to the cursor row so a bare Enter still picks something.
+    if [ -n "$_buf" ]; then
+      _sm_result="$_buf"
+    elif [ "${_hl_index:-0}" -ge 1 ]; then
+      _sm_result="${_hl_index}"
+    else
+      _sm_result=""
+    fi
   else
-    _sm_result=""
+    if [ -n "$_buf" ]; then
+      _sm_result="$_buf"
+    elif [ "${_hl_index:-0}" -ge 1 ]; then
+      _sm_result="${_sm_rows_token[$((_hl_index-1))]}"
+    else
+      _sm_result=""
+    fi
   fi
   return 0
 }
@@ -395,6 +738,8 @@ read() {
   local _vp_hl_fn _vp_input_fn _blk_h _vp_erase
   local -a _sm_hdr=() _sm_ftr=() _sm_rows_text=() _sm_rows_token=()
   local _sm_erase=0 _sm_len=0 _sm_rows_of=0
+  local _sm_mode="single" _sm_cmd_prefix="" _sm_sel_body=""
+  local -A _msel_set=()
 
   local -a __smr_a=("$@")
   local __smr_i __smr_c __smr_f __smr_rest __smr_n=${#__smr_a[@]}
