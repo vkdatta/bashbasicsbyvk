@@ -403,6 +403,26 @@ _vp_render_fresh() {
   $_vp_input_fn
 }
 
+# Redraw after the terminal changed size.
+#
+# _vp_render_fresh emits a block at the CURRENT cursor position, so
+# calling it on a resize appends a whole second copy of the menu
+# below the first — that is the "menu pops up again every few
+# seconds" bug. Instead, walk back up over the block we already
+# drew, wipe from there to the bottom of the screen, and re-emit
+# once at the new geometry.
+_vp_redraw_in_place() {
+  local up=$(( _blk_h - 1 ))
+  local rows
+  rows=$(_term_rows)
+  # never scroll further up than the screen allows
+  (( up > rows - 1 )) && up=$(( rows - 1 ))
+  (( up < 0 )) && up=0
+  (( up > 0 )) && builtin printf '\033[%dA' "$up"
+  builtin printf '\r\033[J'
+  _vp_render_fresh
+}
+
 # --- distance in lines from the input line up to row $1 ---
 _vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + 1 )); }
 
@@ -1331,8 +1351,12 @@ _sync_highlight_from_buf() {
   _vp_count
   (( _vp_n == 0 )) && return
 
-  # --- shortpath command grammar: letters, one/two dashes, a list ---
-  if [[ "$_buf" =~ ^([cCmMsS]-{1,2})([0-9,-]+)$ ]]; then
+  # --- command grammar: letters, one/two dashes, then a number list ---
+  # Covers every prefixed command the menu dispatches with a
+  # selection: c-/m-/s- (shortpath stage, optionally doubled for
+  # persistent) and the multi-letter ones up-/ups- (upload). Any
+  # future letter prefix works with no change here.
+  if [[ "$_buf" =~ ^([A-Za-z]+-{1,2})([0-9][0-9,-]*)$ ]]; then
     local body="${BASH_REMATCH[2]}"
     # rebuild the multi-select set and repaint the changed rows
     local -A _old=()
@@ -1413,7 +1437,7 @@ _read_choice() {
       if _vp_check_resize; then
         _vp_cache_reset
         _vp_prime_rows
-        _vp_render_fresh
+        _vp_redraw_in_place
         _vp_poll_active
       fi
       continue

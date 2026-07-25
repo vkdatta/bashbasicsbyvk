@@ -640,7 +640,7 @@ _sm_run() {
       _vp_poll_tick
       if _vp_check_resize; then
         _vp_cache_reset
-        _vp_render_fresh
+        _vp_redraw_in_place
         _vp_poll_active
       fi
       continue
