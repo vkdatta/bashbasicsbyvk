@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+source "bashbasicsbyvk_smartmenu.sh"
 source "bashbasicsbyvk_run.sh"
 source "bashbasicsbyvk_organise.sh"
 source "bashbasicsbyvk_find.sh"
@@ -66,7 +67,7 @@ _set_available_above() {
 _repaint_line_above() {
   local dist="$1" content="$2"
   [ "$dist" -gt "$_available_above" ] && return 1
-  printf '\033[s\033[%dA\r\033[2K%s\033[u' "$dist" "$content"
+  builtin printf '\033[s\033[%dA\r\033[2K%s\033[u' "$dist" "$content"
 }
 
 # ============================================================
@@ -135,6 +136,13 @@ _vp_fit() {
 }
 
 _vp_count() {
+  # Row source is pluggable: set _vp_count_fn / _vp_rowtext_fn to
+  # drive the viewport from any list (see bashbasicsbyvk_smartmenu.sh).
+  # Nothing else in the engine needs to know where rows come from.
+  if [ -n "${_vp_count_fn:-}" ]; then
+    $_vp_count_fn
+    return 0
+  fi
   if [ "$_vp_mode" == "imaginary" ]; then
     _vp_n=${#imaginary_map[@]}
   else
@@ -149,7 +157,10 @@ _vp_row_text() {
     _vp_line="${_vp_rowcache[$i]}"
     return 0
   fi
-  if [ "$_vp_mode" == "imaginary" ]; then
+  if [ -n "${_vp_rowtext_fn:-}" ]; then
+    $_vp_rowtext_fn "$i"
+    t="$_vp_line"
+  elif [ "$_vp_mode" == "imaginary" ]; then
     t="${imaginary_lines[$((i-1))]}"
   else
     t="$(_item_line_text "$i")"
@@ -296,7 +307,7 @@ _vp_ensure_visible() {
   [ "$_vp_start" -ne "$old" ]
 }
 
-_vp_el() { printf '\r\033[2K%s\n' "$1"; }
+_vp_el() { builtin printf '\r\033[2K%s\n' "$1"; }
 
 # --- paint the whole block at the cursor ---
 _vp_emit() {
@@ -341,7 +352,7 @@ _vp_emit() {
 
 # --- repaint the block in place (block top is _blk_h-1 lines up) ---
 _vp_rerender() {
-  printf '\033[%dA\r' "$(( _blk_h - 1 ))"
+  builtin printf '\033[%dA\r' "$(( _blk_h - 1 ))"
   _vp_emit
   $_vp_input_fn
 }
@@ -485,14 +496,14 @@ _multi_compute_set() {
 }
 
 _multi_print_input_line() {
-  printf '\r\033[K'
+  builtin printf '\r\033[K'
   if [ "$_vp_mode" == "imaginary" ]; then
-    printf "Group numbers: %s" "$_buf"
+    builtin printf "Group numbers: %s" "$_buf"
   else
-    printf "Item numbers: %s" "$_buf"
+    builtin printf "Item numbers: %s" "$_buf"
   fi
   local back=$(( ${#_buf} - _pos ))
-  [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
+  [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
 }
 
 _multi_header_fn() {
@@ -636,13 +647,13 @@ _multi_prompt_loop() {
         right)
           if [ "$_pos" -lt "${#_buf}" ]; then
             _pos=$(( _pos + 1 ))
-            printf '\033[1C'
+            builtin printf '\033[1C'
           fi
           ;;
         left)
           if [ "$_pos" -gt 0 ]; then
             _pos=$(( _pos - 1 ))
-            printf '\033[1D'
+            builtin printf '\033[1D'
           fi
           ;;
         *) : ;;
@@ -951,9 +962,9 @@ build_imaginary_groups() {
     fi
   done
 
-  IFS=$'\n' sorted_specials=($(printf '%s\n' "${specials[@]}" | sort))
-  IFS=$'\n' sorted_digits=($(printf '%s\n' "${digits[@]}" | sort))
-  IFS=$'\n' sorted_letters=($(printf '%s\n' "${letters[@]}" | sort))
+  IFS=$'\n' sorted_specials=($(builtin printf '%s\n' "${specials[@]}" | sort))
+  IFS=$'\n' sorted_digits=($(builtin printf '%s\n' "${digits[@]}" | sort))
+  IFS=$'\n' sorted_letters=($(builtin printf '%s\n' "${letters[@]}" | sort))
   unset IFS
 
   local sorted=("${sorted_specials[@]}" "${sorted_digits[@]}" "${sorted_letters[@]}" "${fallback[@]}")
@@ -963,7 +974,7 @@ build_imaginary_groups() {
   local idx=1
   for ch in "${sorted[@]}"; do
     local cnt="${group_counts[$ch]}"
-    imaginary_lines+=("$(printf ' %2d) 📁 %s (%d items)' "$idx" "$ch" "$cnt")")
+    imaginary_lines+=("$(builtin printf ' %2d) 📁 %s (%d items)' "$idx" "$ch" "$cnt")")
     imaginary_map+=("$ch")
     idx=$((idx+1))
   done
@@ -1200,9 +1211,9 @@ _render_items_with_highlight() {
   for ((i=1; i<=${#items[@]}; i++)); do
     line=$(_item_line_text "$i")
     if [ -n "${hl[$i]+x}" ]; then
-      printf '%s\n' "$(_highlight "$line")"
+      builtin printf '%s\n' "$(_highlight "$line")"
     else
-      printf '%s\n' "$line"
+      builtin printf '%s\n' "$line"
     fi
   done
 }
@@ -1221,10 +1232,10 @@ _menu_header_imaginary() {
 }
 
 _print_input_line() {
-  printf '\r\033[K'
-  printf "Select: %s" "$_buf"
+  builtin printf '\r\033[K'
+  builtin printf "Select: %s" "$_buf"
   local back=$(( ${#_buf} - _pos ))
-  [ "$back" -gt 0 ] && printf '\033[%dD' "$back"
+  [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
 }
 
 _update_highlight() {
@@ -1245,7 +1256,7 @@ _vp_goto() {
     _vp_rerender
   else
     _update_highlight "$old" "$new"
-    _print_input_line
+    $_vp_input_fn
   fi
 }
 
@@ -1262,7 +1273,7 @@ _nav_jump_to() {
   _buf="$_hl_index"; _pos=${#_buf}
   if [ "$target" -eq "$old" ]; then
     # index unchanged, but the buffer was just rewritten
-    _print_input_line
+    $_vp_input_fn
   else
     _vp_goto "$old" "$_hl_index"
   fi
@@ -1359,13 +1370,13 @@ _read_choice() {
         right)  # move cursor within typed text
           if [ "$_pos" -lt "${#_buf}" ]; then
             _pos=$(( _pos + 1 ))
-            printf '\033[1C'
+            builtin printf '\033[1C'
           fi
           ;;
         left)   # move cursor within typed text
           if [ "$_pos" -gt 0 ]; then
             _pos=$(( _pos - 1 ))
-            printf '\033[1D'
+            builtin printf '\033[1D'
           fi
           ;;
         *) : ;;  # unrecognized escape sequence, swallow it
@@ -1441,6 +1452,9 @@ fi
 
 shopt -s nullglob
 while true; do
+  # the file menu owns the screen from here down; anything the
+  # smart-menu capture recorded before now is stale
+  declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   total=$(count_items_in_path "$path")
 
   imaginary_mode=false
