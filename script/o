@@ -14,21 +14,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _vp_rows_now=0
 _vp_cols_now=0
-_vp_size_pending=""     # a candidate new size, awaiting confirmation
+_vp_size_pending=""
 
-# Probe the real tty size. bash traps fired during a blocked `read`
-# are unreliable (read gets restarted, and tput inside a trap can
-# report the terminfo default), so the size is polled instead.
-#
-# Robustness: `stty size` and `tput` can momentarily disagree or
-# fail (0 0, empty, or the terminfo default) on some mobile terminal
-# emulators. If we let a transient failure overwrite a known-good
-# size with a fallback, the next poll flips it back and the menu
-# redraws for no reason — the "pops up every few seconds" bug. So a
-# probe that cannot get a trustworthy reading returns the LAST known
-# size instead of a default, and never clobbers a good value.
 _vp_read_size() {
-  # sets _vp_pr / _vp_pc to a fresh reading, or leaves them empty
   local sz r c
   _vp_pr=""; _vp_pc=""
   sz=$(stty size 2>/dev/null)
@@ -38,7 +26,6 @@ _vp_read_size() {
     _vp_pr="$r"; _vp_pc="$c"
     return 0
   fi
-  # stty unavailable — try tput, but only trust it if BOTH succeed
   r=$(tput lines 2>/dev/null); c=$(tput cols 2>/dev/null)
   if [[ "$r" =~ ^[0-9]+$ ]] && [ "$r" -gt 0 ] \
      && [[ "$c" =~ ^[0-9]+$ ]] && [ "$c" -gt 0 ]; then
@@ -52,9 +39,9 @@ _vp_probe_size() {
   if _vp_read_size; then
     _vp_rows_now="$_vp_pr"; _vp_cols_now="$_vp_pc"
   elif [ "$_vp_rows_now" -gt 0 ] 2>/dev/null; then
-    : # keep the last known-good size; do not fall back to a default
+    : 
   else
-    _vp_rows_now=24; _vp_cols_now=80   # first probe ever, nothing better
+    _vp_rows_now=24; _vp_cols_now=80   
   fi
 }
 
@@ -68,29 +55,20 @@ _term_cols() {
   echo "$_vp_cols_now"
 }
 
-# Returns 0 if the terminal changed size since the last render.
-#
-# A change must be CONFIRMED by two consecutive readings before we
-# believe it. A single differing reading is treated as noise: it is
-# remembered as pending, and only if the very next poll agrees do we
-# commit and report a resize. This kills the flip-flop redraw while
-# still reacting to a genuine keyboard open/close within one extra
-# poll interval.
 _vp_check_resize() {
   _vp_resized=false
-  _vp_read_size || return 1            # could not read: assume no change
+  _vp_read_size || return 1
   local nr="$_vp_pr" nc="$_vp_pc"
   if [ "$nr" = "$_vp_rows_now" ] && [ "$nc" = "$_vp_cols_now" ]; then
-    _vp_size_pending=""                # matches current: steady state
+    _vp_size_pending=""
     return 1
   fi
-  # differs from current — is it the same as the pending candidate?
   if [ "$_vp_size_pending" = "${nr}x${nc}" ]; then
-    _vp_rows_now="$nr"; _vp_cols_now="$nc"   # confirmed, commit
+    _vp_rows_now="$nr"; _vp_cols_now="$nc"
     _vp_size_pending=""
     return 0
   fi
-  _vp_size_pending="${nr}x${nc}"        # first sighting: hold, don't act
+  _vp_size_pending="${nr}x${nc}"
   return 1
 }
 
@@ -107,27 +85,18 @@ _repaint_line_above() {
   builtin printf '\033[s\033[%dA\r\033[2K%s\033[u' "$dist" "$content"
 }
 
-# ============================================================
-#  VIEWPORT ENGINE
-#  Renders a scrollable window over a row list so that the
-#  highlighted row is ALWAYS on screen, no matter how many
-#  rows exist. Replaces the old "print everything and hope it
-#  fits" model, which silently dropped the highlight for any
-#  row that had scrolled off the top of the terminal.
-# ============================================================
-
 declare -gA _vp_rowcache=()
 declare -ga _vp_hdr_arr=()
 declare -ga _vp_ftr_arr=()
-_vp_mode="items"        # items | imaginary
-_vp_start=1             # first row currently on screen (1-based)
-_vp_end=0               # last row currently on screen
-_vp_page=0              # how many rows fit on screen
-_vp_n=0                 # total row count
-_vp_top_n=0             # header line count
-_vp_footer_n=0          # footer line count
+_vp_mode="items"
+_vp_start=1
+_vp_end=0
+_vp_page=0
+_vp_n=0
+_vp_top_n=0
+_vp_footer_n=0
 _vp_rows_printed=0
-_blk_h=0                # total height of the rendered block (incl. input line)
+_blk_h=0
 _vp_cols=80
 _vp_width_margin=2
 _vp_line=""
@@ -138,16 +107,12 @@ _vp_poll_cur="0.5"
 _vp_idle=0
 _vp_rule="   ─────────────────────────────"
 
-# Poll quickly right after activity (when the soft keyboard is most
-# likely to open or close), then back off so an idle menu is not
-# waking up twice a second forever.
 _vp_poll_active() { _vp_idle=0; _vp_poll_cur="$_vp_poll_fast"; }
 _vp_poll_tick() {
   _vp_idle=$(( _vp_idle + 1 ))
   (( _vp_idle > 12 )) && _vp_poll_cur="$_vp_poll_slow"
 }
 
-# --- pure-bash ANSI strip (no subshell: sets _vp_plain) ---
 _vp_strip_ansi() {
   local s="$1" out=""
   while [[ "$s" == *$'\033['* ]]; do
@@ -158,8 +123,6 @@ _vp_strip_ansi() {
   _vp_plain="$out$s"
 }
 
-# --- clamp a row to one physical terminal line (sets _vp_line) ---
-# A wrapped line would desync every distance calculation below.
 _vp_fit() {
   local text="$1" limit
   limit=$(( _vp_cols - _vp_width_margin ))
@@ -173,10 +136,7 @@ _vp_fit() {
 }
 
 _vp_count() {
-  # Row source is pluggable: set _vp_count_fn / _vp_rowtext_fn to
-  # drive the viewport from any list (see bashbasicsbyvk_smartmenu.sh).
-  # Nothing else in the engine needs to know where rows come from.
-  if [ -n "${_vp_count_fn:-}" ]; then
+if [ -n "${_vp_count_fn:-}" ]; then
     $_vp_count_fn
     return 0
   fi
@@ -186,8 +146,6 @@ _vp_count() {
     _vp_n=${#items[@]}
   fi
 }
-
-# --- row text, cached (sets _vp_line) ---
 _vp_row_text() {
   local i="$1" t
   if [ -n "${_vp_rowcache[$i]+x}" ]; then
@@ -213,11 +171,6 @@ _vp_cache_reset() {
   _vp_disp_ok=false
 }
 
-# Prime the row cache from display_items in ONE subshell rather than
-# N calls to _item_line_text. Also acts as a consistency check: if
-# display_items emits anything other than exactly one line per item
-# (a legend, a group separator), the counts disagree and we fall back
-# to per-row rendering instead of silently desyncing the line math.
 _vp_prime_rows() {
   [ "$_vp_mode" == "items" ] || return 0
   declare -F display_items >/dev/null 2>&1 || return 0
@@ -240,7 +193,6 @@ _vp_prime_rows() {
   return 0
 }
 
-# --- highlight predicates ---
 _vp_is_hl_single() { [ "$1" -eq "${_hl_index:-0}" ]; }
 _vp_is_hl_multi()  { [ -n "${_msel_set[$1]+x}" ]; }
 _vp_is_hl() { $_vp_hl_fn "$1"; }
@@ -252,9 +204,6 @@ _vp_build_chrome() {
   _vp_footer_n=${#_vp_ftr_arr[@]}
 }
 
-# On a very short terminal (soft keyboard open) the header+footer
-# alone can exceed the screen. Trim blank lines, then surplus
-# footer/header lines, so the list never gets squeezed off screen.
 _vp_apply_chrome_budget() {
   local i n k tmp=()
   _vp_hdr_out=()
@@ -284,10 +233,6 @@ _vp_apply_chrome_budget() {
   _vp_ftr_show=${#_vp_ftr_out[@]}
 }
 
-# --- how many rows actually fit, given current terminal size ---
-# Recomputed on every build and whenever the polled tty size
-# changes, so opening the soft keyboard (which shrinks the
-# terminal) re-flows the list.
 _vp_geometry() {
   local rows chrome min_rows
   _vp_probe_size
@@ -324,16 +269,15 @@ _vp_geometry() {
   _blk_h=$(( _vp_hdr_show + _vp_ind + _vp_rows_printed + _vp_ind + _vp_ftr_show + 1 ))
 }
 
-# --- scroll the window so row $1 is visible. returns 0 if it moved ---
 _vp_ensure_visible() {
   local sel="$1" old="$_vp_start" max_start
   (( _vp_n == 0 )) && { _vp_start=1; return 1; }
   (( sel < 1 )) && sel=1
   (( sel > _vp_n )) && sel=$_vp_n
   if (( sel < _vp_start )); then
-    _vp_start=$sel                        # jumped backwards: land it at the top
+    _vp_start=$sel
   elif (( sel > _vp_start + _vp_page - 1 )); then
-    _vp_start=$(( sel - _vp_page + 1 ))   # jumped forwards: land it at the bottom
+    _vp_start=$(( sel - _vp_page + 1 ))
   fi
   max_start=$(( _vp_n - _vp_page + 1 ))
   (( max_start < 1 )) && max_start=1
@@ -346,7 +290,6 @@ _vp_ensure_visible() {
 
 _vp_el() { builtin printf '\r\033[2K%s\n' "$1"; }
 
-# --- paint the whole block at the cursor ---
 _vp_emit() {
   local i line
   _vp_count
@@ -394,7 +337,6 @@ _vp_rerender() {
   $_vp_input_fn
 }
 
-# --- fresh block appended below whatever is on screen ---
 _vp_render_fresh() {
   _vp_build_chrome
   _vp_geometry
@@ -403,19 +345,10 @@ _vp_render_fresh() {
   $_vp_input_fn
 }
 
-# Redraw after the terminal changed size.
-#
-# _vp_render_fresh emits a block at the CURRENT cursor position, so
-# calling it on a resize appends a whole second copy of the menu
-# below the first — that is the "menu pops up again every few
-# seconds" bug. Instead, walk back up over the block we already
-# drew, wipe from there to the bottom of the screen, and re-emit
-# once at the new geometry.
 _vp_redraw_in_place() {
   local up=$(( _blk_h - 1 ))
   local rows
   rows=$(_term_rows)
-  # never scroll further up than the screen allows
   (( up > rows - 1 )) && up=$(( rows - 1 ))
   (( up < 0 )) && up=0
   (( up > 0 )) && builtin printf '\033[%dA' "$up"
@@ -423,7 +356,6 @@ _vp_redraw_in_place() {
   _vp_render_fresh
 }
 
-# --- distance in lines from the input line up to row $1 ---
 _vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + 1 )); }
 
 _vp_repaint_row() {
@@ -438,27 +370,15 @@ _vp_repaint_row() {
 
 _vp_on_resize() { _vp_resized=true; }
 
-# ============================================================
-#  KEY DECODING
-#  Terminals emit variable-length escape sequences: arrows are
-#  3 bytes (ESC [ A) but PgUp/PgDn/Home/End can be 4 (ESC [ 5 ~)
-#  or come in application-cursor form (ESC O H). Reading a fixed
-#  2 bytes after ESC leaves the trailing '~' in the stream, which
-#  then gets typed into the input buffer as literal text.
-#  _read_key_seq consumes exactly one full sequence instead.
-# ============================================================
-
-# How far PgUp/PgDn travel, in items.
 _vp_page_step="${BVK_PAGE_STEP:-10}"
 
 _read_key_seq() {
   local c
   _esc=""
-  IFS= read -rsn1 -t 0.08 c || return 1     # bare ESC keypress
+  IFS= read -rsn1 -t 0.08 c || return 1
   _esc="$c"
   case "$c" in
     '[')
-      # CSI: parameter bytes (digits and ';') then one final byte
       while IFS= read -rsn1 -t 0.08 c; do
         _esc+="$c"
         case "$c" in
@@ -474,7 +394,6 @@ _read_key_seq() {
   return 0
 }
 
-# Classify a sequence body into a logical key name in _kname.
 _key_name() {
   local s="$1" fin body num
   _kname=""
@@ -493,8 +412,8 @@ _key_name() {
     *) return 1 ;;
   esac
   body="${s:1}"
-  num="${body%"$fin"}"    # parameters without the final byte
-  num="${num%%;*}"        # keep only the first parameter
+  num="${body%"$fin"}"
+  num="${num%%;*}"
   case "$fin" in
     A) _kname=up ;;
     B) _kname=down ;;
@@ -514,7 +433,6 @@ _key_name() {
   return 0
 }
 
-# True for bytes that must never be inserted into an input buffer.
 _is_ctrl_char() {
   case "$1" in
     [[:cntrl:]]) return 0 ;;
@@ -588,9 +506,6 @@ _multi_render() {
   _vp_render_fresh
 }
 
-# index of the number token the cursor is sitting on — that is
-# the one we scroll to, so typing 900 then editing it to 10
-# pulls the window back to 10.
 _multi_cursor_index() {
   local bounds s e num
   bounds=$(_multi_number_token_bounds) || return 1
@@ -616,7 +531,6 @@ _multi_sync() {
     [ -z "${_old_set[$k]+x}" ] && _changed["$k"]=1
   done
 
-  # scroll the window to follow the number being edited
   local target
   target=$(_multi_cursor_index)
   if [ -n "$target" ] && _vp_ensure_visible "$target"; then
@@ -1126,6 +1040,7 @@ infinity_stones_menu() {
   echo "3) Python Audit"
   echo "4) Git Push"
   echo "5) Generate SQL"
+  echo "6) LocalHost"
   echo "q) Exit"
 
   read -p "Choice: " is_choice
@@ -1136,6 +1051,7 @@ infinity_stones_menu() {
     3) bash "$SCRIPT_DIR/_3bvk_py_audit_core" "$path" ;;
     4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path" ;;
     5) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path" ;;
+    6) python "$SCRIPT_DIR/_3bvk_localhost_core" "$path" ;;   
     q|"") return ;;
     *) echo "⚠️  Invalid choice"; return ;;
   esac
@@ -1337,25 +1253,11 @@ _nav_jump_to() {
   return 0
 }
 
-# Live highlight as the user types at the file-list prompt.
-#
-# Three shapes are handled:
-#   plain number   12         -> single-highlight + scroll to it
-#   command+range  m-1-5      -> highlight EVERY referenced row
-#                  c-1,3      (shortpath staging grammar: c-/m-/s-,
-#                  s--2-4      optionally doubled for persistent)
-# Anything else (partial input, other commands) clears the row
-# highlight rather than leaving a stale one.
 _sync_highlight_from_buf() {
   $_can_nav || return
   _vp_count
   (( _vp_n == 0 )) && return
 
-  # --- command grammar: letters, one/two dashes, then a number list ---
-  # Covers every prefixed command the menu dispatches with a
-  # selection: c-/m-/s- (shortpath stage, optionally doubled for
-  # persistent) and the multi-letter ones up-/ups- (upload). Any
-  # future letter prefix works with no change here.
   if [[ "$_buf" =~ ^([A-Za-z]+-{1,2})([0-9][0-9,-]*)$ ]]; then
     local body="${BASH_REMATCH[2]}"
     # rebuild the multi-select set and repaint the changed rows

@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+
+clear
+
+echo "=============================================="
+echo "      Localhost Server"
+echo "=============================================="
+echo
+echo "Valid TCP Port Range : 1 - 65535"
+echo
+
+echo "Busy Ports:"
+echo "-----------"
+
+if command -v lsof >/dev/null 2>&1; then
+
+    lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null \
+        | awk 'NR>1{split($9,a,":");print a[length(a)]"\t"$1}' \
+        | sort -n | uniq
+
+elif command -v ss >/dev/null 2>&1; then
+
+    ss -ltnp 2>/dev/null \
+        | awk 'NR>1{split($4,a,":");print a[length(a)]}' \
+        | sort -n | uniq
+
+elif command -v netstat >/dev/null 2>&1; then
+
+    netstat -ltn 2>/dev/null \
+        | awk 'NR>2{split($4,a,":");print a[length(a)]}' \
+        | sort -n | uniq
+
+else
+
+    echo "Unable to detect busy ports."
+
+fi
+
+echo
+
+read -rp "Enter localhost port: " PORT
+
+if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+    echo
+    echo "Invalid port."
+    exit 1
+fi
+
+if ((PORT < 1 || PORT > 65535)); then
+    echo
+    echo "Port must be between 1 and 65535."
+    exit 1
+fi
+
+port_busy() {
+
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -i :"$1" >/dev/null 2>&1 && return 0
+    fi
+
+    if command -v fuser >/dev/null 2>&1; then
+        fuser "$1"/tcp >/dev/null 2>&1 && return 0
+    fi
+
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltn 2>/dev/null \
+            | awk -v p="$1" 'NR>1{split($4,a,":");if(a[length(a)]==p){f=1}}END{exit !f}' \
+            && return 0
+    fi
+
+    if command -v netstat >/dev/null 2>&1; then
+        netstat -ltn 2>/dev/null \
+            | awk -v p="$1" 'NR>2{split($4,a,":");if(a[length(a)]==p){f=1}}END{exit !f}' \
+            && return 0
+    fi
+
+    return 1
+}
+
+kill_port() {
+
+    echo
+    echo "Attempting to free port $1..."
+
+    # Try graceful termination first (SIGTERM), then force (SIGKILL) if needed.
+
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -k "$1"/tcp >/dev/null 2>&1
+        sleep 1
+        fuser -k -KILL "$1"/tcp >/dev/null 2>&1
+    fi
+
+    if command -v lsof >/dev/null 2>&1; then
+        PIDS=$(lsof -ti :"$1" 2>/dev/null)
+
+        if [ -n "$PIDS" ]; then
+            kill $PIDS 2>/dev/null
+            sleep 1
+            PIDS=$(lsof -ti :"$1" 2>/dev/null)
+            if [ -n "$PIDS" ]; then
+                kill -9 $PIDS 2>/dev/null
+            fi
+        fi
+    fi
+
+    sleep 1
+
+    if port_busy "$1"; then
+        echo "Warning: port $1 may still be in use."
+        return 1
+    fi
+
+    echo "Port $1 freed."
+    return 0
+}
+
+if port_busy "$PORT"; then
+
+    echo
+    read -rp "Port $PORT is already in use. Force it? (Y/N): " ANS
+
+    case "$ANS" in
+
+        [Yy]*)
+
+            kill_port "$PORT"
+
+            ;;
+
+        *)
+
+            echo
+            echo "Operation cancelled."
+            exit 0
+
+            ;;
+
+    esac
+
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON="python"
+else
+    echo
+    echo "Python is not installed."
+    exit 1
+fi
+
+start_server() {
+
+    TMPFILE=$(mktemp)
+    trap 'rm -f "$TMPFILE"' EXIT
+
+    "$PYTHON" -m http.server "$PORT" \
+        --bind 127.0.0.1 \
+        2>"$TMPFILE"
+
+    STATUS=$?
+
+    if grep -q "Address already in use" "$TMPFILE"; then
+
+        echo
+        echo "Python reports port already in use."
+
+        read -rp "Force terminate process and retry? (Y/N): " AGAIN
+
+        case "$AGAIN" in
+
+            [Yy]*)
+
+                kill_port "$PORT"
+
+                echo
+                echo "Retrying..."
+                echo
+
+                trap - EXIT
+                rm -f "$TMPFILE"
+
+                exec "$PYTHON" -m http.server "$PORT" --bind 127.0.0.1
+
+                ;;
+
+            *)
+
+                echo
+                echo "Cancelled."
+
+                exit 1
+
+                ;;
+
+        esac
+
+    fi
+
+    cat "$TMPFILE"
+
+    return $STATUS
+}
+
+echo
+echo "=============================================="
+echo "Localhost created."
+echo
+echo "View at:"
+echo
+echo "    http://localhost:$PORT/"
+echo
+echo "Press CTRL+C to stop."
+echo "=============================================="
+echo
+
+start_server
