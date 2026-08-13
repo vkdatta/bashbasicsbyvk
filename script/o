@@ -1042,7 +1042,6 @@ infinity_stones_menu() {
   echo "4) Git Push"
   echo "5) Generate SQL"
   echo "6) LocalHost"
-  echo "7) Versioning"
   echo "q) Exit"
 
   read -p "Choice: " is_choice
@@ -1054,7 +1053,6 @@ infinity_stones_menu() {
     4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path" ;;
     5) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path" ;;
     6) bash "$SCRIPT_DIR/_3bvk_localhost_core" "$path" ;;
-    7) bash "$SCRIPT_DIR/bashbasicsbyvk_versioning" "$path" ;;
     q|"") return ;;
     *) echo "⚠️  Invalid choice"; return ;;
   esac
@@ -1436,7 +1434,8 @@ _read_choice() {
   fi
 }
 
-path=$(pwd)
+path="$(pwd -P)"
+export BVK_FILEMANAGER_BOUNDARY="$path"
 selected_items=()
 group_prefix=""
 force_show=false

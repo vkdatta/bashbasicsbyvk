@@ -1,77 +1,93 @@
 version_manager() {
-    local TARGET="${1:-$(pwd)}"
-    local CURRENT_DIR
+    local TARGET
+    local BOUNDARY
     local SCRIPT_PATH
 
-    CURRENT_DIR="$(pwd -P)"
-
-    if ! TARGET="$(realpath -e "$TARGET" 2>/dev/null)"; then
-        echo "ERROR: TARGET does not exist:"
-        echo "  ${1:-$(pwd)}"
+    if [[ -z "${path:-}" ]]; then
+        printf '%s\n' "ERROR: File manager target path variable 'path' is not available."
         return 1
     fi
 
-    if ! SCRIPT_PATH="$(realpath -e "${BASH_SOURCE[0]}" 2>/dev/null)"; then
-        SCRIPT_PATH=""
+    if [[ -z "${BVK_FILEMANAGER_BOUNDARY:-}" ]]; then
+        printf '%s\n' "ERROR: File manager boundary is not available."
+        printf '%s\n' "The file manager must export BVK_FILEMANAGER_BOUNDARY."
+        return 1
+    fi
+
+    TARGET="$(realpath -e -- "$path" 2>/dev/null)" || {
+        printf '%s\n' "ERROR: Cannot resolve file manager target:"
+        printf '  %s\n' "$path"
+        return 1
+    }
+
+    BOUNDARY="$(realpath -e -- "$BVK_FILEMANAGER_BOUNDARY" 2>/dev/null)" || {
+        printf '%s\n' "ERROR: Cannot resolve file manager boundary:"
+        printf '  %s\n' "$BVK_FILEMANAGER_BOUNDARY"
+        return 1
+    }
+
+    if [[ ! -d "$TARGET" ]]; then
+        printf '%s\n' "ERROR: File manager target is not a directory:"
+        printf '  %s\n' "$TARGET"
+        return 1
+    fi
+
+    if [[ ! -d "$BOUNDARY" ]]; then
+        printf '%s\n' "ERROR: File manager boundary is not a directory:"
+        printf '  %s\n' "$BOUNDARY"
+        return 1
     fi
 
     case "$TARGET" in
-        "$CURRENT_DIR"|"$CURRENT_DIR"/*)
+        "$BOUNDARY"|"$BOUNDARY"/*)
             ;;
         *)
-            echo "ERROR: TARGET must be inside the current directory."
-            echo
-            echo "Current directory:"
-            echo "  $CURRENT_DIR"
-            echo
-            echo "Target:"
-            echo "  $TARGET"
+            printf '%s\n' "ERROR: Target is outside the file manager boundary."
+            printf '  Boundary: %s\n' "$BOUNDARY"
+            printf '  Target:   %s\n' "$TARGET"
             return 1
             ;;
     esac
 
-    if [[ ! -d "$TARGET" ]]; then
-        echo "ERROR: TARGET is not a directory:"
-        echo "  $TARGET"
-        return 1
+    SCRIPT_PATH=""
+
+    if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+        SCRIPT_PATH="$(realpath -e -- "${BASH_SOURCE[0]}" 2>/dev/null || true)"
     fi
 
     if ! command -v python3 >/dev/null 2>&1; then
-        echo "ERROR: python3 is required."
+        printf '%s\n' "ERROR: python3 is required."
         return 1
     fi
 
     while true; do
         clear
 
-        echo "=========================================="
-        echo "         FILE VERSIONING MANAGER"
-        echo "=========================================="
-        echo
-        echo "Current directory:"
-        echo "  $CURRENT_DIR"
-        echo
-        echo "Target:"
-        echo "  $TARGET"
-        echo
-        echo "1. Version Files"
-        echo "2. Reset Versioning"
-        echo "q. Quit"
-        echo
+        printf '%s\n' "=========================================="
+        printf '%s\n' "         FILE VERSIONING MANAGER"
+        printf '%s\n' "=========================================="
+        printf '\n'
+        printf 'Boundary:\n  %s\n' "$BOUNDARY"
+        printf '\n'
+        printf 'Target:\n  %s\n' "$TARGET"
+        printf '\n'
+        printf '%s\n' "1. Version Files"
+        printf '%s\n' "2. Reset Versioning"
+        printf '%s\n' "q. Quit"
+        printf '\n'
 
         local choice
         read -r -p "Select an option: " choice
 
         case "$choice" in
-
             1)
-                python3 - "$CURRENT_DIR" "$TARGET" "$SCRIPT_PATH" <<'PY'
+                python3 - "$BOUNDARY" "$TARGET" "$SCRIPT_PATH" <<'PY'
 import os
 import re
 import sys
 from pathlib import Path
 
-CURRENT_DIR = Path(sys.argv[1]).resolve()
+BOUNDARY = Path(sys.argv[1]).resolve()
 TARGET = Path(sys.argv[2]).resolve()
 SCRIPT_PATH = Path(sys.argv[3]).resolve() if sys.argv[3] else None
 
@@ -79,26 +95,26 @@ SKIP_DIRS = {
     ".git",
     ".svn",
     ".hg",
-    "node_modules",
     "__pycache__",
+    "node_modules",
 }
 
 VERSION_RE = re.compile(
     r"^(.*)_v([0-9]+)(\.[^.]*)$"
 )
 
-QUOTED_STRING_RE = re.compile(
+QUOTED_RE = re.compile(
     r"""(["'`])([^"'`\r\n]*)\1"""
 )
 
-PATH_TOKEN_RE = re.compile(
+PATH_RE = re.compile(
     r"""(?<![\w$])((?:\.{0,2}/|/)[A-Za-z0-9_@.\-~/\\]+)(?![\w$])"""
 )
 
 
-def inside(path, parent):
+def inside(path, root):
     try:
-        path.resolve().relative_to(parent.resolve())
+        path.resolve().relative_to(root.resolve())
         return True
     except ValueError:
         return False
@@ -108,7 +124,7 @@ def collect_files(root):
     result = []
 
     for dirpath, dirnames, filenames in os.walk(root):
-        current = Path(dirpath)
+        current = Path(dirpath).resolve()
 
         dirnames[:] = [
             name
@@ -119,7 +135,7 @@ def collect_files(root):
         for filename in filenames:
             path = (current / filename).resolve()
 
-            if not inside(path, CURRENT_DIR):
+            if not inside(path, BOUNDARY):
                 continue
 
             if SCRIPT_PATH is not None and path == SCRIPT_PATH:
@@ -130,21 +146,12 @@ def collect_files(root):
     return sorted(set(result))
 
 
-def is_versioned(path):
-    return VERSION_RE.match(path.name) is not None
-
-
-def versioned_name(path, number):
-    match = VERSION_RE.match(path.name)
-
-    if match:
-        prefix = match.group(1)
-        extension = match.group(3)
-    else:
-        prefix = path.stem
-        extension = path.suffix
-
-    return f"{prefix}_v{number}{extension}"
+def collect_target_files():
+    return [
+        path
+        for path in collect_files(TARGET)
+        if inside(path, TARGET)
+    ]
 
 
 def is_binary(path):
@@ -156,190 +163,198 @@ def is_binary(path):
     return b"\x00" in data
 
 
-def candidate_paths(reference, source_file):
-    reference = reference.strip()
+def split_reference(reference):
+    value = reference.strip()
 
-    if not reference:
-        return []
+    if not value:
+        return None
 
-    if reference.startswith((
+    if value.startswith((
         "http://",
         "https://",
         "ftp://",
+        "ftps://",
         "data:",
         "mailto:",
-        "#",
         "javascript:",
+        "#",
     )):
+        return None
+
+    value = value.split("?", 1)[0]
+    value = value.split("#", 1)[0]
+
+    if not value:
+        return None
+
+    return value
+
+
+def resolve_reference(reference, source):
+    value = split_reference(reference)
+
+    if value is None:
         return []
 
-    clean = reference.split("?", 1)[0].split("#", 1)[0]
+    if value.startswith("/"):
+        return [Path(value).resolve()]
 
-    if not clean:
+    result = []
+
+    candidate = (source.parent / value).resolve()
+
+    if inside(candidate, BOUNDARY):
+        result.append(candidate)
+
+    return result
+
+
+def resolve_bare_reference(reference, source):
+    value = split_reference(reference)
+
+    if value is None:
         return []
 
-    if clean.startswith("/"):
-        return [Path(clean).resolve()]
+    if "/" in value or "\\" in value:
+        return []
 
-    return [
-        (source_file.parent / clean).resolve()
-    ]
+    candidate = (source.parent / value).resolve()
+
+    if inside(candidate, BOUNDARY):
+        return [candidate]
+
+    return []
 
 
-def replacement_reference(
-    old_abs,
-    new_abs,
-    source_file,
-    original_reference
-):
-    if original_reference.startswith("/"):
-        return str(new_abs)
+def relative_reference(old_path, new_path, source, original):
+    if original.startswith("/"):
+        return str(new_path)
 
-    relative = os.path.relpath(
-        new_abs,
-        start=source_file.parent
+    result = os.path.relpath(
+        new_path,
+        start=source.parent
     ).replace(os.sep, "/")
 
-    if (
-        original_reference.startswith("./")
-        and not relative.startswith(".")
-    ):
-        relative = "./" + relative
+    if original.startswith("./") and not result.startswith("."):
+        result = "./" + result
 
-    return relative
+    return result
 
 
-def replace_references(source_file, mapping):
-    if is_binary(source_file):
+def update_file(source, mapping):
+    if is_binary(source):
         return False
 
     try:
-        text = source_file.read_text(
+        text = source.read_text(
             encoding="utf-8"
         )
-    except (OSError, UnicodeDecodeError):
+    except (
+        OSError,
+        UnicodeDecodeError,
+    ):
         return False
 
     original = text
 
-    def quoted_replacer(match):
+    def quoted_replace(match):
         quote = match.group(1)
         reference = match.group(2)
 
-        for candidate in candidate_paths(
+        candidates = resolve_reference(
             reference,
-            source_file
-        ):
+            source
+        )
+
+        if not candidates:
+            candidates = resolve_bare_reference(
+                reference,
+                source
+            )
+
+        for candidate in candidates:
             if candidate in mapping:
-                replacement = replacement_reference(
-                    candidate,
-                    mapping[candidate],
-                    source_file,
-                    reference
-                )
-
                 return (
-                    quote +
-                    replacement +
                     quote
-                )
-
-        if (
-            reference
-            and "/" not in reference
-            and "\\" not in reference
-        ):
-            candidate = (
-                source_file.parent / reference
-            ).resolve()
-
-            if candidate in mapping:
-                replacement = replacement_reference(
-                    candidate,
-                    mapping[candidate],
-                    source_file,
-                    reference
-                )
-
-                return (
-                    quote +
-                    replacement +
-                    quote
+                    + relative_reference(
+                        candidate,
+                        mapping[candidate],
+                        source,
+                        reference
+                    )
+                    + quote
                 )
 
         return match.group(0)
 
-    text = QUOTED_STRING_RE.sub(
-        quoted_replacer,
+    text = QUOTED_RE.sub(
+        quoted_replace,
         text
     )
 
-    def token_replacer(match):
+    def path_replace(match):
         reference = match.group(1)
 
-        for candidate in candidate_paths(
+        for candidate in resolve_reference(
             reference,
-            source_file
+            source
         ):
             if candidate in mapping:
-                return replacement_reference(
+                return relative_reference(
                     candidate,
                     mapping[candidate],
-                    source_file,
+                    source,
                     reference
                 )
 
         return reference
 
-    text = PATH_TOKEN_RE.sub(
-        token_replacer,
+    text = PATH_RE.sub(
+        path_replace,
         text
     )
 
     if text == original:
         return False
 
-    temp = source_file.with_name(
-        f".{source_file.name}.versioning-{os.getpid()}"
+    temporary = source.with_name(
+        f".{source.name}.bvk-versioning-{os.getpid()}"
     )
 
     try:
-        temp.write_text(
+        temporary.write_text(
             text,
             encoding="utf-8",
             newline=""
         )
 
-        os.replace(temp, source_file)
+        os.replace(
+            temporary,
+            source
+        )
 
     finally:
-        if temp.exists():
-            temp.unlink(missing_ok=True)
+        if temporary.exists():
+            temporary.unlink()
 
     return True
 
 
-all_files = collect_files(CURRENT_DIR)
-
-target_files = [
-    path
-    for path in all_files
-    if inside(path, TARGET)
-]
+all_files = collect_files(BOUNDARY)
+target_files = collect_target_files()
 
 candidates = [
     path
     for path in target_files
-    if not is_versioned(path)
+    if not VERSION_RE.match(path.name)
 ]
 
 if not candidates:
     print()
-    print("No unversioned files found.")
+    print("No unversioned files found in TARGET.")
     sys.exit(0)
 
-existing_paths = set(all_files)
-reserved_paths = set(existing_paths)
+reserved = set(all_files)
 
 plan = []
 
@@ -347,20 +362,21 @@ for old_path in candidates:
     number = 1
 
     while True:
+        new_name = (
+            f"{old_path.stem}_v{number}"
+            f"{old_path.suffix}"
+        )
+
         new_path = (
-            old_path.parent /
-            versioned_name(
-                old_path,
-                number
-            )
+            old_path.parent / new_name
         ).resolve()
 
-        if new_path not in reserved_paths:
+        if new_path not in reserved:
             break
 
         number += 1
 
-    reserved_paths.add(new_path)
+    reserved.add(new_path)
 
     plan.append(
         (
@@ -374,17 +390,18 @@ print("VERSIONING PLAN")
 print("=" * 80)
 print()
 
-for old, new in plan:
-    print(f"OLD : {old}")
-    print(f"NEW : {new}")
+for old_path, new_path in plan:
+    print(f"OLD : {old_path}")
+    print(f"NEW : {new_path}")
     print()
 
 print("=" * 80)
-print(f"Files to version: {len(plan)}")
+print(f"TARGET files to rename: {len(plan)}")
+print(f"REFERENCE search root:  {BOUNDARY}")
 print()
 
 answer = input(
-    "Proceed with this plan? [y/N]: "
+    "Proceed? [y/N]: "
 ).strip().lower()
 
 if answer != "y":
@@ -397,82 +414,91 @@ mapping = {
 }
 
 print()
-print("Scanning references...")
+print("Scanning references throughout boundary...")
 print()
 
-changed_files = []
+reference_changes = []
 
 for source in all_files:
-    if replace_references(
-        source,
-        mapping
-    ):
-        changed_files.append(source)
+    if update_file(source, mapping):
+        reference_changes.append(source)
         print(f"UPDATED: {source}")
 
-for old, new in plan:
-    if new.exists():
+for old_path, new_path in plan:
+    if new_path.exists():
         print()
         print("ABORTED.")
-        print("Destination appeared after planning:")
-        print(f"  {new}")
+        print("A destination appeared after reference processing:")
+        print(f"  {new_path}")
         sys.exit(2)
 
 print()
-print("Renaming files...")
+print("Renaming TARGET files...")
 print()
 
 renamed = []
 
-for old, new in plan:
+for old_path, new_path in plan:
+    if not inside(old_path, TARGET):
+        print()
+        print("ABORTED.")
+        print("Attempted rename outside TARGET:")
+        print(f"  {old_path}")
+        sys.exit(2)
 
-    if not old.exists():
+    if not inside(new_path, TARGET):
+        print()
+        print("ABORTED.")
+        print("Attempted destination outside TARGET:")
+        print(f"  {new_path}")
+        sys.exit(2)
+
+    if not old_path.exists():
         print()
         print("ABORTED.")
         print("Source disappeared:")
-        print(f"  {old}")
+        print(f"  {old_path}")
         sys.exit(2)
 
-    if new.exists():
+    if new_path.exists():
         print()
         print("ABORTED.")
         print("Destination exists:")
-        print(f"  {new}")
+        print(f"  {new_path}")
         sys.exit(2)
 
-    old.rename(new)
+    old_path.rename(new_path)
 
     renamed.append(
         (
-            old,
-            new
+            old_path,
+            new_path
         )
     )
 
-    print(f"{old}")
-    print(f"  -> {new}")
+    print(f"{old_path}")
+    print(f"  -> {new_path}")
 
 print()
-print("Verifying final filesystem state...")
+print("VERIFYING...")
 print()
 
 errors = []
 
-for old, new in renamed:
-
-    if old.exists():
+for old_path, new_path in renamed:
+    if old_path.exists():
         errors.append(
-            f"Old file still exists: {old}"
+            f"Old path still exists: {old_path}"
         )
 
-    if not new.exists():
+    if not new_path.exists():
         errors.append(
-            f"New file does not exist: {new}"
+            f"New path missing: {new_path}"
         )
 
-    if not inside(new, TARGET):
+    if not inside(new_path, TARGET):
         errors.append(
-            f"New file escaped TARGET: {new}"
+            f"New path escaped TARGET: {new_path}"
         )
 
 if errors:
@@ -486,19 +512,21 @@ if errors:
 
 print("Versioning completed successfully.")
 print()
-print(f"Versioned files : {len(renamed)}")
-print(f"Updated files   : {len(changed_files)}")
+print(f"Renamed files      : {len(renamed)}")
+print(f"Files with changes : {len(reference_changes)}")
+print(f"Reference boundary : {BOUNDARY}")
+print(f"Rename target      : {TARGET}")
 PY
                 ;;
 
             2)
-                python3 - "$CURRENT_DIR" "$TARGET" "$SCRIPT_PATH" <<'PY'
+                python3 - "$BOUNDARY" "$TARGET" "$SCRIPT_PATH" <<'PY'
 import os
 import re
 import sys
 from pathlib import Path
 
-CURRENT_DIR = Path(sys.argv[1]).resolve()
+BOUNDARY = Path(sys.argv[1]).resolve()
 TARGET = Path(sys.argv[2]).resolve()
 SCRIPT_PATH = Path(sys.argv[3]).resolve() if sys.argv[3] else None
 
@@ -506,26 +534,26 @@ SKIP_DIRS = {
     ".git",
     ".svn",
     ".hg",
-    "node_modules",
     "__pycache__",
+    "node_modules",
 }
 
 VERSION_RE = re.compile(
     r"^(.*)_v([0-9]+)(\.[^.]*)$"
 )
 
-QUOTED_STRING_RE = re.compile(
+QUOTED_RE = re.compile(
     r"""(["'`])([^"'`\r\n]*)\1"""
 )
 
-PATH_TOKEN_RE = re.compile(
+PATH_RE = re.compile(
     r"""(?<![\w$])((?:\.{0,2}/|/)[A-Za-z0-9_@.\-~/\\]+)(?![\w$])"""
 )
 
 
-def inside(path, parent):
+def inside(path, root):
     try:
-        path.resolve().relative_to(parent.resolve())
+        path.resolve().relative_to(root.resolve())
         return True
     except ValueError:
         return False
@@ -535,7 +563,7 @@ def collect_files(root):
     result = []
 
     for dirpath, dirnames, filenames in os.walk(root):
-        current = Path(dirpath)
+        current = Path(dirpath).resolve()
 
         dirnames[:] = [
             name
@@ -546,7 +574,7 @@ def collect_files(root):
         for filename in filenames:
             path = (current / filename).resolve()
 
-            if not inside(path, CURRENT_DIR):
+            if not inside(path, BOUNDARY):
                 continue
 
             if SCRIPT_PATH is not None and path == SCRIPT_PATH:
@@ -567,187 +595,161 @@ def is_binary(path):
 
 
 def base_path(path):
-    match = VERSION_RE.match(
-        path.name
-    )
+    match = VERSION_RE.match(path.name)
 
     if not match:
         return None
 
-    prefix = match.group(1)
-    extension = match.group(3)
-
     return (
-        path.parent /
-        f"{prefix}{extension}"
+        path.parent
+        / f"{match.group(1)}{match.group(3)}"
     ).resolve()
 
 
-def candidate_paths(reference, source_file):
-    reference = reference.strip()
+def resolve_reference(reference, source):
+    value = reference.strip()
 
-    if not reference:
+    if not value:
         return []
 
-    if reference.startswith((
+    if value.startswith((
         "http://",
         "https://",
         "ftp://",
+        "ftps://",
         "data:",
         "mailto:",
-        "#",
         "javascript:",
+        "#",
     )):
         return []
 
-    clean = reference.split("?", 1)[0]
-    clean = clean.split("#", 1)[0]
+    value = value.split("?", 1)[0]
+    value = value.split("#", 1)[0]
 
-    if not clean:
+    if not value:
         return []
 
-    if clean.startswith("/"):
-        return [Path(clean).resolve()]
+    if value.startswith("/"):
+        candidate = Path(value).resolve()
+    else:
+        candidate = (
+            source.parent / value
+        ).resolve()
 
-    return [
-        (source_file.parent / clean).resolve()
-    ]
+    if inside(candidate, BOUNDARY):
+        return [candidate]
+
+    return []
 
 
-def replacement_reference(
-    old_abs,
-    new_abs,
-    source_file,
-    original_reference
-):
-    if original_reference.startswith("/"):
-        return str(new_abs)
+def replacement(old_path, new_path, source, original):
+    if original.startswith("/"):
+        return str(new_path)
 
-    relative = os.path.relpath(
-        new_abs,
-        start=source_file.parent
+    result = os.path.relpath(
+        new_path,
+        start=source.parent
     ).replace(os.sep, "/")
 
-    if (
-        original_reference.startswith("./")
-        and not relative.startswith(".")
-    ):
-        relative = "./" + relative
+    if original.startswith("./") and not result.startswith("."):
+        result = "./" + result
 
-    return relative
+    return result
 
 
-def replace_references(source_file, mapping):
-    if is_binary(source_file):
+def update_file(source, mapping):
+    if is_binary(source):
         return False
 
     try:
-        text = source_file.read_text(
+        text = source.read_text(
             encoding="utf-8"
         )
-    except (OSError, UnicodeDecodeError):
+    except (
+        OSError,
+        UnicodeDecodeError,
+    ):
         return False
 
     original = text
 
-    def quoted_replacer(match):
+    def quoted_replace(match):
         quote = match.group(1)
         reference = match.group(2)
 
-        for candidate in candidate_paths(
+        for candidate in resolve_reference(
             reference,
-            source_file
+            source
         ):
             if candidate in mapping:
-                replacement = replacement_reference(
-                    candidate,
-                    mapping[candidate],
-                    source_file,
-                    reference
-                )
-
                 return (
-                    quote +
-                    replacement +
                     quote
-                )
-
-        if (
-            reference
-            and "/" not in reference
-            and "\\" not in reference
-        ):
-            candidate = (
-                source_file.parent / reference
-            ).resolve()
-
-            if candidate in mapping:
-                replacement = replacement_reference(
-                    candidate,
-                    mapping[candidate],
-                    source_file,
-                    reference
-                )
-
-                return (
-                    quote +
-                    replacement +
-                    quote
+                    + replacement(
+                        candidate,
+                        mapping[candidate],
+                        source,
+                        reference
+                    )
+                    + quote
                 )
 
         return match.group(0)
 
-    text = QUOTED_STRING_RE.sub(
-        quoted_replacer,
+    text = QUOTED_RE.sub(
+        quoted_replace,
         text
     )
 
-    def token_replacer(match):
+    def path_replace(match):
         reference = match.group(1)
 
-        for candidate in candidate_paths(
+        for candidate in resolve_reference(
             reference,
-            source_file
+            source
         ):
             if candidate in mapping:
-                return replacement_reference(
+                return replacement(
                     candidate,
                     mapping[candidate],
-                    source_file,
+                    source,
                     reference
                 )
 
         return reference
 
-    text = PATH_TOKEN_RE.sub(
-        token_replacer,
+    text = PATH_RE.sub(
+        path_replace,
         text
     )
 
     if text == original:
         return False
 
-    temp = source_file.with_name(
-        f".{source_file.name}.reset-{os.getpid()}"
+    temporary = source.with_name(
+        f".{source.name}.bvk-reset-{os.getpid()}"
     )
 
     try:
-        temp.write_text(
+        temporary.write_text(
             text,
             encoding="utf-8",
             newline=""
         )
 
-        os.replace(temp, source_file)
+        os.replace(
+            temporary,
+            source
+        )
 
     finally:
-        if temp.exists():
-            temp.unlink(missing_ok=True)
+        if temporary.exists():
+            temporary.unlink()
 
     return True
 
 
-all_files = collect_files(CURRENT_DIR)
+all_files = collect_files(BOUNDARY)
 
 target_files = [
     path
@@ -755,77 +757,101 @@ target_files = [
     if inside(path, TARGET)
 ]
 
-versioned = []
+groups = {}
 
 for path in target_files:
-    if VERSION_RE.match(path.name):
-        base = base_path(path)
+    match = VERSION_RE.match(path.name)
 
-        if base is not None:
-            versioned.append(
-                (
-                    path,
-                    base
-                )
-            )
+    if not match:
+        continue
 
-if not versioned:
+    base = base_path(path)
+
+    if base is None:
+        continue
+
+    groups.setdefault(base, []).append(path)
+
+if not groups:
     print()
-    print("No versioned files found.")
+    print("No versioned files found in TARGET.")
     sys.exit(0)
 
 safe_plan = []
 blocked = []
 
-for old, new in versioned:
+for base, versions in sorted(
+    groups.items(),
+    key=lambda item: str(item[0])
+):
+    versions.sort(
+        key=lambda p: int(
+            VERSION_RE.match(p.name).group(2)
+        )
+    )
 
-    if new.exists():
+    if base.exists():
         blocked.append(
             (
-                old,
-                new
+                base,
+                versions,
+                "base file already exists"
             )
         )
-    else:
-        safe_plan.append(
+        continue
+
+    if len(versions) != 1:
+        blocked.append(
             (
-                old,
-                new
+                base,
+                versions,
+                "multiple versions exist and cannot be safely collapsed"
             )
         )
+        continue
+
+    safe_plan.append(
+        (
+            versions[0],
+            base
+        )
+    )
 
 print()
 print("RESET PLAN")
 print("=" * 80)
 print()
 
-for old, new in safe_plan:
-    print(f"OLD : {old}")
-    print(f"NEW : {new}")
+for old_path, new_path in safe_plan:
+    print(f"OLD : {old_path}")
+    print(f"NEW : {new_path}")
     print()
 
 if blocked:
-    print("BLOCKED COLLISIONS")
+    print("BLOCKED")
     print("-" * 80)
     print()
 
-    for old, new in blocked:
-        print(f"FILE : {old}")
-        print(f"BASE : {new}")
-        print("REASON: Base filename already exists.")
-        print()
+    for base, versions, reason in blocked:
+        print(f"BASE   : {base}")
+        print(f"REASON : {reason}")
 
-if not safe_plan:
-    print("No files can be safely reset.")
-    sys.exit(0)
+        for version in versions:
+            print(f"VERSION: {version}")
+
+        print()
 
 print("=" * 80)
 print(f"Files to reset : {len(safe_plan)}")
-print(f"Files blocked  : {len(blocked)}")
+print(f"Blocked groups : {len(blocked)}")
 print()
 
+if not safe_plan:
+    print("Nothing can be safely reset.")
+    sys.exit(0)
+
 answer = input(
-    "Proceed with this plan? [y/N]: "
+    "Proceed? [y/N]: "
 ).strip().lower()
 
 if answer != "y":
@@ -838,82 +864,86 @@ mapping = {
 }
 
 print()
-print("Scanning references...")
+print("Scanning references throughout boundary...")
 print()
 
-changed_files = []
+reference_changes = []
 
 for source in all_files:
-    if replace_references(
-        source,
-        mapping
-    ):
-        changed_files.append(source)
+    if update_file(source, mapping):
+        reference_changes.append(source)
         print(f"UPDATED: {source}")
 
-for old, new in safe_plan:
-    if new.exists():
+for old_path, new_path in safe_plan:
+    if new_path.exists():
         print()
         print("ABORTED.")
         print("Destination appeared:")
-        print(f"  {new}")
+        print(f"  {new_path}")
         sys.exit(2)
 
 print()
-print("Resetting filenames...")
+print("Resetting TARGET files...")
 print()
 
 renamed = []
 
-for old, new in safe_plan:
+for old_path, new_path in safe_plan:
+    if not inside(old_path, TARGET):
+        print()
+        print("ABORTED.")
+        print("Source outside TARGET:")
+        print(f"  {old_path}")
+        sys.exit(2)
 
-    if not old.exists():
+    if not inside(new_path, TARGET):
+        print()
+        print("ABORTED.")
+        print("Destination outside TARGET:")
+        print(f"  {new_path}")
+        sys.exit(2)
+
+    if not old_path.exists():
         print()
         print("ABORTED.")
         print("Source disappeared:")
-        print(f"  {old}")
+        print(f"  {old_path}")
         sys.exit(2)
 
-    if new.exists():
+    if new_path.exists():
         print()
         print("ABORTED.")
         print("Destination exists:")
-        print(f"  {new}")
+        print(f"  {new_path}")
         sys.exit(2)
 
-    old.rename(new)
+    old_path.rename(new_path)
 
     renamed.append(
         (
-            old,
-            new
+            old_path,
+            new_path
         )
     )
 
-    print(f"{old}")
-    print(f"  -> {new}")
+    print(f"{old_path}")
+    print(f"  -> {new_path}")
 
 print()
-print("Verifying final filesystem state...")
+print("VERIFYING...")
 print()
 
 errors = []
 
-for old, new in renamed:
-
-    if old.exists():
+for old_path, new_path in renamed:
+    if old_path.exists():
         errors.append(
-            f"Old file still exists: {old}"
+            f"Old path still exists: {old_path}"
         )
 
-    if not new.exists():
+    if not new_path.exists():
         errors.append(
-            f"New file does not exist: {new}"
-        )
-
-    if not inside(new, TARGET):
-        errors.append(
-            f"New file escaped TARGET: {new}"
+            f"New path missing: {new_path}"
         )
 
 if errors:
@@ -927,9 +957,10 @@ if errors:
 
 print("Reset completed successfully.")
 print()
-print(f"Reset files   : {len(renamed)}")
-print(f"Updated files : {len(changed_files)}")
-print(f"Blocked files : {len(blocked)}")
+print(f"Reset files        : {len(renamed)}")
+print(f"Files with changes : {len(reference_changes)}")
+print(f"Reference boundary : {BOUNDARY}")
+print(f"Reset target       : {TARGET}")
 PY
                 ;;
 
@@ -938,13 +969,12 @@ PY
                 ;;
 
             *)
-                echo
-                echo "Invalid option."
+                printf '%s\n' "Invalid option."
                 sleep 1
                 ;;
         esac
 
-        echo
+        printf '\n'
         read -r -p "Press Enter to return to menu..." _
     done
 }
