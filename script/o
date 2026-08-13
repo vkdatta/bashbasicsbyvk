@@ -9,6 +9,7 @@ source "bashbasicsbyvk_transfer.sh"
 source "bashbasicbyvk_shortpath.sh"
 source "bashbasicsbyvk_mapper.sh"
 source "bashbasicsbyvk_help.sh"
+source "bashbasicsbyvk_versioning.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -1569,7 +1570,9 @@ case "$choice" in
     clear)                  hash -r ;;
     disk)                   df -h ;;
     ram)                    free -h ;;
+    v)                      version_manager ;;
     *)                      handle_selection "$choice" ;;
+   
 esac
 
 done
