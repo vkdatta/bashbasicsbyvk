@@ -1,0 +1,952 @@
+ #!/usr/bin/env bash
+
+version_manager() {
+    local TARGET="${1:-$(pwd)}"
+    local CURRENT_DIR
+    local SCRIPT_PATH
+
+    CURRENT_DIR="$(pwd -P)"
+
+    if ! TARGET="$(realpath -e "$TARGET" 2>/dev/null)"; then
+        echo "ERROR: TARGET does not exist:"
+        echo "  ${1:-$(pwd)}"
+        return 1
+    fi
+
+    if ! SCRIPT_PATH="$(realpath -e "${BASH_SOURCE[0]}" 2>/dev/null)"; then
+        SCRIPT_PATH=""
+    fi
+
+    case "$TARGET" in
+        "$CURRENT_DIR"|"$CURRENT_DIR"/*)
+            ;;
+        *)
+            echo "ERROR: TARGET must be inside the current directory."
+            echo
+            echo "Current directory:"
+            echo "  $CURRENT_DIR"
+            echo
+            echo "Target:"
+            echo "  $TARGET"
+            return 1
+            ;;
+    esac
+
+    if [[ ! -d "$TARGET" ]]; then
+        echo "ERROR: TARGET is not a directory:"
+        echo "  $TARGET"
+        return 1
+    fi
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "ERROR: python3 is required."
+        return 1
+    fi
+
+    while true; do
+        clear
+
+        echo "=========================================="
+        echo "         FILE VERSIONING MANAGER"
+        echo "=========================================="
+        echo
+        echo "Current directory:"
+        echo "  $CURRENT_DIR"
+        echo
+        echo "Target:"
+        echo "  $TARGET"
+        echo
+        echo "1. Version Files"
+        echo "2. Reset Versioning"
+        echo "q. Quit"
+        echo
+
+        local choice
+        read -r -p "Select an option: " choice
+
+        case "$choice" in
+
+            1)
+                python3 - "$CURRENT_DIR" "$TARGET" "$SCRIPT_PATH" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+CURRENT_DIR = Path(sys.argv[1]).resolve()
+TARGET = Path(sys.argv[2]).resolve()
+SCRIPT_PATH = Path(sys.argv[3]).resolve() if sys.argv[3] else None
+
+SKIP_DIRS = {
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "__pycache__",
+}
+
+VERSION_RE = re.compile(
+    r"^(.*)_v([0-9]+)(\.[^.]*)$"
+)
+
+QUOTED_STRING_RE = re.compile(
+    r"""(["'`])([^"'`\r\n]*)\1"""
+)
+
+PATH_TOKEN_RE = re.compile(
+    r"""(?<![\w$])((?:\.{0,2}/|/)[A-Za-z0-9_@.\-~/\\]+)(?![\w$])"""
+)
+
+
+def inside(path, parent):
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def collect_files(root):
+    result = []
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        current = Path(dirpath)
+
+        dirnames[:] = [
+            name
+            for name in dirnames
+            if name not in SKIP_DIRS
+        ]
+
+        for filename in filenames:
+            path = (current / filename).resolve()
+
+            if not inside(path, CURRENT_DIR):
+                continue
+
+            if SCRIPT_PATH is not None and path == SCRIPT_PATH:
+                continue
+
+            result.append(path)
+
+    return sorted(set(result))
+
+
+def is_versioned(path):
+    return VERSION_RE.match(path.name) is not None
+
+
+def versioned_name(path, number):
+    match = VERSION_RE.match(path.name)
+
+    if match:
+        prefix = match.group(1)
+        extension = match.group(3)
+    else:
+        prefix = path.stem
+        extension = path.suffix
+
+    return f"{prefix}_v{number}{extension}"
+
+
+def is_binary(path):
+    try:
+        data = path.read_bytes()[:8192]
+    except OSError:
+        return True
+
+    return b"\x00" in data
+
+
+def candidate_paths(reference, source_file):
+    reference = reference.strip()
+
+    if not reference:
+        return []
+
+    if reference.startswith((
+        "http://",
+        "https://",
+        "ftp://",
+        "data:",
+        "mailto:",
+        "#",
+        "javascript:",
+    )):
+        return []
+
+    clean = reference.split("?", 1)[0].split("#", 1)[0]
+
+    if not clean:
+        return []
+
+    if clean.startswith("/"):
+        return [Path(clean).resolve()]
+
+    return [
+        (source_file.parent / clean).resolve()
+    ]
+
+
+def replacement_reference(
+    old_abs,
+    new_abs,
+    source_file,
+    original_reference
+):
+    if original_reference.startswith("/"):
+        return str(new_abs)
+
+    relative = os.path.relpath(
+        new_abs,
+        start=source_file.parent
+    ).replace(os.sep, "/")
+
+    if (
+        original_reference.startswith("./")
+        and not relative.startswith(".")
+    ):
+        relative = "./" + relative
+
+    return relative
+
+
+def replace_references(source_file, mapping):
+    if is_binary(source_file):
+        return False
+
+    try:
+        text = source_file.read_text(
+            encoding="utf-8"
+        )
+    except (OSError, UnicodeDecodeError):
+        return False
+
+    original = text
+
+    def quoted_replacer(match):
+        quote = match.group(1)
+        reference = match.group(2)
+
+        for candidate in candidate_paths(
+            reference,
+            source_file
+        ):
+            if candidate in mapping:
+                replacement = replacement_reference(
+                    candidate,
+                    mapping[candidate],
+                    source_file,
+                    reference
+                )
+
+                return (
+                    quote +
+                    replacement +
+                    quote
+                )
+
+        if (
+            reference
+            and "/" not in reference
+            and "\\" not in reference
+        ):
+            candidate = (
+                source_file.parent / reference
+            ).resolve()
+
+            if candidate in mapping:
+                replacement = replacement_reference(
+                    candidate,
+                    mapping[candidate],
+                    source_file,
+                    reference
+                )
+
+                return (
+                    quote +
+                    replacement +
+                    quote
+                )
+
+        return match.group(0)
+
+    text = QUOTED_STRING_RE.sub(
+        quoted_replacer,
+        text
+    )
+
+    def token_replacer(match):
+        reference = match.group(1)
+
+        for candidate in candidate_paths(
+            reference,
+            source_file
+        ):
+            if candidate in mapping:
+                return replacement_reference(
+                    candidate,
+                    mapping[candidate],
+                    source_file,
+                    reference
+                )
+
+        return reference
+
+    text = PATH_TOKEN_RE.sub(
+        token_replacer,
+        text
+    )
+
+    if text == original:
+        return False
+
+    temp = source_file.with_name(
+        f".{source_file.name}.versioning-{os.getpid()}"
+    )
+
+    try:
+        temp.write_text(
+            text,
+            encoding="utf-8",
+            newline=""
+        )
+
+        os.replace(temp, source_file)
+
+    finally:
+        if temp.exists():
+            temp.unlink(missing_ok=True)
+
+    return True
+
+
+all_files = collect_files(CURRENT_DIR)
+
+target_files = [
+    path
+    for path in all_files
+    if inside(path, TARGET)
+]
+
+candidates = [
+    path
+    for path in target_files
+    if not is_versioned(path)
+]
+
+if not candidates:
+    print()
+    print("No unversioned files found.")
+    sys.exit(0)
+
+existing_paths = set(all_files)
+reserved_paths = set(existing_paths)
+
+plan = []
+
+for old_path in candidates:
+    number = 1
+
+    while True:
+        new_path = (
+            old_path.parent /
+            versioned_name(
+                old_path,
+                number
+            )
+        ).resolve()
+
+        if new_path not in reserved_paths:
+            break
+
+        number += 1
+
+    reserved_paths.add(new_path)
+
+    plan.append(
+        (
+            old_path,
+            new_path
+        )
+    )
+
+print()
+print("VERSIONING PLAN")
+print("=" * 80)
+print()
+
+for old, new in plan:
+    print(f"OLD : {old}")
+    print(f"NEW : {new}")
+    print()
+
+print("=" * 80)
+print(f"Files to version: {len(plan)}")
+print()
+
+answer = input(
+    "Proceed with this plan? [y/N]: "
+).strip().lower()
+
+if answer != "y":
+    print("Cancelled.")
+    sys.exit(0)
+
+mapping = {
+    old.resolve(): new.resolve()
+    for old, new in plan
+}
+
+print()
+print("Scanning references...")
+print()
+
+changed_files = []
+
+for source in all_files:
+    if replace_references(
+        source,
+        mapping
+    ):
+        changed_files.append(source)
+        print(f"UPDATED: {source}")
+
+for old, new in plan:
+    if new.exists():
+        print()
+        print("ABORTED.")
+        print("Destination appeared after planning:")
+        print(f"  {new}")
+        sys.exit(2)
+
+print()
+print("Renaming files...")
+print()
+
+renamed = []
+
+for old, new in plan:
+
+    if not old.exists():
+        print()
+        print("ABORTED.")
+        print("Source disappeared:")
+        print(f"  {old}")
+        sys.exit(2)
+
+    if new.exists():
+        print()
+        print("ABORTED.")
+        print("Destination exists:")
+        print(f"  {new}")
+        sys.exit(2)
+
+    old.rename(new)
+
+    renamed.append(
+        (
+            old,
+            new
+        )
+    )
+
+    print(f"{old}")
+    print(f"  -> {new}")
+
+print()
+print("Verifying final filesystem state...")
+print()
+
+errors = []
+
+for old, new in renamed:
+
+    if old.exists():
+        errors.append(
+            f"Old file still exists: {old}"
+        )
+
+    if not new.exists():
+        errors.append(
+            f"New file does not exist: {new}"
+        )
+
+    if not inside(new, TARGET):
+        errors.append(
+            f"New file escaped TARGET: {new}"
+        )
+
+if errors:
+    print("VERIFICATION FAILED")
+    print()
+
+    for error in errors:
+        print(f"  {error}")
+
+    sys.exit(2)
+
+print("Versioning completed successfully.")
+print()
+print(f"Versioned files : {len(renamed)}")
+print(f"Updated files   : {len(changed_files)}")
+PY
+                ;;
+
+            2)
+                python3 - "$CURRENT_DIR" "$TARGET" "$SCRIPT_PATH" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+CURRENT_DIR = Path(sys.argv[1]).resolve()
+TARGET = Path(sys.argv[2]).resolve()
+SCRIPT_PATH = Path(sys.argv[3]).resolve() if sys.argv[3] else None
+
+SKIP_DIRS = {
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "__pycache__",
+}
+
+VERSION_RE = re.compile(
+    r"^(.*)_v([0-9]+)(\.[^.]*)$"
+)
+
+QUOTED_STRING_RE = re.compile(
+    r"""(["'`])([^"'`\r\n]*)\1"""
+)
+
+PATH_TOKEN_RE = re.compile(
+    r"""(?<![\w$])((?:\.{0,2}/|/)[A-Za-z0-9_@.\-~/\\]+)(?![\w$])"""
+)
+
+
+def inside(path, parent):
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def collect_files(root):
+    result = []
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        current = Path(dirpath)
+
+        dirnames[:] = [
+            name
+            for name in dirnames
+            if name not in SKIP_DIRS
+        ]
+
+        for filename in filenames:
+            path = (current / filename).resolve()
+
+            if not inside(path, CURRENT_DIR):
+                continue
+
+            if SCRIPT_PATH is not None and path == SCRIPT_PATH:
+                continue
+
+            result.append(path)
+
+    return sorted(set(result))
+
+
+def is_binary(path):
+    try:
+        data = path.read_bytes()[:8192]
+    except OSError:
+        return True
+
+    return b"\x00" in data
+
+
+def base_path(path):
+    match = VERSION_RE.match(
+        path.name
+    )
+
+    if not match:
+        return None
+
+    prefix = match.group(1)
+    extension = match.group(3)
+
+    return (
+        path.parent /
+        f"{prefix}{extension}"
+    ).resolve()
+
+
+def candidate_paths(reference, source_file):
+    reference = reference.strip()
+
+    if not reference:
+        return []
+
+    if reference.startswith((
+        "http://",
+        "https://",
+        "ftp://",
+        "data:",
+        "mailto:",
+        "#",
+        "javascript:",
+    )):
+        return []
+
+    clean = reference.split("?", 1)[0]
+    clean = clean.split("#", 1)[0]
+
+    if not clean:
+        return []
+
+    if clean.startswith("/"):
+        return [Path(clean).resolve()]
+
+    return [
+        (source_file.parent / clean).resolve()
+    ]
+
+
+def replacement_reference(
+    old_abs,
+    new_abs,
+    source_file,
+    original_reference
+):
+    if original_reference.startswith("/"):
+        return str(new_abs)
+
+    relative = os.path.relpath(
+        new_abs,
+        start=source_file.parent
+    ).replace(os.sep, "/")
+
+    if (
+        original_reference.startswith("./")
+        and not relative.startswith(".")
+    ):
+        relative = "./" + relative
+
+    return relative
+
+
+def replace_references(source_file, mapping):
+    if is_binary(source_file):
+        return False
+
+    try:
+        text = source_file.read_text(
+            encoding="utf-8"
+        )
+    except (OSError, UnicodeDecodeError):
+        return False
+
+    original = text
+
+    def quoted_replacer(match):
+        quote = match.group(1)
+        reference = match.group(2)
+
+        for candidate in candidate_paths(
+            reference,
+            source_file
+        ):
+            if candidate in mapping:
+                replacement = replacement_reference(
+                    candidate,
+                    mapping[candidate],
+                    source_file,
+                    reference
+                )
+
+                return (
+                    quote +
+                    replacement +
+                    quote
+                )
+
+        if (
+            reference
+            and "/" not in reference
+            and "\\" not in reference
+        ):
+            candidate = (
+                source_file.parent / reference
+            ).resolve()
+
+            if candidate in mapping:
+                replacement = replacement_reference(
+                    candidate,
+                    mapping[candidate],
+                    source_file,
+                    reference
+                )
+
+                return (
+                    quote +
+                    replacement +
+                    quote
+                )
+
+        return match.group(0)
+
+    text = QUOTED_STRING_RE.sub(
+        quoted_replacer,
+        text
+    )
+
+    def token_replacer(match):
+        reference = match.group(1)
+
+        for candidate in candidate_paths(
+            reference,
+            source_file
+        ):
+            if candidate in mapping:
+                return replacement_reference(
+                    candidate,
+                    mapping[candidate],
+                    source_file,
+                    reference
+                )
+
+        return reference
+
+    text = PATH_TOKEN_RE.sub(
+        token_replacer,
+        text
+    )
+
+    if text == original:
+        return False
+
+    temp = source_file.with_name(
+        f".{source_file.name}.reset-{os.getpid()}"
+    )
+
+    try:
+        temp.write_text(
+            text,
+            encoding="utf-8",
+            newline=""
+        )
+
+        os.replace(temp, source_file)
+
+    finally:
+        if temp.exists():
+            temp.unlink(missing_ok=True)
+
+    return True
+
+
+all_files = collect_files(CURRENT_DIR)
+
+target_files = [
+    path
+    for path in all_files
+    if inside(path, TARGET)
+]
+
+versioned = []
+
+for path in target_files:
+    if VERSION_RE.match(path.name):
+        base = base_path(path)
+
+        if base is not None:
+            versioned.append(
+                (
+                    path,
+                    base
+                )
+            )
+
+if not versioned:
+    print()
+    print("No versioned files found.")
+    sys.exit(0)
+
+safe_plan = []
+blocked = []
+
+for old, new in versioned:
+
+    if new.exists():
+        blocked.append(
+            (
+                old,
+                new
+            )
+        )
+    else:
+        safe_plan.append(
+            (
+                old,
+                new
+            )
+        )
+
+print()
+print("RESET PLAN")
+print("=" * 80)
+print()
+
+for old, new in safe_plan:
+    print(f"OLD : {old}")
+    print(f"NEW : {new}")
+    print()
+
+if blocked:
+    print("BLOCKED COLLISIONS")
+    print("-" * 80)
+    print()
+
+    for old, new in blocked:
+        print(f"FILE : {old}")
+        print(f"BASE : {new}")
+        print("REASON: Base filename already exists.")
+        print()
+
+if not safe_plan:
+    print("No files can be safely reset.")
+    sys.exit(0)
+
+print("=" * 80)
+print(f"Files to reset : {len(safe_plan)}")
+print(f"Files blocked  : {len(blocked)}")
+print()
+
+answer = input(
+    "Proceed with this plan? [y/N]: "
+).strip().lower()
+
+if answer != "y":
+    print("Cancelled.")
+    sys.exit(0)
+
+mapping = {
+    old.resolve(): new.resolve()
+    for old, new in safe_plan
+}
+
+print()
+print("Scanning references...")
+print()
+
+changed_files = []
+
+for source in all_files:
+    if replace_references(
+        source,
+        mapping
+    ):
+        changed_files.append(source)
+        print(f"UPDATED: {source}")
+
+for old, new in safe_plan:
+    if new.exists():
+        print()
+        print("ABORTED.")
+        print("Destination appeared:")
+        print(f"  {new}")
+        sys.exit(2)
+
+print()
+print("Resetting filenames...")
+print()
+
+renamed = []
+
+for old, new in safe_plan:
+
+    if not old.exists():
+        print()
+        print("ABORTED.")
+        print("Source disappeared:")
+        print(f"  {old}")
+        sys.exit(2)
+
+    if new.exists():
+        print()
+        print("ABORTED.")
+        print("Destination exists:")
+        print(f"  {new}")
+        sys.exit(2)
+
+    old.rename(new)
+
+    renamed.append(
+        (
+            old,
+            new
+        )
+    )
+
+    print(f"{old}")
+    print(f"  -> {new}")
+
+print()
+print("Verifying final filesystem state...")
+print()
+
+errors = []
+
+for old, new in renamed:
+
+    if old.exists():
+        errors.append(
+            f"Old file still exists: {old}"
+        )
+
+    if not new.exists():
+        errors.append(
+            f"New file does not exist: {new}"
+        )
+
+    if not inside(new, TARGET):
+        errors.append(
+            f"New file escaped TARGET: {new}"
+        )
+
+if errors:
+    print("VERIFICATION FAILED")
+    print()
+
+    for error in errors:
+        print(f"  {error}")
+
+    sys.exit(2)
+
+print("Reset completed successfully.")
+print()
+print(f"Reset files   : {len(renamed)}")
+print(f"Updated files : {len(changed_files)}")
+print(f"Blocked files : {len(blocked)}")
+PY
+                ;;
+
+            q|Q)
+                return 0
+                ;;
+
+            *)
+                echo
+                echo "Invalid option."
+                sleep 1
+                ;;
+        esac
+
+        echo
+        read -r -p "Press Enter to return to menu..." _
+    done
+}

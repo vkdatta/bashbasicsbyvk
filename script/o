@@ -1054,7 +1054,7 @@ infinity_stones_menu() {
     4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path" ;;
     5) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path" ;;
     6) bash "$SCRIPT_DIR/_3bvk_localhost_core" "$path" ;;
-    7) bash "$SCRIPT_DIR/bashbasicbyvk_versioning.sh" "$path" ;;
+    7) bash "$SCRIPT_DIR/bashbasicbyvk_versioning" "$path" ;;
     q|"") return ;;
     *) echo "⚠️  Invalid choice"; return ;;
   esac
