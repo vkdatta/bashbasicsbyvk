@@ -400,9 +400,13 @@ print(f"TARGET files to rename: {len(plan)}")
 print(f"REFERENCE search root:  {BOUNDARY}")
 print()
 
-answer = input(
-    "Proceed? [y/N]: "
-).strip().lower()
+try:
+    with open("/dev/tty", "r", encoding="utf-8") as tty:
+        print("Proceed? [y/N]: ", end="", flush=True)
+        answer = tty.readline().strip().lower()
+except OSError:
+    print("ERROR: Unable to read confirmation from terminal.")
+    sys.exit(1)
 
 if answer != "y":
     print("Cancelled.")
@@ -850,9 +854,13 @@ if not safe_plan:
     print("Nothing can be safely reset.")
     sys.exit(0)
 
-answer = input(
-    "Proceed? [y/N]: "
-).strip().lower()
+try:
+    with open("/dev/tty", "r", encoding="utf-8") as tty:
+        print("Proceed? [y/N]: ", end="", flush=True)
+        answer = tty.readline().strip().lower()
+except OSError:
+    print("ERROR: Unable to read confirmation from terminal.")
+    sys.exit(1)
 
 if answer != "y":
     print("Cancelled.")
