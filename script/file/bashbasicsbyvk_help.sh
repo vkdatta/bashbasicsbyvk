@@ -1,4 +1,4 @@
-Open_help() {
+open_help() {
   local HELP_FILE
 
   # Search Termux prefix, user home, /usr/local, and /usr
