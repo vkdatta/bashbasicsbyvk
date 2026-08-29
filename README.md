@@ -23,6 +23,54 @@
 
 ---
 
+### `o` — Omni File Manager
+
+```bash
+o
+```
+
+A single interactive call to manage everything in your shell. No flags, no paths.
+
+<details>
+<summary>Supported Operations</summary>
+
+<br/>
+
+| Category | Operations |
+|---|---|
+| **Files** | Run, Copy, Erase, Delete, Overwrite, Rename, Move |
+| **Batch** | Batch-create, Batch-delete |
+| **Navigate** | Find, Organise |
+
+</details>
+
+---
+
+### `xtract` — Web Scraper
+
+```bash
+xtract
+```
+
+Extracts **all** HTML tables and hyperlinks from one or more paginated web pages in a single invocation. Perfect for harvesting catalogues, reports, and dashboards spread across multiple pages.
+
+<details>
+<summary>URL Patterns & Examples</summary>
+
+<br/>
+
+| Intent | Format | Example |
+|---|---|---|
+| Single page | Plain URL | `example.com/article/p.html` |
+| Specific page number | URL ending in page number | `example.com/article/100` |
+| Page range (1 to N) | URL with `{N}` | `example.com/article/{100}` |
+
+> **Note:** `{100}` means pages **1 through 100**. Curly braces signal a range — no braces means that exact page only.
+
+</details>
+
+---
+
 ### Installation
 
 <details>
@@ -30,7 +78,10 @@
 
 <br/>
 
-#### Prerequisites
+<details>
+<summary>Prerequisites</summary>
+
+<br/>
 
 ```bash
 pkg install termux-api
@@ -50,7 +101,12 @@ pkg install clang make cmake pkg-config python-dev ninja libandroid-spawn libffi
 pip install numpy pandas requests beautifulsoup4 tqdm openpyxl
 ```
 
-#### Storage
+</details>
+
+<details>
+<summary>Storage</summary>
+
+<br/>
 
 Enable storage access:
 
@@ -64,7 +120,7 @@ Grant the permission when prompted. Then allow external app access:
 nano ~/.termux/termux.properties
 ```
 
-Add or uncomment the following line:
+Add or uncomment:
 
 ```
 allow-external-apps = true
@@ -72,7 +128,12 @@ allow-external-apps = true
 
 Save, exit, then fully restart Termux: **Android Settings → Apps → Termux → Force Stop → Relaunch**.
 
-#### Rclone
+</details>
+
+<details>
+<summary>Rclone</summary>
+
+<br/>
 
 ```bash
 pkg install rclone
@@ -90,23 +151,40 @@ rclone config
 | 7 | Advanced config? | `n` |
 | 8 | Auto config? | `y` |
 
-#### Install
+</details>
+
+<details>
+<summary>Install</summary>
+
+<br/>
 
 ```bash
 pip install git+https://github.com/vkdatta/bashbasicsbyvk.git
 ```
 
-#### Upgrade
+</details>
+
+<details>
+<summary>Upgrade</summary>
+
+<br/>
 
 ```bash
 pip install -vvv --progress-bar on --upgrade --force-reinstall git+https://github.com/vkdatta/bashbasicsbyvk.git
 ```
 
-#### Uninstall
+</details>
+
+<details>
+<summary>Uninstall</summary>
+
+<br/>
 
 ```bash
 pip uninstall bashbasicsbyvk
 ```
+
+</details>
 
 </details>
 
@@ -117,7 +195,10 @@ pip uninstall bashbasicsbyvk
 
 <br/>
 
-#### Rclone
+<details>
+<summary>Rclone</summary>
+
+<br/>
 
 ```bash
 cd ~
@@ -146,23 +227,40 @@ rclone config
 | 7 | Advanced config? | `n` |
 | 8 | Auto config? | `y` |
 
-#### Install
+</details>
+
+<details>
+<summary>Install</summary>
+
+<br/>
 
 ```bash
 pip install git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
 ```
 
-#### Upgrade
+</details>
+
+<details>
+<summary>Upgrade</summary>
+
+<br/>
 
 ```bash
 pip install -vvv --progress-bar on --upgrade --force-reinstall git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
 ```
 
-#### Uninstall
+</details>
+
+<details>
+<summary>Uninstall</summary>
+
+<br/>
 
 ```bash
 pip uninstall bashbasicsbyvk
 ```
+
+</details>
 
 </details>
 
@@ -173,13 +271,21 @@ pip uninstall bashbasicsbyvk
 
 <br/>
 
-#### Prerequisites
+<details>
+<summary>Prerequisites</summary>
+
+<br/>
 
 ```bash
 sudo apt update && sudo apt install python3 python3-pip python3-venv python3-dev -y
 ```
 
-#### Rclone
+</details>
+
+<details>
+<summary>Rclone</summary>
+
+<br/>
 
 ```bash
 cd ~
@@ -208,22 +314,39 @@ rclone config
 | 7 | Advanced config? | `n` |
 | 8 | Auto config? | `y` |
 
-#### Install
+</details>
+
+<details>
+<summary>Install</summary>
+
+<br/>
 
 ```bash
 sudo pip install git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
 ```
 
-#### Upgrade
+</details>
+
+<details>
+<summary>Upgrade</summary>
+
+<br/>
 
 ```bash
 sudo pip install -vvv --progress-bar on --upgrade --force-reinstall git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
 ```
 
-#### Uninstall
+</details>
+
+<details>
+<summary>Uninstall</summary>
+
+<br/>
 
 ```bash
 sudo pip uninstall bashbasicsbyvk
 ```
+
+</details>
 
 </details>
