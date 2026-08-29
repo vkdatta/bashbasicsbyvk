@@ -841,10 +841,6 @@ handle_do_import() {
 
   echo "📦 Multi-file link detected."
   local dest="$path"
-  if [ -t 0 ]; then
-    read -p "📂 Extract into which folder? (blank = current dir: $path): " dest_in
-    [ -n "$dest_in" ] && dest="$dest_in"
-  fi
   mkdir -p "$dest"
 
   echo "🔐 Decrypting and importing..."
