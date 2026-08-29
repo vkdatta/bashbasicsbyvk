@@ -1,228 +1,267 @@
-<div align="center">
+<div align="center"><img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL-black?style=for-the-badge&logo=gnubash&logoColor=white&labelColor=%23272727&color=%23171717"/>
+<img src="https://img.shields.io/badge/Python-3.8%2B-black?style=for-the-badge&logo=python&logoColor=white&labelColor=%23272727&color=%23171717"/>
+<img src="https://img.shields.io/badge/Shell-Bash-black?style=for-the-badge&logo=gnu-bash&logoColor=white&labelColor=%23272727&color=%23171717"/>
+<img src="https://img.shields.io/badge/License-MIT-black?style=for-the-badge&logoColor=white&labelColor=%23272727&color=%23171717"/>
+<img src="https://img.shields.io/badge/Install-pip-black?style=for-the-badge&logo=pypi&logoColor=white&labelColor=%23272727&color=%23171717"/></div>bashbasicsbyvk
 
-<img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL-black?style=for-the-badge&logo=gnubash&logoColor=white&labelColor=%23272727&color=%23171717&borderRadius=50"/>
-<img src="https://img.shields.io/badge/Python-3.8%2B-black?style=for-the-badge&logo=python&logoColor=white&labelColor=%23272727&color=%23171717&borderRadius=50"/>
-<img src="https://img.shields.io/badge/Shell-Bash-black?style=for-the-badge&logo=gnu-bash&logoColor=white&labelColor=%23272727&color=%23171717&borderRadius=50"/>
-<img src="https://img.shields.io/badge/License-MIT-black?style=for-the-badge&logoColor=white&labelColor=%23272727&color=%23171717&borderRadius=50"/>
-<img src="https://img.shields.io/badge/Install-pip-black?style=for-the-badge&logo=pypi&logoColor=white&labelColor=%23272727&color=%23171717&borderRadius=50"/>
+bashbasicsbyvk is a lightweight interactive file manager for your shell environment. It provides modern, simple alternatives to repetitive shell commands for managing files, organizing data, finding content, extracting information from websites, and more.
 
-</div>
+Installation
 
-### bashbasicsbyvk
+<details>
+<summary><strong>Termux for Android</strong></summary><br>Prerequisites
 
-**bashbasicsbyvk** is a lightweight file manager for your shell environment. With its interactive design, it provides modern replacements for boring, monotonous commands that waste your time in the shell. From running, copying, erasing, deleting, overwriting, and renaming files to organizing, indexing, creating shortcuts, transferring data, finding and replacing content, mapping, and more, **bashbasicsbyvk** is an essential tool designed to make your life easier.
+Run:
 
----
-
-### Prerequisites
-
-Run the following blocks in order:
-
-```bash
-pkg install termux-api
-pkg install python -y
-pkg install root-repo
-pkg uninstall tur-repo -y
 pkg update -y
 pkg upgrade -y
-pkg install tur-repo -y
-pkg install clang libopenblas libffi libzmq build-essential -y
-```
-```bash
-pkg update
-pkg install clang make cmake pkg-config
-pkg install python-dev
-pkg install ninja
-pkg install libandroid-spawn
-pkg install libffi-dev
-pkg install rclone
-```
-```bash
-pip install numpy
-```
-```bash
-pip install pandas
-```
-```bash
-pkg install -y termux-api python git curl
-```
-```bash
-pip install requests pandas beautifulsoup4 tqdm 
-```
-```bash
-pip install openpyxl 
-```
+pkg install -y python git curl termux-api rclone
 
----
+Install Python dependencies:
 
-### Storage Setup (for termux)
+pip install numpy pandas requests beautifulsoup4 tqdm openpyxl
 
-If you're in Termux, enable storage access in your environment using:
+Storage
 
-```bash
+Enable Termux storage access:
+
 termux-setup-storage
-```
 
-Grant the requested storage permission when prompted by Android. This creates symlinks in `~/storage/` for shared directories like Downloads and ensures Termux can read from `/storage/emulated/0/`.
+Grant the requested Android storage permission.
 
-Allow external app access (required for sharing files to apps like Chrome):
+For sharing files with external apps, open:
 
-```bash
 nano ~/.termux/termux.properties
-```
 
-Locate or add the line:
+Add or uncomment:
 
-```
 allow-external-apps = true
-```
 
-Uncomment it if present by removing the `#`. Save and exit, then restart the Termux app completely — **Android Settings → Apps → Termux → Force Stop → Relaunch**. This enables the content provider (`com.termux.files`) to grant read access to URIs for external apps.
+Then completely restart Termux.
 
----
+Rclone
 
-### Rclone Setup and Config
+Configure your Google Drive remote:
 
-<details>
-<summary><strong>Remote Shell (e.g. Google Cloud)</strong></summary>
-
-<br/>
-
-```bash
-cd ~
-curl -LO https://downloads.rclone.org/rclone-current-linux-amd64.zip
-unzip -j rclone-current-linux-amd64.zip "*/rclone" -d ~/bin/
-chmod 755 ~/bin/rclone
-rm rclone-current-linux-amd64.zip
-if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
-    echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
-    source ~/.bashrc
-fi
-```
-
-</details>
-
-<details>
-<summary><strong>Local Shell</strong></summary>
-
-<br/>
-
-```bash
-pkg install rclone
-```
-
-</details>
-
-Configure a new Google Drive remote:
-
-```bash
 rclone config
-```
 
-| Step | Prompt | Value |
-|---|---|---|
-| 1 | New remote? | `n` |
-| 2 | Name | `gdrive` |
-| 3 | Storage type | Google Drive |
-| 4 | Client ID / Secret | *(leave empty)* |
-| 5 | Scope | `1` — Full access |
-| 6 | Root folder ID | *(leave empty)* |
-| 7 | Advanced config? | `n` |
-| 8 | Auto config? | `y` |
+Suggested configuration:
 
----
+Step| Value
+New remote| "n"
+Name| "gdrive"
+Storage| Google Drive
+Client ID / Secret| Leave empty
+Scope| "1"
+Root folder ID| Leave empty
+Advanced config| "n"
+Auto config| "y"
 
-### Installation and Upgrade
+Installation
 
-```bash
 pip install git+https://github.com/vkdatta/bashbasicsbyvk.git
-```
 
-This is a personal project — all changes go directly to `main`. No versioned releases. If a command behaves unexpectedly, force-reinstall to pull the latest state:
+Upgrade
 
-```bash
-pip install -vvv --progress-bar on --upgrade --force-reinstall git+https://github.com/vkdatta/bashbasicsbyvk.git
-```
----
-### Clone
+pip install --upgrade --force-reinstall git+https://github.com/vkdatta/bashbasicsbyvk.git
 
-```bash
-git clone https://github.com/vkdatta/bashbasicsbyvk.git
-```
----
+Deletion
 
-### Special Case for VMs
+pip uninstall bashbasicsbyvk
 
-Ensure python:
+</details><details>
+<summary><strong>Linux and Other Cloud Shells</strong></summary><br>Prerequisites
 
-```bash
-sudo apt update && sudo apt install python3 python3-pip python3-venv python3-dev -y
-```
+Ensure Python, pip, Git, and Rclone are installed.
 
-Install Via:
+For Debian/Ubuntu-based systems:
 
-```bash
-sudo pip install git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
-```
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv python3-dev git curl rclone
 
-Upgrade Via:
+Storage
 
-```bash
-sudo pip install -vvv --progress-bar on --upgrade --force-reinstall git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
-```
----
+No additional setup is normally required.
 
-### Commands
+Rclone
 
-| Command | Purpose |
-|---|---|
-| `o` | Omni file manager — run, copy, erase, delete, overwrite, rename, move, batch-create, batch-delete, organise, find |
-| `xtract` | Extract all HTML tables & hyperlinks from single or paginated URLs |
+Configure your Google Drive remote:
 
----
+rclone config
 
-### `o` — Omni File Manager
+Suggested configuration:
 
-```bash
+Step| Value
+New remote| "n"
+Name| "gdrive"
+Storage| Google Drive
+Client ID / Secret| Leave empty
+Scope| "1"
+Root folder ID| Leave empty
+Advanced config| "n"
+Auto config| "y"
+
+Installation
+
+Without sudo:
+
+pip install --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+With sudo:
+
+sudo pip install --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+Upgrade
+
+Without sudo:
+
+pip install --upgrade --force-reinstall --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+With sudo:
+
+sudo pip install --upgrade --force-reinstall --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+Deletion
+
+Without sudo:
+
+pip uninstall bashbasicsbyvk --break-system-packages
+
+With sudo:
+
+sudo pip uninstall bashbasicsbyvk --break-system-packages
+
+</details><details>
+<summary><strong>VMs</strong></summary><br>Prerequisites
+
+For Debian/Ubuntu-based VMs:
+
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv python3-dev git curl rclone
+
+Storage
+
+No additional setup is normally required.
+
+Rclone
+
+Configure your Google Drive remote:
+
+rclone config
+
+Suggested configuration:
+
+Step| Value
+New remote| "n"
+Name| "gdrive"
+Storage| Google Drive
+Client ID / Secret| Leave empty
+Scope| "1"
+Root folder ID| Leave empty
+Advanced config| "n"
+Auto config| "y"
+
+Installation
+
+Without sudo:
+
+pip install --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+With sudo:
+
+sudo pip install --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+Upgrade
+
+Without sudo:
+
+pip install --upgrade --force-reinstall --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+With sudo:
+
+sudo pip install --upgrade --force-reinstall --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+Deletion
+
+Without sudo:
+
+pip uninstall bashbasicsbyvk --break-system-packages
+
+With sudo:
+
+sudo pip uninstall bashbasicsbyvk --break-system-packages
+
+</details><details>
+<summary><strong>All Others</strong></summary><br>Prerequisites
+
+Ensure the following are available:
+
+- Python 3.8+
+- pip
+- Git
+- Bash
+
+Installation
+
+pip install git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+If your system restricts global Python package installation:
+
+pip install --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+Or with sudo:
+
+sudo pip install --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+Upgrade
+
+pip install --upgrade --force-reinstall git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+If required:
+
+pip install --upgrade --force-reinstall --break-system-packages git+https://github.com/vkdatta/bashbasicsbyvk.git
+
+Deletion
+
+pip uninstall bashbasicsbyvk
+
+</details>Commands
+
+Command| Purpose
+"o"| Interactive omni file manager
+"xtract"| Extract HTML tables and hyperlinks from web pages
+
+"o"
+
 o
-```
 
-A single interactive call to manage everything in your shell. No flags, no paths.
+A single interactive file manager for common shell operations.
 
-<details>
-<summary><strong>Supported Operations</strong></summary>
+Supported operations include:
 
-<br/>
+- Run
+- Copy
+- Erase
+- Delete
+- Overwrite
+- Rename
+- Move
+- Batch create
+- Batch delete
+- Organise
+- Find
 
-| Category | Operations |
-|---|---|
-| **Files** | Run, Copy, Erase, Delete, Overwrite, Rename, Move |
-| **Batch** | Batch-create, Batch-delete |
-| **Navigate** | Find, Organise |
+"xtract"
 
-</details>
-
----
-
-### `xtract` — Web Scraper
-
-```bash
 xtract
-```
 
-Extracts **all** HTML tables and hyperlinks from one or more paginated web pages in a single invocation. Perfect for harvesting catalogues, reports, and dashboards spread across multiple pages.
+Extracts HTML tables and hyperlinks from single or paginated URLs.
 
-<details>
-<summary><strong>URL Patterns & Examples</strong></summary>
+URL Patterns
 
-<br/>
+Intent| Format| Example
+Single page| Plain URL| "example.com/article/page.html"
+Specific page| URL ending in a number| "example.com/article/100"
+Page range| URL with "{N}"| "example.com/article/{100}"
 
-| Intent | Format | Example |
-|---|---|---|
-| Single page | Plain URL | `example.com/article/p.html` |
-| Specific page number | URL ending in page number | `example.com/article/100` |
-| Page range (1 to N) | URL with `{N}` | `example.com/article/{100}` |
-
-> **Note:** `{100}` means pages **1 through 100**. Curly braces signal a range — no braces means that exact page only.
-
-</details>
+"{100}" means pages 1 through 100.
