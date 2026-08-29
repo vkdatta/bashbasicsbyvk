@@ -1,10 +1,11 @@
-open_help() {
+Open_help() {
   local HELP_FILE
 
-  HELP_FILE="$(find "${PREFIX:-/usr}" -type f -name "bashbasicsbyvk_help.xlsx" 2>/dev/null | head -n 1)"
+  # Search Termux prefix, user home, /usr/local, and /usr
+  HELP_FILE="$(find "${PREFIX:-/data/data/com.termux/files/usr}" "$HOME/.local" /usr/local /usr -type f -name "bashbasicsbyvk_help.txt" 2>/dev/null | head -n 1)"
 
   if [ -z "$HELP_FILE" ] || [ ! -f "$HELP_FILE" ]; then
-    echo "❌ bashbasicsbyvk_help.xlsx not found"
+    echo "❌ bashbasicsbyvk_help.txt not found"
     return 1
   fi
 

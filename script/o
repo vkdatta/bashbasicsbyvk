@@ -2,6 +2,9 @@
 
 source "bashbasicsbyvk_smartmenu.sh"
 source "bashbasicsbyvk_run.sh"
+source "bashbasicsbyvk_csv.sh"
+source "bashbasicsbyvk_rename.sh"
+source "bashbasicsbyvk_archive.sh"
 source "bashbasicsbyvk_organise.sh"
 source "bashbasicsbyvk_find.sh"
 source "bashbasicsbyvk_settings.sh"
@@ -979,59 +982,6 @@ handle_create() {
   [[ "$cr" == "2" ]] && create_files
 }
 
-handle_rename() {
-  if [ ${#items[@]} -eq 0 ]; then
-    echo "❌ No items to rename"
-    return
-  fi
-  select_items_common "RENAME"
-  [ $? -ne 0 ] && return
-
-  for item in "${selected_items[@]}"; do
-    local bn="${item##*/}"
-
-    if [[ "$bn" == *.shortcut ]]; then
-      local cur_name
-      cur_name=$(_shortcut_read_field "$item" "SHORTCUT_NAME")
-      [ -z "$cur_name" ] && cur_name="${bn%.shortcut}"
-      local sc_type_r
-      sc_type_r=$(_shortcut_read_field "$item" "SHORTCUT_TYPE")
-      [ "$sc_type_r" == "dir" ] && echo "🔑  Shortcut (dir): $cur_name" || echo "🗝️  Shortcut (file): $cur_name"
-      echo "Renaming a shortcut only changes the shortcut's name — the original is untouched."
-      read -p "New display name (blank = cancel): " new_name
-      [ -z "$new_name" ] && echo "🚫 Skipped" && continue
-
-      local tmp_file
-      tmp_file=$(mktemp)
-      sed "s|^SHORTCUT_NAME=.*|SHORTCUT_NAME=${new_name}|" "$item" > "$tmp_file" && mv "$tmp_file" "$item"
-
-      local new_sc_path
-      new_sc_path="$(dirname "$item")/${new_name}.shortcut"
-      local count=1
-      while [ -e "$new_sc_path" ] && [ "$new_sc_path" != "$item" ]; do
-        new_sc_path="$(dirname "$item")/${new_name}${count}.shortcut"
-        count=$((count+1))
-      done
-      if [ "$new_sc_path" != "$item" ]; then
-        mv -- "$item" "$new_sc_path"
-      fi
-      echo "✅ Shortcut renamed: $cur_name → $new_name"
-      continue
-    fi
-
-    echo "Current name: $bn"
-    read -p "New name (blank = cancel): " new_name
-    [ -z "$new_name" ] && echo "🚫 Skipped" && continue
-    local new_path
-    new_path="$(dirname "$item")/$new_name"
-    if [ -e "$new_path" ]; then
-      echo "⚠️  '$new_name' already exists — skipped"
-      continue
-    fi
-    mv -- "$item" "$new_path"
-    echo "✅ Renamed: $bn → $new_name"
-  done
-}
 
 infinity_stones_menu() {
   echo
@@ -1568,6 +1518,8 @@ case "$choice" in
     do-)                    handle_do_import ;;
     ups-*)                  handle_ups_upload "$choice" ;;
     up-*)                   handle_up_upload "$choice" ;;
+    uz-*)                   handle_unzip_items "$choice" ;;
+    z-*)                    handle_zip_items "$choice" ;;
     clear)                  hash -r ;;
     disk)                   df -h ;;
     ram)                    free -h ;;

@@ -196,6 +196,22 @@ pip uninstall bashbasicsbyvk
 <br/>
 
 <details>
+<summary>Prerequisites</summary>
+
+<br/>
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+</details>
+
+<details>
 <summary>Rclone</summary>
 
 <br/>

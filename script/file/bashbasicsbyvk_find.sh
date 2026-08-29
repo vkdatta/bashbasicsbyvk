@@ -17,38 +17,130 @@ find_menu() {
             mapfile -t results < <(grep -rl "$pat" "$path" 2>/dev/null | head -100)
             ;;
         3)
-            read -p "Name pattern to find: " pat
-            read -p "Replace with: " rep
-            mapfile -t results < <(find "$path" -name "*$pat*" 2>/dev/null | head -100)
+            echo ""
+            echo "🔤 Find & Replace in file/folder names"
+            echo "1) Single Mutation"
+            echo "2) Multi Mutation (CSV)"
+            read -p "Mode [1-2]: " fr_name_mode
 
-            if [ ${#results[@]} -eq 0 ]; then
-                echo "No matches found."
-                return
-            fi
+            case "$fr_name_mode" in
+                1)
+                    # ── Single Mutation ──────────────────────────────────────────
+                    read -p "Name pattern to find: " pat
+                    read -p "Replace with: " rep
+                    mapfile -t results < <(find "$path" -name "*$pat*" 2>/dev/null | head -100)
 
-            echo "📋 Preview of renames (${#results[@]} items):"
-            for f in "${results[@]}"; do
-                local base=$(basename "$f")
-                local dir=$(dirname "$f")
-                local newname="${base//$pat/$rep}"
-                printf "  %s  →  %s\n" "$base" "$newname"
-            done
-
-            read -p "Apply all renames? [y/N]: " confirm
-            if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                local count=0
-                for f in "${results[@]}"; do
-                    local base=$(basename "$f")
-                    local dir=$(dirname "$f")
-                    local newname="${base//$pat/$rep}"
-                    if [ "$base" != "$newname" ]; then
-                        mv -- "$f" "$dir/$newname" && (( count++ ))
+                    if [ ${#results[@]} -eq 0 ]; then
+                        echo "No matches found."
+                        return
                     fi
-                done
-                echo "✅ Renamed $count item(s)."
-            else
-                echo "Aborted."
-            fi
+
+                    echo "📋 Preview of renames (${#results[@]} items):"
+                    for f in "${results[@]}"; do
+                        local base=$(basename "$f")
+                        local newname="${base//$pat/$rep}"
+                        printf "  %s  →  %s\n" "$base" "$newname"
+                    done
+
+                    read -p "Apply all renames? [y/N]: " confirm
+                    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                        local count=0
+                        for f in "${results[@]}"; do
+                            local base=$(basename "$f")
+                            local dir=$(dirname "$f")
+                            local newname="${base//$pat/$rep}"
+                            if [ "$base" != "$newname" ]; then
+                                mv -- "$f" "$dir/$newname" && ((count++))
+                            fi
+                        done
+                        echo "✅ Renamed $count item(s)."
+                    else
+                        echo "Aborted."
+                    fi
+                    return
+                    ;;
+
+                2)
+                    # ── Multi Mutation (CSV) — col1=find_pattern, col2=replace_pattern ──
+                    open_csv_menu || return
+                    [ -z "$csv_file" ] && return
+
+                    echo ""
+                    echo "🔄 Processing name renames from: $(basename "$csv_file")"
+
+                    local -a nr_finds=() nr_reps=() nr_counts=()
+
+                    while IFS=, read -r csv_find csv_rep _rest || [ -n "$csv_find" ]; do
+                        csv_find="${csv_find#"${csv_find%%[![:space:]]*}"}"
+                        csv_find="${csv_find%"${csv_find##*[![:space:]]}"}"
+                        csv_find="${csv_find%$'\r'}"
+                        csv_rep="${csv_rep#"${csv_rep%%[![:space:]]*}"}"
+                        csv_rep="${csv_rep%"${csv_rep##*[![:space:]]}"}"
+                        csv_rep="${csv_rep%$'\r'}"
+                        [ -z "$csv_find" ] && continue
+                        nr_finds+=("$csv_find")
+                        nr_reps+=("$csv_rep")
+                    done < "$csv_file"
+
+                    if [ ${#nr_finds[@]} -eq 0 ]; then
+                        echo "❌ No valid rows found in CSV."
+                        return
+                    fi
+
+                    echo "📋 Found ${#nr_finds[@]} pattern(s) to apply in: $path"
+                    echo ""
+
+                    for row_idx in "${!nr_finds[@]}"; do
+                        local row_find="${nr_finds[$row_idx]}"
+                        local row_rep="${nr_reps[$row_idx]}"
+
+                        local -a row_matches=()
+                        mapfile -t row_matches < <(find "$path" -name "*$row_find*" 2>/dev/null)
+
+                        if [ ${#row_matches[@]} -eq 0 ]; then
+                            echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ⚠️  No matches"
+                            nr_counts+=("0")
+                            continue
+                        fi
+
+                        local renamed=0
+                        for f in "${row_matches[@]}"; do
+                            local base="$(basename "$f")"
+                            local dir="$(dirname "$f")"
+                            local newname="${base//$row_find/$row_rep}"
+                            if [ "$base" != "$newname" ] && [ ! -e "$dir/$newname" ]; then
+                                mv -- "$f" "$dir/$newname" && renamed=$((renamed + 1))
+                            fi
+                        done
+                        echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ✅ $renamed renamed"
+                        nr_counts+=("$renamed")
+                    done
+
+                    # Write counts back to col3
+                    echo ""
+                    echo "📝 Writing rename counts back to CSV..."
+                    local tmp_csv="${csv_file}.tmp"
+                    local write_idx=0
+                    while IFS=, read -r csv_find csv_rep _rest || [ -n "$csv_find" ]; do
+                        local raw_find="$csv_find" raw_rep="$csv_rep"
+                        local trimmed="${csv_find#"${csv_find%%[![:space:]]*}"}"
+                        trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+                        trimmed="${trimmed%$'\r'}"
+                        [ -z "$trimmed" ] && { printf "%s,%s,%s\n" "$raw_find" "$raw_rep" "${_rest:-}"; continue; }
+                        printf "%s,%s,%s renamed\n" "$raw_find" "$raw_rep" "${nr_counts[$write_idx]:-0}"
+                        write_idx=$((write_idx + 1))
+                    done < "$csv_file" > "$tmp_csv"
+                    mv "$tmp_csv" "$csv_file"
+                    echo "✅ CSV updated: $(basename "$csv_file")"
+                    echo "🎉 Multi Mutation (names) complete — ${#nr_finds[@]} pattern(s) processed."
+                    return
+                    ;;
+
+                *)
+                    echo "❌ Invalid mode."
+                    return
+                    ;;
+            esac
             return
             ;;
         4)
@@ -88,7 +180,7 @@ find_menu() {
                         a|A)
                             local count=0
                             for f in "${results[@]}"; do
-                                sed -i "s|$pat|$rep|g" "$f" && (( count++ ))
+                                sed -i "s|$pat|$rep|g" "$f" && ((count++))
                             done
                             echo "✅ Replaced in $count file(s)."
                             ;;
@@ -108,91 +200,16 @@ find_menu() {
 
                 2)
                     # ── Multi Mutation (CSV) ────────────────────────────────────
-                    echo ""
-                    echo "📂 Navigate to select your CSV file (showing CSV files and folders only)"
-
-                    local csv_file=""
-                    local csv_nav_path="${nav_last_browsed_path:-$path}"
-
-                    # CSV-only navigator loop
-                    while true; do
-                        echo ""
-                        echo "📂 CSV SELECT — Location: $csv_nav_path"
-
-                        local -a csv_nav_items=()
-                        # collect folders and .csv files only
-                        while IFS= read -r -d '' _entry; do
-                            local _bn="${_entry##*/}"
-                            [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-                            if [ -d "$_entry" ]; then
-                                csv_nav_items+=("$_entry")
-                            elif [[ "${_bn,,}" == *.csv ]]; then
-                                csv_nav_items+=("$_entry")
-                            fi
-                        done < <(find "$csv_nav_path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null | sort -z)
-
-                        if [ ${#csv_nav_items[@]} -eq 0 ]; then
-                            echo "🛑 No folders or CSV files here."
-                        else
-                            local idx=1
-                            for item in "${csv_nav_items[@]}"; do
-                                local _bn="${item##*/}"
-                                if [ -d "$item" ]; then
-                                    printf "%2d) 📁 %s\n" "$idx" "$_bn"
-                                else
-                                    printf "%2d) 📄 %s\n" "$idx" "$_bn"
-                                fi
-                                idx=$((idx+1))
-                            done
-                        fi
-
-                        echo ""
-                        echo "u) Up   x) Cancel   q) Quit"
-                        read -p "CSV Nav: " csv_choice
-
-                        case "$csv_choice" in
-                            q|Q) exit 0 ;;
-                            x|X)
-                                echo "🚫 CSV selection cancelled."
-                                return
-                                ;;
-                            u|U)
-                                [ "$csv_nav_path" != "/" ] && csv_nav_path=$(dirname "$csv_nav_path")
-                                ;;
-                            *)
-                                if [[ "$csv_choice" =~ ^[0-9]+$ ]] && \
-                                   [ "$csv_choice" -ge 1 ] && \
-                                   [ "$csv_choice" -le "${#csv_nav_items[@]}" ]; then
-                                    local csv_sel="${csv_nav_items[$((csv_choice-1))]}"
-                                    if [ -d "$csv_sel" ]; then
-                                        csv_nav_path="$csv_sel"
-                                    else
-                                        # It's a .csv file — selected!
-                                        csv_file="$csv_sel"
-                                        echo "✅ Selected: $(basename "$csv_file")"
-                                        break
-                                    fi
-                                else
-                                    echo "⚠️  Invalid selection"
-                                fi
-                                ;;
-                        esac
-                    done
-
+                    open_csv_menu || return
                     [ -z "$csv_file" ] && return
 
                     # ── Read CSV and run each mutation row by row ───────────────
                     echo ""
                     echo "🔄 Processing mutations from: $(basename "$csv_file")"
 
-                    local -a csv_rows=()
-                    local -a csv_finds=()
-                    local -a csv_reps=()
-                    local -a csv_counts=()
+                    local -a csv_finds=() csv_reps=() csv_counts=()
 
-                    # Parse CSV (col1 = find, col2 = replace), skip empty lines
                     while IFS=, read -r csv_find csv_rep _rest || [ -n "$csv_find" ]; do
-                        # Strip leading/trailing whitespace and CR
                         csv_find="${csv_find#"${csv_find%%[![:space:]]*}"}"
                         csv_find="${csv_find%"${csv_find##*[![:space:]]}"}"
                         csv_find="${csv_find%$'\r'}"
@@ -212,7 +229,6 @@ find_menu() {
                     echo "📋 Found ${#csv_finds[@]} mutation(s) to apply across: $path"
                     echo ""
 
-                    # Resolve absolute path of the CSV so we can exclude it from all operations
                     local abs_csv_file
                     abs_csv_file=$(cd "$(dirname "$csv_file")" && pwd)/$(basename "$csv_file")
 
@@ -220,12 +236,10 @@ find_menu() {
                         local row_find="${csv_finds[$row_idx]}"
                         local row_rep="${csv_reps[$row_idx]}"
 
-                        # Count total instances across all matching files, excluding the CSV itself
                         local -a row_files=()
                         while IFS= read -r rf; do
                             local abs_rf
                             abs_rf=$(cd "$(dirname "$rf")" && pwd)/$(basename "$rf")
-                            # Skip the mutation CSV itself
                             [[ "$abs_rf" == "$abs_csv_file" ]] && continue
                             row_files+=("$rf")
                         done < <(grep -rl "$row_find" "$path" 2>/dev/null)
@@ -234,14 +248,13 @@ find_menu() {
                         for rf in "${row_files[@]}"; do
                             local file_hits
                             file_hits=$(grep -o "$row_find" "$rf" 2>/dev/null | wc -l)
-                            total_instances=$(( total_instances + file_hits ))
+                            total_instances=$((total_instances + file_hits))
                         done
 
                         if [ ${#row_files[@]} -eq 0 ]; then
                             echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ⚠️  No matches found (0 instances)"
                             csv_counts+=("0")
                         else
-                            # Apply replacement
                             for rf in "${row_files[@]}"; do
                                 sed -i "s|$row_find|$row_rep|g" "$rf"
                             done
@@ -265,7 +278,7 @@ find_menu() {
                         [ -z "$trimmed_find" ] && { printf "%s,%s,%s\n" "$raw_find" "$raw_rep" "${_rest:-}"; continue; }
                         local inst="${csv_counts[$write_idx]:-0}"
                         printf "%s,%s,%s instances\n" "$raw_find" "$raw_rep" "$inst"
-                        write_idx=$(( write_idx + 1 ))
+                        write_idx=$((write_idx + 1))
                     done < "$csv_file" > "$tmp_csv"
 
                     mv "$tmp_csv" "$csv_file"
