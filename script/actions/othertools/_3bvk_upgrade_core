@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
 
-pip install -vvv --progress-bar on --upgrade --force-reinstall \
-git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
+INSTALL_LOC=$(pip show bashbasicsbyvk 2>/dev/null | grep '^Location:' | cut -d' ' -f2-)
+
+if [ -z "$INSTALL_LOC" ]; then
+    echo "⚠️  Not installed yet — doing fresh user-local install"
+    pip install -vvv --progress-bar on \
+        git+https://github.com/vkdatta/bashbasicsbyvk.git
+    exit $?
+fi
+
+if [[ "$INSTALL_LOC" == /usr/* || "$INSTALL_LOC" == /lib/* || "$INSTALL_LOC" == /opt/* ]]; then
+    echo "🔧 System install detected ($INSTALL_LOC) — using --break-system-packages"
+    pip install -vvv --progress-bar on --upgrade --force-reinstall \
+        git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
+else
+    echo "🔧 User install detected ($INSTALL_LOC) — normal upgrade"
+    pip install -vvv --progress-bar on --upgrade --force-reinstall \
+        git+https://github.com/vkdatta/bashbasicsbyvk.git
+fi
