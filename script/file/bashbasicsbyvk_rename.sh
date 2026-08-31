@@ -4,25 +4,118 @@
 #           select_items_common, _shortcut_read_field (from main / organise)
 
 # ---------------------------------------------------------------------------
+# _sync_shortcuts_for_rename <old_abs_path> <new_abs_path>
+# Scans every .shortcut file under $HOME and rewrites SHORTCUT_PATH wherever
+# it references old_abs_path (exact match for a file rename) or has it as a
+# directory prefix (any item inside a renamed folder).
+# Called automatically after every successful mv inside this script.
+# ---------------------------------------------------------------------------
+_sync_shortcuts_for_rename() {
+  local old_path="$1"
+  local new_path="$2"
+  local scan_root="${HOME}"
+
+  local updated=0
+  local sc_file sc_path new_sc_path tmp_file
+
+  while IFS= read -r -d '' sc_file; do
+    sc_path=$(_shortcut_read_field "$sc_file" "SHORTCUT_PATH")
+    [ -z "$sc_path" ] && continue
+
+    new_sc_path=""
+    if [ "$sc_path" = "$old_path" ]; then
+      # Exact match — file or directory shortcut pointing directly at the renamed item
+      new_sc_path="$new_path"
+    elif [[ "$sc_path" == "${old_path}/"* ]]; then
+      # Sub-path — shortcut lives inside a directory that was renamed
+      new_sc_path="${new_path}/${sc_path#"${old_path}/"}"
+    fi
+    [ -z "$new_sc_path" ] && continue
+
+    tmp_file=$(mktemp) || continue
+    sed "s|^SHORTCUT_PATH=.*|SHORTCUT_PATH=${new_sc_path}|" "$sc_file" > "$tmp_file" \
+      && mv "$tmp_file" "$sc_file" \
+      && updated=$((updated + 1)) \
+      && echo "  🔗 Shortcut synced: $(basename "$sc_file") → $new_sc_path"
+  done < <(find "$scan_root" -name "*.shortcut" -print0 2>/dev/null)
+
+  [ "$updated" -gt 0 ] && echo "  📎 $updated shortcut(s) updated to reflect new path."
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# _do_rename_mv <old_path> <new_path>
+# Central mv wrapper used by all rename paths.  Handles:
+#   • Conflict detection   — blocks if a genuinely different item already exists
+#   • Case-only renames    — detected via realpath so "mad → MAD" is allowed
+#                            even on case-insensitive filesystems (two-step mv)
+#   • Shortcut sync        — calls _sync_shortcuts_for_rename on success
+#
+# Return codes:
+#   0  success
+#   1  mv failed (OS error)
+#   2  real conflict — caller should print "already exists"
+# ---------------------------------------------------------------------------
+_do_rename_mv() {
+  local old_path="$1"
+  local new_path="$2"
+
+  if [ -e "$new_path" ]; then
+    local real_old real_new
+    real_old=$(realpath "$old_path" 2>/dev/null)
+    real_new=$(realpath "$new_path" 2>/dev/null)
+    if [ "$real_old" != "$real_new" ]; then
+      # A genuinely different item already occupies the destination.
+      return 2
+    fi
+    # Same inode — pure case change on a case-insensitive filesystem.
+    # Two-step rename: old → temp → new  (avoids "same file" rejection).
+    local _tmp="${old_path%/*}/.$$_caseswap"
+    if mv -- "$old_path" "$_tmp" && mv -- "$_tmp" "$new_path"; then
+      _sync_shortcuts_for_rename "$old_path" "$new_path"
+      return 0
+    else
+      echo "❌ Case rename failed" >&2
+      [ -e "$_tmp" ] && mv -- "$_tmp" "$old_path"   # best-effort rollback
+      return 1
+    fi
+  fi
+
+  if mv -- "$old_path" "$new_path"; then
+    _sync_shortcuts_for_rename "$old_path" "$new_path"
+    return 0
+  fi
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # rename_item <path>
 # Low-level: prompts for a new name and mv's a single file or folder.
 # Called by handle_file (run.sh option 7) as well as _rename_single_mutation.
 # ---------------------------------------------------------------------------
 rename_item() {
   local target="$1"
-  local dir newname
+  local dir newname new_path
+
   if [ -d "$target" ]; then
     dir=$(dirname -- "$target")
     read -p "📝 Enter new folder name for '$(basename "$target")': " newname
-    mv -v "$target" "$dir/$newname"
   elif [ -f "$target" ]; then
     dir=$(dirname -- "$target")
     read -p "📝 Enter new file name for '$(basename "$target")': " newname
-    mv -v "$target" "$dir/$newname"
   else
     echo "❌ Cannot rename: '$target' not found." >&2
     return 1
   fi
+
+  new_path="$dir/$newname"
+  _do_rename_mv "$target" "$new_path"
+  local rc=$?
+  case $rc in
+    0) echo "✅ Renamed: $(basename "$target") → $newname" ;;
+    2) echo "⚠️  '$newname' already exists — skipped" ;;
+  esac
+  return $rc
 }
 
 # ---------------------------------------------------------------------------
@@ -68,13 +161,14 @@ _rename_single_mutation() {
     read -p "New name (blank = cancel): " new_name
     [ -z "$new_name" ] && echo "🚫 Skipped" && continue
 
-    local new_path="$(dirname "$item")/$new_name"
-    if [ -e "$new_path" ]; then
-      echo "⚠️  '$new_name' already exists — skipped"
-      continue
-    fi
-    mv -- "$item" "$new_path"
-    echo "✅ Renamed: $bn → $new_name"
+    local new_path
+    new_path="$(dirname "$item")/$new_name"
+    _do_rename_mv "$item" "$new_path"
+    local rc=$?
+    case $rc in
+      0) echo "✅ Renamed: $bn → $new_name" ;;
+      2) echo "⚠️  '$new_name' already exists — skipped" ;;
+    esac
   done
 }
 
@@ -133,13 +227,13 @@ _rename_multi_mutation() {
 
     local renamed=0
     for _f in "${matched[@]}"; do
-      local _dir="${_f%/*}"
-      local _new_path="$_dir/$new_name"
-      if [ -e "$_new_path" ] && [ "$_new_path" != "$_f" ]; then
-        echo "  Row $((row_idx+1)): \"$old_name\" → \"$new_name\"  ⚠️  Target already exists — skipped"
-        continue
-      fi
-      mv -- "$_f" "$_new_path" && renamed=$((renamed + 1))
+      local _new_path="${_f%/*}/$new_name"
+      _do_rename_mv "$_f" "$_new_path"
+      local rc=$?
+      case $rc in
+        0) renamed=$((renamed + 1)) ;;
+        2) echo "  Row $((row_idx+1)): \"$old_name\" → \"$new_name\"  ⚠️  Target already exists — skipped" ;;
+      esac
     done
     echo "  Row $((row_idx+1)): \"$old_name\" → \"$new_name\"  ✅ $renamed renamed"
     rn_counts+=("$renamed")

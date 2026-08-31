@@ -5,7 +5,10 @@ map_directory() {
         (
             cd "$target_dir" || exit
 
-            find . | sed \
+            local -a find_args=(".")
+            $show_hidden_files || find_args+=(-not -path '*/.*')
+
+            find "${find_args[@]}" | sed \
                 -e '1d' \
                 -e 's|^\./||' \
                 -e 's|[^/]*/|│   |g' \
