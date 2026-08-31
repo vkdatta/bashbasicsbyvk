@@ -19,7 +19,7 @@ _sync_shortcuts_for_rename() {
   local sc_file sc_path new_sc_path tmp_file
 
   while IFS= read -r -d '' sc_file; do
-    sc_path=$(_shortcut_read_field "$sc_file" "SHORTCUT_PATH")
+    sc_path=$(_shortcut_read_field "$sc_file" "SHORTCUT_TARGET")
     [ -z "$sc_path" ] && continue
 
     new_sc_path=""
@@ -33,7 +33,7 @@ _sync_shortcuts_for_rename() {
     [ -z "$new_sc_path" ] && continue
 
     tmp_file=$(mktemp) || continue
-    sed "s|^SHORTCUT_PATH=.*|SHORTCUT_PATH=${new_sc_path}|" "$sc_file" > "$tmp_file" \
+    sed "s|^SHORTCUT_TARGET=.*|SHORTCUT_TARGET=${new_sc_path}|" "$sc_file" > "$tmp_file" \
       && mv "$tmp_file" "$sc_file" \
       && updated=$((updated + 1)) \
       && echo "  🔗 Shortcut synced: $(basename "$sc_file") → $new_sc_path"
