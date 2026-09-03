@@ -237,6 +237,44 @@ fi
 fi
 }
 
+organise_by_az() {
+local -a items=()
+for f in "$path"/*; do [ -e "$f" ] && items+=("$f"); done
+[ ${#items[@]} -eq 0 ] && { echo "No items"; return; }
+declare -A az_buckets=()
+declare -A new_dirs=()
+for f in "${items[@]}"; do
+local b="${f##*/}"
+local first="${b:0:1}"
+local key
+# normalise to uppercase for A-Z, keep digits/symbols as-is
+if [[ "$first" =~ [a-zA-Z] ]]; then
+key="${first^^}"
+elif [[ "$first" =~ [0-9] ]]; then
+key="$first"
+else
+key="#"
+fi
+local dest="$path/$key"
+new_dirs["$dest"]=1
+az_buckets["$dest"]+="$f"$'\n'
+done
+# remove entries that would move a folder into itself
+for dest in "${!az_buckets[@]}"; do
+[ -d "$dest" ] && [ "${new_dirs[$dest]+_}" ] && {
+# strip that entry out — it's a pre-existing folder matching a key
+local cleaned=""
+while IFS= read -r item; do
+[ "$item" = "$dest" ] && continue
+[ -n "$item" ] && cleaned+="$item"$'\n'
+done <<< "${az_buckets[$dest]}"
+az_buckets["$dest"]="$cleaned"
+}
+done
+_flush_buckets az_buckets
+echo "✅ Organised A-Z"
+}
+
 organise_menu() {
 echo "🗂️ Organise files in current location ($path):"
 echo "1) Organise by ext"
@@ -244,13 +282,15 @@ echo "2) Organise by year(s) (metadata)"
 echo "3) Organise by year(s) > month(s) (metadata)"
 echo "4) Organise by year(s) > month(s) > date(s) (metadata)"
 echo "5) Unorganise and bring it to current location"
-read -p "Enter choice [1-5]: " och
+echo "6) Organise A-Z"
+read -p "Enter choice [1-6]: " och
 case "$och" in
 1) organise_by_ext ;;
 2) organise_by_year ;;
 3) organise_by_year_month ;;
 4) organise_by_year_month_date ;;
 5) unorganise ;;
+6) organise_by_az ;;
 *) echo "❌ Invalid choice" ;;
 esac
 }
