@@ -13,6 +13,8 @@ source "bashbasicbyvk_shortpath.sh"
 source "bashbasicsbyvk_mapper.sh"
 source "bashbasicsbyvk_help.sh"
 source "bashbasicsbyvk_versioning.sh"
+source "bashbasicsbyvk_refresh.sh"
+
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -1524,7 +1526,7 @@ case "$choice" in
     disk)                   df -h ;;
     ram)                    free -h ;;
     v)                      version_manager ;;
-    rf)                     exec bash -l ;;
+    rf)                     handle_refresh ;;
     *)                      handle_selection "$choice" ;;
    
 esac
