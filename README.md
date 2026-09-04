@@ -254,6 +254,19 @@ rclone config
 pip install git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
 ```
 
+.then
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+.then
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
 </details>
 
 <details>
