@@ -12,6 +12,7 @@ DEFAULT_SORT_MODE="az"
 DEFAULT_DISPLAY_SUFFIX_SET=""
 DEFAULT_DISPLAY_TIME_FORMAT="full"
 DEFAULT_GROUP_VIEW_LEVELS=""
+DEFAULT_COMPRESS_FORMAT="ask"
 
 unset show_hidden_files
 unset index_mode_threshold
@@ -21,6 +22,7 @@ unset sort_mode
 unset display_suffix_set
 unset display_time_format
 unset group_view_levels_str
+unset compress_format
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
 
@@ -32,6 +34,7 @@ unset group_view_levels_str
 : "${display_suffix_set:=$DEFAULT_DISPLAY_SUFFIX_SET}"
 : "${display_time_format:=$DEFAULT_DISPLAY_TIME_FORMAT}"
 : "${group_view_levels_str:=$DEFAULT_GROUP_VIEW_LEVELS}"
+: "${compress_format:=$DEFAULT_COMPRESS_FORMAT}"
 
 declare -ga group_view_levels=()
 if [ -n "$group_view_levels_str" ]; then
@@ -48,6 +51,7 @@ save_settings() {
     echo "display_suffix_set=\"$display_suffix_set\""
     echo "display_time_format=$display_time_format"
     echo "group_view_levels_str=\"${group_view_levels[*]}\""
+    echo "compress_format=$compress_format"
   } > "$SETTINGS_FILE"
 }
 
@@ -72,6 +76,7 @@ restore_all_defaults() {
   display_time_format=$DEFAULT_DISPLAY_TIME_FORMAT
   group_view_levels=()
   group_view_levels_str=""
+  compress_format=$DEFAULT_COMPRESS_FORMAT
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "$mode_choice" in
     2) _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER" ;;
@@ -101,8 +106,9 @@ settings_menu() {
   echo "7) Sort order            ($sort_mode)"
   echo "8) Display suffix        (${sfx_label:-none})"
   echo "9) $gv_label"
+  echo "10) Compress format      ($compress_format)"
 
-  read -r -p "Enter choice [1-9]: " main_choice
+  read -r -p "Enter choice [1-10]: " main_choice
 
 case "$main_choice" in
     1) hidden_file_settings ;; # bashbasicsbyvk_hidefiles.sh
@@ -114,6 +120,29 @@ case "$main_choice" in
     7) sort_order_settings ;; # bashbasicsbyvk_displayer.sh
     8) display_suffix_settings ;; # bashbasicsbyvk_displayer.sh
     9) group_view_settings ;; # bashbasicsbyvk_displayer.sh
+    10) compress_format_settings ;; # Current
     *) echo "Invalid choice" ;;
 esac
+}
+
+# ---------------------------------------------------------------------------
+# compress_format_settings
+# Lets the user choose the default compression format for z-.
+# ---------------------------------------------------------------------------
+compress_format_settings() {
+  echo ""
+  echo "Compress format (used by z-):"
+  echo "1) zip    — always create .zip"
+  echo "2) tar.gz — always create .tar.gz"
+  echo "3) ask    — prompt each time (default)"
+  read -r -p "Choice [1-3]: " cf_choice
+  cf_choice="${cf_choice%$'\r'}"
+  case "$cf_choice" in
+    1) compress_format="zip" ;;
+    2) compress_format="targz" ;;
+    3) compress_format="ask" ;;
+    *) echo "Invalid choice — no changes made." ; return ;;
+  esac
+  save_settings
+  echo "✅ Compress format set to: $compress_format"
 }

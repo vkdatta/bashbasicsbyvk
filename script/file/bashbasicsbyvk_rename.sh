@@ -11,38 +11,8 @@
 # Called automatically after every successful mv inside this script.
 # ---------------------------------------------------------------------------
 _sync_shortcuts_for_rename() {
-  local old_path="$1"
-  local new_path="$2"
-  local scan_root="${HOME}"
-
-  local updated=0
-  local sc_file sc_path new_sc_path tmp_file
-
-  while IFS= read -r -d '' sc_file; do
-    sc_path=$(_shortcut_read_field "$sc_file" "SHORTCUT_TARGET")
-    [ -z "$sc_path" ] && continue
-
-    new_sc_path=""
-    if [ "$sc_path" = "$old_path" ]; then
-      # Exact match — file or directory shortcut pointing directly at the renamed item
-      new_sc_path="$new_path"
-    elif [[ "$sc_path" == "${old_path}/"* ]]; then
-      # Sub-path — shortcut lives inside a directory that was renamed
-      new_sc_path="${new_path}/${sc_path#"${old_path}/"}"
-    fi
-    [ -z "$new_sc_path" ] && continue
-
-    tmp_file=$(mktemp) || continue
-    sed "s|^SHORTCUT_TARGET=.*|SHORTCUT_TARGET=${new_sc_path}|" "$sc_file" > "$tmp_file" \
-      && mv "$tmp_file" "$sc_file" \
-      && updated=$((updated + 1)) \
-      && echo "  🔗 Shortcut synced: $(basename "$sc_file") → $new_sc_path"
-  done < <(find "$scan_root" -name "*.shortcut" -print0 2>/dev/null)
-
-  [ "$updated" -gt 0 ] && echo "  📎 $updated shortcut(s) updated to reflect new path."
-  return 0
+  _scr_rename_sync "$1" "$2"
 }
-
 # ---------------------------------------------------------------------------
 # _do_rename_mv <old_path> <new_path>
 # Central mv wrapper used by all rename paths.  Handles:
@@ -152,8 +122,12 @@ _rename_single_mutation() {
         new_sc_path="$(dirname "$item")/${new_name}${count}.shortcut"
         count=$((count + 1))
       done
-      [ "$new_sc_path" != "$item" ] && mv -- "$item" "$new_sc_path"
-      echo "✅ Shortcut renamed: $cur_name → $new_name"
+ if [ "$new_sc_path" != "$item" ]; then
+  _scr_remove "$item"
+  mv -- "$item" "$new_sc_path"
+  _scr_add "$new_sc_path"
+fi
+echo "✅ Shortcut renamed: $cur_name → $new_name"
       continue
     fi
 

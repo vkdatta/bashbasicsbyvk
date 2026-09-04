@@ -14,6 +14,7 @@ source "bashbasicsbyvk_mapper.sh"
 source "bashbasicsbyvk_help.sh"
 source "bashbasicsbyvk_versioning.sh"
 source "bashbasicsbyvk_refresh.sh"
+source "bashbasicsbyvk_shortcut_registry.sh"
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -1527,6 +1528,7 @@ case "$choice" in
     ram)                    free -h ;;
     v)                      version_manager ;;
     rf)                     handle_refresh ;;
+scr-sync)               handle_scr_sync ;;  
     *)                      handle_selection "$choice" ;;
    
 esac
