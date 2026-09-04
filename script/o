@@ -1524,6 +1524,7 @@ case "$choice" in
     disk)                   df -h ;;
     ram)                    free -h ;;
     v)                      version_manager ;;
+    rf)                     exec bash -l ;;
     *)                      handle_selection "$choice" ;;
    
 esac
