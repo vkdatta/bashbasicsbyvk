@@ -25,6 +25,9 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         exit 1
     fi
 
+    # Configure default branch name to silence the warning
+    git config --global init.defaultBranch main
+
     echo "⚙️ Initializing new Git repository..."
     git init
     git branch -M main
@@ -32,11 +35,32 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git add .
     git commit -m "New Initial Commit"
 
-    echo "🚀 Creating remote repository on GitHub..."
-    # Requires GitHub CLI (gh) logged in via 'gh auth login'
-    gh repo create "$REPO_NAME" --public --source=. --remote=origin --push
-    
-    echo "✅ Successfully created and pushed '$REPO_NAME' to GitHub!"
+    # Check if gh CLI is installed, otherwise fallback to gh auth prompt
+    if command -v gh >/dev/null 2>&1; then
+        echo "🚀 Creating remote repository on GitHub via GitHub CLI..."
+        gh repo create "$REPO_NAME" --public --source=. --remote=origin --push
+    else
+        echo "⚠️  GitHub CLI (gh) not found."
+        echo "Please enter your GitHub Username and Personal Access Token (PAT) to create the repository automatically."
+        read -rp "GitHub Username: " GH_USER
+        read -rsp "GitHub Personal Access Token: " GH_TOKEN
+        echo ""
+
+        # Create repo using GitHub REST API
+        echo "🚀 Creating remote repository on GitHub via API..."
+        RESPONSE=$(curl -s -u "$GH_USER:$GH_TOKEN" https://api.github.com/user/repos -d "{\"name\":\"$REPO_NAME\", \"private\":false}")
+
+        # Check if repo was created
+        if echo "$RESPONSE" | grep -q "\"name\": \"$REPO_NAME\""; then
+            git remote add origin "https://github.com/$GH_USER/$REPO_NAME.git"
+            git push -u origin main
+            echo "✅ Successfully created and pushed '$REPO_NAME' to GitHub!"
+        else
+            echo "❌ Failed to create remote repository on GitHub. Error API Response:"
+            echo "$RESPONSE"
+            exit 1
+        fi
+    fi
     exit 0
 fi
 
