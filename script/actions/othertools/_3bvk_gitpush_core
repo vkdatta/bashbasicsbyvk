@@ -39,14 +39,279 @@ cleanup() {
 trap cleanup EXIT
 
 # ============================================================
-# Requirements
+# Requirements / Automatic GitHub CLI Installation
 # ============================================================
 
-command -v git >/dev/null 2>&1 ||
-    die "git is not installed."
+require_git() {
+    if command -v git >/dev/null 2>&1; then
+        return 0
+    fi
 
-command -v gh >/dev/null 2>&1 ||
-    die "GitHub CLI (gh) is not installed."
+    die "git is not installed.
+
+Install Git first, then run this script again."
+}
+
+install_gh() {
+    echo
+    echo "GitHub CLI (gh) is not installed."
+    echo
+
+    case "$(uname -s 2>/dev/null || true)" in
+
+        Linux)
+            # ------------------------------------------------
+            # Termux / Android
+            # ------------------------------------------------
+
+            if command -v pkg >/dev/null 2>&1 &&
+               [[ -n "${PREFIX:-}" ]] &&
+               [[ "${PREFIX:-}" == *"com.termux"* ||
+                  "${PREFIX:-}" == *"/data/data/"* ]]; then
+
+                echo "Detected: Termux / Android"
+                echo
+                echo "The GitHub CLI will be installed with:"
+                echo
+                echo "  pkg install gh"
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                pkg install gh ||
+                    die "Could not install GitHub CLI with Termux pkg."
+
+            # ------------------------------------------------
+            # Debian / Ubuntu
+            # ------------------------------------------------
+
+            elif command -v apt-get >/dev/null 2>&1 &&
+                 command -v sudo >/dev/null 2>&1; then
+
+                echo "Detected: Debian/Ubuntu-style Linux"
+                echo
+                echo "GitHub's official APT repository will be configured."
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                command -v curl >/dev/null 2>&1 ||
+                    die "curl is required to install GitHub CLI.
+
+Install it with:
+
+  sudo apt update
+  sudo apt install curl"
+
+                sudo mkdir -p -m 755 /etc/apt/keyrings ||
+                    die "Could not create APT keyring directory."
+
+                curl -fsSL \
+                    https://cli.github.com/packages/githubcli-archive-keyring.gpg |
+                    sudo tee \
+                    /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+                    >/dev/null ||
+                    die "Could not download GitHub CLI signing key."
+
+                sudo chmod go+r \
+                    /etc/apt/keyrings/githubcli-archive-keyring.gpg ||
+                    die "Could not set GitHub CLI key permissions."
+
+                echo \
+                    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
+                    sudo tee \
+                    /etc/apt/sources.list.d/github-cli.list \
+                    >/dev/null ||
+                    die "Could not configure GitHub CLI APT repository."
+
+                sudo apt-get update ||
+                    die "APT update failed."
+
+                sudo apt-get install -y gh ||
+                    die "Could not install GitHub CLI."
+
+            # ------------------------------------------------
+            # DNF
+            # ------------------------------------------------
+
+            elif command -v dnf >/dev/null 2>&1 &&
+                 command -v sudo >/dev/null 2>&1; then
+
+                echo "Detected: DNF-based Linux"
+                echo
+                echo "GitHub's official RPM repository will be configured."
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                sudo dnf install -y \
+                    'dnf-command(config-manager)' ||
+                    die "Could not install DNF repository manager."
+
+                sudo dnf config-manager \
+                    --add-repo \
+                    https://cli.github.com/packages/rpm/gh-cli.repo ||
+                    die "Could not configure GitHub CLI RPM repository."
+
+                sudo dnf install -y gh ||
+                    die "Could not install GitHub CLI."
+
+            # ------------------------------------------------
+            # Pacman
+            # ------------------------------------------------
+
+            elif command -v pacman >/dev/null 2>&1 &&
+                 command -v sudo >/dev/null 2>&1; then
+
+                echo "Detected: Arch Linux"
+                echo
+                echo "GitHub CLI will be installed with:"
+                echo
+                echo "  sudo pacman -S github-cli"
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                sudo pacman -S --noconfirm github-cli ||
+                    die "Could not install GitHub CLI."
+
+            # ------------------------------------------------
+            # APK / Alpine
+            # ------------------------------------------------
+
+            elif command -v apk >/dev/null 2>&1; then
+
+                echo "Detected: Alpine Linux"
+                echo
+                echo "GitHub CLI will be installed with:"
+                echo
+                echo "  apk add github-cli"
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                if [[ "$(id -u)" -eq 0 ]]; then
+                    apk add github-cli
+                elif command -v sudo >/dev/null 2>&1; then
+                    sudo apk add github-cli
+                else
+                    die "Root or sudo is required to install GitHub CLI."
+                fi
+
+            else
+
+                die "GitHub CLI (gh) is not installed and this Linux distribution could not be identified automatically.
+
+Install GitHub CLI manually, then run this script again.
+
+Official installation documentation:
+  https://cli.github.com/manual/installation"
+
+            fi
+            ;;
+
+        Darwin)
+            # ------------------------------------------------
+            # macOS
+            # ------------------------------------------------
+
+            if command -v brew >/dev/null 2>&1; then
+
+                echo "Detected: macOS + Homebrew"
+                echo
+                echo "GitHub CLI will be installed with:"
+                echo
+                echo "  brew install gh"
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                brew install gh ||
+                    die "Could not install GitHub CLI with Homebrew."
+
+            else
+
+                die "GitHub CLI (gh) is not installed.
+
+Homebrew was not detected.
+
+Install Homebrew or GitHub CLI manually, then run this script again."
+            fi
+            ;;
+
+        *)
+            die "GitHub CLI (gh) is not installed and automatic installation is not supported for this operating system.
+
+Install GitHub CLI manually, then run this script again."
+            ;;
+    esac
+
+    # --------------------------------------------------------
+    # Verify installation.
+    # --------------------------------------------------------
+
+    hash -r 2>/dev/null || true
+
+    command -v gh >/dev/null 2>&1 ||
+        die "GitHub CLI installation completed but 'gh' is still not available in PATH."
+
+    ok "GitHub CLI installed:"
+    echo "  $(gh --version | head -n 1)"
+}
+
+require_git
+
+if ! command -v gh >/dev/null 2>&1; then
+    install_gh
+fi
 
 # ============================================================
 # Resolve target
