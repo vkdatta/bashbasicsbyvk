@@ -608,11 +608,18 @@ create_commit() {
     local final_msg
     local answer
 
+    # FIRST check for actual working-tree/index changes.
+    # This must happen BEFORE asking for version bump or commit message.
+    git add .
+
+    if git diff --cached --quiet; then
+        return 1
+    fi
+
     check_git_identity
     select_version
 
     echo
-
     read -r -p \
         "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " \
         user_msg
@@ -632,14 +639,6 @@ create_commit() {
     echo "Commit message:"
     echo "  $final_msg"
     echo
-
-    git add .
-
-    if git diff --cached --quiet; then
-        info "No changes to commit."
-        return 1
-    fi
-
     echo "Changes:"
     git status --short
     echo
@@ -658,7 +657,6 @@ create_commit() {
         die "Git commit failed. No push was attempted."
 
     ok "Commit created."
-
     return 0
 }
 
@@ -1293,15 +1291,34 @@ echo "Origin: $ORIGIN"
 echo "============================================================"
 
 # ============================================================
-# Commit
+# Commit / Push
 # ============================================================
 
-if ! create_commit; then
+# A clean working tree does NOT mean there is nothing to push.
+# A previous push may have failed after a local commit was created.
+# If so, create_commit returns 1 WITHOUT prompting for version/message,
+# and we continue directly to push/recovery.
 
-    info "Nothing new was committed."
-    info "No push is necessary."
+if create_commit; then
+    info "New commit created. Proceeding to push."
+else
+    info "No new working-tree changes."
 
-    exit 0
+    if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+        UNPUSHED_COUNT="$(git rev-list --count "@{u}..HEAD" 2>/dev/null || echo 0)"
+
+        if [[ "$UNPUSHED_COUNT" -gt 0 ]]; then
+            info "$UNPUSHED_COUNT unpushed local commit(s) detected."
+            info "Skipping version and commit prompts."
+            info "Proceeding directly to push/recovery."
+        else
+            info "No unpushed local commits."
+            info "Nothing to push."
+            exit 0
+        fi
+    else
+        info "No upstream exists. Proceeding with initial push."
+    fi
 fi
 
 # ============================================================
