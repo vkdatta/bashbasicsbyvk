@@ -668,6 +668,14 @@ create_commit() {
 
 push_repository() {
     local branch="$1"
+    local push_output
+    local local_version
+    local remote_version
+    local remote_commit
+    local remote_author
+    local confirmation
+    local challenge
+    local typed
 
     echo
     echo "============================================================"
@@ -675,23 +683,126 @@ push_repository() {
     echo "============================================================"
 
     # Existing upstream:
-    # EXACTLY normal git push.
+    # Try the normal push first. If Git rejects it because the remote
+    # contains work that is not local, inspect the divergence and offer
+    # an explicit, high-friction force-push recovery.
     if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" \
         >/dev/null 2>&1; then
 
         info "Upstream exists."
         info "Running normal git push."
 
-        if git push; then
+        if push_output="$(git push 2>&1)"; then
+            printf '%s\n' "$push_output"
             ok "Push completed."
-        else
-            die "Push failed.
+            return 0
+        fi
+
+        printf '%s\n' "$push_output" >&2
+
+        # A normal push can fail for many reasons. Only enter the
+        # recovery flow for a genuine non-fast-forward/diverged branch.
+        if ! git fetch origin "$branch"; then
+            die "Push failed and the remote could not be fetched.
 
 The local commit remains intact.
+No force push was performed."
+        fi
 
-Run:
+        if git merge-base --is-ancestor "origin/$branch" HEAD >/dev/null 2>&1; then
+            die "Push failed, but the remote branch is not ahead of this local branch.
 
-  git push"
+The failure does not appear to be a non-fast-forward divergence.
+No force push was performed."
+        fi
+
+        if git merge-base --is-ancestor HEAD "origin/$branch" >/dev/null 2>&1; then
+            die "Push failed because the remote branch is ahead of the local branch.
+
+The local commit remains intact.
+No force push was performed."
+        fi
+
+        # The branches have genuinely diverged.
+        local_version="unknown"
+        remote_version="unknown"
+
+        if [[ -f package.json ]] && command -v node >/dev/null 2>&1; then
+            local_version="$(node -p "require('./package.json').version" 2>/dev/null || echo unknown)"
+        fi
+
+        if git cat-file -e "origin/$branch:package.json" 2>/dev/null; then
+            if command -v node >/dev/null 2>&1; then
+                remote_version="$(git show "origin/$branch:package.json" | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version||"unknown")}catch(e){console.log("unknown")}})' 2>/dev/null || echo unknown)"
+            fi
+        fi
+
+        remote_commit="$(git log -1 --format='%h' "origin/$branch")"
+        remote_author="$(git log -1 --format='%an' "origin/$branch")"
+
+        echo
+        echo "⚠️  GIT REMOTE DIVERGENCE DETECTED"
+        echo
+        echo "GitHub already has work that is not present locally."
+        echo
+        echo "Last remote commit: $remote_commit"
+        echo "Last committed by:  $remote_author"
+        echo "Remote version:      $remote_version"
+        echo "Local version:       $local_version"
+        echo
+        echo "⚠️  DANGER: Overriding the remote branch will replace the"
+        echo "remote branch history with your local branch history."
+        echo "Any remote-only commits will no longer be reachable from $branch"
+        echo "unless they are preserved elsewhere."
+        echo
+        read -r -p "Do you want to override the remote with local version $local_version? [y/N]: " confirmation
+
+        case "$confirmation" in
+            y|Y|yes|YES|Yes)
+                ;;
+            *)
+                die "Override cancelled.
+
+The local commit remains intact.
+No force push was performed."
+                ;;
+        esac
+
+        if command -v shuf >/dev/null 2>&1; then
+            challenge="$(shuf -i 100000-999999 -n 1)"
+        else
+            challenge="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ' | tail -n 1)"
+            challenge="${challenge:0:6}"
+            [[ "$challenge" =~ ^[0-9]{6}$ ]] || challenge="$(date +%s | tail -c 7)"
+        fi
+
+        echo
+        echo "⚠️  FINAL FORCE-PUSH CONFIRMATION"
+        echo
+        echo "This is a destructive operation."
+        echo "Type this number exactly to continue:"
+        echo
+        echo "  $challenge"
+        echo
+        read -r -p "Confirmation number: " typed
+
+        if [[ "$typed" != "$challenge" ]]; then
+            die "Confirmation failed.
+
+The local commit remains intact.
+No force push was performed."
+        fi
+
+        echo
+        echo "⚠️  Force-pushing local $branch to origin/$branch..."
+
+        if git push --force-with-lease origin "$branch"; then
+            ok "Force push completed."
+        else
+            die "Force push failed.
+
+The local commit remains intact.
+No further push was attempted."
         fi
 
     else
@@ -711,7 +822,6 @@ No force push was performed."
         fi
     fi
 }
-
 # ============================================================
 # Copy project tree excluding .git
 # ============================================================
