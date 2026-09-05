@@ -1521,14 +1521,13 @@ case "$choice" in
     do-)                    handle_do_import ;;
     ups-*)                  handle_ups_upload "$choice" ;;
     up-*)                   handle_up_upload "$choice" ;;
-    uz-*)                   handle_unzip_items "$choice" ;;
-    z-*)                    handle_zip_items "$choice" ;;
+    uz-*)                   handle_decompress_items "$choice" ;;
+    z-*)                    handle_compress_items "$choice" ;;
     clear)                  hash -r ;;
     disk)                   df -h ;;
     ram)                    free -h ;;
-    v)                      version_manager ;;
     rf)                     handle_refresh ;;
-scr-sync)               handle_scr_sync ;;  
+    scr-sync)               handle_scr_sync ;;  
     *)                      handle_selection "$choice" ;;
    
 esac
