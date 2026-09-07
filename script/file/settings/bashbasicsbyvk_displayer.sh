@@ -830,3 +830,61 @@ group_view_settings() {
     esac
   done
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FILTER FEATURE  (prefix: _)
+# _filter_query  — the active search string (empty = no filter)
+# _all_items     — snapshot of the full unfiltered items array
+# ─────────────────────────────────────────────────────────────────────────────
+
+_filter_query=""
+declare -ga _all_items=()
+
+# Save the current items[] into _all_items[] so we can filter without losing data.
+_filter_snapshot() {
+  _all_items=("${items[@]}")
+}
+
+# Apply _filter_query against _all_items, writing the result back into items[].
+# Clears the viewport row-cache so the next render picks up fresh rows.
+_filter_apply() {
+  local q="${_filter_query,,}"   # lower-case query for case-insensitive match
+  items=()
+  if [ -z "$q" ]; then
+    items=("${_all_items[@]}")
+  else
+    local f bn
+    for f in "${_all_items[@]}"; do
+      bn="${f##*/}"
+      # Case-insensitive prefix match on the basename
+      [[ "${bn,,}" == "$q"* ]] && items+=("$f")
+    done
+  fi
+  _meta_loaded=false   # force re-collect if metadata was needed
+  _vp_cache_reset
+}
+
+# Called when the user presses backspace while inside filter mode.
+# Strips the last character from _filter_query and re-applies.
+_filter_backspace() {
+  if [ -n "$_filter_query" ]; then
+    _filter_query="${_filter_query%?}"
+    _filter_apply
+    return 0   # consumed the key
+  fi
+  return 1     # nothing to strip — caller may exit filter mode
+}
+
+# Append one character to the filter query and re-apply.
+_filter_append() {
+  _filter_query+="${1,,}"
+  _filter_apply
+}
+
+# Clear the filter entirely and restore the full list.
+_filter_clear() {
+  _filter_query=""
+  items=("${_all_items[@]}")
+  _meta_loaded=false
+  _vp_cache_reset
+}

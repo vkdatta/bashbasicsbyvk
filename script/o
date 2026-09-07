@@ -457,7 +457,13 @@ trap 'stty "$_orig_stty" 2>/dev/null' EXIT
 
 _menu_header() {
   echo
-  echo "📂 Location: $path${group_prefix:+ [filter: ${group_prefix^^}*]}"
+  local _hdr_loc="📂 Location: $path${group_prefix:+ [group: ${group_prefix^^}*]}"
+  if [ -n "$_filter_query" ]; then
+    local _fcnt="${#items[@]}"
+    local _tcnt="${#_all_items[@]}"
+    _hdr_loc+="  🔍 filter: ${_filter_query^^}*  (${_fcnt}/${_tcnt} items)"
+  fi
+  echo "$_hdr_loc"
 }
 
 _menu_body_flat() {
@@ -475,6 +481,11 @@ _menu_footer_lines() {
   echo "q/h) Quit/Home   s) Settings   x) Organise"
   echo "p) Print (last run log)"
   echo "-h) Help   -u) Upgrade"
+  if [ -n "$_filter_query" ]; then
+    echo "🔍 Filter active: ${_filter_query^^}*  — type more chars to narrow, ⌫ to widen, ⌫⌫ to exit"
+  else
+    echo "Type _<text> to filter by name prefix  (e.g. _de  or  __thisisafile for _-prefixed names)"
+  fi
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
@@ -707,7 +718,29 @@ _read_choice() {
         break
         ;;
       $'\x7f'|$'\x08')  # backspace — deletes char before cursor
-        if [ "$_pos" -gt 0 ]; then
+        # ── FILTER MODE: backspace strips one filter char ────────────────────
+        if [[ "$_buf" == _?* ]]; then
+          # Buffer is "_de…" — strip last char, re-filter
+          _buf="${_buf:0:_pos-1}${_buf:_pos}"
+          _pos=$(( _pos - 1 ))
+          _filter_query="${_buf:1}"
+          _filter_apply
+          _hl_index=0
+          _vp_count
+          _vp_cache_reset
+          _vp_prime_rows
+          _vp_redraw_in_place
+          _print_input_line
+        elif [[ "$_buf" == _ ]]; then
+          # Buffer is just "_" — exit filter mode, restore full list
+          _filter_clear
+          _buf=""; _pos=0; _hl_index=0
+          _vp_count
+          _vp_cache_reset
+          _vp_prime_rows
+          _vp_redraw_in_place
+          _print_input_line
+        elif [ "$_pos" -gt 0 ]; then
           _buf="${_buf:0:_pos-1}${_buf:_pos}"
           _pos=$(( _pos - 1 ))
           _print_input_line
@@ -719,10 +752,30 @@ _read_choice() {
       *)  # insert typed char at cursor position
         # never let stray control bytes into the buffer
         _is_ctrl_char "$key" && continue
-        _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-        _pos=$(( _pos + 1 ))
-        _print_input_line
-        _sync_highlight_from_buf
+
+        # ── FILTER MODE: _ prefix activates live name-prefix filter ──────────
+        if [[ "$_buf" == _* ]] || { [ -z "$_buf" ] && [ "$key" = "_" ]; }; then
+          # Snapshot the full list the moment the user presses the first "_"
+          if [ -z "$_buf" ] && [ "$key" = "_" ]; then
+            _filter_snapshot
+          fi
+          _buf="${_buf:0:_pos}${key}${_buf:_pos}"
+          _pos=$(( _pos + 1 ))
+          # Query = everything after the leading _
+          _filter_query="${_buf:1}"
+          _filter_apply
+          _hl_index=0
+          _vp_count
+          _vp_cache_reset
+          _vp_prime_rows
+          _vp_redraw_in_place
+          _print_input_line
+        else
+          _buf="${_buf:0:_pos}${key}${_buf:_pos}"
+          _pos=$(( _pos + 1 ))
+          _print_input_line
+          _sync_highlight_from_buf
+        fi
         ;;
     esac
   done
@@ -777,6 +830,8 @@ while true; do
   total=$(count_items_in_path "$path")
 
   imaginary_mode=false
+  _filter_query=""
+  _all_items=()
   items=()
   _hl_index=0
 
@@ -875,6 +930,12 @@ case "$choice" in
     uz-*)                   handle_decompress_items "$choice" ;;
     z-*)                    handle_compress_items "$choice" ;;
     clear)                  hash -r ;;
+    _*)
+      # User typed _<query> and pressed Enter without a number.
+      # This is a no-op — the filter is already applied live and the
+      # viewport shows the filtered list. Just loop back and redraw.
+      # (To exit the filter, backspace back to bare "_" then one more backspace.)
+      ;;
     disk)                   df -h ;;
     ram)                    free -h ;;
     rf)                     handle_refresh ;;
