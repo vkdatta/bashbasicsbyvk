@@ -18,6 +18,106 @@ _highlight() {
 # variable-setting form used by hot render loops (avoids $( ))
 _highlight_v() { _hl_out=$'\033[1;7m'"$1"$'\033[0m'; }
 
+# Returns true if the filename looks like an archive.
+# Covers: zip, tar, tgz, tar.gz, tar.bz2, tar.xz, tar.zst, tar.lz,
+#         tar.lzma, tar.lz4, tar.Z, gz, bz2, xz, zst, lz, lzma, lz4,
+#         Z, 7z, rar, jar, war, ear, apk, aab, ipa, deb, rpm, pkg,
+#         dmg, iso, img, wim, cab, arj, lzh, lha, ace, arc, zoo, cpio,
+#         shar, sit, sitx, sea, hqx, bin, pax, zz, br, sz, snap, flatpak.
+_is_archive() {
+  local bn="${1##*/}"
+  local lower="${bn,,}"
+  case "$lower" in
+    # Multi-part tar combos first (must precede single-ext check)
+    *.tar.gz|*.tar.bz2|*.tar.xz|*.tar.zst|*.tar.lz|*.tar.lzma|*.tar.lz4|*.tar.Z|*.tar.sz|*.tar.br) return 0 ;;
+    # Common archives
+    *.zip|*.7z|*.rar|*.tar|*.tgz|*.tbz|*.tbz2|*.txz|*.tzst) return 0 ;;
+    # Compressed single files
+    *.gz|*.bz2|*.xz|*.zst|*.lz|*.lzma|*.lz4|*.Z|*.zz|*.br|*.sz) return 0 ;;
+    # Java / Android / Apple packaging
+    *.jar|*.war|*.ear|*.apk|*.aab|*.ipa) return 0 ;;
+    # Linux packaging
+    *.deb|*.rpm|*.pkg|*.snap|*.flatpak) return 0 ;;
+    # macOS / Windows disk images & installers
+    *.dmg|*.iso|*.img|*.wim|*.cab) return 0 ;;
+    # Legacy archivers
+    *.arj|*.lzh|*.lha|*.ace|*.arc|*.zoo|*.sit|*.sitx|*.sea) return 0 ;;
+    # Unix-ish
+    *.cpio|*.shar|*.pax) return 0 ;;
+    # Mac legacy
+    *.hqx|*.bin) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Returns true if the filename looks like an image.
+# Covers raster, vector, raw camera, and HDR formats.
+_is_image() {
+  local lower="${1##*/}"; lower="${lower,,}"
+  case "$lower" in
+    # Common raster
+    *.jpg|*.jpeg|*.png|*.gif|*.bmp|*.tif|*.tiff|*.webp|*.avif|*.heic|*.heif) return 0 ;;
+    # Misc raster
+    *.ico|*.cur|*.psd|*.psb|*.xcf|*.ora|*.kra|*.clip|*.csp|*.sai|*.sai2) return 0 ;;
+    *.ppm|*.pgm|*.pbm|*.pnm|*.pfm|*.pam|*.xbm|*.xpm|*.wbmp|*.pcx|*.tga) return 0 ;;
+    *.dds|*.exr|*.hdr|*.rgbe|*.pic|*.sgi|*.rgb|*.rgba|*.int|*.inta) return 0 ;;
+    # Vector / mixed
+    *.svg|*.svgz|*.ai|*.eps|*.pdf|*.emf|*.wmf|*.cgm|*.odg|*.fodg) return 0 ;;
+    # Raw camera
+    *.raw|*.cr2|*.cr3|*.nef|*.nrw|*.arw|*.srf|*.sr2|*.orf|*.rw2|*.rwl) return 0 ;;
+    *.pef|*.ptx|*.dng|*.raf|*.3fr|*.fff|*.iiq|*.cap|*.eip|*.mef|*.mos) return 0 ;;
+    *.mrw|*.dcr|*.kdc|*.erf|*.rwz|*.x3f|*.srw|*.bay) return 0 ;;
+    # Animation / multi-frame
+    *.apng|*.flif|*.jxl|*.jp2|*.jpx|*.j2k|*.jp2|*.jpf|*.jpm|*.mj2) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Returns true if the file is an executable/binary/script.
+# Covers native binaries, scripts, bytecode, and compiled outputs.
+_is_executable() {
+  local lower="${1##*/}"; lower="${lower,,}"
+  # If the file has the executable bit set, honour that first
+  [ -x "$1" ] && [ -f "$1" ] && return 0
+  case "$lower" in
+    # Shell / scripting
+    *.sh|*.bash|*.zsh|*.fish|*.ksh|*.csh|*.tcsh|*.dash) return 0 ;;
+    # Python / Ruby / Perl / Lua / Tcl
+    *.py|*.pyc|*.pyo|*.pyw|*.rb|*.pl|*.pm|*.lua|*.tcl|*.tk) return 0 ;;
+    # JS / TS runtimes
+    *.js|*.mjs|*.cjs|*.ts|*.mts|*.cts) return 0 ;;
+    # JVM bytecode
+    *.class|*.jar) return 0 ;;
+    # Native binaries / objects
+    *.exe|*.com|*.out|*.elf|*.o|*.a|*.lib) return 0 ;;
+    # Windows scripts
+    *.bat|*.cmd|*.ps1|*.psm1|*.psd1|*.vbs|*.vbe|*.wsf|*.wsh) return 0 ;;
+    # macOS / misc
+    *.app|*.command|*.run|*.bin) return 0 ;;
+    # Bytecode / intermediate
+    *.wasm|*.beam|*.elc|*.rbc|*.luac) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Returns true if the file is a plugin / extension / add-on.
+_is_plugin() {
+  local lower="${1##*/}"; lower="${lower,,}"
+  case "$lower" in
+    # Browser extensions
+    *.crx|*.xpi|*.safariextz) return 0 ;;
+    # Editor / IDE plugins
+    *.vsix|*.visx|*.natvis|*.sublime-package) return 0 ;;
+    # macOS bundles
+    *.plugin|*.bundle|*.kext|*.mdimporter) return 0 ;;
+    # Generic add-ons
+    *.addon|*.addin|*.adp|*.vst|*.vst3|*.au|*.lv2|*.ladspa|*.dssi) return 0 ;;
+    # App-specific
+    *.sketchplugin|*.figma|*.xdx) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Returns (echoes, no trailing newline) the plain, unhighlighted line
 # text for a single item by its 1-indexed position in $items. Used to
 # redraw just one row in place without reprinting the whole list.
@@ -33,25 +133,18 @@ _item_line_text() {
 
 # variable-setting form: sets _ilt_out, no fork
 _item_line_text_v() {
-  local target="$1" f icon bn
-  local _sc_icon _sc_display _bs_out
+  local target="$1" f
+  local _rdp_icon _rdp_bn _sc_icon _sc_display _bs_out
   _ilt_out=""
   (( target < 1 || target > ${#items[@]} )) && return
   f="${items[$((target-1))]}"
-  bn="${f##*/}"
-  if [[ "$bn" == *.shortcut ]]; then
-    _shortcut_display_parts "$f"
-    icon="$_sc_icon"
-    bn="$_sc_display"
-  else
-    [ -d "$f" ] && icon="📁" || icon="📄"
-  fi
+  _resolve_display_parts_v "$f"
   if [ -n "${display_suffix_set:-}" ]; then
     _build_suffix_v "$f"
   else
     _bs_out=""
   fi
-  printf -v _ilt_out " %2d) %s %s%s" "$target" "$icon" "$bn" "$_bs_out"
+  printf -v _ilt_out " %2d) %s %s%s" "$target" "$_rdp_icon" "$_rdp_bn" "$_bs_out"
 }
 
 _needs_metadata() {
@@ -138,10 +231,11 @@ unset _bvk_tfmt_probe
 
 _fmt_time_v() {
   local epoch="${1:-0}" f
-  case "${display_time_format:-full}" in
+  # Optional second argument overrides display_time_format (used by _gk_* group-key helpers).
+  case "${2:-${display_time_format:-full}}" in
     year)      f='%Y' ;;
-    month)     f='%b' ;;
-    date)      f='%d' ;;
+    month)     f='%Y-%b' ;;   # group keys need year+month for correct sort
+    date)      f='%Y-%b-%d' ;; # group keys need full date for correct sort
     datetime)  f='%d %H:%M' ;;
     monthdate) f='%b-%d %H:%M' ;;
     full|*)    f='%Y-%b-%d %H:%M' ;;
@@ -265,9 +359,11 @@ _gk_ext() {
   [ -d "$1" ] && { printf '[dir]'; return; }
   [[ "$bn" == *.* ]] && printf '.%s' "${bn##*.}" || printf '(no ext)'
 }
-_gk_year()  { date -d "@${item_mtime[$1]:-0}" "+%Y"       2>/dev/null || printf '?'; }
-_gk_month() { date -d "@${item_mtime[$1]:-0}" "+%Y-%b"    2>/dev/null || printf '?'; }
-_gk_date()  { date -d "@${item_mtime[$1]:-0}" "+%Y-%b-%d" 2>/dev/null || printf '?'; }
+# Use _fmt_time_v (bash built-in printf '%()T' fast path) instead of
+# forking an external `date` process for every grouped item.
+_gk_year()  { local _ft_out; _fmt_time_v "${item_mtime[$1]:-0}" year;  printf '%s' "$_ft_out"; }
+_gk_month() { local _ft_out; _fmt_time_v "${item_mtime[$1]:-0}" month; printf '%s' "$_ft_out"; }
+_gk_date()  { local _ft_out; _fmt_time_v "${item_mtime[$1]:-0}" date;  printf '%s' "$_ft_out"; }
 
 _composite_key() {
   local f="$1" key=""
@@ -304,29 +400,42 @@ _shortcut_display_parts() {
   _sc_display="${sc_name}${_broken}"
 }
 
+# Sets _rdp_icon and _rdp_bn for a given filepath.
+# Handles .shortcut files (delegates to _shortcut_display_parts) and
+# all ordinary files (dir / archive / image / plugin / executable / plain).
+# Callers use these two variables instead of repeating the if-chain.
+_resolve_display_parts_v() {
+  local f="$1"
+  _rdp_bn="${f##*/}"
+  if [[ "$_rdp_bn" == *.shortcut ]]; then
+    _shortcut_display_parts "$f"
+    _rdp_icon="$_sc_icon"
+    _rdp_bn="$_sc_display"
+  else
+    if   [ -d "$f" ];          then _rdp_icon="📁"
+    elif _is_archive "$f";     then _rdp_icon="📦"
+    elif _is_image "$f";       then _rdp_icon="🌄"
+    elif _is_plugin "$f";      then _rdp_icon="🧩"
+    elif _is_executable "$f";  then _rdp_icon="⚙️"
+    else                            _rdp_icon="📄"
+    fi
+  fi
+}
+
 _display_items_flat() {
-  local idx=1 f icon bn line
-  local _sc_icon _sc_display _bs_out
+  local idx=1 f line
+  local _rdp_icon _rdp_bn _sc_icon _sc_display _bs_out
   local want_suffix=0
   [ -n "${display_suffix_set:-}" ] && want_suffix=1
   local hl="${_hl_index:-0}"
   for f in "${items[@]}"; do
-    bn="${f##*/}"
-    if [[ "$bn" == *.shortcut ]]; then
-      _shortcut_display_parts "$f"
-      icon="$_sc_icon"
-      bn="$_sc_display"
-    else
-      [ -d "$f" ] && icon="📁" || icon="📄"
-    fi
+    _resolve_display_parts_v "$f"
     if [ "$want_suffix" = 1 ]; then
       _build_suffix_v "$f"
     else
       _bs_out=""
     fi
-    # printf -v keeps this in-process; the old line=$(printf ...)
-    # forked a subshell for every single item
-    printf -v line " %2d) %s %s%s" "$idx" "$icon" "$bn" "$_bs_out"
+    printf -v line " %2d) %s %s%s" "$idx" "$_rdp_icon" "$_rdp_bn" "$_bs_out"
     if [ "$idx" -eq "$hl" ]; then
       _highlight_v "$line"
       printf '%s\n' "$_hl_out"
@@ -352,9 +461,9 @@ _display_grouped() {
   done
 
   local global_idx=1
-  local ck f icon bn suffix indent indent_items lvl_idx lvl part
+  local ck f indent indent_items lvl_idx lvl part line
   local -a parts
-  local _sc_icon _sc_display
+  local _rdp_icon _rdp_bn _sc_icon _sc_display _bs_out
 
   for ck in "${all_keys[@]}"; do
     IFS='|' read -ra parts <<< "$ck"
@@ -367,19 +476,16 @@ _display_grouped() {
     indent_items=$(printf '%*s' "$(( depth * 2 ))" '')
     while IFS= read -r f; do
       [ -z "$f" ] && continue
-      bn="${f##*/}"
-      if [[ "$bn" == *.shortcut ]]; then
-        _shortcut_display_parts "$f"
-        icon="$_sc_icon"
-        bn="$_sc_display"
+      _resolve_display_parts_v "$f"
+      if [ -n "${display_suffix_set:-}" ]; then
+        _build_suffix_v "$f"
       else
-        [ -d "$f" ] && icon="📁" || icon="📄"
+        _bs_out=""
       fi
-      [ -n "${display_suffix_set:-}" ] && suffix=$(_build_suffix "$f") || suffix=""
-      local line
-      line=$(printf "%s%2d) %s %s%s" "$indent_items" "$global_idx" "$icon" "$bn" "$suffix")
+      printf -v line "%s%2d) %s %s%s" "$indent_items" "$global_idx" "$_rdp_icon" "$_rdp_bn" "$_bs_out"
       if [ "$global_idx" -eq "${_hl_index:-0}" ]; then
-        printf '%s\n' "$(_highlight "$line")"
+        _highlight_v "$line"
+        printf '%s\n' "$_hl_out"
       else
         printf '%s\n' "$line"
       fi
