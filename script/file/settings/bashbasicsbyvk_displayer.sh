@@ -60,15 +60,16 @@ _bvk_daemon_start() {
   [ -S "$_BVK_SOCK" ]
 }
 
-# _bvk_prewarm — call once at startup (from o).
-# Only starts the daemon process so the socket is ready before the first
-# query. We deliberately do NOT pre-scan the directory here: if we did,
-# the cache would be warm before build_items_with_meta runs and the user
-# would never see the progress bar. The first real _bvk_query call does
-# the scan and shows the progress bar itself.
+# _bvk_prewarm — call once at startup (from o) with the initial path.
+# Fires daemon start + directory scan in the background so that by the time
+# the user sees the menu, the cache is already warm.  Non-blocking.
 _bvk_prewarm() {
+  local dir="${1:-$PWD}"
   (
-    _bvk_daemon_start 2>/dev/null
+    _bvk_daemon_start 2>/dev/null || return
+    # Scan both modes so the cache is ready regardless of show_hidden_files setting
+    python3 "$_BVK_DAEMON_PY" LIST "$dir" 0 >/dev/null 2>/dev/null
+    python3 "$_BVK_DAEMON_PY" LIST "$dir" 1 >/dev/null 2>/dev/null
   ) &
   disown 2>/dev/null
 }
@@ -96,11 +97,7 @@ _bvk_query() {
   local dirpath="$1" hidden_flag=0
   $show_hidden_files && hidden_flag=1
   [ -S "$_BVK_SOCK" ] || _bvk_daemon_start || return 1
-  # stdout  → caller's pipe (entry lines for build_items_with_meta)
-  # stderr  → /dev/tty directly so the progress bar renders on the physical
-  #           terminal even though stdout is captured by the process substitution
-  #           above us.  2>/dev/null would silently swallow the bar.
-  python3 "$_BVK_DAEMON_PY" LIST "$dirpath" "$hidden_flag" 2>/dev/tty
+  python3 "$_BVK_DAEMON_PY" LIST "$dirpath" "$hidden_flag"
 }
 
 # ── build_items_with_meta — daemon-backed drop-in ─────────────────────────────
@@ -130,6 +127,7 @@ build_items_with_meta() {
     [ "$line" = "END" ] && break
     [ -z "$line" ] && continue
     [[ "$line" == ERROR:* ]] && break
+    [[ "$line" == PROGRESS:* ]] && continue
 
     IFS='|' read -r fpath fsize fmtime fchildren ftype <<< "$line"
     [ -z "$fpath" ] && continue
