@@ -97,7 +97,11 @@ _bvk_query() {
   local dirpath="$1" hidden_flag=0
   $show_hidden_files && hidden_flag=1
   [ -S "$_BVK_SOCK" ] || _bvk_daemon_start || return 1
-  python3 "$_BVK_DAEMON_PY" LIST "$dirpath" "$hidden_flag" 2>/dev/null
+  # stdout  → caller's pipe (entry lines for build_items_with_meta)
+  # stderr  → /dev/tty directly so the progress bar renders on the physical
+  #           terminal even though stdout is captured by the process substitution
+  #           above us.  2>/dev/null would silently swallow the bar.
+  python3 "$_BVK_DAEMON_PY" LIST "$dirpath" "$hidden_flag" 2>/dev/tty
 }
 
 # ── build_items_with_meta — daemon-backed drop-in ─────────────────────────────
