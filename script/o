@@ -793,6 +793,10 @@ _read_choice() {
 
 path="$(pwd -P)"
 export BVK_FILEMANAGER_BOUNDARY="$path"
+
+# Kick the daemon immediately in background so the cache is warm
+# before the first render.  _bvk_prewarm is defined in bashbasicsbyvk_displayer.sh.
+declare -F _bvk_prewarm >/dev/null 2>&1 && _bvk_prewarm "$path"
 selected_items=()
 group_prefix=""
 force_show=false

@@ -60,6 +60,20 @@ _bvk_daemon_start() {
   [ -S "$_BVK_SOCK" ]
 }
 
+# _bvk_prewarm — call once at startup (from o) with the initial path.
+# Fires daemon start + directory scan in the background so that by the time
+# the user sees the menu, the cache is already warm.  Non-blocking.
+_bvk_prewarm() {
+  local dir="${1:-$PWD}"
+  (
+    _bvk_daemon_start 2>/dev/null || return
+    # Scan both modes so the cache is ready regardless of show_hidden_files setting
+    python3 "$_BVK_DAEMON_PY" LIST "$dir" 0 >/dev/null 2>&1
+    python3 "$_BVK_DAEMON_PY" LIST "$dir" 1 >/dev/null 2>&1
+  ) &
+  disown 2>/dev/null
+}
+
 bvk_daemon_stop()   { [ -S "$_BVK_SOCK" ] && python3 "$_BVK_DAEMON_PY" QUIT 2>/dev/null; }
 bvk_daemon_status() {
   echo "Daemon socket : $_BVK_SOCK"

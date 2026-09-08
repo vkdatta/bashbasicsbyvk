@@ -194,7 +194,7 @@ def _scan_dir(dirpath: str) -> dict:
                         "p": e.path,
                         "n": e.name,
                         "d": is_dir,
-                        "s": 0 if is_dir else st.st_size,
+                        "s": st.st_size,          # real size for files; inode entry (~4K) for dirs
                         "m": int(st.st_mtime),
                         "c": children,
                         "t": icon,
