@@ -1,0 +1,550 @@
+#!/usr/bin/env python3
+"""
+bvk_daemon.py — BashBasicsByVK filesystem metadata daemon
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TWO MODES
+─────────
+  # Start the daemon (bash does this automatically on first query):
+  python3 bvk_daemon.py --daemon
+
+  # Query the daemon (used by bvk_client.sh):
+  python3 bvk_daemon.py LIST   /path/to/dir <show_hidden:0|1>
+  python3 bvk_daemon.py PING
+  python3 bvk_daemon.py INVALIDATE /path/to/dir
+
+HOW IT WORKS
+────────────
+  First visit to a directory:
+    • os.scandir() collects all entries in one kernel call
+    • Each subdir gets a quick children-count (one extra scandir per dir)
+    • Result written to a per-directory JSON cache file
+    • inotify watch registered on the directory
+
+  Every subsequent visit:
+    • Cache file read directly — no filesystem walk at all
+    • Typical latency: <5 ms even for 20 000-entry directories
+
+  File system changes:
+    • inotify fires IN_CREATE / IN_DELETE / IN_MOVED / IN_ATTRIB
+    • Directory is marked dirty; next LIST rebuilds its cache
+    • Fallback: directory mtime is validated on every request
+
+WIRE PROTOCOL
+─────────────
+  Request  (one line, tab-separated): CMD [\targ1 [\targ2]]
+  Response (LIST): one line per entry, pipe-separated fields, then "END\n"
+    Format: <abs_path>|<size_bytes>|<mtime_epoch>|<children>|<icon_type>
+    children: -1 for files, count of immediate entries for directories
+    icon_type: dir | archive | image | plugin | exec | plain | shortcut
+"""
+
+import os
+import sys
+import json
+import time
+import socket
+import hashlib
+import threading
+import signal
+import struct
+import stat as stat_mod
+import fcntl
+from pathlib import Path
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+
+_xdg_cfg   = os.environ.get("XDG_CONFIG_HOME", os.path.join(os.path.expanduser("~"), ".config"))
+_xdg_cache = os.environ.get("XDG_CACHE_HOME",  os.path.join(os.path.expanduser("~"), ".cache"))
+
+CONFIG_DIR = Path(_xdg_cfg)   / "bashbasicsbyvk"
+CACHE_DIR  = Path(_xdg_cache) / "bashbasicsbyvk"
+SOCK_PATH  = CONFIG_DIR / "daemon.sock"
+PID_FILE   = CONFIG_DIR / "daemon.pid"
+LOCK_FILE  = CONFIG_DIR / "daemon.lock"
+LOG_FILE   = CACHE_DIR  / "daemon.log"
+CACHE_VER  = 3  # bump when cache schema changes
+
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── Icon-type detection (mirrors bash _is_* functions exactly) ─────────────────
+
+_ARCHIVE_MULTI = (
+    ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst", ".tar.lz",
+    ".tar.lzma", ".tar.lz4", ".tar.z", ".tar.sz", ".tar.br",
+)
+_ARCHIVE_EXT = frozenset((
+    ".zip",".7z",".rar",".tar",".tgz",".tbz",".tbz2",".txz",".tzst",
+    ".gz",".bz2",".xz",".zst",".lz",".lzma",".lz4",".z",".zz",".br",".sz",
+    ".jar",".war",".ear",".apk",".aab",".ipa",
+    ".deb",".rpm",".pkg",".snap",".flatpak",
+    ".dmg",".iso",".img",".wim",".cab",
+    ".arj",".lzh",".lha",".ace",".arc",".zoo",".sit",".sitx",".sea",
+    ".cpio",".shar",".pax",".hqx",".bin",
+))
+_IMAGE_EXT = frozenset((
+    ".jpg",".jpeg",".png",".gif",".bmp",".tif",".tiff",".webp",
+    ".avif",".heic",".heif",".ico",".cur",".psd",".psb",".xcf",
+    ".ppm",".pgm",".pbm",".pnm",".pfm",".pam",".xbm",".xpm",".tga",
+    ".dds",".exr",".hdr",".sgi",".rgb",".rgba",
+    ".svg",".svgz",".ai",".eps",
+    ".raw",".cr2",".cr3",".nef",".nrw",".arw",".srf",".sr2",".orf",
+    ".rw2",".rwl",".pef",".ptx",".dng",".raf",".mef",".mrw",".dcr",
+    ".kdc",".erf",".x3f",".srw",".bay",
+    ".apng",".flif",".jxl",".jp2",".jpx",".j2k",".jpf",".jpm",".mj2",
+))
+_PLUGIN_EXT = frozenset((
+    ".crx",".xpi",".safariextz",".vsix",".visx",".natvis",
+    ".sublime-package",".plugin",".bundle",".kext",".mdimporter",
+    ".addon",".addin",".adp",".vst",".vst3",".au",".lv2",".ladspa",".dssi",
+    ".sketchplugin",".figma",".xdx",
+))
+_EXEC_EXT = frozenset((
+    ".sh",".bash",".zsh",".fish",".ksh",".csh",".tcsh",".dash",
+    ".py",".pyc",".pyo",".pyw",".rb",".pl",".pm",".lua",".tcl",".tk",
+    ".js",".mjs",".cjs",".ts",".mts",".cts",
+    ".class",".jar",
+    ".exe",".com",".out",".elf",".o",".a",".lib",
+    ".bat",".cmd",".ps1",".psm1",".psd1",".vbs",".vbe",".wsf",".wsh",
+    ".app",".command",".run",
+    ".wasm",".beam",".elc",".rbc",".luac",
+))
+
+def _icon_type(name: str, is_dir: bool, mode: int) -> str:
+    if name.endswith(".shortcut"):
+        return "shortcut"
+    if is_dir:
+        return "dir"
+    lo = name.lower()
+    for m in _ARCHIVE_MULTI:
+        if lo.endswith(m):
+            return "archive"
+    dot = lo.rfind(".")
+    ext = lo[dot:] if dot >= 0 else ""
+    if ext in _ARCHIVE_EXT:  return "archive"
+    if ext in _IMAGE_EXT:    return "image"
+    if ext in _PLUGIN_EXT:   return "plugin"
+    is_exec = bool(mode & (stat_mod.S_IXUSR | stat_mod.S_IXGRP | stat_mod.S_IXOTH))
+    if ext in _EXEC_EXT or is_exec:  return "exec"
+    return "plain"
+
+# ── Cache I/O ──────────────────────────────────────────────────────────────────
+
+def _cache_path(dirpath: str) -> Path:
+    h = hashlib.sha1(dirpath.encode()).hexdigest()
+    return CACHE_DIR / f"{h}.json"
+
+def _cache_load(dirpath: str):
+    """Return cache data dict or None on miss/invalid."""
+    try:
+        with open(_cache_path(dirpath)) as f:
+            d = json.load(f)
+        if d.get("v") != CACHE_VER:
+            return None
+        return d
+    except Exception:
+        return None
+
+def _cache_save(dirpath: str, data: dict):
+    p = _cache_path(dirpath)
+    tmp = str(p) + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f, separators=(",", ":"))
+        os.replace(tmp, p)
+    except Exception as e:
+        _log(f"cache save error: {e}")
+
+def _cache_invalidate(dirpath: str):
+    try:
+        _cache_path(dirpath).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+# ── Directory scanning ─────────────────────────────────────────────────────────
+
+def _count_children(path: str) -> int:
+    """Count immediate entries in a directory. Fast (no stat)."""
+    try:
+        return sum(1 for _ in os.scandir(path))
+    except Exception:
+        return -1
+
+def _scan_dir(dirpath: str) -> dict:
+    """
+    Full directory scan → cache data structure.
+    Called once per directory; result cached to disk.
+    """
+    try:
+        dir_mtime = os.stat(dirpath).st_mtime
+    except Exception:
+        dir_mtime = 0.0
+
+    entries = []
+    try:
+        with os.scandir(dirpath) as it:
+            for e in it:
+                try:
+                    st = e.stat(follow_symlinks=True)
+                    is_dir = e.is_dir(follow_symlinks=True)
+                    children = _count_children(e.path) if is_dir else -1
+                    icon = _icon_type(e.name, is_dir, st.st_mode)
+                    entries.append({
+                        "p": e.path,
+                        "n": e.name,
+                        "d": is_dir,
+                        "s": 0 if is_dir else st.st_size,
+                        "m": int(st.st_mtime),
+                        "c": children,
+                        "t": icon,
+                    })
+                except Exception:
+                    pass  # skip unreadable entries
+    except PermissionError:
+        pass
+    except Exception as ex:
+        _log(f"scandir error {dirpath}: {ex}")
+
+    return {
+        "v":  CACHE_VER,
+        "dir": dirpath,
+        "dm": dir_mtime,     # directory mtime at scan time
+        "ts": time.time(),   # when we built this cache
+        "entries": entries,
+    }
+
+# ── inotify (Linux) ────────────────────────────────────────────────────────────
+
+_inotify_fd   = -1
+_wd_to_dir    = {}     # int(wd) → str(dirpath)
+_dir_to_wd    = {}     # str(dirpath) → int(wd)
+_dirty        = set()  # dirpaths whose cache needs rebuild
+_inotify_lock = threading.Lock()
+
+_IN_CREATE      = 0x00000100
+_IN_DELETE      = 0x00000200
+_IN_MOVED_FROM  = 0x00000040
+_IN_MOVED_TO    = 0x00000080
+_IN_ATTRIB      = 0x00000004
+_IN_CLOSE_WRITE = 0x00000008
+_IN_MASK        = (_IN_CREATE | _IN_DELETE | _IN_MOVED_FROM |
+                   _IN_MOVED_TO | _IN_ATTRIB | _IN_CLOSE_WRITE)
+_INOTIFY_HDR    = struct.Struct("iIII")  # wd mask cookie len
+_INOTIFY_HDR_SZ = _INOTIFY_HDR.size     # 16
+
+def _inotify_init():
+    """Return an inotify fd, or -1 if unavailable."""
+    try:
+        import ctypes
+        _libc = ctypes.CDLL(None)
+        fd = _libc.inotify_init()
+        return int(fd)
+    except Exception:
+        return -1
+
+def _inotify_add(dirpath: str):
+    """Register an inotify watch on dirpath."""
+    if _inotify_fd < 0:
+        return
+    try:
+        import ctypes
+        _libc = ctypes.CDLL(None)
+        _libc.inotify_add_watch.restype = ctypes.c_int
+        _libc.inotify_add_watch.argtypes = [
+            ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32
+        ]
+        wd = _libc.inotify_add_watch(
+            _inotify_fd, dirpath.encode(), _IN_MASK
+        )
+        if wd >= 0:
+            with _inotify_lock:
+                _wd_to_dir[wd] = dirpath
+                _dir_to_wd[dirpath] = wd
+    except Exception as ex:
+        _log(f"inotify_add_watch failed: {ex}")
+
+def _inotify_reader():
+    """Thread: read inotify events and mark dirs dirty."""
+    import select
+    buf = b""
+    while True:
+        try:
+            r, _, _ = select.select([_inotify_fd], [], [], 1.0)
+            if not r:
+                continue
+            chunk = os.read(_inotify_fd, 65536)
+            if not chunk:
+                break
+            buf += chunk
+            while len(buf) >= _INOTIFY_HDR_SZ:
+                wd, mask, cookie, name_len = _INOTIFY_HDR.unpack_from(buf)
+                total = _INOTIFY_HDR_SZ + name_len
+                if len(buf) < total:
+                    break
+                buf = buf[total:]
+                with _inotify_lock:
+                    dp = _wd_to_dir.get(wd)
+                if dp:
+                    _dirty.add(dp)
+                    _log(f"dirty: {dp} (mask=0x{mask:x})")
+        except Exception as ex:
+            _log(f"inotify reader: {ex}")
+            time.sleep(0.5)
+
+# ── Per-directory scan locks (prevent duplicate concurrent scans) ──────────────
+
+_scan_locks    = {}
+_scan_lock_mtx = threading.Lock()
+
+def _scan_lock(dirpath: str) -> threading.Lock:
+    with _scan_lock_mtx:
+        if dirpath not in _scan_locks:
+            _scan_locks[dirpath] = threading.Lock()
+        return _scan_locks[dirpath]
+
+# ── Core: get directory data (cache-first, rebuild on miss/dirty) ──────────────
+
+def _get_dir_data(dirpath: str) -> dict:
+    """
+    Return directory data. Algorithm:
+      1. Dirty (inotify) → invalidate cache, rebuild
+      2. Cache hit with valid dir-mtime → return immediately
+      3. Cache miss or stale mtime → rebuild (with per-dir lock)
+    """
+    is_dirty = dirpath in _dirty
+    if is_dirty:
+        _dirty.discard(dirpath)
+        _cache_invalidate(dirpath)
+
+    if not is_dirty:
+        cached = _cache_load(dirpath)
+        if cached is not None:
+            try:
+                cur_mtime = os.stat(dirpath).st_mtime
+                if abs(cur_mtime - cached.get("dm", 0)) < 1.0:
+                    _inotify_add(dirpath)   # ensure watched
+                    return cached
+            except Exception:
+                pass
+
+    # Need to (re)build — serialize per dir to avoid duplicate scans
+    lock = _scan_lock(dirpath)
+    with lock:
+        # Double-check after acquiring lock
+        if not is_dirty:
+            cached = _cache_load(dirpath)
+            if cached is not None:
+                try:
+                    cur_mtime = os.stat(dirpath).st_mtime
+                    if abs(cur_mtime - cached.get("dm", 0)) < 1.0:
+                        _inotify_add(dirpath)
+                        return cached
+                except Exception:
+                    pass
+
+        _log(f"scanning {dirpath}")
+        data = _scan_dir(dirpath)
+        _cache_save(dirpath, data)
+        _inotify_add(dirpath)
+        return data
+
+# ── Request handlers ───────────────────────────────────────────────────────────
+
+def _handle_list(dirpath: str, show_hidden: bool, wfile):
+    if not os.path.isdir(dirpath):
+        wfile.write(b"ERROR:not a directory\nEND\n")
+        return
+
+    data = _get_dir_data(dirpath)
+    entries = data.get("entries", [])
+
+    out = []
+    for e in entries:
+        if not show_hidden and e["n"].startswith("."):
+            continue
+        # path|size|mtime|children|icon_type
+        out.append(f"{e['p']}|{e['s']}|{e['m']}|{e['c']}|{e['t']}\n".encode())
+
+    for line in out:
+        wfile.write(line)
+    wfile.write(b"END\n")
+    wfile.flush()
+
+def _handle_client(conn: socket.socket):
+    try:
+        rfile = conn.makefile("rb")
+        wfile = conn.makefile("wb")
+        raw = rfile.readline()
+        if not raw:
+            return
+        parts = raw.decode().strip().split("\t")
+        cmd = parts[0] if parts else ""
+
+        if cmd == "LIST" and len(parts) >= 2:
+            dirpath     = parts[1]
+            show_hidden = (parts[2] == "1") if len(parts) >= 3 else False
+            _handle_list(dirpath, show_hidden, wfile)
+
+        elif cmd == "INVALIDATE" and len(parts) >= 2:
+            _cache_invalidate(parts[1])
+            _dirty.discard(parts[1])
+            wfile.write(b"OK\n")
+            wfile.flush()
+
+        elif cmd == "PING":
+            wfile.write(b"PONG\n")
+            wfile.flush()
+
+        elif cmd == "QUIT":
+            wfile.write(b"BYE\n")
+            wfile.flush()
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        else:
+            wfile.write(b"ERROR:unknown command\n")
+            wfile.flush()
+
+    except Exception as ex:
+        _log(f"client handler: {ex}")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+# ── Logging ────────────────────────────────────────────────────────────────────
+
+_log_lock = threading.Lock()
+
+def _log(msg: str):
+    ts = time.strftime("%H:%M:%S")
+    line = f"[{ts}] {msg}\n"
+    with _log_lock:
+        try:
+            with open(LOG_FILE, "a") as f:
+                f.write(line)
+        except Exception:
+            pass
+
+# ── Daemon startup ─────────────────────────────────────────────────────────────
+
+def _run_daemon():
+    # Single-instance lock
+    lock_fd = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        # Another instance already running
+        sys.exit(0)
+
+    # Write PID
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()) + "\n")
+
+    # Remove stale socket
+    try: SOCK_PATH.unlink()
+    except FileNotFoundError: pass
+
+    # inotify
+    global _inotify_fd
+    _inotify_fd = _inotify_init()
+    if _inotify_fd >= 0:
+        t = threading.Thread(target=_inotify_reader, daemon=True, name="inotify")
+        t.start()
+        _log("inotify active")
+    else:
+        _log("inotify unavailable — using mtime validation")
+
+    # Signal handlers
+    def _cleanup(sig, frame):
+        _log("shutting down")
+        try: SOCK_PATH.unlink()
+        except Exception: pass
+        try: PID_FILE.unlink()
+        except Exception: pass
+        try: lock_fd.close()
+        except Exception: pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _cleanup)
+    signal.signal(signal.SIGINT,  _cleanup)
+
+    # Socket server
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(str(SOCK_PATH))
+    os.chmod(SOCK_PATH, 0o600)
+    srv.listen(64)
+    srv.settimeout(1.0)
+
+    _log(f"listening on {SOCK_PATH} (pid {os.getpid()})")
+
+    try:
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            t = threading.Thread(
+                target=_handle_client, args=(conn,), daemon=True
+            )
+            t.start()
+    finally:
+        try: srv.close()
+        except Exception: pass
+        _cleanup(None, None)
+
+# ── Client mode (called from bash) ────────────────────────────────────────────
+
+def _run_client(argv):
+    """
+    Connect to running daemon and send a command.
+    Prints the response to stdout.
+    Usage: bvk_daemon.py LIST /path 0
+           bvk_daemon.py PING
+           bvk_daemon.py INVALIDATE /path
+    """
+    cmd  = argv[0] if argv else "PING"
+    args = argv[1:]
+
+    sock_str = str(SOCK_PATH)
+    if not os.path.exists(sock_str):
+        print("ERROR:daemon not running", flush=True)
+        sys.exit(1)
+
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(30.0)  # 30s max (first scan of huge dir)
+        s.connect(sock_str)
+
+        msg = (cmd + "".join(f"\t{a}" for a in args) + "\n").encode()
+        s.sendall(msg)
+
+        # Stream response directly to stdout
+        out = sys.stdout.buffer
+        while True:
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            out.write(chunk)
+            out.flush()
+            # Stop after terminal marker
+            if chunk.endswith(b"END\n") or chunk.endswith(b"OK\n") \
+               or chunk.endswith(b"PONG\n") or chunk.endswith(b"BYE\n"):
+                break
+        s.close()
+    except socket.timeout:
+        print("ERROR:timeout", flush=True)
+        sys.exit(1)
+    except Exception as ex:
+        print(f"ERROR:{ex}", flush=True)
+        sys.exit(1)
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    if len(sys.argv) >= 2 and sys.argv[1] == "--daemon":
+        _run_daemon()
+    else:
+        _run_client(sys.argv[1:])
