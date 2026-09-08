@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 
-source "bashbasicsbyvk_smartmenu.sh"
-source "bashbasicsbyvk_run.sh"
-source "bashbasicsbyvk_csv.sh"
-source "bashbasicsbyvk_rename.sh"
-source "bashbasicsbyvk_archive.sh"
-source "bashbasicsbyvk_organise.sh"
-source "bashbasicsbyvk_find.sh"
-source "bashbasicsbyvk_settings.sh"
-source "bashbasicsbyvk_transfer.sh"
-source "bashbasicbyvk_shortpath.sh"
-source "bashbasicsbyvk_mapper.sh"
-source "bashbasicsbyvk_help.sh"
-source "bashbasicsbyvk_viewport.sh"
-source "bashbasicsbyvk_refresh.sh"
-source "bashbasicsbyvk_shortcut_registry.sh"
-
-
+# SCRIPT_DIR must be resolved FIRST — sourced files (especially the displayer)
+# use it to locate bvk_daemon at load time.  Defining it after the source
+# block means it is unset when the displayer evaluates _BVK_DAEMON_PY, so
+# the daemon binary is never found and the daemon never starts.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "$SCRIPT_DIR/bashbasicsbyvk_smartmenu.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_run.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_csv.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_rename.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_archive.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_organise.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_find.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_settings.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_transfer.sh"
+source "$SCRIPT_DIR/bashbasicbyvk_shortpath.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_mapper.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_help.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_viewport.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_refresh.sh"
+source "$SCRIPT_DIR/bashbasicsbyvk_shortcut_registry.sh"
 
 select_items_common() {
   local prompt="$1"
