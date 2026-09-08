@@ -454,44 +454,49 @@ def _get_dir_data(dirpath: str, progress_cb=None) -> dict:
 
 # ── Request handlers ───────────────────────────────────────────────────────────
 
-def _handle_list(dirpath: str, show_hidden: bool, wfile):
+def _handle_list(dirpath: str, show_hidden: bool, conn: socket.socket):
     if not os.path.isdir(dirpath):
-        wfile.write(b"ERROR:not a directory\nEND\n")
+        conn.sendall(b"ERROR:not a directory\nEND\n")
         return
 
-    _last_progress_t = [0.0]
+    # Use the raw socket with a lock so multiple worker threads can safely
+    # call send() concurrently without interleaving bytes.
+    write_lock    = threading.Lock()
+    last_t        = [0.0]
+
+    def _send(data: bytes):
+        with write_lock:
+            try:
+                conn.sendall(data)
+            except Exception:
+                pass
+
+    # Send immediately so the client sees output before the scan even starts.
+    _send(b"PROGRESS:0:0:0\n")
 
     def _progress(files: int, folders: int, byte_count: int):
         now = time.monotonic()
-        if now - _last_progress_t[0] < 0.1:
+        if now - last_t[0] < 0.15:
             return
-        _last_progress_t[0] = now
-        try:
-            wfile.write(
-                f"PROGRESS:{files}:{folders}:{byte_count}\n".encode()
-            )
-            wfile.flush()
-        except Exception:
-            pass
+        last_t[0] = now
+        _send(f"PROGRESS:{files}:{folders}:{byte_count}\n".encode())
 
     data    = _get_dir_data(dirpath, progress_cb=_progress)
     entries = data.get("entries", [])
 
-    out = []
+    # Build all output lines then send in one shot to minimise syscalls.
+    out = bytearray()
     for e in entries:
         if not show_hidden and e["n"].startswith("."):
             continue
-        out.append(f"{e['p']}|{e['s']}|{e['m']}|{e['c']}|{e['t']}\n".encode())
-
-    for line in out:
-        wfile.write(line)
-    wfile.write(b"END\n")
-    wfile.flush()
+        out += f"{e['p']}|{e['s']}|{e['m']}|{e['c']}|{e['t']}\n".encode()
+    out += b"END\n"
+    _send(bytes(out))
 
 def _handle_client(conn: socket.socket):
     try:
         rfile = conn.makefile("rb")
-        wfile = conn.makefile("wb")
+        # wfile unused now — we write directly to conn in _handle_list
         raw   = rfile.readline()
         if not raw:
             return
@@ -501,26 +506,22 @@ def _handle_client(conn: socket.socket):
         if cmd == "LIST" and len(parts) >= 2:
             dirpath     = parts[1]
             show_hidden = (parts[2] == "1") if len(parts) >= 3 else False
-            _handle_list(dirpath, show_hidden, wfile)
+            _handle_list(dirpath, show_hidden, conn)
 
         elif cmd == "INVALIDATE" and len(parts) >= 2:
             _cache_invalidate(parts[1])
             _dirty.discard(parts[1])
-            wfile.write(b"OK\n")
-            wfile.flush()
+            conn.sendall(b"OK\n")
 
         elif cmd == "PING":
-            wfile.write(b"PONG\n")
-            wfile.flush()
+            conn.sendall(b"PONG\n")
 
         elif cmd == "QUIT":
-            wfile.write(b"BYE\n")
-            wfile.flush()
+            conn.sendall(b"BYE\n")
             os.kill(os.getpid(), signal.SIGTERM)
 
         else:
-            wfile.write(b"ERROR:unknown command\n")
-            wfile.flush()
+            conn.sendall(b"ERROR:unknown command\n")
 
     except Exception as ex:
         _log(f"client handler: {ex}")
