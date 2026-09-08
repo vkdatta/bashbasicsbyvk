@@ -631,6 +631,11 @@ def _run_client(argv):
         print("ERROR:daemon not running", flush=True)
         sys.exit(1)
 
+    # FIX: initialise showed_progress before the try block so that all
+    # except branches can safely reference it even if the exception is
+    # raised before the variable would have been assigned inside the try.
+    showed_progress = False
+
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(120.0)  # 2-minute max (first scan of very large tree)
@@ -641,7 +646,6 @@ def _run_client(argv):
 
         out = sys.stdout.buffer
         buf = b""
-        showed_progress = False
         done = False
 
         while not done:
@@ -698,6 +702,13 @@ def _run_client(argv):
     except Exception as ex:
         if showed_progress:
             _clear_progress()
+        # FIX: remove the stale socket file so the next invocation can
+        # restart the daemon cleanly instead of hitting ConnectionRefusedError
+        # again on a socket that has no listener behind it.
+        try:
+            Path(sock_str).unlink(missing_ok=True)
+        except Exception:
+            pass
         print(f"ERROR:{ex}", flush=True)
         sys.exit(1)
 
