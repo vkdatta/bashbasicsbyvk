@@ -68,7 +68,8 @@ _bvk_prewarm() {
   (
     _bvk_daemon_start 2>/dev/null || return
     # Scan both modes so the cache is ready regardless of show_hidden_files setting
-    python3 "$_BVK_DAEMON_PY" LIST "$dir" 0 >/dev/null 2>/dev/null
+    # stderr left open so _draw_progress renders to terminal
+    python3 "$_BVK_DAEMON_PY" LIST "$dir" 0 >/dev/null
     python3 "$_BVK_DAEMON_PY" LIST "$dir" 1 >/dev/null 2>/dev/null
   ) &
   disown 2>/dev/null
