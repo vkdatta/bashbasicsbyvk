@@ -613,15 +613,24 @@ def _fmt_bytes(n: int) -> str:
             return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
         n /= 1024
 
-def _draw_progress(files: int, folders: int, byte_count: int):
-    """
-    Progress bar — no percentage, no estimate.
-    Shows exact counts of files and folders seen so far plus bytes scanned.
+_SPINNER = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
-    Format:  Scanning…  12,345 files  678 folders  4.2 GB
+def _fmt_bytes(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
+        n /= 1024
+
+def _draw_progress(files: int, folders: int, byte_count: int, spin: int = 0):
     """
+    Live status line on stderr — no percentage, no estimate.
+    Shown immediately on connect, updated at every file the walker touches.
+
+    Format:  ⠹ Scanning…  12,345 files  678 folders  4.2 GB
+    """
+    sp   = _SPINNER[spin % len(_SPINNER)]
     line = (
-        f"\r\033[KScanning…  {files:,} files  {folders:,} folders"
+        f"\r\033[K{sp} Scanning\u2026  {files:,} files  {folders:,} folders"
         f"  {_fmt_bytes(byte_count)}"
     )
     sys.stderr.write(line)
@@ -641,21 +650,41 @@ def _run_client(argv):
         sys.exit(1)
 
     showed_progress = False
+    spin_idx        = 0
 
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(300.0)   # 5-min max for very large first scans
-        s.connect(sock_str)
+        s.connect(sock_str)          # no timeout on connect — socket already exists
+        s.settimeout(0.15)           # short recv timeout so spinner stays alive
 
         msg = (cmd + "".join(f"\t{a}" for a in args) + "\n").encode()
         s.sendall(msg)
 
-        out  = sys.stdout.buffer
-        buf  = b""
-        done = False
+        # Show something immediately — before the daemon has sent a single byte.
+        # This is what was missing: the screen was black/frozen until the first
+        # PROGRESS line arrived (up to 100 ms into a huge scan).
+        if cmd == "LIST":
+            _draw_progress(0, 0, 0, spin_idx)
+            showed_progress = True
+
+        out        = sys.stdout.buffer
+        buf        = b""
+        done       = False
+        last_files = 0
+        last_fold  = 0
+        last_bytes = 0
 
         while not done:
-            chunk = s.recv(65536)
+            try:
+                chunk = s.recv(65536)
+            except socket.timeout:
+                # Nothing arrived in 150 ms — just tick the spinner so the
+                # user sees it's alive, then go back to waiting.
+                if showed_progress:
+                    spin_idx += 1
+                    _draw_progress(last_files, last_fold, last_bytes, spin_idx)
+                continue
+
             if not chunk:
                 break
             buf += chunk
@@ -667,10 +696,16 @@ def _run_client(argv):
                 decoded = line.decode(errors="replace")
 
                 if decoded.startswith("PROGRESS:"):
-                    # PROGRESS:<files>:<folders>:<bytes>
+                    # Protocol: PROGRESS:<files>:<folders>:<bytes>
+                    # Use rsplit with maxsplit=3 so any future colon in a
+                    # field on the left can't break the numeric tail.
                     try:
-                        parts = decoded.strip().split(":")
-                        _draw_progress(int(parts[1]), int(parts[2]), int(parts[3]))
+                        _, f_s, d_s, b_s = decoded.strip().rsplit(":", 3)
+                        last_files = int(f_s)
+                        last_fold  = int(d_s)
+                        last_bytes = int(b_s)
+                        spin_idx  += 1
+                        _draw_progress(last_files, last_fold, last_bytes, spin_idx)
                         showed_progress = True
                     except Exception:
                         pass
@@ -695,12 +730,6 @@ def _run_client(argv):
             out.flush()
 
         s.close()
-
-    except socket.timeout:
-        if showed_progress:
-            _clear_progress()
-        print("ERROR:timeout", flush=True)
-        sys.exit(1)
 
     except Exception as ex:
         if showed_progress:
