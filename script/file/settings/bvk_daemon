@@ -13,22 +13,27 @@ TWO MODES
   python3 bvk_daemon.py PING
   python3 bvk_daemon.py INVALIDATE /path/to/dir
 
-HOW IT WORKS
-────────────
-  First visit to a directory:
-    • os.scandir() collects all entries in one kernel call
-    • Each subdir gets a quick children-count (one extra scandir per dir)
-    • Result written to a per-directory JSON cache file
-    • inotify watch registered on the directory
+HOW IT WORKS — SINGLE RECURSIVE SCAN
+──────────────────────────────────────
+  When you LIST ~/home, the daemon performs ONE full recursive walk of the
+  entire tree rooted there.  Every subdirectory encountered during that walk
+  gets its own cache entry written to disk.  When you later enter ~/claude,
+  the cache already exists — no re-scan, instant response.
 
-  Every subsequent visit:
-    • Cache file read directly — no filesystem walk at all
-    • Typical latency: <5 ms even for 20 000-entry directories
+  Cache hit path:
+    LIST ~/home        → cache miss → full recursive scan → cache written
+                         for ~/home AND every subdir inside it
+    LIST ~/home/claude → cache hit  → read JSON, done in <5 ms
 
-  File system changes:
-    • inotify fires IN_CREATE / IN_DELETE / IN_MOVED / IN_ATTRIB
-    • Directory is marked dirty; next LIST rebuilds its cache
-    • Fallback: directory mtime is validated on every request
+  Invalidation:
+    inotify fires on any directory → that directory's cache is marked dirty
+    → next LIST of that specific dir rebuilds only that one level
+
+PROGRESS FORMAT
+───────────────
+  PROGRESS:<files>:<folders>:<bytes>
+  No percentage, no estimate.  Exact counts of what has been seen so far,
+  updated at every single file and folder the walker touches.
 
 WIRE PROTOCOL
 ─────────────
@@ -51,6 +56,7 @@ import struct
 import stat as stat_mod
 import fcntl
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
@@ -63,12 +69,18 @@ SOCK_PATH  = CONFIG_DIR / "daemon.sock"
 PID_FILE   = CONFIG_DIR / "daemon.pid"
 LOCK_FILE  = CONFIG_DIR / "daemon.lock"
 LOG_FILE   = CACHE_DIR  / "daemon.log"
-CACHE_VER  = 3  # bump when cache schema changes
+CACHE_VER  = 4  # bumped: schema now includes recursive subcache population
 
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# ── Icon-type detection (mirrors bash _is_* functions exactly) ─────────────────
+# ── Shared thread pool ─────────────────────────────────────────────────────────
+# 64 workers: pure I/O-bound work on Termux (scandir+stat syscalls).
+# The GIL is released during I/O so threads genuinely run in parallel here.
+_POOL_WORKERS = 64
+_pool = ThreadPoolExecutor(max_workers=_POOL_WORKERS, thread_name_prefix="bvk")
+
+# ── Icon-type detection ────────────────────────────────────────────────────────
 
 _ARCHIVE_MULTI = (
     ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst", ".tar.lz",
@@ -136,7 +148,6 @@ def _cache_path(dirpath: str) -> Path:
     return CACHE_DIR / f"{h}.json"
 
 def _cache_load(dirpath: str):
-    """Return cache data dict or None on miss/invalid."""
     try:
         with open(_cache_path(dirpath)) as f:
             d = json.load(f)
@@ -147,7 +158,7 @@ def _cache_load(dirpath: str):
         return None
 
 def _cache_save(dirpath: str, data: dict):
-    p = _cache_path(dirpath)
+    p   = _cache_path(dirpath)
     tmp = str(p) + ".tmp"
     try:
         with open(tmp, "w") as f:
@@ -162,122 +173,161 @@ def _cache_invalidate(dirpath: str):
     except Exception:
         pass
 
-# ── Directory scanning ─────────────────────────────────────────────────────────
+# ── Progress state (shared across recursive workers) ──────────────────────────
 
-def _count_children(path: str) -> int:
-    """Count immediate entries in a directory. Fast (no stat)."""
+class _ProgressState:
+    """
+    Thread-safe counters updated by every worker at every file/folder.
+    No estimates — only exact counts of what has actually been seen.
+    """
+    __slots__ = ("lock", "files", "folders", "bytes", "callback", "_last_t")
+
+    def __init__(self, callback):
+        self.lock     = threading.Lock()
+        self.files    = 0
+        self.folders  = 0
+        self.bytes    = 0
+        self.callback = callback
+        self._last_t  = 0.0
+
+    def tick_file(self, size: int):
+        if self.callback is None:
+            return
+        with self.lock:
+            self.files += 1
+            self.bytes += size
+            self._fire()
+
+    def tick_folder(self):
+        if self.callback is None:
+            return
+        with self.lock:
+            self.folders += 1
+            self._fire()
+
+    def _fire(self):
+        # Throttle to max one update per 100 ms to avoid socket flood
+        now = time.monotonic()
+        if now - self._last_t < 0.1:
+            return
+        self._last_t = now
+        try:
+            self.callback(self.files, self.folders, self.bytes)
+        except Exception:
+            pass
+
+# ── Core recursive scanner ─────────────────────────────────────────────────────
+
+def _walk_dir(dirpath: str, dir_mtime: float, ps: _ProgressState) -> dict:
+    """
+    Scan one directory level.  For each subdirectory found, submit a new
+    task to the shared pool so all branches of the tree run in parallel.
+
+    Returns the cache data dict for `dirpath`.  Also writes a cache file
+    for every subdirectory it discovers — so entering any child directory
+    later is an instant cache hit with zero re-scan.
+
+    This is the key architectural fix: ONE scan populates caches for the
+    entire subtree, not just the single directory requested.
+    """
+    entries  = []
+    sub_futs = []   # futures for child directories
+
     try:
-        return sum(1 for _ in os.scandir(path))
-    except Exception:
-        return -1
+        raw = list(os.scandir(dirpath))
+    except PermissionError:
+        raw = []
+    except Exception as ex:
+        _log(f"scandir {dirpath}: {ex}")
+        raw = []
 
-def _recursive_dir_size(path: str) -> int:
-    """
-    Walk an entire directory tree and return the true total byte size of all
-    contained files (follows symlinks for files, skips symlinks to dirs to
-    avoid loops).  Errors on individual entries are silently skipped.
-    """
-    total = 0
-    try:
-        with os.scandir(path) as it:
-            for entry in it:
-                try:
-                    if entry.is_file(follow_symlinks=True):
-                        total += entry.stat(follow_symlinks=True).st_size
-                    elif entry.is_dir(follow_symlinks=False):
-                        # Only recurse into real dirs, not symlinked dirs,
-                        # to avoid loops.
-                        total += _recursive_dir_size(entry.path)
-                except Exception:
-                    pass
-    except Exception:
-        pass
-    return total
+    for e in raw:
+        try:
+            st     = e.stat(follow_symlinks=True)
+            is_dir = e.is_dir(follow_symlinks=True)
+            mode   = st.st_mode
+            mtime  = int(st.st_mtime)
 
-def _estimate_entry_count(dirpath: str) -> int:
-    """
-    Quick shallow estimate of how many filesystem entries exist under dirpath.
-    Used only for progress-bar denominator; accuracy not critical.
-    Each immediate child directory is assumed to contain ~50 entries on average.
-    """
-    try:
-        immediate = list(os.scandir(dirpath))
-    except Exception:
-        return 1
-    files = sum(1 for e in immediate if not e.is_dir(follow_symlinks=False))
-    dirs  = sum(1 for e in immediate if e.is_dir(follow_symlinks=False))
-    return files + dirs * 51  # 1 for the dir itself + 50 assumed children
+            if is_dir and not e.is_symlink():
+                # Submit child dir to pool — parallel recursive walk
+                sub_dm = st.st_mtime
+                fut = _pool.submit(_walk_dir, e.path, sub_dm, ps)
+                sub_futs.append((e, fut, mtime, mode))
+                ps.tick_folder()
+            else:
+                size = st.st_size
+                icon = _icon_type(e.name, is_dir, mode)
+                entries.append({
+                    "p": e.path,
+                    "n": e.name,
+                    "d": is_dir,
+                    "s": size,
+                    "m": mtime,
+                    "c": -1,
+                    "t": icon,
+                })
+                ps.tick_file(size)
 
-def _scan_dir(dirpath: str, progress_cb=None) -> dict:
-    """
-    Full directory scan → cache data structure.
-    Called once per directory; result cached to disk.
+        except Exception:
+            pass
 
-    progress_cb(scanned: int, total_est: int, bytes_so_far: int)
-        Optional callable invoked after each top-level entry is processed.
-        Use it to stream progress to the client during a first scan.
+    # Collect child dir results
+    for e, fut, mtime, mode in sub_futs:
+        try:
+            child_data = fut.result()
+            child_entries = child_data.get("entries", [])
+            # Immediate children count = entries in the child's own listing
+            children = len(child_entries)
+            # Total recursive size = sum of all sizes in child's entries
+            # (each dir entry already has its full recursive size stored)
+            size = sum(ce["s"] for ce in child_entries)
+            icon = _icon_type(e.name, True, mode)
+            entries.append({
+                "p": e.path,
+                "n": e.name,
+                "d": True,
+                "s": size,
+                "m": mtime,
+                "c": children,
+                "t": icon,
+            })
+        except Exception:
+            pass
+
+    data = {
+        "v":       CACHE_VER,
+        "dir":     dirpath,
+        "dm":      dir_mtime,
+        "ts":      time.time(),
+        "entries": entries,
+    }
+
+    # Write cache for THIS directory — so any future LIST of it is instant
+    _cache_save(dirpath, data)
+    return data
+
+
+def _scan_tree(dirpath: str, progress_cb=None) -> dict:
+    """
+    Entry point for a full recursive scan.  Returns the cache data for
+    `dirpath`; all subdirectory caches are written as a side effect.
     """
     try:
         dir_mtime = os.stat(dirpath).st_mtime
     except Exception:
         dir_mtime = 0.0
 
-    # Pre-estimate total for progress bar (fast, non-recursive)
-    total_est = max(1, _estimate_entry_count(dirpath))
+    ps = _ProgressState(progress_cb)
+    ps.tick_folder()  # count the root itself
 
-    entries = []
-    scanned = 0
-    bytes_so_far = 0
-    try:
-        with os.scandir(dirpath) as it:
-            for e in it:
-                try:
-                    st = e.stat(follow_symlinks=True)
-                    is_dir = e.is_dir(follow_symlinks=True)
-                    if is_dir:
-                        # Compute true recursive size instead of raw inode size
-                        size = _recursive_dir_size(e.path)
-                        children = _count_children(e.path)
-                    else:
-                        size = st.st_size
-                        children = -1
-                    icon = _icon_type(e.name, is_dir, st.st_mode)
-                    entries.append({
-                        "p": e.path,
-                        "n": e.name,
-                        "d": is_dir,
-                        "s": size,           # recursive total for dirs, real size for files
-                        "m": int(st.st_mtime),
-                        "c": children,
-                        "t": icon,
-                    })
-                    scanned += 1
-                    bytes_so_far += size if size > 0 else 0
-                    if progress_cb:
-                        progress_cb(scanned, total_est, bytes_so_far)
-                except Exception:
-                    scanned += 1
-                    if progress_cb:
-                        progress_cb(scanned, total_est, bytes_so_far)
-    except PermissionError:
-        pass
-    except Exception as ex:
-        _log(f"scandir error {dirpath}: {ex}")
-
-    return {
-        "v":  CACHE_VER,
-        "dir": dirpath,
-        "dm": dir_mtime,     # directory mtime at scan time
-        "ts": time.time(),   # when we built this cache
-        "entries": entries,
-    }
+    return _walk_dir(dirpath, dir_mtime, ps)
 
 # ── inotify (Linux) ────────────────────────────────────────────────────────────
 
 _inotify_fd   = -1
-_wd_to_dir    = {}     # int(wd) → str(dirpath)
-_dir_to_wd    = {}     # str(dirpath) → int(wd)
-_dirty        = set()  # dirpaths whose cache needs rebuild
+_wd_to_dir    = {}
+_dir_to_wd    = {}
+_dirty        = set()
 _inotify_lock = threading.Lock()
 
 _IN_CREATE      = 0x00000100
@@ -288,11 +338,10 @@ _IN_ATTRIB      = 0x00000004
 _IN_CLOSE_WRITE = 0x00000008
 _IN_MASK        = (_IN_CREATE | _IN_DELETE | _IN_MOVED_FROM |
                    _IN_MOVED_TO | _IN_ATTRIB | _IN_CLOSE_WRITE)
-_INOTIFY_HDR    = struct.Struct("iIII")  # wd mask cookie len
-_INOTIFY_HDR_SZ = _INOTIFY_HDR.size     # 16
+_INOTIFY_HDR    = struct.Struct("iIII")
+_INOTIFY_HDR_SZ = _INOTIFY_HDR.size
 
 def _inotify_init():
-    """Return an inotify fd, or -1 if unavailable."""
     try:
         import ctypes
         _libc = ctypes.CDLL(None)
@@ -302,19 +351,14 @@ def _inotify_init():
         return -1
 
 def _inotify_add(dirpath: str):
-    """Register an inotify watch on dirpath."""
     if _inotify_fd < 0:
         return
     try:
         import ctypes
         _libc = ctypes.CDLL(None)
         _libc.inotify_add_watch.restype = ctypes.c_int
-        _libc.inotify_add_watch.argtypes = [
-            ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32
-        ]
-        wd = _libc.inotify_add_watch(
-            _inotify_fd, dirpath.encode(), _IN_MASK
-        )
+        _libc.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+        wd = _libc.inotify_add_watch(_inotify_fd, dirpath.encode(), _IN_MASK)
         if wd >= 0:
             with _inotify_lock:
                 _wd_to_dir[wd] = dirpath
@@ -323,7 +367,6 @@ def _inotify_add(dirpath: str):
         _log(f"inotify_add_watch failed: {ex}")
 
 def _inotify_reader():
-    """Thread: read inotify events and mark dirs dirty."""
     import select
     buf = b""
     while True:
@@ -350,7 +393,7 @@ def _inotify_reader():
             _log(f"inotify reader: {ex}")
             time.sleep(0.5)
 
-# ── Per-directory scan locks (prevent duplicate concurrent scans) ──────────────
+# ── Per-directory scan locks ───────────────────────────────────────────────────
 
 _scan_locks    = {}
 _scan_lock_mtx = threading.Lock()
@@ -365,13 +408,12 @@ def _scan_lock(dirpath: str) -> threading.Lock:
 
 def _get_dir_data(dirpath: str, progress_cb=None) -> dict:
     """
-    Return directory data. Algorithm:
-      1. Dirty (inotify) → invalidate cache, rebuild
-      2. Cache hit with valid dir-mtime → return immediately
-      3. Cache miss or stale mtime → rebuild (with per-dir lock)
+    Returns cache data for dirpath.
 
-    progress_cb is forwarded to _scan_dir only when a real scan is performed
-    (cache miss / dirty).  On a cache hit it is never called.
+    On cache HIT  → instant, no I/O beyond reading one JSON file.
+    On cache MISS → _scan_tree() walks the entire subtree, populating
+                    caches for every directory it visits.  All subsequent
+                    requests for any child directory will be cache hits.
     """
     is_dirty = dirpath in _dirty
     if is_dirty:
@@ -384,15 +426,15 @@ def _get_dir_data(dirpath: str, progress_cb=None) -> dict:
             try:
                 cur_mtime = os.stat(dirpath).st_mtime
                 if abs(cur_mtime - cached.get("dm", 0)) < 1.0:
-                    _inotify_add(dirpath)   # ensure watched
+                    _inotify_add(dirpath)
                     return cached
             except Exception:
                 pass
 
-    # Need to (re)build — serialize per dir to avoid duplicate scans
     lock = _scan_lock(dirpath)
     with lock:
-        # Double-check after acquiring lock
+        # Double-check after acquiring the lock (another thread may have
+        # just finished scanning and written the cache)
         if not is_dirty:
             cached = _cache_load(dirpath)
             if cached is not None:
@@ -404,9 +446,9 @@ def _get_dir_data(dirpath: str, progress_cb=None) -> dict:
                 except Exception:
                     pass
 
-        _log(f"scanning {dirpath}")
-        data = _scan_dir(dirpath, progress_cb=progress_cb)
-        _cache_save(dirpath, data)
+        _log(f"full recursive scan: {dirpath}")
+        data = _scan_tree(dirpath, progress_cb=progress_cb)
+        # Register inotify watches for all dirs we just cached
         _inotify_add(dirpath)
         return data
 
@@ -417,33 +459,28 @@ def _handle_list(dirpath: str, show_hidden: bool, wfile):
         wfile.write(b"ERROR:not a directory\nEND\n")
         return
 
-    # Progress callback: emits "PROGRESS:<scanned>:<total_est>:<bytes_so_far>\n"
-    # lines to the client while a first-time (or dirty) scan is in progress.
-    # The client can parse and display these before the final entry lines arrive.
-    # Throttled to at most one update per 0.1 s to avoid flooding the socket.
     _last_progress_t = [0.0]
 
-    def _progress(scanned: int, total_est: int, bytes_so_far: int):
+    def _progress(files: int, folders: int, byte_count: int):
         now = time.monotonic()
         if now - _last_progress_t[0] < 0.1:
             return
         _last_progress_t[0] = now
         try:
             wfile.write(
-                f"PROGRESS:{scanned}:{total_est}:{bytes_so_far}\n".encode()
+                f"PROGRESS:{files}:{folders}:{byte_count}\n".encode()
             )
             wfile.flush()
         except Exception:
-            pass  # client may have disconnected; scan still completes
+            pass
 
-    data = _get_dir_data(dirpath, progress_cb=_progress)
+    data    = _get_dir_data(dirpath, progress_cb=_progress)
     entries = data.get("entries", [])
 
     out = []
     for e in entries:
         if not show_hidden and e["n"].startswith("."):
             continue
-        # path|size|mtime|children|icon_type
         out.append(f"{e['p']}|{e['s']}|{e['m']}|{e['c']}|{e['t']}\n".encode())
 
     for line in out:
@@ -455,11 +492,11 @@ def _handle_client(conn: socket.socket):
     try:
         rfile = conn.makefile("rb")
         wfile = conn.makefile("wb")
-        raw = rfile.readline()
+        raw   = rfile.readline()
         if not raw:
             return
         parts = raw.decode().strip().split("\t")
-        cmd = parts[0] if parts else ""
+        cmd   = parts[0] if parts else ""
 
         if cmd == "LIST" and len(parts) >= 2:
             dirpath     = parts[1]
@@ -496,7 +533,7 @@ def _handle_client(conn: socket.socket):
 _log_lock = threading.Lock()
 
 def _log(msg: str):
-    ts = time.strftime("%H:%M:%S")
+    ts   = time.strftime("%H:%M:%S")
     line = f"[{ts}] {msg}\n"
     with _log_lock:
         try:
@@ -508,23 +545,18 @@ def _log(msg: str):
 # ── Daemon startup ─────────────────────────────────────────────────────────────
 
 def _run_daemon():
-    # Single-instance lock
     lock_fd = open(LOCK_FILE, "w")
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        # Another instance already running
         sys.exit(0)
 
-    # Write PID
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()) + "\n")
 
-    # Remove stale socket
     try: SOCK_PATH.unlink()
     except FileNotFoundError: pass
 
-    # inotify
     global _inotify_fd
     _inotify_fd = _inotify_init()
     if _inotify_fd >= 0:
@@ -534,7 +566,6 @@ def _run_daemon():
     else:
         _log("inotify unavailable — using mtime validation")
 
-    # Signal handlers
     def _cleanup(sig, frame):
         _log("shutting down")
         try: SOCK_PATH.unlink()
@@ -548,7 +579,6 @@ def _run_daemon():
     signal.signal(signal.SIGTERM, _cleanup)
     signal.signal(signal.SIGINT,  _cleanup)
 
-    # Socket server
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(str(SOCK_PATH))
@@ -556,7 +586,7 @@ def _run_daemon():
     srv.listen(64)
     srv.settimeout(1.0)
 
-    _log(f"listening on {SOCK_PATH} (pid {os.getpid()})")
+    _log(f"listening on {SOCK_PATH} (pid {os.getpid()}) — {_POOL_WORKERS} scan workers")
 
     try:
         while True:
@@ -575,54 +605,33 @@ def _run_daemon():
         except Exception: pass
         _cleanup(None, None)
 
-# ── Client mode (called from bash) ────────────────────────────────────────────
+# ── Client mode ────────────────────────────────────────────────────────────────
 
 def _fmt_bytes(n: int) -> str:
-    """Human-readable byte count for progress display."""
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if n < 1024 or unit == "TB":
             return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
         n /= 1024
 
-def _draw_progress(scanned: int, total_est: int, bytes_so_far: int):
+def _draw_progress(files: int, folders: int, byte_count: int):
     """
-    Render an in-place progress bar on stderr so it does not pollute the
-    pipe/stdout that the caller (bvk_client.sh) reads.
+    Progress bar — no percentage, no estimate.
+    Shows exact counts of files and folders seen so far plus bytes scanned.
 
-    Format:
-      Scanning… [ ████████░░░░░░░░ ]  42 %   1 237 entries   2.3 GB scanned
+    Format:  Scanning…  12,345 files  678 folders  4.2 GB
     """
-    BAR_W = 30
-    pct = min(scanned / total_est, 1.0) if total_est > 0 else 0.0
-    filled = int(BAR_W * pct)
-    bar = "█" * filled + "░" * (BAR_W - filled)
-    pct_str    = f"{pct * 100:5.1f}%"
-    bytes_str  = _fmt_bytes(bytes_so_far)
     line = (
-        f"\r\033[KScanning… [{bar}] {pct_str}"
-        f"   {scanned:,} / ~{total_est:,} entries   {bytes_str} scanned"
+        f"\r\033[KScanning…  {files:,} files  {folders:,} folders"
+        f"  {_fmt_bytes(byte_count)}"
     )
     sys.stderr.write(line)
     sys.stderr.flush()
 
 def _clear_progress():
-    """Erase the progress bar line from stderr."""
     sys.stderr.write("\r\033[K")
     sys.stderr.flush()
 
 def _run_client(argv):
-    """
-    Connect to running daemon and send a command.
-    Prints the response to stdout.
-    Usage: bvk_daemon.py LIST /path 0
-           bvk_daemon.py PING
-           bvk_daemon.py INVALIDATE /path
-
-    During the first scan of a directory the daemon streams
-    PROGRESS:<scanned>:<total_est>:<bytes_so_far> lines before the entry data.
-    The client renders these as a live progress bar on stderr and discards
-    them from the stdout stream so the caller sees clean entry lines only.
-    """
     cmd  = argv[0] if argv else "PING"
     args = argv[1:]
 
@@ -631,21 +640,18 @@ def _run_client(argv):
         print("ERROR:daemon not running", flush=True)
         sys.exit(1)
 
-    # FIX: initialise showed_progress before the try block so that all
-    # except branches can safely reference it even if the exception is
-    # raised before the variable would have been assigned inside the try.
     showed_progress = False
 
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(120.0)  # 2-minute max (first scan of very large tree)
+        s.settimeout(300.0)   # 5-min max for very large first scans
         s.connect(sock_str)
 
         msg = (cmd + "".join(f"\t{a}" for a in args) + "\n").encode()
         s.sendall(msg)
 
-        out = sys.stdout.buffer
-        buf = b""
+        out  = sys.stdout.buffer
+        buf  = b""
         done = False
 
         while not done:
@@ -654,31 +660,27 @@ def _run_client(argv):
                 break
             buf += chunk
 
-            # Process all complete lines buffered so far
             while b"\n" in buf:
-                nl = buf.index(b"\n")
-                line = buf[:nl + 1]
-                buf  = buf[nl + 1:]
-
+                nl      = buf.index(b"\n")
+                line    = buf[:nl + 1]
+                buf     = buf[nl + 1:]
                 decoded = line.decode(errors="replace")
 
                 if decoded.startswith("PROGRESS:"):
-                    # Parse and render progress bar; do NOT forward to stdout
+                    # PROGRESS:<files>:<folders>:<bytes>
                     try:
-                        _, s_str, t_str, b_str = decoded.strip().split(":")
-                        _draw_progress(int(s_str), int(t_str), int(b_str))
+                        parts = decoded.strip().split(":")
+                        _draw_progress(int(parts[1]), int(parts[2]), int(parts[3]))
                         showed_progress = True
                     except Exception:
                         pass
                 else:
-                    # Forward all non-progress lines to stdout
                     if showed_progress:
                         _clear_progress()
                         showed_progress = False
                     out.write(line)
                     out.flush()
 
-                # Stop at terminal markers
                 stripped = decoded.strip()
                 if stripped in ("END", "OK", "PONG", "BYE") or \
                         stripped.startswith("ERROR:"):
@@ -688,23 +690,21 @@ def _run_client(argv):
         if showed_progress:
             _clear_progress()
 
-        # Flush any remaining buffered bytes (shouldn't be any after END)
         if buf:
             out.write(buf)
             out.flush()
 
         s.close()
+
     except socket.timeout:
         if showed_progress:
             _clear_progress()
         print("ERROR:timeout", flush=True)
         sys.exit(1)
+
     except Exception as ex:
         if showed_progress:
             _clear_progress()
-        # FIX: remove the stale socket file so the next invocation can
-        # restart the daemon cleanly instead of hitting ConnectionRefusedError
-        # again on a socket that has no listener behind it.
         try:
             Path(sock_str).unlink(missing_ok=True)
         except Exception:
