@@ -68,9 +68,8 @@ _bvk_prewarm() {
   (
     _bvk_daemon_start 2>/dev/null || return
     # Scan both modes so the cache is ready regardless of show_hidden_files setting
-    # stderr left open so _draw_progress renders to terminal
-    python3 "$_BVK_DAEMON_PY" LIST "$dir" 0 >/dev/null
-    python3 "$_BVK_DAEMON_PY" LIST "$dir" 1 >/dev/null 2>/dev/null
+    python3 "$_BVK_DAEMON_PY" LIST "$dir" 0 >/dev/null 2>&1
+    python3 "$_BVK_DAEMON_PY" LIST "$dir" 1 >/dev/null 2>&1
   ) &
   disown 2>/dev/null
 }
@@ -124,11 +123,26 @@ build_items_with_meta() {
   _bvk_meta_source=""
 
   local line fpath fsize fmtime fchildren ftype
+  local _bvk_prog_shown=false
   while IFS= read -r line; do
     [ "$line" = "END" ] && break
     [ -z "$line" ] && continue
     [[ "$line" == ERROR:* ]] && break
-    [[ "$line" == PROGRESS:* ]] && continue
+
+    if [[ "$line" == PROGRESS:* ]]; then
+      local _sc _te _by
+      IFS=':' read -r _ _sc _te _by <<< "$line"
+      local _fs_b
+      if   (( _by < 1024 ));       then _fs_b="${_by}B"
+      elif (( _by < 1048576 ));    then _fs_b="$(( _by / 1024 ))K"
+      elif (( _by < 1073741824 )); then _fs_b="$(( _by / 1048576 ))M"
+      else                              _fs_b="$(( _by / 1073741824 ))G"
+      fi
+      builtin printf '\r\033[KScanning…  %s files  %s folders  %s' \
+        "$_sc" "$_te" "$_fs_b" >&2
+      _bvk_prog_shown=true
+      continue
+    fi
 
     IFS='|' read -r fpath fsize fmtime fchildren ftype <<< "$line"
     [ -z "$fpath" ] && continue
@@ -143,7 +157,9 @@ build_items_with_meta() {
     item_mtime["$fpath"]="$fmtime"
     item_children["$fpath"]="$fchildren"
     item_icon["$fpath"]="$ftype"
-  done < <(_bvk_query "$p" 2>/dev/null)
+  done < <(_bvk_query "$p")
+
+  $_bvk_prog_shown && builtin printf '\r\033[K' >&2
 
   if [ ${#items[@]} -gt 0 ] || [ -S "$_BVK_SOCK" ]; then
     _meta_loaded=true
