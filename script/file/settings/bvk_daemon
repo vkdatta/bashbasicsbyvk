@@ -171,36 +171,94 @@ def _count_children(path: str) -> int:
     except Exception:
         return -1
 
-def _scan_dir(dirpath: str) -> dict:
+def _recursive_dir_size(path: str) -> int:
+    """
+    Walk an entire directory tree and return the true total byte size of all
+    contained files (follows symlinks for files, skips symlinks to dirs to
+    avoid loops).  Errors on individual entries are silently skipped.
+    """
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=True):
+                        total += entry.stat(follow_symlinks=True).st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        # Only recurse into real dirs, not symlinked dirs,
+                        # to avoid loops.
+                        total += _recursive_dir_size(entry.path)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return total
+
+def _estimate_entry_count(dirpath: str) -> int:
+    """
+    Quick shallow estimate of how many filesystem entries exist under dirpath.
+    Used only for progress-bar denominator; accuracy not critical.
+    Each immediate child directory is assumed to contain ~50 entries on average.
+    """
+    try:
+        immediate = list(os.scandir(dirpath))
+    except Exception:
+        return 1
+    files = sum(1 for e in immediate if not e.is_dir(follow_symlinks=False))
+    dirs  = sum(1 for e in immediate if e.is_dir(follow_symlinks=False))
+    return files + dirs * 51  # 1 for the dir itself + 50 assumed children
+
+def _scan_dir(dirpath: str, progress_cb=None) -> dict:
     """
     Full directory scan → cache data structure.
     Called once per directory; result cached to disk.
+
+    progress_cb(scanned: int, total_est: int, bytes_so_far: int)
+        Optional callable invoked after each top-level entry is processed.
+        Use it to stream progress to the client during a first scan.
     """
     try:
         dir_mtime = os.stat(dirpath).st_mtime
     except Exception:
         dir_mtime = 0.0
 
+    # Pre-estimate total for progress bar (fast, non-recursive)
+    total_est = max(1, _estimate_entry_count(dirpath))
+
     entries = []
+    scanned = 0
+    bytes_so_far = 0
     try:
         with os.scandir(dirpath) as it:
             for e in it:
                 try:
                     st = e.stat(follow_symlinks=True)
                     is_dir = e.is_dir(follow_symlinks=True)
-                    children = _count_children(e.path) if is_dir else -1
+                    if is_dir:
+                        # Compute true recursive size instead of raw inode size
+                        size = _recursive_dir_size(e.path)
+                        children = _count_children(e.path)
+                    else:
+                        size = st.st_size
+                        children = -1
                     icon = _icon_type(e.name, is_dir, st.st_mode)
                     entries.append({
                         "p": e.path,
                         "n": e.name,
                         "d": is_dir,
-                        "s": st.st_size,          # real size for files; inode entry (~4K) for dirs
+                        "s": size,           # recursive total for dirs, real size for files
                         "m": int(st.st_mtime),
                         "c": children,
                         "t": icon,
                     })
+                    scanned += 1
+                    bytes_so_far += size if size > 0 else 0
+                    if progress_cb:
+                        progress_cb(scanned, total_est, bytes_so_far)
                 except Exception:
-                    pass  # skip unreadable entries
+                    scanned += 1
+                    if progress_cb:
+                        progress_cb(scanned, total_est, bytes_so_far)
     except PermissionError:
         pass
     except Exception as ex:
@@ -305,12 +363,15 @@ def _scan_lock(dirpath: str) -> threading.Lock:
 
 # ── Core: get directory data (cache-first, rebuild on miss/dirty) ──────────────
 
-def _get_dir_data(dirpath: str) -> dict:
+def _get_dir_data(dirpath: str, progress_cb=None) -> dict:
     """
     Return directory data. Algorithm:
       1. Dirty (inotify) → invalidate cache, rebuild
       2. Cache hit with valid dir-mtime → return immediately
       3. Cache miss or stale mtime → rebuild (with per-dir lock)
+
+    progress_cb is forwarded to _scan_dir only when a real scan is performed
+    (cache miss / dirty).  On a cache hit it is never called.
     """
     is_dirty = dirpath in _dirty
     if is_dirty:
@@ -344,7 +405,7 @@ def _get_dir_data(dirpath: str) -> dict:
                     pass
 
         _log(f"scanning {dirpath}")
-        data = _scan_dir(dirpath)
+        data = _scan_dir(dirpath, progress_cb=progress_cb)
         _cache_save(dirpath, data)
         _inotify_add(dirpath)
         return data
@@ -356,7 +417,26 @@ def _handle_list(dirpath: str, show_hidden: bool, wfile):
         wfile.write(b"ERROR:not a directory\nEND\n")
         return
 
-    data = _get_dir_data(dirpath)
+    # Progress callback: emits "PROGRESS:<scanned>:<total_est>:<bytes_so_far>\n"
+    # lines to the client while a first-time (or dirty) scan is in progress.
+    # The client can parse and display these before the final entry lines arrive.
+    # Throttled to at most one update per 0.1 s to avoid flooding the socket.
+    _last_progress_t = [0.0]
+
+    def _progress(scanned: int, total_est: int, bytes_so_far: int):
+        now = time.monotonic()
+        if now - _last_progress_t[0] < 0.1:
+            return
+        _last_progress_t[0] = now
+        try:
+            wfile.write(
+                f"PROGRESS:{scanned}:{total_est}:{bytes_so_far}\n".encode()
+            )
+            wfile.flush()
+        except Exception:
+            pass  # client may have disconnected; scan still completes
+
+    data = _get_dir_data(dirpath, progress_cb=_progress)
     entries = data.get("entries", [])
 
     out = []
@@ -497,6 +577,39 @@ def _run_daemon():
 
 # ── Client mode (called from bash) ────────────────────────────────────────────
 
+def _fmt_bytes(n: int) -> str:
+    """Human-readable byte count for progress display."""
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
+        n /= 1024
+
+def _draw_progress(scanned: int, total_est: int, bytes_so_far: int):
+    """
+    Render an in-place progress bar on stderr so it does not pollute the
+    pipe/stdout that the caller (bvk_client.sh) reads.
+
+    Format:
+      Scanning… [ ████████░░░░░░░░ ]  42 %   1 237 entries   2.3 GB scanned
+    """
+    BAR_W = 30
+    pct = min(scanned / total_est, 1.0) if total_est > 0 else 0.0
+    filled = int(BAR_W * pct)
+    bar = "█" * filled + "░" * (BAR_W - filled)
+    pct_str    = f"{pct * 100:5.1f}%"
+    bytes_str  = _fmt_bytes(bytes_so_far)
+    line = (
+        f"\r\033[KScanning… [{bar}] {pct_str}"
+        f"   {scanned:,} / ~{total_est:,} entries   {bytes_str} scanned"
+    )
+    sys.stderr.write(line)
+    sys.stderr.flush()
+
+def _clear_progress():
+    """Erase the progress bar line from stderr."""
+    sys.stderr.write("\r\033[K")
+    sys.stderr.flush()
+
 def _run_client(argv):
     """
     Connect to running daemon and send a command.
@@ -504,6 +617,11 @@ def _run_client(argv):
     Usage: bvk_daemon.py LIST /path 0
            bvk_daemon.py PING
            bvk_daemon.py INVALIDATE /path
+
+    During the first scan of a directory the daemon streams
+    PROGRESS:<scanned>:<total_est>:<bytes_so_far> lines before the entry data.
+    The client renders these as a live progress bar on stderr and discards
+    them from the stdout stream so the caller sees clean entry lines only.
     """
     cmd  = argv[0] if argv else "PING"
     args = argv[1:]
@@ -515,29 +633,71 @@ def _run_client(argv):
 
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(30.0)  # 30s max (first scan of huge dir)
+        s.settimeout(120.0)  # 2-minute max (first scan of very large tree)
         s.connect(sock_str)
 
         msg = (cmd + "".join(f"\t{a}" for a in args) + "\n").encode()
         s.sendall(msg)
 
-        # Stream response directly to stdout
         out = sys.stdout.buffer
-        while True:
+        buf = b""
+        showed_progress = False
+        done = False
+
+        while not done:
             chunk = s.recv(65536)
             if not chunk:
                 break
-            out.write(chunk)
+            buf += chunk
+
+            # Process all complete lines buffered so far
+            while b"\n" in buf:
+                nl = buf.index(b"\n")
+                line = buf[:nl + 1]
+                buf  = buf[nl + 1:]
+
+                decoded = line.decode(errors="replace")
+
+                if decoded.startswith("PROGRESS:"):
+                    # Parse and render progress bar; do NOT forward to stdout
+                    try:
+                        _, s_str, t_str, b_str = decoded.strip().split(":")
+                        _draw_progress(int(s_str), int(t_str), int(b_str))
+                        showed_progress = True
+                    except Exception:
+                        pass
+                else:
+                    # Forward all non-progress lines to stdout
+                    if showed_progress:
+                        _clear_progress()
+                        showed_progress = False
+                    out.write(line)
+                    out.flush()
+
+                # Stop at terminal markers
+                stripped = decoded.strip()
+                if stripped in ("END", "OK", "PONG", "BYE") or \
+                        stripped.startswith("ERROR:"):
+                    done = True
+                    break
+
+        if showed_progress:
+            _clear_progress()
+
+        # Flush any remaining buffered bytes (shouldn't be any after END)
+        if buf:
+            out.write(buf)
             out.flush()
-            # Stop after terminal marker
-            if chunk.endswith(b"END\n") or chunk.endswith(b"OK\n") \
-               or chunk.endswith(b"PONG\n") or chunk.endswith(b"BYE\n"):
-                break
+
         s.close()
     except socket.timeout:
+        if showed_progress:
+            _clear_progress()
         print("ERROR:timeout", flush=True)
         sys.exit(1)
     except Exception as ex:
+        if showed_progress:
+            _clear_progress()
         print(f"ERROR:{ex}", flush=True)
         sys.exit(1)
 
