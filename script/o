@@ -463,12 +463,7 @@ _menu_body_flat() {
 }
 
 _menu_footer_lines() {
-  builtin printf "\nu) Up   cd) Change directory   t) Transfer\nd) Delete   c) Create   f) Find    r) Rename\nq/h) Quit/Home   s) Settings   x) Organise\np) Print (last run log)\n-h) Help   -u) Upgrade\n"
-  if [ -n "$_filter_query" ]; then
-    echo "🔍 Filter active: ${_filter_query^^}*  — type more chars to narrow, ⌫ to widen, ⌫⌫ to exit"
-  else
-    echo "Type _<text> to filter by name prefix  (e.g. _de  or  __thisisafile for _-prefixed names)"
-  fi
+  builtin printf "\nu) Up   cd) Change directory   t) Transfer\nd) Delete   c) Create   f) Find    r) Rename\nq/h) Quit/Home   s) Settings   x) Organise\n-h) Help   -u) Upgrade\n"
   [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press forceshow to enable grouped display"
@@ -902,7 +897,6 @@ case "$choice" in
     m)                      map_directory ;;
     kl)                     kill -9 -1 ;;
     i)                      infinity_stones_menu ;;
-    p)                      print_log_action ;;
     -u)                     bash _3bvk_upgrade_core ;;
     d-)                     handle_shortpath_dispatch ;;
     v-)                     handle_shortpath_view ;;
