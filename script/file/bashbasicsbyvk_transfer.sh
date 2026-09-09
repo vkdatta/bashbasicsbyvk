@@ -112,7 +112,7 @@ _view_selections_menu() {
       echo "📋 Current selections (${#_sel_ref[@]}):"
       local i=1
       for s in "${_sel_ref[@]}"; do
-        printf "  %2d) %s\n" "$i" "$(basename "$s")"
+        printf "  %2d) %s\n" "$i" "${s##*/}"
         i=$((i+1))
       done
     fi
@@ -327,7 +327,9 @@ local_navigator() {
             [[ "$raw_input" =~ ^[sS] ]] && is_select=true
 
             local cleaned_input
-            cleaned_input=$(printf '%s' "$raw_input" | sed 's/[Ss]\([0-9]\)/\1/g; s/^[Ss]//')
+            # Strip leading s/S prefix, then remove any s/S immediately before a digit
+            cleaned_input="${raw_input#[sS]}"
+            cleaned_input=$(python3 -c "import re,sys; sys.stdout.write(re.sub(r'[sS](?=[0-9])', '', sys.argv[1]))" "$cleaned_input")
 
             [[ "$cleaned_input" =~ [,\-] ]] && is_select=true
 
@@ -363,10 +365,10 @@ local_navigator() {
                     nav_force_show=false
                   else
                     if _in_selection "$sel" "${nav_selected_items[@]}"; then
-                      echo "⚠️  Already selected: $(basename "$sel") — skipped"
+                      echo "⚠️  Already selected: ${sel##*/} — skipped"
                     else
                       nav_selected_items+=("$sel")
-                      echo "➕ Selected: $(basename "$sel") — total: ${#nav_selected_items[@]}  (v to review)"
+                      echo "➕ Selected: ${sel##*/} — total: ${#nav_selected_items[@]}  (v to review)"
                     fi
                   fi
                 else
@@ -499,7 +501,8 @@ gcloud_navigator() {
           [[ "$raw_input" =~ ^[sS] ]] && is_select=true
 
           local cleaned_input
-          cleaned_input=$(printf '%s' "$raw_input" | sed 's/[Ss]\([0-9]\)/\1/g; s/^[Ss]//')
+          cleaned_input="${raw_input#[sS]}"
+          cleaned_input=$(python3 -c "import re,sys; sys.stdout.write(re.sub(r'[sS](?=[0-9])', '', sys.argv[1]))" "$cleaned_input")
 
           [[ "$cleaned_input" =~ [,\-] ]] && is_select=true
 
@@ -573,14 +576,21 @@ perform_copy() {
   local dest="$1"
   shift
   local src_items=("$@")
+  local n=${#src_items[@]} i=0 failed=0
   local item err
+
   for item in "${src_items[@]}"; do
+    i=$((i+1))
+    printf "\r  %d/%d Copying…    " "$i" "$n" >&2
+
     if [ ! -e "$item" ]; then
-      echo "  ⚠️  Skipped (not found): $item"
+      printf "\n  ⚠️  Skipped (not found): %s\n" "$item" >&2
+      failed=$((failed+1))
       continue
     fi
+
     local base name ext count newbase
-    base=$(basename -- "$item")
+    base="${item##*/}"
     name="${base%.*}"
     ext="${base##*.}"
     [[ "$base" == "$ext" ]] && ext=""
@@ -594,39 +604,70 @@ perform_copy() {
       fi
       count=$((count+1))
     done
+
     if err=$(cp -r -- "$item" "$dest/$newbase" 2>&1); then
-      echo "  ✅ Copied: $(basename -- "$item") → $dest/$newbase"
+      : # success — progress line already shows x/n
     else
-      echo "  ❌ Failed: $(basename -- "$item") — ${err:-cp returned $?}"
+      printf "\n  ❌ Failed: %s — %s\n" "$base" "${err:-cp returned $?}" >&2
+      failed=$((failed+1))
     fi
   done
+
+  printf "\r%-60s\r" "" >&2
+  local succeeded=$(( n - failed ))
+  if [ "$failed" -eq 0 ]; then
+    echo "  ✅ Copied $succeeded/$n item(s) → $dest"
+  else
+    echo "  ⚠️  Copied $succeeded/$n item(s) → $dest — $failed failed (see above)"
+  fi
 }
 
 perform_move() {
   local dest="$1"
   shift
   local src_items=("$@")
+  local n=${#src_items[@]} i=0 failed=0
   local item err
+
   for item in "${src_items[@]}"; do
+    i=$((i+1))
+    printf "\r  %d/%d Moving…    " "$i" "$n" >&2
+
     if [ ! -e "$item" ]; then
-      echo "  ⚠️  Skipped (not found): $item"
+      printf "\n  ⚠️  Skipped (not found): %s\n" "$item" >&2
+      failed=$((failed+1))
       continue
     fi
+
     if err=$(mv -- "$item" "$dest/" 2>&1); then
-      echo "  ✅ Moved: $(basename -- "$item") → $dest/"
+      : # success
     else
-      echo "  ❌ Failed: $(basename -- "$item") — ${err:-mv returned $?}"
+      printf "\n  ❌ Failed: %s — %s\n" "${item##*/}" "${err:-mv returned $?}" >&2
+      failed=$((failed+1))
     fi
   done
+
+  printf "\r%-60s\r" "" >&2
+  local succeeded=$(( n - failed ))
+  if [ "$failed" -eq 0 ]; then
+    echo "  ✅ Moved $succeeded/$n item(s) → $dest"
+  else
+    echo "  ⚠️  Moved $succeeded/$n item(s) → $dest — $failed failed (see above)"
+  fi
 }
 
 _shortcut_read_field() {
-  local sc_file="$1"
-  local field="$2"
+  local sc_file="$1" field="$2"
   [ ! -f "$sc_file" ] && return 1
-  local val
-  val=$(grep -m1 "^${field}=" "$sc_file" 2>/dev/null | cut -d'=' -f2-)
-  printf '%s' "$val"
+  # Python heredoc: read file once, find field= line — no grep|cut fork pair
+  python3 - "$field" < "$sc_file" <<'PYEOF'
+import sys
+field = sys.argv[1] + '='
+for line in sys.stdin:
+    if line.startswith(field):
+        sys.stdout.write(line[len(field):].rstrip('\n'))
+        break
+PYEOF
 }
 
 _shortcut_write() {
@@ -645,12 +686,16 @@ _shortcut_write() {
     count=$((count+1))
   done
 
-  {
-    printf 'SHORTCUT_TARGET=%s\n' "$target"
-    printf 'SHORTCUT_TYPE=%s\n'   "$sc_type"
-    printf 'SHORTCUT_NAME=%s\n'   "$display_name"
-    printf 'SHORTCUT_CREATED=%s\n' "$(date +%s)"
-  } > "$sc_path"
+  # Python heredoc: write all fields atomically + get epoch without date fork
+  python3 - "$sc_path" "$target" "$sc_type" "$display_name" <<'PYEOF'
+import sys, time
+path, target, sc_type, name = sys.argv[1:5]
+with open(path, 'w') as f:
+    f.write(f'SHORTCUT_TARGET={target}\n')
+    f.write(f'SHORTCUT_TYPE={sc_type}\n')
+    f.write(f'SHORTCUT_NAME={name}\n')
+    f.write(f'SHORTCUT_CREATED={int(time.time())}\n')
+PYEOF
 
   printf '%s' "$sc_path"
 }
@@ -681,9 +726,16 @@ perform_shortcut() {
     return 1
   fi
 
+  local n=${#src_items[@]} i=0 failed=0
+  local item
+
   for item in "${src_items[@]}"; do
+    i=$((i+1))
+    printf "\r  %d/%d Linking…    " "$i" "$n" >&2
+
     if [ ! -e "$item" ]; then
-      echo "  ⚠️  Skipped (not found): $item"
+      printf "\n  ⚠️  Skipped (not found): %s\n" "$item" >&2
+      failed=$((failed+1))
       continue
     fi
 
@@ -691,19 +743,27 @@ perform_shortcut() {
     if [ -d "$item" ]; then
       abs_target=$(cd -- "$item" && pwd)
     else
-      abs_target=$(cd -- "$(dirname "$item")" && pwd)/$(basename -- "$item")
+      abs_target=$(cd -- "${item%/*}" && pwd)/${item##*/}
     fi
 
     local display_name
-    display_name=$(basename -- "$abs_target")
+    display_name="${abs_target##*/}"
 
     local sc_path
     sc_path=$(_shortcut_write "$dest" "$abs_target" "$display_name")
-
-    local sc_icon
-    [ -d "$item" ] && sc_icon="🔑" || sc_icon="🗝️"
-    echo "  ✅ Shortcut created: ${sc_icon} ${display_name} → $dest/$(basename "$sc_path")"
+    if [ $? -ne 0 ] || [ -z "$sc_path" ]; then
+      printf "\n  ❌ Failed to create shortcut: %s\n" "$display_name" >&2
+      failed=$((failed+1))
+    fi
   done
+
+  printf "\r%-60s\r" "" >&2
+  local succeeded=$(( n - failed ))
+  if [ "$failed" -eq 0 ]; then
+    echo "  ✅ Linked $succeeded/$n shortcut(s) → $dest"
+  else
+    echo "  ⚠️  Linked $succeeded/$n shortcut(s) → $dest — $failed failed (see above)"
+  fi
 }
 
 _get_mime_type() {
@@ -1021,7 +1081,7 @@ MAPPER_EOF
 
       for item in "${selected_items[@]}"; do
         local base
-        base=$(basename "$item")
+        base="${item##*/}"
         local is_dir=false
         [ -d "$item" ] && is_dir=true
 
@@ -1067,7 +1127,7 @@ MAPPER_EOF
       echo "☁️  Transferring to GCloud Shell..."
       for item in "${selected_items[@]}"; do
         local base
-        base=$(basename "$item")
+        base="${item##*/}"
         echo "📤 Sending $base → GCloud:$final_dest/"
         gcloud cloud-shell scp --recurse "localhost:$item" "cloudshell:$final_dest/"
         if [ $? -eq 0 ] && [ "$t_op" == "move" ]; then
@@ -1081,7 +1141,7 @@ MAPPER_EOF
       echo "☁️  Transferring from GCloud Shell to local..."
       for remote_item in "${gcloud_nav_selected_items[@]}"; do
         local base
-        base=$(basename "$remote_item")
+        base="${remote_item##*/}"
         echo "📥 Pulling $base → $final_dest/"
         gcloud cloud-shell scp --recurse "cloudshell:$remote_item" "localhost:$final_dest/"
         if [ $? -eq 0 ] && [ "$t_op" == "move" ]; then

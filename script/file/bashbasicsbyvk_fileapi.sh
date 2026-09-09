@@ -38,16 +38,18 @@ _bb_get_credentials() {
 
 _bb_json_get() {
   local json="$1" field="$2"
-  node -e '
-    let d = "";
-    process.stdin.on("data", c => d += c);
-    process.stdin.on("end", () => {
-      try {
-        const o = JSON.parse(d);
-        process.stdout.write(o[process.argv[1]] !== undefined ? String(o[process.argv[1]]) : "");
-      } catch (e) {}
-    });
-  ' "$field" <<< "$json"
+  # Python heredoc: parse JSON and extract field — no node spawn needed
+  python3 - "$field" <<'PYEOF' <<< "$json"
+import sys, json as _J
+_f = sys.argv[1]
+try:
+    _o = _J.loads(sys.stdin.read())
+    _v = _o.get(_f)
+    if _v is not None:
+        sys.stdout.write(str(_v))
+except Exception:
+    pass
+PYEOF
 }
 
 _bb_fail_reason() {
@@ -58,13 +60,20 @@ _bb_fail_reason() {
     printf '%s' "$reason"
     return
   fi
+  # Python heredoc: collapse whitespace + truncate — replaces tr|sed fork chain
   local trimmed
-  trimmed=$(printf '%s' "$body" | tr '\n\r' '  ' | sed 's/  */ /g; s/^ *//; s/ *$//')
-  if [ -n "$trimmed" ]; then
-    printf 'HTTP %s: %s' "$http_status" "${trimmed:0:300}"
-  else
-    printf 'Request failed (HTTP %s)' "$http_status"
-  fi
+  trimmed=$(python3 - "$http_status" <<'PYEOF' <<< "$body"
+import sys
+body = sys.stdin.read()
+status = sys.argv[1]
+t = ' '.join(body.split())[:300]
+if t:
+    sys.stdout.write(f'HTTP {status}: {t}')
+else:
+    sys.stdout.write(f'Request failed (HTTP {status})')
+PYEOF
+)
+  printf '%s' "$trimmed"
 }
 
 _bb_authed_put() {
@@ -593,25 +602,34 @@ _up_do_multipart_upload() {
 
   echo "🔎 Scanning selection..."
   local listfile; listfile=$(mktemp)
-  local p base file
-  # Build the file list WITHOUT forking a `stat` per file. For a 50k-file tree
-  # that per-file subprocess was why nothing printed for minutes. The whole
-  # loop redirects to the list once (one open, not one per line), and the exact
-  # byte total is computed by the encryption pass instead.
-  {
-    for p in "${paths[@]}"; do
-      if [ -d "$p" ]; then
-        base=$(basename -- "$p")
-        while IFS= read -r -d '' file; do
-          printf '%s\t%s\n' "${base}/${file#$p/}" "$file"
-        done < <(find "$p" -type f -print0)
-      elif [ -f "$p" ]; then
-        printf '%s\t%s\n' "$(basename -- "$p")" "$p"
-      else
-        echo "  ⚠️  Skipping missing item: $p" >&2
-      fi
-    done
-  } >> "$listfile"
+  # Python heredoc: walk dirs + emit relpath<TAB>abspath lines, count in one pass.
+  # Avoids per-file basename/find subshell forks and the separate wc -l spawn.
+  local file_count
+  file_count=$(printf '%s\x00' "${paths[@]}" | python3 - "$listfile" <<'PYEOF'
+import sys, os
+raw = sys.stdin.buffer.read()
+paths = [e.decode() for e in raw.split(b'\x00') if e]
+listfile = sys.argv[1]
+count = 0
+with open(listfile, 'a') as out:
+    for p in paths:
+        if os.path.isdir(p):
+            base = os.path.basename(p.rstrip('/'))
+            for root, dirs, files in os.walk(p):
+                dirs.sort()
+                for fname in sorted(files):
+                    abspath = os.path.join(root, fname)
+                    relpath = base + '/' + os.path.relpath(abspath, p)
+                    out.write(f'{relpath}\t{abspath}\n')
+                    count += 1
+        elif os.path.isfile(p):
+            out.write(f'{os.path.basename(p)}\t{p}\n')
+            count += 1
+        else:
+            sys.stderr.write(f'  ⚠️  Skipping missing item: {p}\n')
+print(count)
+PYEOF
+)
 
   if [ ! -s "$listfile" ]; then
     echo "❌ No valid files found in selection"
@@ -619,7 +637,6 @@ _up_do_multipart_upload() {
     return 1
   fi
 
-  local file_count; file_count=$(wc -l < "$listfile" | tr -d ' ')
   if [ "$file_count" -gt 2000 ]; then
     echo "⏳ $file_count files — this is packed one blob per file, so it will take a while."
   fi

@@ -25,38 +25,78 @@ _sp_load() {
   local file="$2"
   _sp_out=()
   [ -f "$file" ] || return 0
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    _sp_out+=("$line")
-  done < "$file"
+  # Python heredoc: read all non-blank lines at once, NUL-delimited for safety
+  local raw
+  raw=$(python3 - "$file" <<'PYEOF'
+import sys, os
+p = sys.argv[1]
+if os.path.isfile(p):
+    with open(p) as f:
+        lines = [l.rstrip('\n') for l in f if l.strip()]
+    print('\x00'.join(lines), end='\x00' if lines else '')
+PYEOF
+)
+  [ -z "$raw" ] && return 0
+  IFS=$'\x00' read -r -d '' -a _sp_out <<< "$raw" || true
 }
 
 _sp_save() {
   local -n _sp_in="$1"
   local file="$2"
-  : > "$file"
-  local entry
-  for entry in "${_sp_in[@]}"; do
-    [ -n "$entry" ] && printf '%s\n' "$entry" >> "$file"
-  done
+  # Python heredoc: join array via NUL on stdin, write non-blank lines atomically
+  local joined
+  printf '%s\x00' "${_sp_in[@]}" | python3 - "$file" <<'PYEOF'
+import sys, os
+dest = sys.argv[1]
+data = sys.stdin.buffer.read()
+lines = [e.decode() for e in data.split(b'\x00') if e.strip()]
+tmp = dest + '.tmp'
+with open(tmp, 'w') as f:
+    f.write('\n'.join(lines) + ('\n' if lines else ''))
+os.replace(tmp, dest)
+PYEOF
 }
 
 _sp_append() {
   local file="$1"; shift
-  local -a existing=()
-  _sp_load existing "$file"
-  local added=0 dupes=0
-  local p
-  for p in "$@"; do
-    if _in_selection "$p" "${existing[@]}"; then
-      dupes=$((dupes+1))
-    else
-      existing+=("$p")
-      added=$((added+1))
-    fi
-  done
-  _sp_save existing "$file"
-  echo "$added|$dupes|${#existing[@]}"
+  # Python heredoc: read existing + new paths (NUL-separated), dedup preserving order, write back
+  # Outputs: added|dupes|total
+  local result
+  result=$(
+    {
+      # existing lines from file
+      [ -f "$file" ] && cat "$file"
+      # new candidates via NUL so paths with newlines are safe
+      printf '\x00NEW_BOUNDARY\x00'
+      printf '%s\x00' "$@"
+    } | python3 - "$file" <<'PYEOF'
+import sys, os
+data = sys.stdin.buffer.read()
+sep = b'\x00NEW_BOUNDARY\x00'
+before, _, after = data.partition(sep)
+
+existing = [l for l in before.decode().splitlines() if l.strip()]
+new_paths = [e.decode() for e in after.split(b'\x00') if e.strip()]
+
+seen = set(existing)
+added = 0
+dupes = 0
+for p in new_paths:
+    if p in seen:
+        dupes += 1
+    else:
+        existing.append(p)
+        seen.add(p)
+        added += 1
+
+tmp = sys.argv[1] + '.tmp'
+with open(tmp, 'w') as f:
+    f.write('\n'.join(existing) + ('\n' if existing else ''))
+os.replace(tmp, sys.argv[1])
+print(f"{added}|{dupes}|{len(existing)}")
+PYEOF
+  )
+  echo "$result"
 }
 
 _sp_resolve_itemlist() {
@@ -144,17 +184,43 @@ _sp_apply_buffer() {
   _sp_load list "$file"
   [ ${#list[@]} -eq 0 ] && return 0
 
+  # Batch existence-check via Python: partition live vs missing in one process
   local -a live=()
-  local missing=0
-  local p
-  for p in "${list[@]}"; do
-    if [ -e "$p" ]; then
-      live+=("$p")
-    else
-      missing=$((missing+1))
-      echo "  ⚠️  Skipping missing item (no longer exists): $p"
-    fi
-  done
+  local missing_summary
+  {
+    IFS=$'\x00' read -r -d '' -a live || true
+    read -r missing_summary
+  } < <(
+    printf '%s\x00' "${list[@]}" | python3 <<'PYEOF'
+import sys, os
+paths = [e for e in sys.stdin.buffer.read().split(b'\x00') if e]
+live = []
+missing = []
+for p in paths:
+    s = p.decode()
+    if os.path.exists(s):
+        live.append(p)
+    else:
+        missing.append(s)
+sys.stdout.buffer.write(b'\x00'.join(live))
+if live:
+    sys.stdout.buffer.write(b'\x00')
+sys.stdout.buffer.write(b'\n')
+sys.stdout.write(f"MISSING:{len(missing)}:{'|'.join(missing)}\n")
+PYEOF
+  )
+
+  # Report missing items individually (these no longer exist on disk)
+  local missing_count="${missing_summary#MISSING:}"
+  missing_count="${missing_count%%:*}"
+  if [ "${missing_count:-0}" -gt 0 ]; then
+    local missing_paths="${missing_summary#MISSING:*:}"
+    IFS='|' read -ra _mp_arr <<< "$missing_paths"
+    local mp
+    for mp in "${_mp_arr[@]}"; do
+      [ -n "$mp" ] && echo "  ⚠️  Skipping missing item (no longer exists): $mp"
+    done
+  fi
 
   if [ ${#live[@]} -eq 0 ]; then
     echo "ℹ️  $(_sp_op_label "$kind") buffer had no valid items to apply"
@@ -163,8 +229,8 @@ _sp_apply_buffer() {
 
   echo "⚙️  Applying $(_sp_op_label "$kind") buffer (${#live[@]} item(s)) → $dest"
   case "$kind" in
-    cp) perform_copy "$dest" "${live[@]}" ;;
-    mv) perform_move "$dest" "${live[@]}" ;;
+    cp) perform_copy     "$dest" "${live[@]}" ;;
+    mv) perform_move     "$dest" "${live[@]}" ;;
     sc) perform_shortcut "$dest" "${live[@]}" ;;
   esac
 }
@@ -222,14 +288,18 @@ _sp_view_one_buffer() {
     if [ ${#list[@]} -eq 0 ]; then
       echo "  (empty)"
     else
-      local i=1
-      local p
-      for p in "${list[@]}"; do
-        local exists_tag=""
-        [ ! -e "$p" ] && exists_tag="  ⚠️ missing"
-        printf "  %2d) %s%s\n" "$i" "$p" "$exists_tag"
-        i=$((i+1))
-      done
+      # Batch existence-check via Python: outputs "<idx>|<exists>|<path>" per line
+      local view_lines
+      view_lines=$(
+        printf '%s\x00' "${list[@]}" | python3 <<'PYEOF'
+import sys, os
+items = [e.decode() for e in sys.stdin.buffer.read().split(b'\x00') if e]
+for i, p in enumerate(items, 1):
+    tag = '' if os.path.exists(p) else '  ⚠️ missing'
+    print(f"  {i:2d}) {p}{tag}")
+PYEOF
+      )
+      echo "$view_lines"
     fi
 
     echo
