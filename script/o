@@ -908,17 +908,16 @@ case "$choice" in
     z-*)                    handle_compress_items "$choice" ;;
     clear)                  hash -r ;;
     _*)
-      # User typed _<query> and pressed Enter without a number.
-      # This is a no-op — the filter is already applied live and the
-      # viewport shows the filtered list. Just loop back and redraw.
-      # (To exit the filter, backspace back to bare "_" then one more backspace.)
+      # Filter
       ;;
     disk)                   df -h ;;
     ram)                    free -h ;;
     rf)                     handle_refresh ;;
-    scr-sync)               handle_scr_sync ;;  
+    scr-sync)               handle_scr_sync ;;
+    sast)                   bashbasicsbyvk_sast;;
     *)                      handle_selection "$choice" ;;
    
 esac
 
 done
+
