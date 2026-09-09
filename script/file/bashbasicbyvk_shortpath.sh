@@ -25,19 +25,21 @@ _sp_load() {
   local file="$2"
   _sp_out=()
   [ -f "$file" ] || return 0
-  # Python heredoc: read all non-blank lines at once, NUL-delimited for safety
-  local raw
-  raw=$(python3 - "$file" <<'PYEOF'
+  # Python heredoc: read all non-blank lines at once, NUL-delimited for safety.
+  # Use mapfile + process substitution — $() strips NUL bytes and emits a
+  # "ignored null byte in input" warning; the herestring <<< then receives a
+  # garbled single string instead of NUL-delimited tokens.
+  mapfile -d $'\0' -t _sp_out < <(python3 - "$file" <<'PYEOF'
 import sys, os
 p = sys.argv[1]
 if os.path.isfile(p):
     with open(p) as f:
         lines = [l.rstrip('\n') for l in f if l.strip()]
-    print('\x00'.join(lines), end='\x00' if lines else '')
+    sys.stdout.buffer.write(b'\x00'.join(l.encode() for l in lines))
+    if lines:
+        sys.stdout.buffer.write(b'\x00')
 PYEOF
 )
-  [ -z "$raw" ] && return 0
-  IFS=$'\x00' read -r -d '' -a _sp_out <<< "$raw" || true
 }
 
 _sp_save() {
@@ -172,12 +174,17 @@ _sp_apply_buffer() {
   _sp_load list "$file"
   [ ${#list[@]} -eq 0 ] && return 0
 
-  # Batch existence-check via Python: partition live vs missing in one process
+  # Batch existence-check via Python: partition live vs missing in one process.
+  # Protocol: Python emits the MISSING summary line first (newline-terminated),
+  # then the NUL-delimited live paths.  This order lets bash read the summary
+  # with a plain `read -r` before mapfile consumes the rest — the previous
+  # order (NUL block first, then MISSING line) caused mapfile to slurp the
+  # MISSING line into the live array as a spurious extra element.
   local -a live=()
   local missing_summary
   {
-    IFS=$'\x00' read -r -d '' -a live || true
     read -r missing_summary
+    mapfile -d $'\0' -t live
   } < <(
     printf '%s\x00' "${list[@]}" | python3 -c '
 import sys, os
@@ -186,11 +193,10 @@ live, missing = [], []
 for p in paths:
     s = p.decode()
     (live if os.path.exists(s) else missing).append(s)
+sys.stdout.write(f"MISSING:{len(missing)}:{chr(124).join(missing)}\n")
 sys.stdout.buffer.write(b"\x00".join(s.encode() for s in live))
 if live:
     sys.stdout.buffer.write(b"\x00")
-sys.stdout.buffer.write(b"\n")
-sys.stdout.write(f"MISSING:{len(missing)}:{chr(124).join(missing)}\n")
 '
   )
 
