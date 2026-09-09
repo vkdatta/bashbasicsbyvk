@@ -15,6 +15,7 @@ source "bashbasicsbyvk_help.sh"
 source "bashbasicsbyvk_viewport.sh"
 source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_shortcut_registry.sh"
+source "bashbasicsbyvk_switch.sh"
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -915,6 +916,7 @@ case "$choice" in
     rf)                     handle_refresh ;;
     scr-sync)               handle_scr_sync ;;
     sast)                   bashbasicsbyvk_sast;;
+    sw)                     switch_menu ;;
     *)                      handle_selection "$choice" ;;
    
 esac
