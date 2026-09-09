@@ -312,9 +312,7 @@ build_imaginary_groups() {
 # kept for any caller that still wants the old print-immediately behaviour
 display_imaginary_groups() {
   build_imaginary_groups "$1" "$2" "$3"
-  echo "$_imag_banner"
-  local l
-  for l in "${imaginary_lines[@]}"; do echo "$l"; done
+  builtin printf "%s\n" "$_imag_banner" "${imaginary_lines[@]}"
 }
 
 handle_force_show() {
@@ -328,9 +326,7 @@ handle_force_show() {
 }
 
 handle_create() {
-  echo "Create:"
-  echo "1) New folders"
-  echo "2) New files"
+  builtin printf "Create:\n1) New folders\n2) New files\n"
   read -p "Choice: " cr
   [[ "$cr" == "1" ]] && create_dirs
   [[ "$cr" == "2" ]] && create_files
@@ -338,15 +334,7 @@ handle_create() {
 
 
 infinity_stones_menu() {
-  echo
-  echo "💎 Infinity Stones"
-  echo "1) Extract Tables and Links from Web"
-  echo "2) JavaScript Audit"
-  echo "3) Python Audit"
-  echo "4) Git Push"
-  echo "5) Generate SQL"
-  echo "6) LocalHost"
-  echo "q) Exit"
+  builtin printf "\n💎 Infinity Stones\n1) Extract Tables and Links from Web\n2) JavaScript Audit\n3) Python Audit\n4) Git Push\n5) Generate SQL\n6) LocalHost\nq) Exit\n"
 
   read -p "Choice: " is_choice
 
@@ -475,12 +463,7 @@ _menu_body_flat() {
 }
 
 _menu_footer_lines() {
-  echo
-  echo "u) Up   cd) Change directory   t) Transfer"
-  echo "d) Delete   c) Create   f) Find    r) Rename"
-  echo "q/h) Quit/Home   s) Settings   x) Organise"
-  echo "p) Print (last run log)"
-  echo "-h) Help   -u) Upgrade"
+  builtin printf "\nu) Up   cd) Change directory   t) Transfer\nd) Delete   c) Create   f) Find    r) Rename\nq/h) Quit/Home   s) Settings   x) Organise\np) Print (last run log)\n-h) Help   -u) Upgrade\n"
   if [ -n "$_filter_query" ]; then
     echo "🔍 Filter active: ${_filter_query^^}*  — type more chars to narrow, ⌫ to widen, ⌫⌫ to exit"
   else
