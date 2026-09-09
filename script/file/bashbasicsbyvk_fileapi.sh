@@ -38,8 +38,8 @@ _bb_get_credentials() {
 
 _bb_json_get() {
   local json="$1" field="$2"
-  # Python heredoc: parse JSON and extract field — no node spawn needed
-  python3 - "$field" <<'PYEOF' <<< "$json"
+  # python3 -c avoids heredoc stdin conflict; herestring feeds json via stdin
+  python3 -c '
 import sys, json as _J
 _f = sys.argv[1]
 try:
@@ -49,7 +49,7 @@ try:
         sys.stdout.write(str(_v))
 except Exception:
     pass
-PYEOF
+' "$field" <<< "$json"
 }
 
 _bb_fail_reason() {
@@ -62,17 +62,16 @@ _bb_fail_reason() {
   fi
   # Python heredoc: collapse whitespace + truncate — replaces tr|sed fork chain
   local trimmed
-  trimmed=$(python3 - "$http_status" <<'PYEOF' <<< "$body"
+  trimmed=$(python3 -c '
 import sys
 body = sys.stdin.read()
 status = sys.argv[1]
-t = ' '.join(body.split())[:300]
+t = " ".join(body.split())[:300]
 if t:
-    sys.stdout.write(f'HTTP {status}: {t}')
+    sys.stdout.write(f"HTTP {status}: {t}")
 else:
-    sys.stdout.write(f'Request failed (HTTP {status})')
-PYEOF
-)
+    sys.stdout.write(f"Request failed (HTTP {status})")
+' "$http_status" <<< "$body")
   printf '%s' "$trimmed"
 }
 
@@ -605,31 +604,30 @@ _up_do_multipart_upload() {
   # Python heredoc: walk dirs + emit relpath<TAB>abspath lines, count in one pass.
   # Avoids per-file basename/find subshell forks and the separate wc -l spawn.
   local file_count
-  file_count=$(printf '%s\x00' "${paths[@]}" | python3 - "$listfile" <<'PYEOF'
+  file_count=$(printf '%s\x00' "${paths[@]}" | python3 -c '
 import sys, os
 raw = sys.stdin.buffer.read()
-paths = [e.decode() for e in raw.split(b'\x00') if e]
+paths = [e.decode() for e in raw.split(b"\x00") if e]
 listfile = sys.argv[1]
 count = 0
-with open(listfile, 'a') as out:
+with open(listfile, "a") as out:
     for p in paths:
         if os.path.isdir(p):
-            base = os.path.basename(p.rstrip('/'))
+            base = os.path.basename(p.rstrip("/"))
             for root, dirs, files in os.walk(p):
                 dirs.sort()
                 for fname in sorted(files):
                     abspath = os.path.join(root, fname)
-                    relpath = base + '/' + os.path.relpath(abspath, p)
-                    out.write(f'{relpath}\t{abspath}\n')
+                    relpath = base + "/" + os.path.relpath(abspath, p)
+                    out.write(f"{relpath}\t{abspath}\n")
                     count += 1
         elif os.path.isfile(p):
-            out.write(f'{os.path.basename(p)}\t{p}\n')
+            out.write(f"{os.path.basename(p)}\t{p}\n")
             count += 1
         else:
-            sys.stderr.write(f'  ⚠️  Skipping missing item: {p}\n')
+            sys.stderr.write(f"  ⚠️  Skipping missing item: {p}\n")
 print(count)
-PYEOF
-)
+' "$listfile")
 
   if [ ! -s "$listfile" ]; then
     echo "❌ No valid files found in selection"

@@ -43,44 +43,34 @@ PYEOF
 _sp_save() {
   local -n _sp_in="$1"
   local file="$2"
-  # Python heredoc: join array via NUL on stdin, write non-blank lines atomically
-  local joined
-  printf '%s\x00' "${_sp_in[@]}" | python3 - "$file" <<'PYEOF'
+  # Write array atomically; pass paths via stdin (pipe), script via -c to avoid
+  # the pipe+heredoc stdin conflict
+  printf '%s\x00' "${_sp_in[@]}" | python3 -c '
 import sys, os
 dest = sys.argv[1]
 data = sys.stdin.buffer.read()
-lines = [e.decode() for e in data.split(b'\x00') if e.strip()]
-tmp = dest + '.tmp'
-with open(tmp, 'w') as f:
-    f.write('\n'.join(lines) + ('\n' if lines else ''))
+lines = [e.decode() for e in data.split(b"\x00") if e.strip()]
+tmp = dest + ".tmp"
+with open(tmp, "w") as f:
+    f.write("\n".join(lines) + ("\n" if lines else ""))
 os.replace(tmp, dest)
-PYEOF
+' "$file"
 }
 
 _sp_append() {
   local file="$1"; shift
-  # Python heredoc: read existing + new paths (NUL-separated), dedup preserving order, write back
-  # Outputs: added|dupes|total
+  # pipe into python3 -c (not heredoc) so stdin carries the NUL-delimited paths
   local result
-  result=$(
-    {
-      # existing lines from file
-      [ -f "$file" ] && cat "$file"
-      # new candidates via NUL so paths with newlines are safe
-      printf '\x00NEW_BOUNDARY\x00'
-      printf '%s\x00' "$@"
-    } | python3 - "$file" <<'PYEOF'
+  result=$(printf '%s\x00' "$@" | python3 -c '
 import sys, os
-data = sys.stdin.buffer.read()
-sep = b'\x00NEW_BOUNDARY\x00'
-before, _, after = data.partition(sep)
-
-existing = [l for l in before.decode().splitlines() if l.strip()]
-new_paths = [e.decode() for e in after.split(b'\x00') if e.strip()]
-
+dest = sys.argv[1]
+new_paths = [e.decode() for e in sys.stdin.buffer.read().split(b"\x00") if e.strip()]
+existing = []
+if os.path.isfile(dest):
+    with open(dest) as f:
+        existing = [l.rstrip("\n") for l in f if l.strip()]
 seen = set(existing)
-added = 0
-dupes = 0
+added = dupes = 0
 for p in new_paths:
     if p in seen:
         dupes += 1
@@ -88,14 +78,12 @@ for p in new_paths:
         existing.append(p)
         seen.add(p)
         added += 1
-
-tmp = sys.argv[1] + '.tmp'
-with open(tmp, 'w') as f:
-    f.write('\n'.join(existing) + ('\n' if existing else ''))
-os.replace(tmp, sys.argv[1])
+tmp = dest + ".tmp"
+with open(tmp, "w") as f:
+    f.write("\n".join(existing) + ("\n" if existing else ""))
+os.replace(tmp, dest)
 print(f"{added}|{dupes}|{len(existing)}")
-PYEOF
-  )
+' "$file")
   echo "$result"
 }
 
@@ -191,23 +179,19 @@ _sp_apply_buffer() {
     IFS=$'\x00' read -r -d '' -a live || true
     read -r missing_summary
   } < <(
-    printf '%s\x00' "${list[@]}" | python3 <<'PYEOF'
+    printf '%s\x00' "${list[@]}" | python3 -c '
 import sys, os
-paths = [e for e in sys.stdin.buffer.read().split(b'\x00') if e]
-live = []
-missing = []
+paths = [e for e in sys.stdin.buffer.read().split(b"\x00") if e]
+live, missing = [], []
 for p in paths:
     s = p.decode()
-    if os.path.exists(s):
-        live.append(p)
-    else:
-        missing.append(s)
-sys.stdout.buffer.write(b'\x00'.join(live))
+    (live if os.path.exists(s) else missing).append(s)
+sys.stdout.buffer.write(b"\x00".join(s.encode() for s in live))
 if live:
-    sys.stdout.buffer.write(b'\x00')
-sys.stdout.buffer.write(b'\n')
-sys.stdout.write(f"MISSING:{len(missing)}:{'|'.join(missing)}\n")
-PYEOF
+    sys.stdout.buffer.write(b"\x00")
+sys.stdout.buffer.write(b"\n")
+sys.stdout.write(f"MISSING:{len(missing)}:{chr(124).join(missing)}\n")
+'
   )
 
   # Report missing items individually (these no longer exist on disk)
@@ -291,13 +275,13 @@ _sp_view_one_buffer() {
       # Batch existence-check via Python: outputs "<idx>|<exists>|<path>" per line
       local view_lines
       view_lines=$(
-        printf '%s\x00' "${list[@]}" | python3 <<'PYEOF'
+        printf '%s\x00' "${list[@]}" | python3 -c '
 import sys, os
-items = [e.decode() for e in sys.stdin.buffer.read().split(b'\x00') if e]
+items = [e.decode() for e in sys.stdin.buffer.read().split(b"\x00") if e]
 for i, p in enumerate(items, 1):
-    tag = '' if os.path.exists(p) else '  ⚠️ missing'
+    tag = "" if os.path.exists(p) else "  ⚠️ missing"
     print(f"  {i:2d}) {p}{tag}")
-PYEOF
+'
       )
       echo "$view_lines"
     fi
