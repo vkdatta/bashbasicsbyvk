@@ -36,23 +36,40 @@ find_menu() {
                     fi
 
                     echo "📋 Preview of renames (${#results[@]} items):"
-                    for f in "${results[@]}"; do
-                        local base=$(basename "$f")
-                        local newname="${base//$pat/$rep}"
-                        printf "  %s  →  %s\n" "$base" "$newname"
-                    done
+                    # Python replaces $(basename "$f") per file — N subprocess spawns → 1.
+                    # Estimated speedup: 3-5× for typical result sets.
+                    python3 - "$pat" "$rep" "${results[@]}" <<'PYEOF'
+import sys, os
+pat, rep = sys.argv[1], sys.argv[2]
+for f in sys.argv[3:]:
+    base    = os.path.basename(f)
+    newname = base.replace(pat, rep)
+    print(f"  {base}  →  {newname}")
+PYEOF
 
                     read -p "Apply all renames? [y/N]: " confirm
                     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                        local count=0
-                        for f in "${results[@]}"; do
-                            local base=$(basename "$f")
-                            local dir=$(dirname "$f")
-                            local newname="${base//$pat/$rep}"
-                            if [ "$base" != "$newname" ]; then
-                                mv -- "$f" "$dir/$newname" && ((count++))
-                            fi
-                        done
+                        # Python replaces $(basename)+$(dirname) per file and shells out to mv.
+                        # os.rename() is a single syscall; no subprocess per file.
+                        # Estimated speedup: 3-5× over the bash loop.
+                        local count
+                        count=$(python3 - "$pat" "$rep" "${results[@]}" <<'PYEOF'
+import sys, os
+pat, rep = sys.argv[1], sys.argv[2]
+count = 0
+for f in sys.argv[3:]:
+    base    = os.path.basename(f)
+    d       = os.path.dirname(f)
+    newname = base.replace(pat, rep)
+    if base != newname:
+        try:
+            os.rename(f, os.path.join(d, newname))
+            count += 1
+        except OSError:
+            pass
+print(count)
+PYEOF
+)
                         echo "✅ Renamed $count item(s)."
                     else
                         echo "Aborted."
@@ -103,15 +120,28 @@ find_menu() {
                             continue
                         fi
 
-                        local renamed=0
-                        for f in "${row_matches[@]}"; do
-                            local base="$(basename "$f")"
-                            local dir="$(dirname "$f")"
-                            local newname="${base//$row_find/$row_rep}"
-                            if [ "$base" != "$newname" ] && [ ! -e "$dir/$newname" ]; then
-                                mv -- "$f" "$dir/$newname" && renamed=$((renamed + 1))
-                            fi
-                        done
+                        # Python replaces $(basename)+$(dirname) per file and mv per rename.
+                        # os.rename() is a single syscall; collision check via os.path.exists().
+                        # Estimated speedup: 3-5× per CSV row.
+                        local renamed
+                        renamed=$(python3 - "$row_find" "$row_rep" "${row_matches[@]}" <<'PYEOF'
+import sys, os
+find_str, rep = sys.argv[1], sys.argv[2]
+renamed = 0
+for f in sys.argv[3:]:
+    base    = os.path.basename(f)
+    d       = os.path.dirname(f)
+    newname = base.replace(find_str, rep)
+    dest    = os.path.join(d, newname)
+    if base != newname and not os.path.exists(dest):
+        try:
+            os.rename(f, dest)
+            renamed += 1
+        except OSError:
+            pass
+print(renamed)
+PYEOF
+)
                         echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ✅ $renamed renamed"
                         nr_counts+=("$renamed")
                     done
@@ -163,11 +193,26 @@ find_menu() {
                     fi
 
                     echo "📋 Files containing \"$pat\" (${#results[@]} files):"
-                    for i in "${!results[@]}"; do
-                        local rel=$(realpath --relative-to="$path" "${results[$i]}" 2>/dev/null || basename "${results[$i]}")
-                        local hits=$(grep -c "$pat" "${results[$i]}" 2>/dev/null)
-                        printf "  %3d) %s  (%s match(es))\n" $((i+1)) "$rel" "$hits"
-                    done
+                    # Python replaces realpath + grep -c per file — 2N subprocess spawns → 1.
+                    # os.path.relpath() replaces realpath; str.count() replaces grep -c.
+                    # Estimated speedup: 5-10× for 50+ result files.
+                    python3 - "$path" "$pat" "${results[@]}" <<'PYEOF'
+import sys, os
+base_path = sys.argv[1]
+pat       = sys.argv[2]
+files     = sys.argv[3:]
+for i, f in enumerate(files, 1):
+    try:
+        rel = os.path.relpath(f, base_path)
+    except ValueError:
+        rel = os.path.basename(f)
+    try:
+        with open(f, errors='replace') as fh:
+            hits = fh.read().count(pat)
+    except OSError:
+        hits = 0
+    print(f"  {i:3d}) {rel}  ({hits} match(es))")
+PYEOF
 
                     echo ""
                     echo "a) Apply to ALL files"
@@ -237,19 +282,41 @@ find_menu() {
                         local row_rep="${csv_reps[$row_idx]}"
 
                         local -a row_files=()
-                        while IFS= read -r rf; do
-                            local abs_rf
-                            abs_rf=$(cd "$(dirname "$rf")" && pwd)/$(basename "$rf")
-                            [[ "$abs_rf" == "$abs_csv_file" ]] && continue
-                            row_files+=("$rf")
-                        done < <(grep -rl "$row_find" "$path" 2>/dev/null)
+                        # Python runs grep internally and filters via os.path.abspath() in-process.
+                        # Replaces the while-loop's (cd $(dirname) && pwd)/$(basename) per file
+                        # (N×3 subprocess spawns) with a single python3 process.
+                        # NOTE: pipe + heredoc conflict on stdin — Python must own grep, not pipe to it.
+                        # Estimated speedup: 3-5× per CSV row.
+                        mapfile -t row_files < <(python3 - "$row_find" "$path" "$abs_csv_file" <<'PYEOF'
+import sys, os, subprocess
+pat, search_path, csv_abs = sys.argv[1], sys.argv[2], sys.argv[3]
+result = subprocess.run(
+    ['grep', '-rl', pat, search_path],
+    capture_output=True, text=True, errors='replace'
+)
+for line in result.stdout.splitlines():
+    if line and os.path.abspath(line) != csv_abs:
+        print(line)
+PYEOF
+)
 
-                        local total_instances=0
-                        for rf in "${row_files[@]}"; do
-                            local file_hits
-                            file_hits=$(grep -o "$row_find" "$rf" 2>/dev/null | wc -l)
-                            total_instances=$((total_instances + file_hits))
-                        done
+                        # Python replaces grep -o | wc -l pipeline per file — 2N subprocess spawns → 1.
+                        # str.count() reads each file in-process; no pipeline per file.
+                        # Estimated speedup: 5-10× per CSV row.
+                        local total_instances
+                        total_instances=$(python3 - "$row_find" "${row_files[@]}" <<'PYEOF'
+import sys
+pat   = sys.argv[1]
+total = 0
+for f in sys.argv[2:]:
+    try:
+        with open(f, errors='replace') as fh:
+            total += fh.read().count(pat)
+    except OSError:
+        pass
+print(total)
+PYEOF
+)
 
                         if [ ${#row_files[@]} -eq 0 ]; then
                             echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ⚠️  No matches found (0 instances)"
