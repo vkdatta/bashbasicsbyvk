@@ -19,6 +19,9 @@ from _3bvk_js_audit_constants import (
     _RE_FUNC_DECL, _RE_FUNC_EXPR, _RE_ARROW_PAREN, _RE_ARROW_BARE,
     _RE_METHOD_SHORTHAND, _RE_WINDOW_ASSIGN, _RE_IIFE, _RE_COMMENT_BLOCK,
     _RE_SCRIPT_TAG, _RE_SCRIPT_SRC, _RE_SCRIPT_TYPE,
+    _RE_DYNAMIC_LOAD_CALL, _RE_DYNAMIC_LOADER_DECL,
+    _RE_CREATE_SCRIPT_DECL, _RE_SCRIPT_PROP_ASSIGN,
+    _RE_SCRIPT_SETATTRIBUTE, _RE_SCRIPT_APPEND,
     _RE_INLINE_EVT, _RE_FUNC_CALL,
     _JS_KEYWORDS, _HTML_KW,
 )
@@ -255,31 +258,263 @@ class JSFileInfo:
     def _regex_is_top(self, clean, pos):
         before = clean[:pos]
         return not (_RE_FUNC_DECL.search(before) or _RE_FUNC_EXPR.search(before))
+def _js_code_mask(src):
+    """Return same-length text with JS comments/strings masked.
+
+    Newlines are preserved so regex matches keep their original positions.
+    Template literals are masked conservatively; dynamic expressions inside
+    templates are intentionally not treated as static URLs.
+    """
+    out = list(src)
+    n = len(src)
+    i = 0
+    state = 'code'
+    quote = ''
+    while i < n:
+        c = src[i]
+        nxt = src[i + 1] if i + 1 < n else ''
+        if state == 'code':
+            if c == '/' and nxt == '/':
+                out[i] = out[i + 1] = ' '
+                i += 2
+                state = 'line'
+                continue
+            if c == '/' and nxt == '*':
+                out[i] = out[i + 1] = ' '
+                i += 2
+                state = 'block'
+                continue
+            if c in ('"', "'", '`'):
+                quote = c
+                out[i] = ' '
+                i += 1
+                state = 'string'
+                continue
+            i += 1
+        elif state == 'line':
+            if c == '\n':
+                state = 'code'
+            elif c != '\r':
+                out[i] = ' '
+            i += 1
+        elif state == 'block':
+            if c == '*' and nxt == '/':
+                out[i] = out[i + 1] = ' '
+                i += 2
+                state = 'code'
+            else:
+                if c not in '\r\n':
+                    out[i] = ' '
+                i += 1
+        else:  # string/template
+            if c == '\\':
+                out[i] = ' '
+                if i + 1 < n:
+                    if src[i + 1] not in '\r\n':
+                        out[i + 1] = ' '
+                    i += 2
+                else:
+                    i += 1
+                continue
+            if c == quote:
+                out[i] = ' '
+                i += 1
+                state = 'code'
+            else:
+                if c not in '\r\n':
+                    out[i] = ' '
+                i += 1
+    return ''.join(out)
+
+
+def _scope_key(masked, pos):
+    """Approximate lexical block scope using brace depth at *pos*.
+
+    This is deliberately conservative: a binding is only reused from the
+    same lexical brace scope. It prevents the common shadowing/redeclaration
+    false association without pretending regex parsing is a full JS AST.
+    """
+    return masked[:pos].count('{') - masked[:pos].count('}')
+
+
+def _dynamic_script_refs(js_source):
+    """Detect statically provable script loads created by inline JavaScript.
+
+    Supported forms:
+      loadScript("x.js") / loadModule("x.js") when the loader is defined
+      in the same inline script; and
+      createElement("script") + src/type assignment/setAttribute + appendChild.
+
+    All events are processed in source order. Computed/runtime expressions,
+    template literals, comments and ordinary strings are ignored.
+    """
+    clean = _js_code_mask(js_source)
+    events = []
+
+    # Named loaders are accepted only when there is evidence that the name is
+    # actually a loader in this inline script. This removes unrelated
+    # loadScript()/loadModule() calls while preserving the user's common form.
+    loader_defs = {'loadscript': [], 'loadmodule': []}
+
+    def _loader_body(start):
+        # Find the declaration's function body in masked code and return its
+        # source span plus masked text. This keeps the validation local to
+        # the declaration rather than accidentally borrowing evidence from
+        # later unrelated code.
+        brace = clean.find('{', start)
+        if brace < 0:
+            return None
+        depth = 0
+        i = brace
+        while i < len(clean):
+            if clean[i] == '{':
+                depth += 1
+            elif clean[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    return brace, i + 1, clean[brace:i + 1]
+            i += 1
+        return None
+
+    for m in _RE_DYNAMIC_LOADER_DECL.finditer(clean):
+        body_info = _loader_body(m.start())
+        if not body_info:
+            continue
+        body_start, body_end, body = body_info
+        body_source = js_source[body_start:body_end]
+        creates_script = bool(re.search(
+            r'document\s*\.\s*createElement\s*\(\s*[\"\']script[\"\']',
+            body_source, re.IGNORECASE
+        ))
+        appends_node = bool(re.search(r'\.\s*appendChild\s*\(', body, re.IGNORECASE))
+        if not (creates_script and appends_node):
+            continue
+        names = [x for x in m.groups() if x and x.lower() in loader_defs]
+        for name in names:
+            loader_defs[name.lower()].append(m.start())
+
+    for m in _RE_DYNAMIC_LOAD_CALL.finditer(js_source):
+        if clean[m.start()] != ' ':
+            # In masked source, code characters remain unchanged.
+            name = m.group(1).lower()
+            if any(p < m.start() for p in loader_defs[name]):
+                url = js_source[m.start(3):m.end(3)]
+                if url:
+                    events.append((m.start(), 'load', name, url))
+
+    for m in _RE_CREATE_SCRIPT_DECL.finditer(js_source):
+        if clean[m.start()] == ' ':
+            continue
+        events.append((m.start(), 'create', m.group(1), None))
+
+    for m in _RE_SCRIPT_PROP_ASSIGN.finditer(js_source):
+        if clean[m.start()] == ' ':
+            continue
+        value = js_source[m.start(4):m.end(4)]
+        events.append((m.start(), 'set', m.group(1), (m.group(2).lower(), value)))
+
+    for m in _RE_SCRIPT_SETATTRIBUTE.finditer(js_source):
+        if clean[m.start()] == ' ':
+            continue
+        value = js_source[m.start(5):m.end(5)]
+        events.append((m.start(), 'set', m.group(1), (m.group(3).lower(), value)))
+
+    for m in _RE_SCRIPT_APPEND.finditer(js_source):
+        if clean[m.start()] == ' ':
+            continue
+        events.append((m.start(), 'append', m.group(1), None))
+
+    events.sort(key=lambda x: x[0])
+
+    # name -> stack of live bindings. A new declaration replaces only the
+    # binding in its current lexical scope; older outer bindings remain.
+    bindings = {}
+    refs = []
+    for pos, kind, name, payload in events:
+        scope = _scope_key(clean, pos)
+        if kind == 'load':
+            refs.append((pos, ScriptRef(payload, name == 'loadmodule', 'dynamic', name)))
+            continue
+        if kind == 'create':
+            bindings.setdefault(name, []).append({
+                'scope': scope, 'created': pos, 'src': None, 'is_module': False,
+            })
+            continue
+
+        stack = bindings.get(name, [])
+        state = None
+        # Resolve nearest active declaration whose creation precedes this use.
+        for candidate in reversed(stack):
+            if candidate['created'] <= pos and candidate['scope'] <= scope:
+                state = candidate
+                break
+        if state is None:
+            continue
+
+        if kind == 'set':
+            prop, value = payload
+            if prop == 'src':
+                state['src'] = value.strip() or None
+            elif prop == 'type':
+                state['is_module'] = value.strip().lower() == 'module'
+        elif kind == 'append':
+            if state['src']:
+                refs.append((pos, ScriptRef(
+                    state['src'], state['is_module'], 'dynamic', 'createElement'
+                )))
+                # A node that has already been appended is not reused as a
+                # fresh dependency merely because appendChild is repeated.
+                state['src'] = None
+
+    refs.sort(key=lambda x: x[0])
+    return [sr for _, sr in refs]
+
+
 class ScriptRef:
-    def __init__(self, src_attr, is_module):
+    def __init__(self, src_attr, is_module, source='static', loader=None):
         self.src_attr  = src_attr
         self.is_module = is_module
+        self.source    = source
+        self.loader    = loader
+
+
 class HTMLFileInfo:
     def __init__(self, path: Path):
-        self.path          = path
-        self.rel_path      = rel(path)
-        self.source        = read_file(path)
-        self.script_refs   = []
+        self.path         = path
+        self.rel_path     = rel(path)
+        self.source       = read_file(path)
+        self.script_refs  = []
         self.inline_events = []
         self._parse()
+
     def _parse(self):
+        seen = set()
         for m in _RE_SCRIPT_TAG.finditer(self.source):
             attrs  = m.group(1)
             src_m  = _RE_SCRIPT_SRC.search(attrs)
             type_m = _RE_SCRIPT_TYPE.search(attrs)
             is_module = bool(type_m and 'module' in type_m.group(1).lower())
             if src_m:
-                self.script_refs.append(ScriptRef(src_m.group(1), is_module))
+                ref = ScriptRef(src_m.group(1), is_module)
+                key = (ref.src_attr.strip(), ref.is_module)
+                if key not in seen:
+                    self.script_refs.append(ref)
+                    seen.add(key)
+            # Inline script bodies are independently scanned for dynamic
+            # dependency creation/loading.
+            body = m.group(2)
+            for ref in _dynamic_script_refs(body):
+                key = (ref.src_attr.strip(), ref.is_module)
+                if key not in seen:
+                    self.script_refs.append(ref)
+                    seen.add(key)
+
         for m in _RE_INLINE_EVT.finditer(self.source):
             code  = m.group(1)
             funcs = [f for f in _RE_FUNC_CALL.findall(code) if f not in _HTML_KW]
             if funcs:
                 self.inline_events.append((code, funcs))
+
 def resolve_js_path(from_path_str, root, source_file):
     p         = from_path_str.strip()
     candidate = root / p.lstrip('/') if p.startswith('/') else source_file.parent / p

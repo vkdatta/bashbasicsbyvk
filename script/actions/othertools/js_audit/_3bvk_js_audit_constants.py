@@ -47,6 +47,38 @@ _RE_COMMENT_BLOCK  = re.compile(r'/\*.*?\*/', re.DOTALL)
 _RE_SCRIPT_TAG  = re.compile(r'<script([^>]*)>(.*?)</script>', re.IGNORECASE | re.DOTALL)
 _RE_SCRIPT_SRC  = re.compile(r"src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _RE_SCRIPT_TYPE = re.compile(r"type=[\"']([^\"']+)[\"']", re.IGNORECASE)
+
+# Dynamic script-loading detection (inline JS)
+_RE_DYNAMIC_LOAD_CALL = re.compile(
+    r"\b(loadScript|loadModule)\s*\(\s*([\"'])(.*?)\2",
+    re.IGNORECASE | re.DOTALL,
+)
+_RE_DYNAMIC_LOADER_DECL = re.compile(
+    r"(?:function\s+(loadScript|loadModule)|"
+    r"(?:window|globalThis)\s*\.\s*(loadScript|loadModule)\s*=\s*(?:async\s*)?function|"
+    r"(?:window|globalThis)\s*\[\s*([\"'])(loadScript|loadModule)\3\s*\]\s*=)",
+    re.IGNORECASE,
+)
+_RE_CREATE_SCRIPT_DECL = re.compile(
+    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
+    r"document\s*\.\s*createElement\s*\(\s*([\"'])script\2\s*\)",
+    re.IGNORECASE,
+)
+_RE_SCRIPT_PROP_ASSIGN = re.compile(
+    r"\b([A-Za-z_$][\w$]*)\s*\.\s*(src|type)\s*=\s*([\"'])(.*?)\3",
+    re.IGNORECASE | re.DOTALL,
+)
+_RE_SCRIPT_SETATTRIBUTE = re.compile(
+    r"\b([A-Za-z_$][\w$]*)\s*\.\s*setAttribute\s*\(\s*"
+    r"([\"'])(src|type)\2\s*,\s*([\"'])(.*?)\4\s*\)",
+    re.IGNORECASE | re.DOTALL,
+)
+_RE_SCRIPT_APPEND = re.compile(
+    r"(?:document\s*\.\s*(?:body|head|documentElement)|"
+    r"[A-Za-z_$][\w$]*)\s*\.\s*appendChild\s*\(\s*"
+    r"([A-Za-z_$][\w$]*)\s*\)",
+    re.IGNORECASE,
+)
 _RE_INLINE_EVT  = re.compile(r"(?:on\w+)=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _RE_FUNC_CALL   = re.compile(r'(?<![.\w])(\w+)\s*\(')
 
