@@ -415,7 +415,12 @@ switch_menu() {
             # Restore outer state except path — path gets the new destination
             group_prefix="$_sw_saved_prefix"
             force_show="$_sw_saved_force"
-            path="$_sw_result_path"
+            # cd so $PWD tracks the target (main loop uses $path, but cd keeps
+            # the shell in sync for sub-processes, cd→shell, and $PWD checks)
+            local _sw_cd_target="$_sw_result_path"
+            [ -f "$_sw_cd_target" ] && _sw_cd_target="$(dirname "$_sw_cd_target")"
+            cd -- "$_sw_cd_target" 2>/dev/null || true
+            path="$_sw_cd_target"
             _sw_result_path=""
             # Clear saved so the outer loop just uses the new path
             _sw_saved_path=""
