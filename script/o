@@ -442,7 +442,8 @@ handle_selection() {
 
 
 _orig_stty=$(stty -g 2>/dev/null)
-trap 'stty "$_orig_stty" 2>/dev/null' EXIT
+_BVK_LASTDIR_FILE="${HOME}/.bashbasicsbyvk/lastdir"
+trap 'stty "$_orig_stty" 2>/dev/null; [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"' EXIT
 
 _menu_header() {
   echo
@@ -786,6 +787,7 @@ nav_result_path=""
 nav_selected_items=()
 gcloud_nav_result_path=""
 gcloud_nav_selected_items=()
+_sw_did_switch=false
 
 if [ $# -eq 1 ]; then
   target="$1"
@@ -882,7 +884,7 @@ while true; do
 shopt -s nocasematch
 
 case "$choice" in
-    q)                      exit 0 ;;
+    q)                      if $_sw_did_switch; then cd "$path" && exec "$SHELL"; else exit 0; fi ;;
     -h)                     open_help ;;
     u)                      if [ "$path" != "/" ]; then path=$(dirname "$path"); group_prefix=""; force_show=false; fi ;;
     back)                   if [ -n "$group_prefix" ]; then group_prefix="${group_prefix%?}"; force_show=false; fi ;;

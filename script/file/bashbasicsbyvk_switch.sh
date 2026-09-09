@@ -421,6 +421,7 @@ switch_menu() {
             [ -f "$_sw_cd_target" ] && _sw_cd_target="$(dirname "$_sw_cd_target")"
             cd -- "$_sw_cd_target" 2>/dev/null || true
             path="$_sw_cd_target"
+            _sw_did_switch=true
             _sw_result_path=""
             # Clear saved so the outer loop just uses the new path
             _sw_saved_path=""
