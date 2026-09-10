@@ -21,7 +21,7 @@ import sys
 import signal
 import threading
 import time
-import fcntl
+
 from collections import OrderedDict
 from pathlib import Path
 
@@ -163,15 +163,15 @@ def _cleanup(signum=None, frame=None):
 def main():
     BVK_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Single-instance guard
-    try:
-        lock_fd = open(PID_FILE, "w")
-        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        lock_fd.write(str(os.getpid()) + "\n")
-        lock_fd.flush()
-    except BlockingIOError:
-        # Another instance already running — exit silently
-        sys.exit(0)
+    # Single-instance guard — plain PID file, no flock
+    if PID_FILE.exists():
+        try:
+            old_pid = int(PID_FILE.read_text().strip())
+            os.kill(old_pid, 0)   # raises if process is gone
+            sys.exit(0)           # genuinely already running
+        except (ProcessLookupError, ValueError, OSError):
+            pass                  # stale PID — overwrite below
+    PID_FILE.write_text(str(os.getpid()) + "\n")
 
     signal.signal(signal.SIGTERM, _cleanup)
     signal.signal(signal.SIGINT,  _cleanup)
