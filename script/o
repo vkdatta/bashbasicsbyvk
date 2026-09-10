@@ -447,7 +447,7 @@ _BVK_RECENTS_PID_FILE="${HOME}/.bashbasicsbyvk/recents.pid"
 
 # ── Recents daemon: wake if not alive (daemon manages its own persistence) ──
 _bvk_wake_recents_daemon() {
-  local _daemon_script="$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon"
+  local _daemon_script="$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon.py"
   [ -f "$_daemon_script" ] || return
   local _pid
   _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)

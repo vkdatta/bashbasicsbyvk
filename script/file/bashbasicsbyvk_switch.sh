@@ -372,7 +372,13 @@ _sw_tab_redraw() {
   (( _up < 0 )) && _up=0
   (( _up > 0 )) && builtin printf '[%dA' "$_up"
   builtin printf '[J'
-  _vp_render_fresh
+  # Emit WITHOUT input line: _read_choice prints it fresh each loop.
+  # Calling _vp_render_fresh here adds an extra input-line print
+  # causing +1 line drift per tab switch.
+  _vp_build_chrome
+  _vp_geometry
+  _vp_ensure_visible "${_hl_index:-1}"
+  _vp_emit
 }
 
 # ── Main entry point ──────────────────────────────────────────────────────────

@@ -48,7 +48,9 @@ def _has_systemd_user():
             ["systemctl", "--user", "is-system-running"],
             capture_output=True, timeout=3
         )
-        return r.returncode in (0, 1)  # 0=running 1=degraded — both usable
+        # Only trust it if stdout actually says something meaningful
+        out = r.stdout.decode().strip()
+        return r.returncode in (0, 1) and out in ("running", "degraded")
     except Exception:
         return False
 
@@ -124,23 +126,20 @@ def bootstrap():
     sys.exit(0)
 
 def _start_background():
-    """Launch this script as a detached background process."""
-    pid = os.fork() if hasattr(os, "fork") else None
-    if pid is None:
-        # No fork (Windows compat path, unlikely here) — use subprocess
-        subprocess.Popen(
-            [sys.executable, str(THIS_FILE), "--daemon"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        return
-    if pid > 0:
-        return   # parent returns immediately
-    # Child: become session leader and exec as daemon
-    os.setsid()
-    os.execv(sys.executable, [sys.executable, str(THIS_FILE), "--daemon"])
+    """Launch this script as a detached background process.
+    Uses Popen with start_new_session=True — works on Termux, containers,
+    Cloud Shell, and plain Linux without needing os.fork().
+    """
+    proc = subprocess.Popen(
+        [sys.executable, str(THIS_FILE), "--daemon"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    # Give the child a moment to write its PID file before we exit
+    time.sleep(0.5)
+    return proc.pid
 
 # ── Liveness check ─────────────────────────────────────────────────────────────
 
@@ -229,15 +228,26 @@ def _cleanup(signum=None, frame=None):
     except OSError: pass
     sys.exit(0)
 
+LOG_FILE = BVK_DIR / "recents.log"
+
+def _log(msg):
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    except OSError:
+        pass
+
 def run_daemon():
     """The actual watcher loop. Runs in foreground; systemd/fork supervises it."""
     BVK_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Write PID
+    # Write PID before anything else so caller's liveness check succeeds
     PID_FILE.write_text(str(os.getpid()) + "\n")
 
     signal.signal(signal.SIGTERM, _cleanup)
     signal.signal(signal.SIGINT,  _cleanup)
+
+    _log(f"daemon started pid={os.getpid()}")
 
     _load_existing()
 
@@ -264,7 +274,13 @@ def run_daemon():
         if os.path.isdir(root):
             observer.schedule(handler, root, recursive=True)
 
-    observer.start()
+    try:
+        observer.start()
+        _log(f"observer started watching {watch_roots}")
+    except Exception as e:
+        _log(f"observer failed to start: {e}")
+        _cleanup()
+        return
 
     t = threading.Thread(target=_flusher, daemon=True)
     t.start()
@@ -272,6 +288,7 @@ def run_daemon():
     try:
         while observer.is_alive():
             time.sleep(1)
+        _log("observer died unexpectedly")
     finally:
         observer.stop()
         observer.join()
