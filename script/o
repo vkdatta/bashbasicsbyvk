@@ -443,7 +443,33 @@ handle_selection() {
 
 _orig_stty=$(stty -g 2>/dev/null)
 _BVK_LASTDIR_FILE="${HOME}/.bashbasicsbyvk/lastdir"
-trap 'stty "$_orig_stty" 2>/dev/null; [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"' EXIT
+_BVK_RECENTS_PID_FILE="${HOME}/.bashbasicsbyvk/recents.pid"
+
+# ── Recents daemon: start once per session ─────────────────────────────────
+_bvk_start_recents_daemon() {
+  local _daemon_script
+  _daemon_script="$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon"
+  [ -f "$_daemon_script" ] || return
+  # Only start if no instance is already running
+  if [ -f "$_BVK_RECENTS_PID_FILE" ]; then
+    local _pid
+    _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
+    kill -0 "$_pid" 2>/dev/null && return   # already alive
+  fi
+  python "$_daemon_script" "$HOME" </dev/null >/dev/null 2>&1 &
+  disown
+}
+
+_bvk_stop_recents_daemon() {
+  [ -f "$_BVK_RECENTS_PID_FILE" ] || return
+  local _pid
+  _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
+  [ -n "$_pid" ] && kill "$_pid" 2>/dev/null
+}
+
+_bvk_start_recents_daemon
+
+trap 'stty "$_orig_stty" 2>/dev/null; [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; _bvk_stop_recents_daemon' EXIT
 
 _menu_header() {
   echo
@@ -676,14 +702,18 @@ _read_choice() {
         pgdn)   _nav_jump_to $(( _hl_index + _vp_page_step )) ;;
         home)   _nav_jump_to 1 ;;
         end)    _nav_jump_to "$_vp_n" ;;
-        right)  # move cursor within typed text
-          if [ "$_pos" -lt "${#_buf}" ]; then
+        right)  # move cursor within typed text; or tab-switch when empty
+          if [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ]; then
+            choice="__sw_tab_right__"; break
+          elif [ "$_pos" -lt "${#_buf}" ]; then
             _pos=$(( _pos + 1 ))
             builtin printf '\033[1C'
           fi
           ;;
-        left)   # move cursor within typed text
-          if [ "$_pos" -gt 0 ]; then
+        left)   # move cursor within typed text; or tab-switch when empty
+          if [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ]; then
+            choice="__sw_tab_left__"; break
+          elif [ "$_pos" -gt 0 ]; then
             _pos=$(( _pos - 1 ))
             builtin printf '\033[1D'
           fi
