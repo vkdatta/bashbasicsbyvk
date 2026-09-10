@@ -447,13 +447,40 @@ _BVK_RECENTS_PID_FILE="${HOME}/.bashbasicsbyvk/recents.pid"
 
 # ── Recents daemon: wake if not alive (daemon manages its own persistence) ──
 _bvk_wake_recents_daemon() {
-  local _daemon_script="$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon.py"
-  [ -f "$_daemon_script" ] || return
+  # Try every plausible deployment layout for the daemon. In the real tree the
+  # file may have no .py extension (and be directly executable); the .py
+  # spelling is also supported. Silent return if nothing is found — the
+  # file manager must keep working even without the recents daemon.
+  local _candidates=(
+    "$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon.py"
+    "$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon"
+    "$SCRIPT_DIR/bashbasicsbyvk_recents_daemon.py"
+    "$SCRIPT_DIR/bashbasicsbyvk_recents_daemon"
+  )
+  local _daemon_script=""
+  local _c
+  for _c in "${_candidates[@]}"; do
+    if [ -f "$_c" ]; then
+      _daemon_script="$_c"
+      break
+    fi
+  done
+  [ -n "$_daemon_script" ] || return
+
   local _pid
   _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
   kill -0 "$_pid" 2>/dev/null && return   # already alive
-  # Not alive — call daemon; it bootstraps persistence and starts itself
-  python "$_daemon_script" </dev/null >/dev/null 2>&1 &
+
+  # Not alive — invoke the daemon; it bootstraps its own persistence.
+  # Prefer direct execution so the shebang picks the right interpreter;
+  # fall back to python3 / python if the file isn't marked executable.
+  if [ -x "$_daemon_script" ]; then
+    "$_daemon_script" </dev/null >/dev/null 2>&1 &
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 "$_daemon_script" </dev/null >/dev/null 2>&1 &
+  else
+    python "$_daemon_script" </dev/null >/dev/null 2>&1 &
+  fi
   disown
 }
 
@@ -940,8 +967,7 @@ case "$choice" in
     sast)                   bashbasicsbyvk_sast;;
     sw)                     switch_menu ;;
     *)                      handle_selection "$choice" ;;
-   
+
 esac
 
 done
-

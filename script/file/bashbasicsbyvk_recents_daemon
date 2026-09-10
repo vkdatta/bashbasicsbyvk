@@ -66,13 +66,16 @@ def _install_systemd():
     unit = _systemd_unit_path()
     unit.parent.mkdir(parents=True, exist_ok=True)
     python = sys.executable
+    # NOTE: --daemon is required so the service actually runs the watcher.
+    # Without it, main() falls into bootstrap() and exits, and Restart=always
+    # loops the unit forever without ever entering run_daemon().
     unit.write_text(f"""[Unit]
 Description=bashbasicsbyvk recents file watcher
 After=default.target
 
 [Service]
 Type=simple
-ExecStart={python} {THIS_FILE}
+ExecStart={python} {THIS_FILE} --daemon
 Restart=always
 RestartSec=5
 
