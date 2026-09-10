@@ -365,13 +365,16 @@ _sw_tab_redraw() {
   _vp_cache_reset
   _vp_prime_rows
 
-  # Move up exactly as many lines as the block we drew, clear to end, redraw.
-  local _up=$(( _old_blk_h - 1 ))
+  # _read_choice terminated with a trailing `echo`, so the cursor currently
+  # sits one row BELOW the block. To reach the top of the same block we must
+  # move up the FULL old block height — not _old_blk_h - 1, which leaves a
+  # one-line residual each switch and accumulates drift.
+  local _up=$(( _old_blk_h ))
   local _rows; _rows=$(_term_rows)
   (( _up > _rows - 1 )) && _up=$(( _rows - 1 ))
   (( _up < 0 )) && _up=0
-  (( _up > 0 )) && builtin printf '[%dA' "$_up"
-  builtin printf '[J'
+  (( _up > 0 )) && builtin printf '\033[%dA' "$_up"
+  builtin printf '\r\033[J'
   # Emit WITHOUT input line: _read_choice prints it fresh each loop.
   # Calling _vp_render_fresh here adds an extra input-line print
   # causing +1 line drift per tab switch.
