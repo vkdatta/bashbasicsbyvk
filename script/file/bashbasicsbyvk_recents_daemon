@@ -1,69 +1,172 @@
 #!/usr/bin/env python3
 """
-bashbasicsbyvk_recents_daemon.py
-─────────────────────────────────
-Watches the filesystem with inotify (via watchdog) and maintains a
-rolling list of the 100 most recently modified/created files in:
-    ~/.bashbasicsbyvk/recents.list
+bashbasicsbyvk_recents_daemon
+──────────────────────────────
+Self-bootstrapping persistent daemon that tracks recently modified files.
 
-Format: one absolute path per line, newest first.
+First run (called from main script o):
+  • Detects environment (systemd/user, Termux, plain Linux)
+  • Installs itself as a persistent service if possible
+  • Starts itself and stays alive
 
-Usage (managed by bashbasicsbyvk_switch.sh):
-    python3 <this file> [watch_root1 watch_root2 ...]
-    Default watch roots: $HOME
+Subsequent runs / reboots:
+  • systemd (or ~/.bashrc on Termux) wakes it automatically
+  • Main script o just does a liveness check and wakes if dead
 
-The process writes its PID to ~/.bashbasicsbyvk/recents.pid on start
-and removes it on clean exit (SIGTERM / SIGINT).
+Output:
+  ~/.bashbasicsbyvk/recents.list   — newest-first, max 100 paths
+  ~/.bashbasicsbyvk/recents.pid    — PID of running daemon
 """
 
 import os
 import sys
 import signal
+import subprocess
 import threading
 import time
-
 from collections import OrderedDict
 from pathlib import Path
 
-try:
-    from watchdog.observers.inotify import InotifyObserver as Observer
-except ImportError:
-    from watchdog.observers import Observer
-
-from watchdog.events import (
-    FileSystemEventHandler,
-    FileCreatedEvent,
-    FileModifiedEvent,
-    FileMovedEvent,
-)
-
-# ── Config ─────────────────────────────────────────────────────────────────────
-BVK_DIR    = Path.home() / ".bashbasicsbyvk"
+# ── Paths ──────────────────────────────────────────────────────────────────────
+HOME       = Path.home()
+BVK_DIR    = HOME / ".bashbasicsbyvk"
 LIST_FILE  = BVK_DIR / "recents.list"
 PID_FILE   = BVK_DIR / "recents.pid"
-MAX_RECENT = 100
-FLUSH_INTERVAL = 2.0   # seconds between disk writes (batch updates)
+THIS_FILE  = Path(os.path.abspath(__file__))
 
-# Paths/patterns to ignore
+MAX_RECENT    = 100
+FLUSH_DELAY   = 2.0   # seconds — debounce rapid edits
+
+# ── Environment detection ──────────────────────────────────────────────────────
+
+def _is_termux():
+    return "com.termux" in str(HOME) or os.environ.get("TERMUX_VERSION") is not None
+
+def _has_systemd_user():
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "is-system-running"],
+            capture_output=True, timeout=3
+        )
+        return r.returncode in (0, 1)  # 0=running 1=degraded — both usable
+    except Exception:
+        return False
+
+# ── Self-bootstrap ─────────────────────────────────────────────────────────────
+
+SERVICE_NAME = "bashbasicsbyvk-recents"
+
+def _systemd_unit_path():
+    cfg = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+    return cfg / "systemd" / "user" / f"{SERVICE_NAME}.service"
+
+def _install_systemd():
+    unit = _systemd_unit_path()
+    unit.parent.mkdir(parents=True, exist_ok=True)
+    python = sys.executable
+    unit.write_text(f"""[Unit]
+Description=bashbasicsbyvk recents file watcher
+After=default.target
+
+[Service]
+Type=simple
+ExecStart={python} {THIS_FILE}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+""")
+    try:
+        subprocess.run(["systemctl", "--user", "daemon-reload"], timeout=5)
+        subprocess.run(["systemctl", "--user", "enable", SERVICE_NAME], timeout=5)
+        subprocess.run(["systemctl", "--user", "start",  SERVICE_NAME], timeout=5)
+        return True
+    except Exception:
+        return False
+
+def _install_termux_bashrc():
+    """Append a one-liner to ~/.bashrc that wakes the daemon on every new shell."""
+    bashrc = HOME / ".bashrc"
+    marker = "# bashbasicsbyvk-recents-daemon"
+    text   = bashrc.read_text() if bashrc.exists() else ""
+    if marker in text:
+        return   # already installed
+    line = (
+        f"\n{marker}\n"
+        f"( pgrep -f '{THIS_FILE.name}' > /dev/null 2>&1 ) || "
+        f"( python '{THIS_FILE}' --daemon </dev/null >/dev/null 2>&1 & disown )\n"
+    )
+    with open(bashrc, "a") as f:
+        f.write(line)
+
+def bootstrap():
+    """
+    Called when no daemon is running.
+    Install persistence, then re-exec as the daemon.
+    """
+    BVK_DIR.mkdir(parents=True, exist_ok=True)
+
+    if _is_termux():
+        _install_termux_bashrc()
+        # On Termux we can't use systemd; just start ourselves in the background
+        # and let the bashrc hook handle future sessions.
+        _start_background()
+        sys.exit(0)
+
+    if _has_systemd_user():
+        if _install_systemd():
+            # systemd took over — we're done
+            sys.exit(0)
+
+    # Fallback: plain background launch (Docker, Cloud Shell, etc.)
+    _start_background()
+    sys.exit(0)
+
+def _start_background():
+    """Launch this script as a detached background process."""
+    pid = os.fork() if hasattr(os, "fork") else None
+    if pid is None:
+        # No fork (Windows compat path, unlikely here) — use subprocess
+        subprocess.Popen(
+            [sys.executable, str(THIS_FILE), "--daemon"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return
+    if pid > 0:
+        return   # parent returns immediately
+    # Child: become session leader and exec as daemon
+    os.setsid()
+    os.execv(sys.executable, [sys.executable, str(THIS_FILE), "--daemon"])
+
+# ── Liveness check ─────────────────────────────────────────────────────────────
+
+def is_alive():
+    if not PID_FILE.exists():
+        return False
+    try:
+        pid = int(PID_FILE.read_text().strip())
+        os.kill(pid, 0)
+        return True
+    except (ValueError, ProcessLookupError, PermissionError, OSError):
+        return False
+
+# ── Watcher ────────────────────────────────────────────────────────────────────
+
 IGNORE_PREFIXES = (
     str(BVK_DIR),
-    str(Path.home() / ".cache"),
-    str(Path.home() / ".local/share/recently-used"),
+    str(HOME / ".cache"),
+    str(HOME / ".local/share/recently-used"),
     "/proc", "/sys", "/dev", "/run", "/tmp",
 )
-IGNORE_SUFFIXES = (
-    ".swp", ".swpx", ".tmp", "~", ".lock", ".pid",
-    ".pyc", ".pyo",
-)
-IGNORE_NAMES = {
-    "recents.list", "recents.pid", "lastdir",
-    ".bash_history", ".python_history",
-}
+IGNORE_SUFFIXES = (".swp", ".swpx", ".tmp", "~", ".lock", ".pid", ".pyc", ".pyo")
+IGNORE_NAMES    = {"recents.list", "recents.pid", "lastdir", ".bash_history", ".python_history"}
 
-# ── Shared state ───────────────────────────────────────────────────────────────
-# Use OrderedDict as an ordered set: key=path, value=None, newest at front
 _lock   = threading.Lock()
-_recent: OrderedDict = OrderedDict()
+_recent : OrderedDict = OrderedDict()
 _dirty  = threading.Event()
 
 def _should_ignore(path: str) -> bool:
@@ -72,53 +175,30 @@ def _should_ignore(path: str) -> bool:
         return True
     if name in IGNORE_NAMES:
         return True
-    for sfx in IGNORE_SUFFIXES:
-        if path.endswith(sfx):
+    for s in IGNORE_SUFFIXES:
+        if path.endswith(s):
             return True
-    for pfx in IGNORE_PREFIXES:
-        if path.startswith(pfx):
+    for p in IGNORE_PREFIXES:
+        if path.startswith(p):
             return True
     return False
 
 def _record(path: str):
-    if _should_ignore(path):
-        return
-    if not os.path.isfile(path):
+    if _should_ignore(path) or not os.path.isfile(path):
         return
     with _lock:
-        # Move to front (most recent)
         _recent.pop(path, None)
-        # Insert at beginning by rebuilding (OrderedDict has no move_to_front)
-        new = OrderedDict()
-        new[path] = None
-        new.update(_recent)
-        _recent.clear()
-        _recent.update(new)
-        # Trim
+        new = OrderedDict(); new[path] = None; new.update(_recent)
+        _recent.clear(); _recent.update(new)
         while len(_recent) > MAX_RECENT:
             _recent.popitem(last=True)
     _dirty.set()
 
-# ── Watchdog event handler ─────────────────────────────────────────────────────
-class RecentHandler(FileSystemEventHandler):
-    def on_created(self, event):
-        if not event.is_directory:
-            _record(event.src_path)
-
-    def on_modified(self, event):
-        if not event.is_directory:
-            _record(event.src_path)
-
-    def on_moved(self, event):
-        if not event.is_directory:
-            _record(event.dest_path)
-
-# ── Disk flusher thread ────────────────────────────────────────────────────────
 def _flusher():
     while True:
         _dirty.wait()
         _dirty.clear()
-        time.sleep(FLUSH_INTERVAL)   # debounce: batch rapid edits
+        time.sleep(FLUSH_DELAY)
         _flush_to_disk()
 
 def _flush_to_disk():
@@ -126,51 +206,34 @@ def _flush_to_disk():
         lines = list(_recent.keys())
     tmp = LIST_FILE.with_suffix(".tmp")
     try:
-        with open(tmp, "w") as f:
-            f.write("\n".join(lines))
-            if lines:
-                f.write("\n")
-        os.replace(tmp, LIST_FILE)   # atomic rename
+        tmp.write_text("\n".join(lines) + ("\n" if lines else ""))
+        os.replace(tmp, LIST_FILE)
     except OSError:
         pass
 
-# ── Bootstrap: load existing list so we don't start cold ──────────────────────
 def _load_existing():
     if not LIST_FILE.exists():
         return
     try:
-        with open(LIST_FILE) as f:
-            for line in f:
-                p = line.rstrip("\n")
-                if p and os.path.isfile(p):
-                    _recent[p] = None
-        # Trim to max
+        for line in LIST_FILE.read_text().splitlines():
+            if line and os.path.isfile(line):
+                _recent[line] = None
         while len(_recent) > MAX_RECENT:
             _recent.popitem(last=True)
     except OSError:
         pass
 
-# ── Cleanup ────────────────────────────────────────────────────────────────────
 def _cleanup(signum=None, frame=None):
     _flush_to_disk()
-    try:
-        PID_FILE.unlink()
-    except OSError:
-        pass
+    try: PID_FILE.unlink()
+    except OSError: pass
     sys.exit(0)
 
-# ── Main ───────────────────────────────────────────────────────────────────────
-def main():
+def run_daemon():
+    """The actual watcher loop. Runs in foreground; systemd/fork supervises it."""
     BVK_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Single-instance guard — plain PID file, no flock
-    if PID_FILE.exists():
-        try:
-            old_pid = int(PID_FILE.read_text().strip())
-            os.kill(old_pid, 0)   # raises if process is gone
-            sys.exit(0)           # genuinely already running
-        except (ProcessLookupError, ValueError, OSError):
-            pass                  # stale PID — overwrite below
+    # Write PID
     PID_FILE.write_text(str(os.getpid()) + "\n")
 
     signal.signal(signal.SIGTERM, _cleanup)
@@ -178,29 +241,59 @@ def main():
 
     _load_existing()
 
-    watch_roots = sys.argv[1:] if len(sys.argv) > 1 else [str(Path.home())]
+    watch_roots = [str(HOME)]
+
+    try:
+        from watchdog.observers.inotify import InotifyObserver as Observer
+    except ImportError:
+        from watchdog.observers import Observer
+
+    from watchdog.events import FileSystemEventHandler
+
+    class _Handler(FileSystemEventHandler):
+        def on_created(self, e):
+            if not e.is_directory: _record(e.src_path)
+        def on_modified(self, e):
+            if not e.is_directory: _record(e.src_path)
+        def on_moved(self, e):
+            if not e.is_directory: _record(e.dest_path)
 
     observer = Observer()
-    handler  = RecentHandler()
+    handler  = _Handler()
     for root in watch_roots:
         if os.path.isdir(root):
             observer.schedule(handler, root, recursive=True)
 
     observer.start()
 
-    # Start flusher thread
     t = threading.Thread(target=_flusher, daemon=True)
     t.start()
 
     try:
-        while True:
+        while observer.is_alive():
             time.sleep(1)
-            if not observer.is_alive():
-                break
     finally:
         observer.stop()
         observer.join()
         _cleanup()
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+def main():
+    daemon_mode = "--daemon" in sys.argv
+
+    if daemon_mode:
+        # We are the daemon — just run the watcher
+        run_daemon()
+        return
+
+    # Called from main script o (or manually):
+    # If already alive, nothing to do.
+    if is_alive():
+        return
+
+    # Not alive — bootstrap persistence and start
+    bootstrap()
 
 if __name__ == "__main__":
     main()

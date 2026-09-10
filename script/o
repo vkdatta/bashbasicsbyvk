@@ -445,31 +445,21 @@ _orig_stty=$(stty -g 2>/dev/null)
 _BVK_LASTDIR_FILE="${HOME}/.bashbasicsbyvk/lastdir"
 _BVK_RECENTS_PID_FILE="${HOME}/.bashbasicsbyvk/recents.pid"
 
-# ── Recents daemon: start once per session ─────────────────────────────────
-_bvk_start_recents_daemon() {
-  local _daemon_script
-  _daemon_script="$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon"
+# ── Recents daemon: wake if not alive (daemon manages its own persistence) ──
+_bvk_wake_recents_daemon() {
+  local _daemon_script="$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon"
   [ -f "$_daemon_script" ] || return
-  # Only start if no instance is already running
-  if [ -f "$_BVK_RECENTS_PID_FILE" ]; then
-    local _pid
-    _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
-    kill -0 "$_pid" 2>/dev/null && return   # already alive
-  fi
-  python "$_daemon_script" "$HOME" </dev/null >/dev/null 2>&1 &
+  local _pid
+  _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
+  kill -0 "$_pid" 2>/dev/null && return   # already alive
+  # Not alive — call daemon; it bootstraps persistence and starts itself
+  python "$_daemon_script" </dev/null >/dev/null 2>&1 &
   disown
 }
 
-_bvk_stop_recents_daemon() {
-  [ -f "$_BVK_RECENTS_PID_FILE" ] || return
-  local _pid
-  _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
-  [ -n "$_pid" ] && kill "$_pid" 2>/dev/null
-}
+_bvk_wake_recents_daemon
 
-_bvk_start_recents_daemon
-
-trap 'stty "$_orig_stty" 2>/dev/null; [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; _bvk_stop_recents_daemon' EXIT
+trap 'stty "$_orig_stty" 2>/dev/null; [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"' EXIT
 
 _menu_header() {
   echo

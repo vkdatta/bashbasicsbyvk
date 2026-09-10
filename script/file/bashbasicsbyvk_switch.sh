@@ -344,13 +344,17 @@ _sw_execute_handle_selection() {
 # Does NOT scroll or emit a new block.
 
 _sw_tab_redraw() {
-  local prev_tab="$1"   # tab we're leaving — restore its path on the way out
+  # Snapshot _blk_h NOW — before geometry changes with the new tab's chrome.
+  # _vp_redraw_in_place recalculates _blk_h internally which causes drift when
+  # header/footer line counts differ between tabs. We do the cursor-up ourselves
+  # with the old value, then let _vp_render_fresh compute fresh geometry cleanly.
+  local _old_blk_h="${_blk_h:-0}"
 
   # Switch path context to new tab
   case "$_sw_tab" in
     bookmarks) path="$_SW_DIR" ;;
     execute)   path="$_SW_EXEC_DIR" ;;
-    recents)   : ;;   # recents has no real path
+    recents)   : ;;
   esac
   group_prefix=""
   force_show=false
@@ -360,7 +364,15 @@ _sw_tab_redraw() {
   _vp_start=1
   _vp_cache_reset
   _vp_prime_rows
-  _vp_redraw_in_place
+
+  # Move up exactly as many lines as the block we drew, clear to end, redraw.
+  local _up=$(( _old_blk_h - 1 ))
+  local _rows; _rows=$(_term_rows)
+  (( _up > _rows - 1 )) && _up=$(( _rows - 1 ))
+  (( _up < 0 )) && _up=0
+  (( _up > 0 )) && builtin printf '[%dA' "$_up"
+  builtin printf '[J'
+  _vp_render_fresh
 }
 
 # ── Main entry point ──────────────────────────────────────────────────────────
