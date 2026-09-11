@@ -4,18 +4,21 @@ bashbasicsbyvk_recents_daemon
 ──────────────────────────────
 Self-bootstrapping persistent daemon that tracks recently modified files.
 
-First run (called from main script o):
-  • Detects environment (systemd/user, Termux, plain Linux)
-  • Installs itself as a persistent service if possible
-  • Starts itself and stays alive
+Watcher backends:
+  • watchdog (inotify) — preferred, instant
+  • polling fallback   — used when watchdog isn't available
 
-Subsequent runs / reboots:
-  • systemd (or ~/.bashrc on Termux) wakes it automatically
-  • Main script o just does a liveness check and wakes if dead
+Self-install:
+  On first run, if watchdog is missing, the daemon attempts a one-shot
+  `pip install --user watchdog` in the background. Success is logged and
+  picked up on the next restart. Failures are logged and the daemon stays
+  on the polling backend.
 
 Output:
-  ~/.bashbasicsbyvk/recents.list   — newest-first, max 100 paths
-  ~/.bashbasicsbyvk/recents.pid    — PID of running daemon
+  ~/.bashbasicsbyvk/recents.list                — newest-first, max 100 paths
+  ~/.bashbasicsbyvk/recents.pid                 — PID of running daemon
+  ~/.bashbasicsbyvk/recents.log                 — daemon log
+  ~/.bashbasicsbyvk/.watchdog_install_attempted — pip attempt sentinel
 """
 
 import os
@@ -32,10 +35,16 @@ HOME       = Path.home()
 BVK_DIR    = HOME / ".bashbasicsbyvk"
 LIST_FILE  = BVK_DIR / "recents.list"
 PID_FILE   = BVK_DIR / "recents.pid"
+LOG_FILE   = BVK_DIR / "recents.log"
+SENTINEL   = BVK_DIR / ".watchdog_install_attempted"
 THIS_FILE  = Path(os.path.abspath(__file__))
 
-MAX_RECENT    = 100
-FLUSH_DELAY   = 2.0   # seconds — debounce rapid edits
+MAX_RECENT     = 100
+FLUSH_DELAY    = 2.0     # seconds — debounce rapid edits
+POLL_INTERVAL  = 3.0     # seconds — polling fallback cadence
+POLL_MAX_DEPTH = 6       # max directory depth for polling fallback
+INSTALL_RETRY  = 86400   # seconds — don't retry pip install before this
+PIP_TIMEOUT    = 120     # seconds
 
 # ── Environment detection ──────────────────────────────────────────────────────
 
@@ -48,13 +57,12 @@ def _has_systemd_user():
             ["systemctl", "--user", "is-system-running"],
             capture_output=True, timeout=3
         )
-        # Only trust it if stdout actually says something meaningful
         out = r.stdout.decode().strip()
         return r.returncode in (0, 1) and out in ("running", "degraded")
     except Exception:
         return False
 
-# ── Self-bootstrap ─────────────────────────────────────────────────────────────
+# ── Self-bootstrap (service persistence) ───────────────────────────────────────
 
 SERVICE_NAME = "bashbasicsbyvk-recents"
 
@@ -66,9 +74,6 @@ def _install_systemd():
     unit = _systemd_unit_path()
     unit.parent.mkdir(parents=True, exist_ok=True)
     python = sys.executable
-    # NOTE: --daemon is required so the service actually runs the watcher.
-    # Without it, main() falls into bootstrap() and exits, and Restart=always
-    # loops the unit forever without ever entering run_daemon().
     unit.write_text(f"""[Unit]
 Description=bashbasicsbyvk recents file watcher
 After=default.target
@@ -91,48 +96,56 @@ WantedBy=default.target
         return False
 
 def _install_termux_bashrc():
-    """Append a one-liner to ~/.bashrc that wakes the daemon on every new shell."""
+    """Install/repair the ~/.bashrc wake hook. Idempotent.
+
+    Calls the daemon WITHOUT --daemon so it goes through main()'s
+    is_alive() gate — prevents duplicate daemons when many shells open
+    at once. bootstrap() re-execs with --daemon.
+    """
     bashrc = HOME / ".bashrc"
-    marker = "# bashbasicsbyvk-recents-daemon"
-    text   = bashrc.read_text() if bashrc.exists() else ""
-    if marker in text:
-        return   # already installed
-    line = (
-        f"\n{marker}\n"
-        f"( pgrep -f '{THIS_FILE.name}' > /dev/null 2>&1 ) || "
-        f"( python '{THIS_FILE}' --daemon </dev/null >/dev/null 2>&1 & disown )\n"
-    )
-    with open(bashrc, "a") as f:
-        f.write(line)
+    marker   = "# bashbasicsbyvk-recents-daemon"
+    new_line = f"( python '{THIS_FILE}' </dev/null >/dev/null 2>&1 & disown )"
+
+    text  = bashrc.read_text() if bashrc.exists() else ""
+    lines = text.splitlines()
+
+    for i in range(len(lines) - 1):
+        if lines[i].strip() == marker and lines[i+1] == new_line:
+            return
+
+    out, skip = [], False
+    for ln in lines:
+        if skip:
+            skip = False
+            continue
+        if ln.strip() == marker:
+            skip = True
+            continue
+        out.append(ln)
+
+    out.append(marker)
+    out.append(new_line)
+    try:
+        bashrc.write_text("\n".join(out) + "\n")
+    except OSError:
+        pass
 
 def bootstrap():
-    """
-    Called when no daemon is running.
-    Install persistence, then re-exec as the daemon.
-    """
     BVK_DIR.mkdir(parents=True, exist_ok=True)
 
     if _is_termux():
         _install_termux_bashrc()
-        # On Termux we can't use systemd; just start ourselves in the background
-        # and let the bashrc hook handle future sessions.
         _start_background()
         sys.exit(0)
 
     if _has_systemd_user():
         if _install_systemd():
-            # systemd took over — we're done
             sys.exit(0)
 
-    # Fallback: plain background launch (Docker, Cloud Shell, etc.)
     _start_background()
     sys.exit(0)
 
 def _start_background():
-    """Launch this script as a detached background process.
-    Uses Popen with start_new_session=True — works on Termux, containers,
-    Cloud Shell, and plain Linux without needing os.fork().
-    """
     proc = subprocess.Popen(
         [sys.executable, str(THIS_FILE), "--daemon"],
         stdout=subprocess.DEVNULL,
@@ -140,11 +153,14 @@ def _start_background():
         stdin=subprocess.DEVNULL,
         start_new_session=True,
     )
-    # Give the child a moment to write its PID file before we exit
     time.sleep(0.5)
+    try:
+        PID_FILE.write_text(str(proc.pid) + "\n")
+    except OSError:
+        pass
     return proc.pid
 
-# ── Liveness check ─────────────────────────────────────────────────────────────
+# ── Liveness ───────────────────────────────────────────────────────────────────
 
 def is_alive():
     if not PID_FILE.exists():
@@ -156,7 +172,16 @@ def is_alive():
     except (ValueError, ProcessLookupError, PermissionError, OSError):
         return False
 
-# ── Watcher ────────────────────────────────────────────────────────────────────
+# ── Logging ────────────────────────────────────────────────────────────────────
+
+def _log(msg):
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    except OSError:
+        pass
+
+# ── Ignores ────────────────────────────────────────────────────────────────────
 
 IGNORE_PREFIXES = (
     str(BVK_DIR),
@@ -165,7 +190,10 @@ IGNORE_PREFIXES = (
     "/proc", "/sys", "/dev", "/run", "/tmp",
 )
 IGNORE_SUFFIXES = (".swp", ".swpx", ".tmp", "~", ".lock", ".pid", ".pyc", ".pyo")
-IGNORE_NAMES    = {"recents.list", "recents.pid", "lastdir", ".bash_history", ".python_history"}
+IGNORE_NAMES    = {"recents.list", "recents.pid", "recents.log",
+                   "lastdir", ".bash_history", ".python_history"}
+
+# ── Shared state ───────────────────────────────────────────────────────────────
 
 _lock   = threading.Lock()
 _recent : OrderedDict = OrderedDict()
@@ -231,37 +259,105 @@ def _cleanup(signum=None, frame=None):
     except OSError: pass
     sys.exit(0)
 
-LOG_FILE = BVK_DIR / "recents.log"
+# ── watchdog import / self-install ─────────────────────────────────────────────
 
-def _log(msg):
+def _refresh_import_paths():
+    """Make sure user site-packages is on sys.path and Python's import
+    caches are invalidated. Needed after a fresh `pip install --user`."""
     try:
-        with open(LOG_FILE, "a") as f:
-            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+        import site, importlib
+        try:
+            site.addsitedir(site.getusersitepackages())
+        except Exception:
+            pass
+        importlib.invalidate_caches()
+    except Exception:
+        pass
+
+def _try_import_watchdog():
+    _refresh_import_paths()
+    try:
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+        return Observer, FileSystemEventHandler
+    except ImportError as e:
+        _log(f"watchdog import failed: {e}")
+        return None, None
+
+def _should_attempt_install():
+    if not SENTINEL.exists():
+        return True
+    try:
+        age = time.time() - SENTINEL.stat().st_mtime
+        return age > INSTALL_RETRY
+    except OSError:
+        return True
+
+def _run_pip(args):
+    cmd = [sys.executable, "-m", "pip", "install",
+           "--no-input", "--disable-pip-version-check"] + args
+    _log(f"pip: {' '.join(cmd)}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=PIP_TIMEOUT)
+        out = proc.stdout.decode(errors="replace").strip()
+        err = proc.stderr.decode(errors="replace").strip()
+        if out:
+            _log(f"pip stdout tail: {out[-500:]}")
+        if err:
+            _log(f"pip stderr tail: {err[-500:]}")
+        return proc.returncode
+    except subprocess.TimeoutExpired:
+        _log(f"pip install timed out after {PIP_TIMEOUT}s")
+        return 124
+    except Exception as e:
+        _log(f"pip install raised {type(e).__name__}: {e}")
+        return 1
+
+def _try_install_watchdog():
+    """One-shot pip install. Tries plain --user first, then falls back to
+    --break-system-packages for PEP 668–managed environments. Records a
+    sentinel so we don't hammer pip on every daemon start."""
+    _log("watchdog missing — attempting one-shot pip install")
+
+    attempts = [
+        ["--user", "watchdog"],
+        ["--user", "--break-system-packages", "watchdog"],
+    ]
+
+    success = False
+    for extra in attempts:
+        rc = _run_pip(extra)
+        if rc == 0:
+            success = True
+            _log("pip install watchdog succeeded")
+            break
+        _log(f"pip attempt rc={rc} (args={extra})")
+
+    try:
+        SENTINEL.write_text(
+            f"{time.strftime('%Y-%m-%d %H:%M:%S')} "
+            f"{'ok' if success else 'failed'}\n"
+        )
     except OSError:
         pass
 
-def run_daemon():
-    """The actual watcher loop. Runs in foreground; systemd/fork supervises it."""
-    BVK_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Write PID before anything else so caller's liveness check succeeds
-    PID_FILE.write_text(str(os.getpid()) + "\n")
-
-    signal.signal(signal.SIGTERM, _cleanup)
-    signal.signal(signal.SIGINT,  _cleanup)
-
-    _log(f"daemon started pid={os.getpid()}")
-
-    _load_existing()
-
-    watch_roots = [str(HOME)]
-
+    # Verify the install by re-importing in this process
+    _refresh_import_paths()
     try:
-        from watchdog.observers.inotify import InotifyObserver as Observer
-    except ImportError:
-        from watchdog.observers import Observer
+        import importlib
+        if "watchdog" in sys.modules:
+            importlib.reload(sys.modules["watchdog"])
+        from watchdog.observers import Observer  # noqa: F401
+        _log("watchdog now importable")
+        return True
+    except Exception as e:
+        _log(f"watchdog still not importable after install: {e}")
+        return False
 
-    from watchdog.events import FileSystemEventHandler
+# ── Watcher: watchdog (inotify) ────────────────────────────────────────────────
+
+def _run_watchdog_watcher(Observer, FileSystemEventHandler):
+    watch_roots = [str(HOME)]
 
     class _Handler(FileSystemEventHandler):
         def on_created(self, e):
@@ -277,24 +373,128 @@ def run_daemon():
         if os.path.isdir(root):
             observer.schedule(handler, root, recursive=True)
 
-    try:
-        observer.start()
-        _log(f"observer started watching {watch_roots}")
-    except Exception as e:
-        _log(f"observer failed to start: {e}")
-        _cleanup()
-        return
-
-    t = threading.Thread(target=_flusher, daemon=True)
-    t.start()
+    observer.start()
+    _log(f"observer started watching {watch_roots}")
 
     try:
         while observer.is_alive():
             time.sleep(1)
         _log("observer died unexpectedly")
     finally:
-        observer.stop()
-        observer.join()
+        try:
+            observer.stop(); observer.join()
+        except Exception:
+            pass
+
+# ── Watcher: polling fallback ──────────────────────────────────────────────────
+
+def _prune_dirname(dirpath, name):
+    if name.startswith("."):
+        return True
+    full = os.path.join(dirpath, name)
+    for p in IGNORE_PREFIXES:
+        if full.startswith(p):
+            return True
+    return False
+
+def _scan_files(root, max_depth=POLL_MAX_DEPTH):
+    results = {}
+    root = os.path.abspath(root)
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+        rel   = os.path.relpath(dirpath, root)
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+        dirnames[:] = [
+            d for d in dirnames
+            if (depth + 1) <= max_depth and not _prune_dirname(dirpath, d)
+        ]
+        for fn in filenames:
+            if fn.startswith("."):
+                continue
+            fp = os.path.join(dirpath, fn)
+            if _should_ignore(fp):
+                continue
+            try:
+                st = os.stat(fp)
+            except OSError:
+                continue
+            results[fp] = st.st_mtime
+    return results
+
+def _run_polling_watcher():
+    _log(f"polling watcher starting (interval={POLL_INTERVAL}s, depth={POLL_MAX_DEPTH})")
+    t0 = time.time()
+    try:
+        seen = _scan_files(str(HOME))
+    except Exception as e:
+        _log(f"initial scan failed: {type(e).__name__}: {e}")
+        seen = {}
+    _log(f"primed with {len(seen)} files in {time.time()-t0:.2f}s")
+
+    while True:
+        time.sleep(POLL_INTERVAL)
+        try:
+            cur = _scan_files(str(HOME))
+        except Exception as e:
+            _log(f"scan error: {type(e).__name__}: {e}")
+            continue
+        for path, mtime in cur.items():
+            old = seen.get(path)
+            if old is None or mtime > old:
+                _record(path)
+        seen = cur
+
+# ── Dispatcher ─────────────────────────────────────────────────────────────────
+
+def _run_watcher():
+    Observer, FileSystemEventHandler = _try_import_watchdog()
+
+    # Not available? Try a one-shot install — but never block the watcher
+    # on pip. If pip succeeds, watchdog gets picked up on the next restart.
+    if Observer is None and _should_attempt_install():
+        t = threading.Thread(
+            target=_try_install_watchdog, name="pip-install-watchdog",
+            daemon=True,
+        )
+        t.start()
+
+    if Observer is not None:
+        _log("using watchdog (inotify) watcher")
+        try:
+            _run_watchdog_watcher(Observer, FileSystemEventHandler)
+            return
+        except Exception as e:
+            import traceback
+            _log(f"watchdog watcher failed: {type(e).__name__}: {e}")
+            _log(traceback.format_exc())
+            _log("falling back to polling watcher")
+    else:
+        _log("watchdog unavailable — using polling watcher")
+
+    _run_polling_watcher()
+
+# ── Daemon loop ────────────────────────────────────────────────────────────────
+
+def run_daemon():
+    BVK_DIR.mkdir(parents=True, exist_ok=True)
+    PID_FILE.write_text(str(os.getpid()) + "\n")
+
+    signal.signal(signal.SIGTERM, _cleanup)
+    signal.signal(signal.SIGINT,  _cleanup)
+
+    _log(f"daemon started pid={os.getpid()}")
+
+    _load_existing()
+
+    t = threading.Thread(target=_flusher, daemon=True)
+    t.start()
+
+    try:
+        _run_watcher()
+    except Exception as e:
+        import traceback
+        _log(f"watcher crashed: {type(e).__name__}: {e}")
+        _log(traceback.format_exc())
+    finally:
         _cleanup()
 
 # ── Entry point ────────────────────────────────────────────────────────────────
@@ -303,16 +503,12 @@ def main():
     daemon_mode = "--daemon" in sys.argv
 
     if daemon_mode:
-        # We are the daemon — just run the watcher
         run_daemon()
         return
 
-    # Called from main script o (or manually):
-    # If already alive, nothing to do.
     if is_alive():
         return
 
-    # Not alive — bootstrap persistence and start
     bootstrap()
 
 if __name__ == "__main__":
