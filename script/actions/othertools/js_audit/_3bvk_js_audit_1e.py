@@ -287,10 +287,15 @@ def audit_1e_missing_imports(js_info, all_js, root):
         | globally_available   # ← classic-script globals: no import needed
     )
 
-    # Collect all bare calls not in the known set
+    # Collect all bare calls not in the known set.
+    # _RE_BARE_CALL group(1) captures an optional keyword prefix (new, typeof, etc.);
+    # skip those matches -- new Foo() is a constructor call, not a missing import.
+    # group(2) is the actual identifier.
     called_names = set()
     for m in _RE_BARE_CALL.finditer(nosstr):
-        name = m.group(1)
+        if m.group(1):   # keyword-prefixed: new Foo(), typeof foo(), etc.
+            continue
+        name = m.group(2)
         if name not in known:
             called_names.add(name)
 

@@ -69,7 +69,17 @@ _RE_STRING_LITERAL = re.compile(
     r"|`(?:[^`\\]|\\.)*`",
     re.DOTALL,
 )
-_RE_BARE_CALL = re.compile(r'(?<![.\w])([A-Za-z_$]\w*)\s*\(')
+# Matches bare function/constructor calls, capturing an optional keyword
+# prefix (new, typeof, instanceof, etc.) in group 1 and the identifier
+# in group 2.  Callers must skip matches where group(1) is truthy to
+# exclude constructor calls (new Foo()) and keyword expressions.
+# Method calls (obj.foo()) are excluded by the (?<![.\w]) lookbehind.
+_RE_BARE_CALL = re.compile(
+    r'(?<![.\w])'
+    r'((?:new|typeof|instanceof|extends|delete|void|await|yield)\s+)?'
+    r'([A-Za-z_$]\w*)\s*\(',
+    re.MULTILINE,
+)
 
 
 # ──────────────────────────────────────────────────────────────
