@@ -18,7 +18,7 @@ with a suggested import statement.
 import re
 from pathlib import Path
 
-from _3bvk_js_audit_helpers import strip_comments, rel, read_file, resolve_script_ref, _find_index_html
+from _3bvk_js_audit_helpers import strip_comments, rel, read_file, resolve_script_ref, _find_index_html, HTMLFileInfo
 from _3bvk_js_audit_constants import (
     _JS_KEYWORDS, _NATIVE_GLOBALS, _SAFE_LITERALS,
     _RE_BARE_CALL, _RE_STRING_LITERAL,
@@ -139,6 +139,14 @@ def _collect_global_names_from_classic_scripts(html_path: Path, all_js: dict, ro
     filename_to_finfo = {}
     for fpath, finfo in all_js.items():
         filename_to_finfo.setdefault(fpath.name, []).append(finfo)
+
+    # Functions and classes defined directly in inline <script> blocks are
+    # globally available to all classic scripts on the same page.
+    # HTMLFileInfo._parse() already extracts these into inline_script_globals.
+    try:
+        global_names |= HTMLFileInfo(html_path).inline_script_globals
+    except Exception:
+        pass
 
     for src_attr, is_module in script_srcs:
         if is_module:       # modules are scoped, not global

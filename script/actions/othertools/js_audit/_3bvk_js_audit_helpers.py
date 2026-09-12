@@ -20,7 +20,6 @@ from _3bvk_js_audit_constants import (
     _RE_METHOD_SHORTHAND, _RE_WINDOW_ASSIGN, _RE_IIFE, _RE_COMMENT_BLOCK,
     _RE_SCRIPT_TAG, _RE_SCRIPT_SRC, _RE_SCRIPT_TYPE,
     _RE_INLINE_EVT, _RE_FUNC_CALL,
-    _RE_CLASS_DECL,
     _JS_KEYWORDS, _HTML_KW,
 )
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
@@ -95,7 +94,6 @@ class JSFileInfo:
         self.exports        = set()
         self.functions      = {}
         self.window_globals = set()
-        self.class_names    = set()   # all class names defined in this file
         self.iife_present   = False
         self._parse()
     def _parse(self):
@@ -114,7 +112,6 @@ class JSFileInfo:
             self.exports        = set()
             self.functions      = {}
             self.window_globals = set()
-            self.class_names    = set()
             self.iife_present   = False
             try:
                 tree = esprima.parseScript(src, {'tolerant': True, 'range': True, 'loc': True})
@@ -163,13 +160,6 @@ class JSFileInfo:
                 self.exports.add('*')
             self._collect_func_node(node)
         self.window_globals = set(_RE_WINDOW_ASSIGN.findall(self.source))
-        # Collect class names from the esprima AST body
-        for node in getattr(tree, 'body', []):
-            n = node
-            if getattr(n, 'type', None) == 'ExportNamedDeclaration' and getattr(n, 'declaration', None):
-                n = n.declaration
-            if getattr(n, 'type', None) == 'ClassDeclaration' and getattr(n, 'id', None):
-                self.class_names.add(n.id.name)
     def _esprima_is_top(self, body, idx):
         for node in body[:idx]:
             if node.type not in ('ImportDeclaration', 'ExpressionStatement'):
@@ -260,12 +250,6 @@ class JSFileInfo:
             name = m.group(1)
             if name and name not in _JS_KEYWORDS:
                 self.functions[name] = FuncInfo(name, self.path)
-        for m in _RE_CLASS_DECL.finditer(clean):
-            name = m.group(1)
-            if name and name not in _JS_KEYWORDS:
-                self.class_names.add(name)
-                # exported classes are already in self.exports via _RE_EXPORT_CLASS;
-                # non-exported classes are still local names, tracked in class_names.
         self.window_globals = set(_RE_WINDOW_ASSIGN.findall(clean))
         self.iife_present   = bool(_RE_IIFE.search(clean))
     def _regex_is_top(self, clean, pos):
@@ -277,25 +261,65 @@ class ScriptRef:
         self.is_module = is_module
 class HTMLFileInfo:
     def __init__(self, path: Path):
-        self.path          = path
-        self.rel_path      = rel(path)
-        self.source        = read_file(path)
-        self.script_refs   = []
-        self.inline_events = []
+        self.path                  = path
+        self.rel_path              = rel(path)
+        self.source                = read_file(path)
+        self.script_refs           = []
+        self.inline_events         = []
+        self.inline_script_globals = set()   # function/class names defined in inline <script> blocks
         self._parse()
+
     def _parse(self):
         for m in _RE_SCRIPT_TAG.finditer(self.source):
-            attrs  = m.group(1)
-            src_m  = _RE_SCRIPT_SRC.search(attrs)
-            type_m = _RE_SCRIPT_TYPE.search(attrs)
+            attrs     = m.group(1)
+            body      = m.group(2)
+            src_m     = _RE_SCRIPT_SRC.search(attrs)
+            type_m    = _RE_SCRIPT_TYPE.search(attrs)
             is_module = bool(type_m and 'module' in type_m.group(1).lower())
             if src_m:
                 self.script_refs.append(ScriptRef(src_m.group(1), is_module))
+            # Collect names defined in inline <script> bodies regardless of
+            # whether the block also has a src= attribute.  Functions and
+            # classes defined here are globally visible to all classic scripts
+            # on the same page.
+            if body and body.strip():
+                self._extract_inline_globals(body)
         for m in _RE_INLINE_EVT.finditer(self.source):
             code  = m.group(1)
             funcs = [f for f in _RE_FUNC_CALL.findall(code) if f not in _HTML_KW]
             if funcs:
                 self.inline_events.append((code, funcs))
+
+    def _extract_inline_globals(self, js_body):
+        """
+        Collect every function and class name defined at the top level of an
+        inline <script> block.  These land on the global scope and are
+        available to all classic scripts loaded by the same page.
+        """
+        import re as _re
+        # function declarations:  function foo(...)  /  async function foo(...)
+        for m in _re.finditer(r'\bfunction\s+(\w+)\s*\(', js_body):
+            name = m.group(1)
+            if name and name not in _JS_KEYWORDS:
+                self.inline_script_globals.add(name)
+        # function expressions assigned to var/let/const:  const foo = function / const foo = () =>
+        for m in _re.finditer(
+            r'\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:function\b|(?:\([^)]*\)|\w+)\s*=>)',
+            js_body,
+        ):
+            name = m.group(1)
+            if name and name not in _JS_KEYWORDS:
+                self.inline_script_globals.add(name)
+        # class declarations:  class Foo  /  class Foo extends Bar
+        for m in _re.finditer(r'\bclass\s+(\w+)(?:\s+extends\s+\w+)?\s*\{', js_body):
+            name = m.group(1)
+            if name and name not in _JS_KEYWORDS:
+                self.inline_script_globals.add(name)
+        # window.foo = ...  explicit global assignments
+        for m in _re.finditer(r'\bwindow\.(\w+)\s*=', js_body):
+            name = m.group(1)
+            if name and name not in _JS_KEYWORDS:
+                self.inline_script_globals.add(name)
 def resolve_js_path(from_path_str, root, source_file):
     p         = from_path_str.strip()
     candidate = root / p.lstrip('/') if p.startswith('/') else source_file.parent / p
