@@ -343,8 +343,8 @@ _sw_tab_redraw() {
   local _rows; _rows=$(_term_rows)
   (( _up > _rows - 1 )) && _up=$(( _rows - 1 ))
   (( _up < 0 )) && _up=0
-  (( _up > 0 )) && builtin printf '\033[%dA' "$_up"
-  builtin printf '\r\033[J'
+  (( _up > 0 )) && printf '\033[%dA' "$_up"
+  printf '\r\033[J'
   # Emit WITHOUT input line: _read_choice prints it fresh each loop.
   # Calling _vp_render_fresh here adds an extra input-line print
   # causing +1 line drift per tab switch.

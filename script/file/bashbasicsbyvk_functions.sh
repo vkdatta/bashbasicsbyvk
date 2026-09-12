@@ -256,8 +256,8 @@ _fx_tab_redraw() {
   local _rows; _rows=$(_term_rows)
   (( _up > _rows - 1 )) && _up=$(( _rows - 1 ))
   (( _up < 0 ))         && _up=0
-  (( _up > 0 ))         && builtin printf '\033[%dA' "$_up"
-  builtin printf '\r\033[J'
+  (( _up > 0 ))         && printf '\033[%dA' "$_up"
+  printf '\r\033[J'
   _vp_build_chrome
   _vp_geometry
   _vp_ensure_visible "${_hl_index:-1}"
