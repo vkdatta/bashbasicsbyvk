@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Rename handling — single mutation and multi mutation (CSV)
+# Rename handling — single mutation (interactive per-item rename)
+# Multi-mutation (CSV batch rename) lives in bashbasicsbyvk_functions.sh as ADF.
 # Requires: bashbasicsbyvk_csv.sh (open_csv_menu)
 #           select_items_common, _shortcut_read_field (from main / organise)
 
@@ -238,24 +239,13 @@ _rename_multi_mutation() {
 
 # ---------------------------------------------------------------------------
 # handle_rename  (main menu: r)
-# Top-level entry point — presents the Single / Multi Mutation choice,
-# then delegates. Replaces the old handle_rename in both `o` and run.sh.
+# Selects items interactively and renames each one individually.
+# For CSV batch rename, use the fx tab → ADF → rename.select.items.csv
 # ---------------------------------------------------------------------------
 handle_rename() {
   if [ ${#items[@]} -eq 0 ]; then
     echo "❌ No items to rename"
     return
   fi
-
-  echo ""
-  echo "🔤 Rename"
-  echo "1) Single Mutation"
-  echo "2) Multi Mutation (CSV)"
-  read -p "Mode [1-2]: " _ren_mode
-
-  case "$_ren_mode" in
-    1) _rename_single_mutation ;;
-    2) _rename_multi_mutation  ;;
-    *) echo "❌ Invalid mode." ;;
-  esac
+  _rename_single_mutation
 }

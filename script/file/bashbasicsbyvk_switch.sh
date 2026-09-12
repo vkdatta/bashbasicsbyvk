@@ -1,28 +1,27 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_switch.sh
 # ════════════════════════════════════════════════════════════════════════════
-#  SWITCH — three-tab overlay inside the main file-manager loop
+#  SWITCH — two-tab overlay inside the main file-manager loop
 #
 #  Tabs (← / → to cycle when input is empty):
 #    📌 Bookmarks  ~/.bashbasicsbyvk/switch/   — .swlink bookmark files
 #    🕐 Recents    ~/.bashbasicsbyvk/recents.list — daemon-maintained, read-only
-#    ⚡ Execute    ~/.bashbasicsbyvk/execute/   — user scripts, full access
 #
+#  Execute / scripting has moved to bashbasicsbyvk_functions.sh (fx tab).
 #  Tab switch is in-place: the block redraws inside the existing terminal
 #  block — no scroll, no new container.
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Storage roots ─────────────────────────────────────────────────────────────
 _SW_DIR="${HOME}/.bashbasicsbyvk/switch"
-_SW_EXEC_DIR="${HOME}/.bashbasicsbyvk/execute"
 _SW_RECENTS_LIST="${HOME}/.bashbasicsbyvk/recents.list"
 
 _sw_ensure_store() {
-  mkdir -p "$_SW_DIR" "$_SW_EXEC_DIR" 2>/dev/null
+  mkdir -p "$_SW_DIR" 2>/dev/null
 }
 
 # ── Tab state ─────────────────────────────────────────────────────────────────
-_sw_tab="bookmarks"   # bookmarks | recents | execute
+_sw_tab="bookmarks"   # bookmarks | recents
 _sw_in_mode=0         # 1 while inside switch_menu — enables ←/→ sentinel
 _sw_did_switch=false  # set true on successful path jump — changes q behaviour
 
@@ -93,25 +92,22 @@ _sw_build_recents() {
 _sw_tab_next() {
   case "$_sw_tab" in
     bookmarks) _sw_tab=recents ;;
-    recents)   _sw_tab=execute ;;
-    execute)   _sw_tab=bookmarks ;;
+    recents)   _sw_tab=bookmarks ;;
   esac
 }
 
 _sw_tab_prev() {
   case "$_sw_tab" in
-    bookmarks) _sw_tab=execute ;;
+    bookmarks) _sw_tab=recents ;;
     recents)   _sw_tab=bookmarks ;;
-    execute)   _sw_tab=recents ;;
   esac
 }
 
 _sw_tab_label() {
-  local bm="📌 Bookmarks" rc="🕐 Recents" ex="⚡ Execute"
+  local bm="📌 Bookmarks" rc="🕐 Recents"
   case "$_sw_tab" in
-    bookmarks) printf '[%s]   %s    %s'  "$bm" "$rc" "$ex" ;;
-    recents)   printf ' %s  [%s]   %s'  "$bm" "$rc" "$ex" ;;
-    execute)   printf ' %s   %s   [%s]' "$bm" "$rc" "$ex" ;;
+    bookmarks) printf '[%s]   %s'  "$bm" "$rc" ;;
+    recents)   printf ' %s  [%s]' "$bm" "$rc" ;;
   esac
 }
 
@@ -122,8 +118,8 @@ _sw_menu_header() {
   printf '🔀 SWITCH  %s   ←/→ tabs\n' "$(_sw_tab_label)"
   local _loc
   case "$_sw_tab" in
-    recents)   _loc="(recently modified — read only)" ;;
-    *)         _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}" ;;
+    recents) _loc="(recently modified — read only)" ;;
+    *)       _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}" ;;
   esac
   printf '📂 %s\n' "$_loc"
   if [ -n "$_filter_query" ]; then
@@ -145,17 +141,11 @@ _sw_menu_footer_recents() {
   printf '\n[READ ONLY]   Select a file → open/edit/run/copy\nsw) Exit switch mode\n'
 }
 
-_sw_menu_footer_execute() {
-  printf '\n[EXECUTE]  All commands available — scripts run from launch path\nu) Up   t) Transfer   d) Delete   c) Create   f) Find\nr) Rename   s) Settings   x) Organise   sw) Exit\n'
-  [ -n "$group_prefix" ] && printf 'back) Remove last prefix (%s*)\n' "${group_prefix^^}"
-}
-
 _sw_set_viewport_for_tab() {
   local ftr
   case "$_sw_tab" in
     bookmarks) ftr=_sw_menu_footer_bookmarks ;;
     recents)   ftr=_sw_menu_footer_recents   ;;
-    execute)   ftr=_sw_menu_footer_execute   ;;
   esac
   if $imaginary_mode; then
     _vp_mode="imaginary"
@@ -185,7 +175,7 @@ _sw_build_items_for_tab() {
       _sw_build_recents
       ;;
 
-    bookmarks|execute)
+    bookmarks)
       local total
       total=$(count_items_in_path "$path")
       _has_group_view=false
@@ -232,7 +222,7 @@ _sw_build_items_for_tab() {
 # ── Read-only guard ───────────────────────────────────────────────────────────
 
 _sw_recents_blocked() {
-  printf '⚠️  Read-only in Recents — use Bookmarks or Execute tab\n'
+  printf '⚠️  Read-only in Recents — use Bookmarks tab or fx (functions) for scripts\n'
 }
 
 # ── Bookmarks selection ───────────────────────────────────────────────────────
@@ -320,25 +310,6 @@ _sw_recents_handle_selection() {
   handle_file "${items[$((choice-1))]}"
 }
 
-# ── Execute selection — plain file-manager, no .swlink intercept ──────────────
-
-_sw_execute_handle_selection() {
-  local choice="$1"
-
-  if $imaginary_mode; then
-    _sw_bookmarks_handle_selection "$choice"   # imaginary logic is identical
-    return $?
-  fi
-
-  if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
-    local selected="${items[$((choice-1))]}"
-    [ -d "$selected" ] && { path="$selected"; group_prefix=""; force_show=false; return 0; }
-    [ -f "$selected" ] && handle_file "$selected"
-  else
-    echo "⚠️  Invalid selection"
-  fi
-}
-
 # ── In-place tab redraw ───────────────────────────────────────────────────────
 # Rebuilds items + chrome, then repaints the existing terminal block.
 # Does NOT scroll or emit a new block.
@@ -353,7 +324,6 @@ _sw_tab_redraw() {
   # Switch path context to new tab
   case "$_sw_tab" in
     bookmarks) path="$_SW_DIR" ;;
-    execute)   path="$_SW_EXEC_DIR" ;;
     recents)   : ;;
   esac
   group_prefix=""
@@ -399,6 +369,7 @@ switch_menu() {
   group_prefix=""
   force_show=false
   _sw_in_mode=1
+  # Execute / scripting → use fx (functions_menu) instead
 
   local _sw_choice _sw_rc
 
@@ -455,7 +426,7 @@ switch_menu() {
       u)
         if [ "$_sw_tab" = "recents" ]; then
           _sw_recents_blocked; _sw_do_fresh=false
-        elif [ "$path" != "$_SW_DIR" ] && [ "$path" != "$_SW_EXEC_DIR" ] && [ "$path" != "/" ]; then
+        elif [ "$path" != "$_SW_DIR" ] && [ "$path" != "/" ]; then
           path=$(dirname "$path"); group_prefix=""; force_show=false
         else
           echo "↩️  At root — exiting switch mode"; break
@@ -549,9 +520,6 @@ switch_menu() {
             ;;
           recents)
             _sw_recents_handle_selection "$_sw_choice"
-            ;;
-          execute)
-            _sw_execute_handle_selection "$_sw_choice"
             ;;
         esac
         ;;
