@@ -19,6 +19,13 @@ Output:
   ~/.bashbasicsbyvk/recents.pid                 — PID of running daemon
   ~/.bashbasicsbyvk/recents.log                 — daemon log
   ~/.bashbasicsbyvk/.watchdog_install_attempted — pip attempt sentinel
+
+Recents policy:
+  • A file joins recents ONLY when it is modified (on_modified / mtime change).
+  • Created, moved, and renamed files do NOT join recents.
+  • If a file already in recents is renamed/moved, its entry is updated to the
+    new path so the list stays accurate.
+  • If a file already in recents is deleted, its entry is removed.
 """
 
 import os
@@ -214,6 +221,7 @@ def _should_ignore(path: str) -> bool:
     return False
 
 def _record(path: str):
+    """Add or promote path to the top of recents. Only called for genuine edits."""
     if _should_ignore(path) or not os.path.isfile(path):
         return
     with _lock:
@@ -222,6 +230,27 @@ def _record(path: str):
         _recent.clear(); _recent.update(new)
         while len(_recent) > MAX_RECENT:
             _recent.popitem(last=True)
+    _dirty.set()
+
+def _update_path(old_path: str, new_path: str):
+    """Rename an existing recents entry in-place. Does NOT add new entries."""
+    with _lock:
+        if old_path not in _recent:
+            return
+        # Rebuild OrderedDict preserving order, swapping the key
+        new = OrderedDict()
+        for k in _recent:
+            new[new_path if k == old_path else k] = None
+        _recent.clear()
+        _recent.update(new)
+    _dirty.set()
+
+def _remove_path(path: str):
+    """Remove a path from recents if present. Called on deletion."""
+    with _lock:
+        if path not in _recent:
+            return
+        del _recent[path]
     _dirty.set()
 
 def _flusher():
@@ -360,12 +389,22 @@ def _run_watchdog_watcher(Observer, FileSystemEventHandler):
     watch_roots = [str(HOME)]
 
     class _Handler(FileSystemEventHandler):
-        def on_created(self, e):
-            if not e.is_directory: _record(e.src_path)
         def on_modified(self, e):
-            if not e.is_directory: _record(e.src_path)
+            # Only genuine edits to existing files join recents.
+            if not e.is_directory:
+                _record(e.src_path)
+
         def on_moved(self, e):
-            if not e.is_directory: _record(e.dest_path)
+            # Rename/move: update the path if already in recents, don't add it.
+            if not e.is_directory:
+                _update_path(e.src_path, e.dest_path)
+
+        def on_deleted(self, e):
+            # Remove from recents if present, don't error if not.
+            if not e.is_directory:
+                _remove_path(e.src_path)
+
+        # on_created intentionally omitted — new files must not appear in recents.
 
     observer = Observer()
     handler  = _Handler()
@@ -437,10 +476,21 @@ def _run_polling_watcher():
         except Exception as e:
             _log(f"scan error: {type(e).__name__}: {e}")
             continue
+
+        # Only record files that EXISTED before and have a newer mtime — pure edits.
+        # New files (old is None) are intentionally skipped.
         for path, mtime in cur.items():
             old = seen.get(path)
-            if old is None or mtime > old:
+            if old is not None and mtime > old:
                 _record(path)
+
+        # Remove deleted files from recents if they were there.
+        # Note: polling cannot distinguish rename from delete+create, so a
+        # renamed file just gets removed from recents (can't follow the new name).
+        for path in list(seen):
+            if path not in cur:
+                _remove_path(path)
+
         seen = cur
 
 # ── Dispatcher ─────────────────────────────────────────────────────────────────
