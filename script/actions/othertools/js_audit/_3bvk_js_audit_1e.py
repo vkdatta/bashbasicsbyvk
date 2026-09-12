@@ -182,11 +182,33 @@ def _collect_global_names_from_classic_scripts(html_path: Path, all_js: dict, ro
     return global_names
 
 
+def _collect_window_globals(all_js) -> set:
+    """
+    Return the union of window_globals across every JS file in the project.
+
+    Any file -- classic or module -- can do  window.foo = ...  which puts foo
+    on the global scope unconditionally.  JSFileInfo already tracks these via
+    window_globals; we just aggregate them here.
+    """
+    names = set()
+    for finfo in all_js.values():
+        names |= finfo.window_globals
+    return names
+
+
 def _build_html_global_names(js_info, all_js, root) -> set:
     """
-    Find every HTML file in the project and collect the union of
-    globally-scoped function names from classic scripts they load.
-    Falls back to index.html if nothing explicitly references this JS file.
+    Build the complete set of names that are legitimately on the global scope
+    for the page that loads js_info, combining two sources:
+
+    1. Functions defined in classic (non-module) scripts loaded by the HTML --
+       these land on window automatically because classic scripts share the
+       global scope.
+
+    2. Explicit window.X = ... assignments from ANY JS file (classic or
+       module).  A module that does  window.saveFoldState = saveFoldState
+       is deliberately publishing to the global scope; callers that reach for
+       it as a bare  saveFoldState()  call are correct and must not be flagged.
     """
     html_files = sorted(root.rglob('*.html')) + sorted(root.rglob('*.htm'))
 
@@ -208,6 +230,10 @@ def _build_html_global_names(js_info, all_js, root) -> set:
     global_names = set()
     for html_path in loading_html:
         global_names |= _collect_global_names_from_classic_scripts(html_path, all_js, root)
+
+    # Explicit window.X = ... assignments from any JS file publish to the
+    # global scope regardless of whether the file is a module or classic script.
+    global_names |= _collect_window_globals(all_js)
 
     return global_names
 
