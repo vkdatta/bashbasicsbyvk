@@ -3,13 +3,12 @@ _3bvk_js_audit_1e.py
 Audit 1e -- Missing Imports
 
 Scans every JS file for bare function calls whose names are not:
-  • locally defined in the same file
-  • already imported
-  • a native JS global or keyword
-  • a safe string literal
-  • defined in a classic (non-module) script that is globally loaded by the
-    same HTML page — such functions land on the global scope and are
-    available to every other classic script without an import statement
+  - locally defined in the same file
+  - already imported
+  - a native JS global or keyword
+  - a safe string literal
+  - defined in a classic (non-module) script that the page's HTML loads
+    globally -- such functions are on window scope and need no import
 
 For each genuinely unresolved call, searches all other JS files for where
 the function is defined (and whether it is exported), then emits Error rows
@@ -19,17 +18,18 @@ with a suggested import statement.
 import re
 from pathlib import Path
 
-from _3bvk_js_audit_helpers import strip_comments, rel
+from _3bvk_js_audit_helpers import strip_comments, rel, read_file, resolve_script_ref, _find_index_html
 from _3bvk_js_audit_constants import (
     _JS_KEYWORDS, _NATIVE_GLOBALS, _SAFE_LITERALS,
     _RE_BARE_CALL, _RE_STRING_LITERAL,
     _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN,
+    _RE_COMMENT_BLOCK,
 )
 from _3bvk_js_audit_1d import _extract_template_literals, _extract_event_functions
 
 
 # ---------------------------------------------------------------------------
-# Internal _3bvk_js_audit_helpers.py
+# Internal helpers
 # ---------------------------------------------------------------------------
 
 def _strip_strings(src):
@@ -65,52 +65,107 @@ def _relative_import_path(source_path: Path, dest_path: Path, root: Path) -> str
     return s
 
 
-# ---------------------------------------------------------------------------
-# Global-scope name collector
-# ---------------------------------------------------------------------------
+def _is_external_url(src):
+    s = src.strip().lower()
+    return s.startswith('http://') or s.startswith('https://') or s.startswith('//')
 
-def collect_html_global_names(html_info, all_js, root):
+
+def _strip_js_comments(src):
+    src = _RE_COMMENT_BLOCK.sub('', src)
+    return re.sub(r'//[^\n]*', '', src)
+
+
+# Matches loadScript("url") or loadScript('url') anywhere in the document,
+# including inside CDATA blocks and Blogger widget-setting wrappers.
+_RE_LOAD_SCRIPT_GLOBAL = re.compile(
+    r'(?<![.\w])loadScript\s*\(\s*(?:"([^"]+)"|\'([^\']+)\')\s*[,)]',
+    re.MULTILINE,
+)
+_RE_LOAD_MODULE_GLOBAL = re.compile(
+    r'(?<![.\w])loadModule\s*\(\s*(?:"([^"]+)"|\'([^\']+)\')\s*[,)]',
+    re.MULTILINE,
+)
+
+
+def _collect_global_names_from_classic_scripts(html_path: Path, all_js: dict, root: Path) -> set:
     """
-    Return a set of every function name that is defined in a classic
-    (non-module) script loaded by *html_info* and therefore available on the
-    global/window scope to every other classic script on the same page.
+    Scan the entire HTML file text for every script loaded as a classic
+    (non-module) script -- via static <script src>, loadScript(), or any
+    equivalent pattern anywhere in the file (including CDATA / Blogger
+    widget-setting blocks).
 
-    Module scripts (is_module=True) are excluded: their top-level names are
-    NOT implicitly global, so callers still need an explicit import.
+    Collect every function name defined in those scripts.  These names land
+    on window/global scope and are legitimately callable from any other
+    classic script on the same page without an import.
 
-    Only locally-scanned JS files contribute names; remote CDN scripts are
-    skipped because their source is not available for static analysis.
-
-    Parameters
-    ----------
-    html_info : HTMLFileInfo
-    all_js    : dict[Path, JSFileInfo]
-    root      : project root Path
+    loadModule() calls are excluded: module top-level bindings are NOT global.
+    Remote/external URLs are skipped (source not available locally).
     """
-    from _3bvk_js_audit_helpers import resolve_script_ref
-
     global_names = set()
 
-    for sr in html_info.script_refs:
-        # Modules are scoped — their top-level bindings are NOT global
-        if sr.is_module:
-            continue
-        # Remote scripts cannot be statically analysed
-        if sr.is_external:
+    try:
+        html_src = read_file(html_path)
+    except Exception:
+        return global_names
+
+    script_srcs = []  # list of (src_attr, is_module)
+
+    # 1. Static <script src="..."> tags (existing behaviour)
+    _re_script_tag = re.compile(r'<script([^>]*)>', re.IGNORECASE)
+    _re_src        = re.compile(r'\bsrc=["\']([^"\']+)["\']', re.IGNORECASE)
+    _re_type       = re.compile(r'\btype=["\']([^"\']+)["\']', re.IGNORECASE)
+    for m in _re_script_tag.finditer(html_src):
+        attrs     = m.group(1)
+        src_m     = _re_src.search(attrs)
+        type_m    = _re_type.search(attrs)
+        is_module = bool(type_m and 'module' in type_m.group(1).lower())
+        if src_m:
+            script_srcs.append((src_m.group(1), is_module))
+
+    # 2. loadScript("url") calls anywhere in the document (covers CDATA,
+    #    Blogger b:widget-setting blocks, inline <script> bodies, etc.)
+    for m in _RE_LOAD_SCRIPT_GLOBAL.finditer(html_src):
+        src = m.group(1) or m.group(2)
+        if src:
+            script_srcs.append((src, False))   # classic
+
+    # 3. loadModule("url") calls -- is_module=True, will be excluded below
+    for m in _RE_LOAD_MODULE_GLOBAL.finditer(html_src):
+        src = m.group(1) or m.group(2)
+        if src:
+            script_srcs.append((src, True))    # module -- excluded below
+
+    # Build a filename -> JSFileInfo map for fallback matching of CDN URLs
+    filename_to_finfo = {}
+    for fpath, finfo in all_js.items():
+        filename_to_finfo.setdefault(fpath.name, []).append(finfo)
+
+    for src_attr, is_module in script_srcs:
+        if is_module:       # modules are scoped, not global
             continue
 
-        rp = resolve_script_ref(sr.src_attr, root, html_info.path)
-        if rp is None or rp not in all_js:
+        finfo = None
+
+        if not _is_external_url(src_attr):
+            # Try local path resolution first
+            rp = resolve_script_ref(src_attr, root, html_path)
+            if rp is not None and rp in all_js:
+                finfo = all_js[rp]
+        else:
+            # For CDN / external URLs, match by filename.
+            # e.g. "https://cdn.../notes-state.js" -> notes-state.js in all_js.
+            fname = src_attr.rstrip('/').split('/')[-1].split('?')[0]
+            candidates = filename_to_finfo.get(fname, [])
+            if len(candidates) == 1:
+                finfo = candidates[0]
+            # If multiple local files share the same name, skip (ambiguous).
+
+        if finfo is None:
             continue
 
-        finfo = all_js[rp]
+        clean = _strip_js_comments(finfo.source)
 
-        # Collect every function name visible at the top level of this
-        # classic script.  We include both finfo.functions (esprima-parsed)
-        # and a quick regex sweep so we catch everything regardless of how
-        # the parser categorised it.
         global_names.update(finfo.functions.keys())
-        clean = strip_comments(finfo.source)
         for m in re.finditer(r'\bfunction\s+(\w+)\s*\(', clean):
             global_names.add(m.group(1))
         for m in re.finditer(
@@ -127,32 +182,46 @@ def collect_html_global_names(html_info, all_js, root):
     return global_names
 
 
+def _build_html_global_names(js_info, all_js, root) -> set:
+    """
+    Find every HTML file in the project and collect the union of
+    globally-scoped function names from classic scripts they load.
+    Falls back to index.html if nothing explicitly references this JS file.
+    """
+    html_files = sorted(root.rglob('*.html')) + sorted(root.rglob('*.htm'))
+
+    loading_html = []
+    js_name = js_info.path.name
+    for html_path in html_files:
+        try:
+            html_src = read_file(html_path)
+        except Exception:
+            continue
+        if js_name in html_src:
+            loading_html.append(html_path)
+
+    if not loading_html:
+        idx = _find_index_html(root)
+        if idx:
+            loading_html = [idx]
+
+    global_names = set()
+    for html_path in loading_html:
+        global_names |= _collect_global_names_from_classic_scripts(html_path, all_js, root)
+
+    return global_names
+
+
 # ---------------------------------------------------------------------------
 # Audit 1e
 # ---------------------------------------------------------------------------
 
-def audit_1e_missing_imports(js_info, all_js, root, html_global_names=None):
-    """
-    Parameters
-    ----------
-    js_info           : JSFileInfo for the file being audited
-    all_js            : dict[Path, JSFileInfo] for the whole project
-    root              : project root Path
-    html_global_names : optional set[str] of function names that are defined
-                        in classic (non-module) scripts loaded by the page's
-                        HTML file.  Functions in this set are available on the
-                        global scope at runtime and must NOT be flagged as
-                        missing imports, even when they carry no export keyword.
-                        Pass None (the default) to preserve existing behaviour
-                        for callers that have not yet been updated.
-    """
+def audit_1e_missing_imports(js_info, all_js, root):
     rows = []
 
-    # Functions injected into global scope by classic <script> tags in the HTML
-    # are legitimately callable from every other classic script on the same page
-    # without an import.  Treat them like native globals so they are never
-    # flagged as missing imports.
-    globally_available = set(html_global_names) if html_global_names else set()
+    # Names globally available via classic scripts loaded by the HTML page --
+    # these require no import statement and must not be flagged.
+    globally_available = _build_html_global_names(js_info, all_js, root)
 
     clean  = strip_comments(js_info.source)
     nosstr = _strip_strings(clean)
@@ -181,7 +250,7 @@ def audit_1e_missing_imports(js_info, all_js, root, html_global_names=None):
         locally_defined | already_imported
         | _JS_KEYWORDS | _NATIVE_GLOBALS | _SAFE_LITERALS
         | namespace_aliases
-        | globally_available          # classic-script globals: no import needed
+        | globally_available   # ← classic-script globals: no import needed
     )
 
     # Collect all bare calls not in the known set
@@ -191,10 +260,6 @@ def audit_1e_missing_imports(js_info, all_js, root, html_global_names=None):
         if name not in known:
             called_names.add(name)
 
-    # _strip_strings blanks entire template literals, so any function names
-    # that appear only inside JS-built HTML onclick strings (e.g.
-    # `<button onclick="toggleDbCol(...)">`) are invisible to _RE_BARE_CALL.
-    # Extract them separately from the raw (pre-strip) template literal bodies.
     for tl_body in _extract_template_literals(js_info.source):
         for attr_m in _RE_EVT_ATTR.finditer(tl_body):
             attr_value = attr_m.group(1) or attr_m.group(2) or attr_m.group(3) or ''
@@ -225,7 +290,6 @@ def audit_1e_missing_imports(js_info, all_js, root, html_global_names=None):
         else:
             resolution[fname] = None
 
-    # Group by destination file so the suggested import is one line per dest
     dest_groups   = {}
     unknown_names = []
 
@@ -238,7 +302,6 @@ def audit_1e_missing_imports(js_info, all_js, root, html_global_names=None):
                 dest_groups[dest_rel] = {'abs': dest_abs, 'names': []}
             dest_groups[dest_rel]['names'].append((fname, is_exp, found_list))
 
-    # Emit one row per function, merging the suggested import for the group
     for dest_rel, grp in dest_groups.items():
         names_in_grp = sorted(grp['names'], key=lambda x: x[0])
         dest_abs     = grp['abs']
@@ -291,7 +354,6 @@ def audit_1e_missing_imports(js_info, all_js, root, html_global_names=None):
                 '_group_size': len(names_in_grp),
             })
 
-    # Functions not found in any file
     for fname in sorted(unknown_names):
         rows.append({
             'Sub Audit': '1e - Missing Import',
