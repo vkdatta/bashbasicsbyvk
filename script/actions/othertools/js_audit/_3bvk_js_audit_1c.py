@@ -26,9 +26,6 @@ def audit_1c_html_events(html_info, all_js, root):
 
     if index_html:
         for sr in HTMLFileInfo(index_html).script_refs:
-            # Skip remote URLs – we cannot resolve them to a local path
-            if sr.is_external:
-                continue
             rp = resolve_script_ref(sr.src_attr, root, index_html)
             if rp:
                 loaded_scripts.append((rp, sr))

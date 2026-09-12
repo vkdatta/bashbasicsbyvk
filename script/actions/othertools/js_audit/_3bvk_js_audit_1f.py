@@ -22,10 +22,6 @@ def audit_1f_module_script_type(html_info, all_js, root):
     rows = []
 
     for sr in html_info.script_refs:
-        # ── Remote URLs: we know they exist but cannot read them locally ──
-        if sr.is_external:
-            continue
-
         rp = resolve_script_ref(sr.src_attr, root, html_info.path)
         if rp is None or rp not in all_js:
             continue

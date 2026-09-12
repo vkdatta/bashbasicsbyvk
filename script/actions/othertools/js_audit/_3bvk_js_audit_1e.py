@@ -166,7 +166,7 @@ def _collect_global_names_from_classic_scripts(html_path: Path, all_js: dict, ro
         clean = _strip_js_comments(finfo.source)
 
         global_names.update(finfo.functions.keys())
-        global_names.update(finfo.class_names)   # classes are also global in classic scripts
+        global_names.update(getattr(finfo, "class_names", set()))   # classes are also global in classic scripts
         for m in re.finditer(r'\bfunction\s+(\w+)\s*\(', clean):
             global_names.add(m.group(1))
         for m in re.finditer(
@@ -193,7 +193,7 @@ def _collect_window_globals(all_js) -> set:
     """
     names = set()
     for finfo in all_js.values():
-        names |= finfo.window_globals
+        names |= getattr(finfo, "window_globals", set())
     return names
 
 
@@ -254,7 +254,7 @@ def audit_1e_missing_imports(js_info, all_js, root):
     nosstr = _strip_strings(clean)
 
     locally_defined   = set(js_info.functions.keys())
-    locally_defined  |= js_info.class_names   # class Foo is callable as new Foo()
+    locally_defined  |= getattr(js_info, "class_names", set())   # class Foo is callable as new Foo()
     already_imported  = _get_imported_names(js_info)
     namespace_aliases = _get_namespace_prefixes(js_info)
 
