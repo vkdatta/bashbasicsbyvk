@@ -36,8 +36,16 @@ create_dirs() {
 }
 
 handle_create() {
-  builtin printf "Create:\n1) New folders\n2) New files\n"
-  read -p "Choice: " cr
-  [[ "$cr" == "1" ]] && create_dirs
-  [[ "$cr" == "2" ]] && create_files
+  echo
+  echo "Create:"
+  echo "1) New folders"
+  echo "2) New files"
+  echo
+  read -r -p "Choice [1-2]: " cr
+
+  case "$cr" in
+    1) create_dirs ;;
+    2) create_files ;;
+    *) echo "Invalid choice" ;;
+  esac
 }
