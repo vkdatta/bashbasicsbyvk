@@ -16,6 +16,7 @@ source "bashbasicsbyvk_viewport.sh"
 source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_shortcut_registry.sh"
 source "bashbasicsbyvk_switch.sh"
+source "bashbasicsbyvk_filter.sh"
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -745,33 +746,13 @@ _read_choice() {
         break
         ;;
       $'\x7f'|$'\x08')  # backspace — deletes char before cursor
-        # ── FILTER MODE: backspace strips one filter char ────────────────────
-        if [[ "$_buf" == _?* ]]; then
-          # Buffer is "_de…" — strip last char, re-filter
-          _buf="${_buf:0:_pos-1}${_buf:_pos}"
-          _pos=$(( _pos - 1 ))
-          _filter_query="${_buf:1}"
-          _filter_apply
-          _hl_index=0
-          _vp_count
-          _vp_cache_reset
-          _vp_prime_rows
-          _vp_redraw_in_place
-          _print_input_line
-        elif [[ "$_buf" == _ ]]; then
-          # Buffer is just "_" — exit filter mode, restore full list
-          _filter_clear
-          _buf=""; _pos=0; _hl_index=0
-          _vp_count
-          _vp_cache_reset
-          _vp_prime_rows
-          _vp_redraw_in_place
-          _print_input_line
-        elif [ "$_pos" -gt 0 ]; then
-          _buf="${_buf:0:_pos-1}${_buf:_pos}"
-          _pos=$(( _pos - 1 ))
-          _print_input_line
-          _sync_highlight_from_buf
+        if ! _filter_on_backspace; then
+          if [ "$_pos" -gt 0 ]; then
+            _buf="${_buf:0:_pos-1}${_buf:_pos}"
+            _pos=$(( _pos - 1 ))
+            _print_input_line
+            _sync_highlight_from_buf
+          fi
         fi
         ;;
       $'\x01') _nav_jump_to 1 ;;          # Ctrl-A — first item
@@ -780,24 +761,7 @@ _read_choice() {
         # never let stray control bytes into the buffer
         _is_ctrl_char "$key" && continue
 
-        # ── FILTER MODE: _ prefix activates live name-prefix filter ──────────
-        if [[ "$_buf" == _* ]] || { [ -z "$_buf" ] && [ "$key" = "_" ]; }; then
-          # Snapshot the full list the moment the user presses the first "_"
-          if [ -z "$_buf" ] && [ "$key" = "_" ]; then
-            _filter_snapshot
-          fi
-          _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-          _pos=$(( _pos + 1 ))
-          # Query = everything after the leading _
-          _filter_query="${_buf:1}"
-          _filter_apply
-          _hl_index=0
-          _vp_count
-          _vp_cache_reset
-          _vp_prime_rows
-          _vp_redraw_in_place
-          _print_input_line
-        else
+        if ! _filter_on_char "$key"; then
           _buf="${_buf:0:_pos}${key}${_buf:_pos}"
           _pos=$(( _pos + 1 ))
           _print_input_line
@@ -957,7 +921,7 @@ case "$choice" in
     uz-*)                   handle_decompress_items "$choice" ;;
     z-*)                    handle_compress_items "$choice" ;;
     clear)                  hash -r ;;
-    _*)
+    =*)
       # Filter
       ;;
     disk)                   df -h ;;
