@@ -278,6 +278,7 @@ functions_menu() {
   group_prefix=""
   force_show=false
   _fx_in_mode=1
+  _sw_in_mode=1    # viewport reads _sw_in_mode to emit __sw_tab_left/right__ sentinels
 
   # Expose outer path for UDF handler
   _fx_outer_path="$_fx_outer_path"
@@ -327,6 +328,7 @@ functions_menu() {
 
       q)
         _fx_in_mode=0
+        _sw_in_mode=0
         exit 0
         ;;
 
@@ -421,6 +423,7 @@ functions_menu() {
 
   shopt -u nocasematch
   _fx_in_mode=0
+  _sw_in_mode=0    # restore — we set this on entry
 
   # Restore outer context
   path="$_fx_outer_path"
