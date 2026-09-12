@@ -47,40 +47,58 @@ _RE_COMMENT_BLOCK  = re.compile(r'/\*.*?\*/', re.DOTALL)
 _RE_SCRIPT_TAG  = re.compile(r'<script([^>]*)>(.*?)</script>', re.IGNORECASE | re.DOTALL)
 _RE_SCRIPT_SRC  = re.compile(r"src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _RE_SCRIPT_TYPE = re.compile(r"type=[\"']([^\"']+)[\"']", re.IGNORECASE)
-
-# Dynamic script-loading detection (inline JS)
-_RE_DYNAMIC_LOAD_CALL = re.compile(
-    r"\b(loadScript|loadModule)\s*\(\s*([\"'])(.*?)\2",
-    re.IGNORECASE | re.DOTALL,
-)
-_RE_DYNAMIC_LOADER_DECL = re.compile(
-    r"(?:function\s+(loadScript|loadModule)|"
-    r"(?:window|globalThis)\s*\.\s*(loadScript|loadModule)\s*=\s*(?:async\s*)?function|"
-    r"(?:window|globalThis)\s*\[\s*([\"'])(loadScript|loadModule)\3\s*\]\s*=)",
-    re.IGNORECASE,
-)
-_RE_CREATE_SCRIPT_DECL = re.compile(
-    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
-    r"document\s*\.\s*createElement\s*\(\s*([\"'])script\2\s*\)",
-    re.IGNORECASE,
-)
-_RE_SCRIPT_PROP_ASSIGN = re.compile(
-    r"\b([A-Za-z_$][\w$]*)\s*\.\s*(src|type)\s*=\s*([\"'])(.*?)\3",
-    re.IGNORECASE | re.DOTALL,
-)
-_RE_SCRIPT_SETATTRIBUTE = re.compile(
-    r"\b([A-Za-z_$][\w$]*)\s*\.\s*setAttribute\s*\(\s*"
-    r"([\"'])(src|type)\2\s*,\s*([\"'])(.*?)\4\s*\)",
-    re.IGNORECASE | re.DOTALL,
-)
-_RE_SCRIPT_APPEND = re.compile(
-    r"(?:document\s*\.\s*(?:body|head|documentElement)|"
-    r"[A-Za-z_$][\w$]*)\s*\.\s*appendChild\s*\(\s*"
-    r"([A-Za-z_$][\w$]*)\s*\)",
-    re.IGNORECASE,
-)
 _RE_INLINE_EVT  = re.compile(r"(?:on\w+)=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _RE_FUNC_CALL   = re.compile(r'(?<![.\w])(\w+)\s*\(')
+
+# ── Dynamic script loading patterns ──
+# Matches: loadScript("url") or loadScript('url') with optional leading whitespace
+# and optional trailing arguments (callbacks, etc.).
+# Group 1: the URL string (without quotes).
+_RE_LOAD_SCRIPT = re.compile(
+    r'(?<![.\w])loadScript\s*\(\s*'
+    r'(?:"([^"]+)"|\'([^\']+)\')'
+    r'\s*(?:[,)])',
+    re.MULTILINE,
+)
+
+# Matches: loadModule("url") or loadModule('url')
+# Group 1 or 2: the URL string.
+_RE_LOAD_MODULE = re.compile(
+    r'(?<![.\w])loadModule\s*\(\s*'
+    r'(?:"([^"]+)"|\'([^\']+)\')'
+    r'\s*(?:[,)])',
+    re.MULTILINE,
+)
+
+# Matches: document.createElement("script") or document.createElement('script')
+# Used to identify the start of a dynamic script element block.
+_RE_CREATE_SCRIPT = re.compile(
+    r'(?:(?:const|let|var)\s+(\w+)\s*=\s*)?'
+    r'document\.createElement\s*\(\s*["\']script["\']\s*\)',
+    re.IGNORECASE | re.MULTILINE,
+)
+
+# Matches: <varname>.src = "url" or <varname>.src = 'url'
+# Group 1: variable name; group 2 or 3: URL.
+_RE_SCRIPT_SRC_ASSIGN = re.compile(
+    r'(\w+)\.src\s*=\s*(?:"([^"]+)"|\'([^\']+)\')',
+    re.MULTILINE,
+)
+
+# Matches: <varname>.type = "module" or <varname>.type = 'module'
+# Group 1: variable name.
+_RE_SCRIPT_TYPE_MODULE = re.compile(
+    r'(\w+)\.type\s*=\s*["\']module["\']',
+    re.MULTILINE,
+)
+
+# Matches common DOM insertion calls that indicate the element goes into the document.
+# Group 1: variable name being appended.
+_RE_SCRIPT_APPEND = re.compile(
+    r'(?:document\.body|document\.head|document\.documentElement)'
+    r'\.appendChild\s*\(\s*(\w+)\s*\)',
+    re.MULTILINE,
+)
 
 _RE_EVT_ATTR = re.compile(
     r'on\w+='

@@ -1,13 +1,18 @@
 """
-_3bvk_js_audit_1c.py.py
+_3bvk_js_audit_1c.py
 Audit 1c -- HTML Inline Event Resolution
 
 For every inline event handler (onclick="...", etc.) found in an HTML file,
 checks that the referenced function is:
   1. Defined in at least one loaded JS file.
-  2. That JS file is referenced from index.html.
+  2. That JS file is referenced from index.html (statically or dynamically).
   3. If the script is a module, the function is exposed via window.<name>.
   4. No duplicate definitions cause a load-order race condition.
+
+Dynamic script dependencies (loadScript / loadModule / createElement) are
+already included in html_info.script_refs via HTMLFileInfo._parse(), so
+no independent detection is required here.  External/remote URLs that cannot
+be resolved locally are simply skipped during filesystem resolution.
 """
 
 from _3bvk_js_audit_helpers import resolve_script_ref, _find_index_html, rel
@@ -15,12 +20,15 @@ from _3bvk_js_audit_helpers import HTMLFileInfo
 
 
 def audit_1c_html_events(html_info, all_js, root):
-    rows        = []
-    index_html  = _find_index_html(root)
+    rows           = []
+    index_html     = _find_index_html(root)
     loaded_scripts = []
 
     if index_html:
         for sr in HTMLFileInfo(index_html).script_refs:
+            # Skip remote URLs – we cannot resolve them to a local path
+            if sr.is_external:
+                continue
             rp = resolve_script_ref(sr.src_attr, root, index_html)
             if rp:
                 loaded_scripts.append((rp, sr))
