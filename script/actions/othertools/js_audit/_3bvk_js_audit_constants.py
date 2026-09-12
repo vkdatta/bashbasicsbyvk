@@ -30,6 +30,8 @@ _RE_IMPORT_STAR    = re.compile(r"\bimport\s*\*\s*as\s+\w+\s*from\s*[\"']([^\"']
 _RE_EXPORT_FUNC    = re.compile(r'\bexport\s+(?:async\s+)?function\s+(\w+)', re.MULTILINE)
 _RE_EXPORT_CONST   = re.compile(r'\bexport\s+(?:const|let|var)\s+(\w+)', re.MULTILINE)
 _RE_EXPORT_CLASS   = re.compile(r'\bexport\s+class\s+(\w+)', re.MULTILINE)
+# Bare class declaration (exported or not): class Foo / class Foo extends Bar
+_RE_CLASS_DECL     = re.compile(r'\bclass\s+(\w+)(?:\s+extends\s+\w+)?\s*\{', re.MULTILINE)
 _RE_EXPORT_LIST    = re.compile(r'\bexport\s*\{([^}]+)\}', re.MULTILINE)
 _RE_EXPORT_FUNC_EXPR = re.compile(
     r'\bexport\s+(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function[\s(]', re.MULTILINE)
@@ -49,56 +51,6 @@ _RE_SCRIPT_SRC  = re.compile(r"src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _RE_SCRIPT_TYPE = re.compile(r"type=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _RE_INLINE_EVT  = re.compile(r"(?:on\w+)=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _RE_FUNC_CALL   = re.compile(r'(?<![.\w])(\w+)\s*\(')
-
-# ── Dynamic script loading patterns ──
-# Matches: loadScript("url") or loadScript('url') with optional leading whitespace
-# and optional trailing arguments (callbacks, etc.).
-# Group 1: the URL string (without quotes).
-_RE_LOAD_SCRIPT = re.compile(
-    r'(?<![.\w])loadScript\s*\(\s*'
-    r'(?:"([^"]+)"|\'([^\']+)\')'
-    r'\s*(?:[,)])',
-    re.MULTILINE,
-)
-
-# Matches: loadModule("url") or loadModule('url')
-# Group 1 or 2: the URL string.
-_RE_LOAD_MODULE = re.compile(
-    r'(?<![.\w])loadModule\s*\(\s*'
-    r'(?:"([^"]+)"|\'([^\']+)\')'
-    r'\s*(?:[,)])',
-    re.MULTILINE,
-)
-
-# Matches: document.createElement("script") or document.createElement('script')
-# Used to identify the start of a dynamic script element block.
-_RE_CREATE_SCRIPT = re.compile(
-    r'(?:(?:const|let|var)\s+(\w+)\s*=\s*)?'
-    r'document\.createElement\s*\(\s*["\']script["\']\s*\)',
-    re.IGNORECASE | re.MULTILINE,
-)
-
-# Matches: <varname>.src = "url" or <varname>.src = 'url'
-# Group 1: variable name; group 2 or 3: URL.
-_RE_SCRIPT_SRC_ASSIGN = re.compile(
-    r'(\w+)\.src\s*=\s*(?:"([^"]+)"|\'([^\']+)\')',
-    re.MULTILINE,
-)
-
-# Matches: <varname>.type = "module" or <varname>.type = 'module'
-# Group 1: variable name.
-_RE_SCRIPT_TYPE_MODULE = re.compile(
-    r'(\w+)\.type\s*=\s*["\']module["\']',
-    re.MULTILINE,
-)
-
-# Matches common DOM insertion calls that indicate the element goes into the document.
-# Group 1: variable name being appended.
-_RE_SCRIPT_APPEND = re.compile(
-    r'(?:document\.body|document\.head|document\.documentElement)'
-    r'\.appendChild\s*\(\s*(\w+)\s*\)',
-    re.MULTILINE,
-)
 
 _RE_EVT_ATTR = re.compile(
     r'on\w+='

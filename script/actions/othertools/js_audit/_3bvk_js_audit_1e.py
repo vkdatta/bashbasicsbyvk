@@ -166,6 +166,7 @@ def _collect_global_names_from_classic_scripts(html_path: Path, all_js: dict, ro
         clean = _strip_js_comments(finfo.source)
 
         global_names.update(finfo.functions.keys())
+        global_names.update(finfo.class_names)   # classes are also global in classic scripts
         for m in re.finditer(r'\bfunction\s+(\w+)\s*\(', clean):
             global_names.add(m.group(1))
         for m in re.finditer(
@@ -253,6 +254,7 @@ def audit_1e_missing_imports(js_info, all_js, root):
     nosstr = _strip_strings(clean)
 
     locally_defined   = set(js_info.functions.keys())
+    locally_defined  |= js_info.class_names   # class Foo is callable as new Foo()
     already_imported  = _get_imported_names(js_info)
     namespace_aliases = _get_namespace_prefixes(js_info)
 
