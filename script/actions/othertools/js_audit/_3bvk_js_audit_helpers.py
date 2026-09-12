@@ -20,6 +20,7 @@ from _3bvk_js_audit_constants import (
     _RE_METHOD_SHORTHAND, _RE_WINDOW_ASSIGN, _RE_IIFE, _RE_COMMENT_BLOCK,
     _RE_SCRIPT_TAG, _RE_SCRIPT_SRC, _RE_SCRIPT_TYPE,
     _RE_INLINE_EVT, _RE_FUNC_CALL,
+    _RE_CLASS_DECL, _RE_FUNC_PARAMS,
     _JS_KEYWORDS, _HTML_KW,
 )
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
@@ -84,6 +85,22 @@ class ImportSpec:
         self.raw_stmt  = raw_stmt
         self.is_top    = is_top
         self.line      = line
+def extract_param_names(source):
+    """
+    Return every parameter name from any function/arrow signature in source.
+    Parameters are locally scoped and must never be flagged as missing imports.
+    """
+    params = set()
+    for m in _RE_FUNC_PARAMS.finditer(source):
+        raw = m.group(1) or m.group(2) or ''
+        for token in raw.split(','):
+            token = token.strip().lstrip('.').lstrip('{[').strip()
+            name = re.split(r'[=:\s]', token)[0].strip().strip("'\"")
+            if name and re.match(r'^[A-Za-z_$]\w*$', name) and name not in _JS_KEYWORDS:
+                params.add(name)
+    return params
+
+
 class JSFileInfo:
     def __init__(self, path: Path):
         self.path           = path
@@ -94,6 +111,8 @@ class JSFileInfo:
         self.exports        = set()
         self.functions      = {}
         self.window_globals = set()
+        self.class_names    = set()
+        self.param_names    = set()   # all param names from function signatures
         self.iife_present   = False
         self._parse()
     def _parse(self):
@@ -250,6 +269,11 @@ class JSFileInfo:
             name = m.group(1)
             if name and name not in _JS_KEYWORDS:
                 self.functions[name] = FuncInfo(name, self.path)
+        self.param_names    = extract_param_names(clean)
+        for m in _RE_CLASS_DECL.finditer(clean):
+            name = m.group(1)
+            if name and name not in _JS_KEYWORDS:
+                self.class_names.add(name)
         self.window_globals = set(_RE_WINDOW_ASSIGN.findall(clean))
         self.iife_present   = bool(_RE_IIFE.search(clean))
     def _regex_is_top(self, clean, pos):

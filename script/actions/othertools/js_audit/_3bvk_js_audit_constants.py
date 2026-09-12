@@ -38,6 +38,13 @@ _RE_EXPORT_FUNC_EXPR = re.compile(
 _RE_EXPORT_ARROW   = re.compile(
     r'\bexport\s+(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$]\w*)\s*=>', re.MULTILINE)
 _RE_FUNC_DECL      = re.compile(r'\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(')
+# Captures the full parameter list (between the parens) of any function/arrow.
+# Used to extract parameter names so they are never flagged as missing imports.
+_RE_FUNC_PARAMS    = re.compile(
+    r'(?:function\s*\w*|=>)\s*\(([^)]*)\)'  # function(...) or (...) =>
+    r'|(?<!=)>?\s*\(([^)]*)\)\s*=>',          # bare arrow: (a, b) =>
+    re.MULTILINE,
+)
 _RE_FUNC_EXPR      = re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function[\s(]')
 _RE_ARROW_PAREN    = re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>')
 _RE_ARROW_BARE     = re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?([A-Za-z_$]\w*)\s*=>')

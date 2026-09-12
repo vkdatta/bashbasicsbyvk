@@ -262,7 +262,8 @@ def audit_1e_missing_imports(js_info, all_js, root):
     nosstr = _strip_strings(clean)
 
     locally_defined   = set(js_info.functions.keys())
-    locally_defined  |= getattr(js_info, "class_names", set())   # class Foo is callable as new Foo()
+    locally_defined  |= getattr(js_info, 'class_names',  set())  # class Foo is callable as new Foo()
+    locally_defined  |= getattr(js_info, 'param_names',  set())  # function params are local by definition
     already_imported  = _get_imported_names(js_info)
     namespace_aliases = _get_namespace_prefixes(js_info)
 
