@@ -19,6 +19,7 @@ source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_functions.sh"
 source "bashbasicsbyvk_filter.sh"
 source "bashbasicsbyvk_create.sh"
+source "bashbasicsbyvk_infinity.sh"
 
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
