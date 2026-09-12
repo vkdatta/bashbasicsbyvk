@@ -270,6 +270,12 @@ def audit_1e_missing_imports(js_info, all_js, root):
         extra_locals.add(m.group(1))
     for m in re.finditer(r'(?:^|\n|\{)\s*(\w+)\s*\([^)]*\)\s*\{', clean):
         extra_locals.add(m.group(1))
+    # Catch-all: any let/const/var declaration regardless of what it is
+    # assigned to.  A variable like  let activeDropdownClose = null  can
+    # later hold a function and be called as activeDropdownClose() -- it is
+    # local by definition and must never be flagged as a missing import.
+    for m in re.finditer(r'\b(?:const|let|var)\s+(\w+)\b', clean):
+        extra_locals.add(m.group(1))
     locally_defined.update(extra_locals)
 
     known = (
