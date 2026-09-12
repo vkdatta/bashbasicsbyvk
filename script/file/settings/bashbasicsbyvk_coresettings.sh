@@ -13,6 +13,7 @@ DEFAULT_DISPLAY_SUFFIX_SET=""
 DEFAULT_DISPLAY_TIME_FORMAT="full"
 DEFAULT_GROUP_VIEW_LEVELS=""
 DEFAULT_COMPRESS_FORMAT="ask"
+DEFAULT_FILTER_MODE="partial"
 
 unset show_hidden_files
 unset index_mode_threshold
@@ -23,6 +24,7 @@ unset display_suffix_set
 unset display_time_format
 unset group_view_levels_str
 unset compress_format
+unset filter_mode
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
 
@@ -35,6 +37,7 @@ unset compress_format
 : "${display_time_format:=$DEFAULT_DISPLAY_TIME_FORMAT}"
 : "${group_view_levels_str:=$DEFAULT_GROUP_VIEW_LEVELS}"
 : "${compress_format:=$DEFAULT_COMPRESS_FORMAT}"
+: "${filter_mode:=$DEFAULT_FILTER_MODE}"
 
 declare -ga group_view_levels=()
 if [ -n "$group_view_levels_str" ]; then
@@ -52,6 +55,7 @@ save_settings() {
     echo "display_time_format=$display_time_format"
     echo "group_view_levels_str=\"${group_view_levels[*]}\""
     echo "compress_format=$compress_format"
+    echo "filter_mode=$filter_mode"
   } > "$SETTINGS_FILE"
 }
 
@@ -107,8 +111,9 @@ settings_menu() {
   echo "8) Display suffix        (${sfx_label:-none})"
   echo "9) $gv_label"
   echo "10) Compress format      ($compress_format)"
+  echo "11) Filter mode          ($filter_mode)"
 
-  read -r -p "Enter choice [1-10]: " main_choice
+  read -r -p "Enter choice [1-11]: " main_choice
 
 case "$main_choice" in
     1) hidden_file_settings ;; # bashbasicsbyvk_hidefiles.sh
@@ -121,6 +126,7 @@ case "$main_choice" in
     8) display_suffix_settings ;; # bashbasicsbyvk_displayer.sh
     9) group_view_settings ;; # bashbasicsbyvk_displayer.sh
     10) compress_format_settings ;; # Current
+    11) filter_mode_settings ;;    # bashbasicsbyvk_filter.sh
     *) echo "Invalid choice" ;;
 esac
 }
@@ -145,4 +151,26 @@ compress_format_settings() {
   esac
   save_settings
   echo "✅ Compress format set to: $compress_format"
+}
+
+# ---------------------------------------------------------------------------
+# filter_mode_settings
+# Controls how the = live filter matches filenames.
+#   partial — substring match (=config matches longword_xdconfig)
+#   exact   — prefix match   (=config matches config_file)
+# ---------------------------------------------------------------------------
+filter_mode_settings() {
+  echo ""
+  echo "Filter mode (used by = filter):"
+  echo "1) partial — match anywhere in name  (=config → longword_xdconfig ✔)"
+  echo "2) exact   — prefix match only       (=config → config_file ✔)"
+  read -r -p "Choice [1-2]: " fm_choice
+  fm_choice="${fm_choice%$'\r'}"
+  case "$fm_choice" in
+    1) filter_mode="partial" ;;
+    2) filter_mode="exact"   ;;
+    *) echo "Invalid choice — no changes made." ; return ;;
+  esac
+  save_settings
+  echo "✅ Filter mode set to: $filter_mode"
 }

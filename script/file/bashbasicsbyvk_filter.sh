@@ -6,11 +6,36 @@
 # from whichever sourced file currently defines them.
 
 # ── Core filter primitives ────────────────────────────────────────────────────
-# (Move implementations here from their current home)
 
-# _filter_snapshot  — save a copy of the full items list before filtering
-# _filter_apply     — rebuild items[] from _all_items[] using _filter_query
-# _filter_clear     — restore items[] to the full snapshot and reset query
+# Save the full unfiltered list the moment the user enters filter mode.
+_filter_snapshot() {
+  _all_items=("${items[@]}")
+}
+
+# Rebuild items[] from _all_items[] using _filter_query and filter_mode.
+#   filter_mode=exact   → filename must START with the query (prefix match)
+#   filter_mode=partial → filename must CONTAIN the query anywhere (default)
+_filter_apply() {
+  local q="${_filter_query,,}"
+  items=()
+  local f bn
+  for f in "${_all_items[@]}"; do
+    bn="${f##*/}"
+    local bn_lower="${bn,,}"
+    if [ "${filter_mode:-partial}" = "exact" ]; then
+      [[ "$bn_lower" == "$q"* ]] && items+=("$f")
+    else
+      [[ "$bn_lower" == *"$q"* ]] && items+=("$f")
+    fi
+  done
+}
+
+# Restore the full list and reset filter state.
+_filter_clear() {
+  items=("${_all_items[@]}")
+  _filter_query=""
+  _all_items=()
+}
 
 # ── Input handlers (called from _read_choice) ─────────────────────────────────
 
