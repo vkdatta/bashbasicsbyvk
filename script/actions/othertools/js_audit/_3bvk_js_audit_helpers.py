@@ -89,12 +89,26 @@ def extract_param_names(source):
     """
     Return every parameter name from any function/arrow signature in source.
     Parameters are locally scoped and must never be flagged as missing imports.
+
+    Handles all JS function forms:
+      function foo(a, b)          -> {a, b}
+      function(resolve, reject)   -> {resolve, reject}
+      (a, b) =>                   -> {a, b}
+      res =>                      -> {res}
     """
     params = set()
     for m in _RE_FUNC_PARAMS.finditer(source):
+        # group(3): single bare-param arrow  e.g.  res =>  /  predicate =>
+        if m.group(3):
+            name = m.group(3).strip()
+            if name and re.match(r'^[A-Za-z_$]\w*$', name) and name not in _JS_KEYWORDS:
+                params.add(name)
+            continue
+        # group(1): function(...)  /  function name(...)
+        # group(2): (a, b) =>  — may have a leading '(' from outer call context
         raw = m.group(1) or m.group(2) or ''
         for token in raw.split(','):
-            token = token.strip().lstrip('.').lstrip('{[').strip()
+            token = token.strip().lstrip('({[').strip()
             name = re.split(r'[=:\s]', token)[0].strip().strip("'\"")
             if name and re.match(r'^[A-Za-z_$]\w*$', name) and name not in _JS_KEYWORDS:
                 params.add(name)

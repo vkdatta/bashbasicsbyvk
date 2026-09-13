@@ -38,11 +38,16 @@ _RE_EXPORT_FUNC_EXPR = re.compile(
 _RE_EXPORT_ARROW   = re.compile(
     r'\bexport\s+(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$]\w*)\s*=>', re.MULTILINE)
 _RE_FUNC_DECL      = re.compile(r'\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(')
-# Captures the full parameter list (between the parens) of any function/arrow.
-# Used to extract parameter names so they are never flagged as missing imports.
-_RE_FUNC_PARAMS    = re.compile(
-    r'(?:function\s*\w*|=>)\s*\(([^)]*)\)'  # function(...) or (...) =>
-    r'|(?<!=)>?\s*\(([^)]*)\)\s*=>',          # bare arrow: (a, b) =>
+# Captures parameter lists from all function/arrow forms.
+# Four groups cover all JS function syntaxes:
+#   group 1: function name(params)  /  function(params)
+#   group 2: (params) =>            (parenthesised arrow)
+#   group 3: param =>               (bare single-param arrow)
+# extract_param_names() reads whichever group matched.
+_RE_FUNC_PARAMS = re.compile(
+    r'\bfunction\s*(?:\w+\s*)?\(([^)]*)\)'   # function foo(a,b) / function(a,b)
+    r'|\(([^)]*)\)\s*=>'                          # (a, b) =>
+    r'|(?<![.\w])([A-Za-z_$]\w*)\s*=>',          # param =>  (single bare-param arrow)
     re.MULTILINE,
 )
 _RE_FUNC_EXPR      = re.compile(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function[\s(]')
@@ -661,7 +666,34 @@ _WEB_PLATFORM_GLOBALS = {
 }
 
 # ── Combine all native globals ──
-_NATIVE_GLOBALS = _ECMASCRIPT_GLOBALS | _WEB_PLATFORM_GLOBALS
+
+# ── Common callback / functional-programming parameter names ──────────────
+# These appear as bare calls (fn(), cb(), resolve(), reject() etc.) because
+# they are function parameters that happen to hold callables.
+# extract_param_names() handles the general case; this set covers names that
+# appear in patterns the regex cannot easily reach (e.g. long chains, external
+# callbacks passed by reference) and universal short-hand conventions.
+_CALLBACK_NAMES = {
+    # Promise executor params
+    'resolve', 'reject',
+    # Generic callback conventions
+    'fn', 'cb', 'callback', 'done', 'next', 'then',
+    # Response/result shorthands used in .then(res => ...)
+    'res', 'result', 'response', 'data', 'err', 'error',
+    # Progress / lifecycle hooks passed as params
+    'onProgress', 'onSuccess', 'onError', 'onComplete', 'onDone',
+    'onLoad', 'onMove', 'onResize', 'onScroll', 'onSelect', 'onSubmit',
+    'onClose', 'onOpen', 'onUpdate', 'onDelete', 'onSave', 'onCancel',
+    'onInput', 'onFocus', 'onBlur', 'onChange', 'onClick', 'onKeyDown',
+    'onKeyUp', 'onKeyPress', 'onMouseDown', 'onMouseUp', 'onMouseMove',
+    # Functional programming
+    'predicate', 'comparator', 'selector', 'reducer', 'mapper', 'handler',
+    'transform', 'formatter', 'validator', 'factory', 'getter', 'setter',
+    # Native method names that appear bare in .apply()/.call()/.bind() patterns
+    'apply', 'call', 'bind',
+}
+
+_NATIVE_GLOBALS = _ECMASCRIPT_GLOBALS | _WEB_PLATFORM_GLOBALS | _CALLBACK_NAMES
 
 
 # ── JavaScript Keywords ──
@@ -682,6 +714,7 @@ _SAFE_LITERALS = {
     'lookback', 'specific', 'fgi', 'ledger', 'debug', 'stocks', 'indices',
     'yes', 'no', 'on', 'off', 'enabled', 'disabled', 'true', 'false',
 }
+
 
 
 # ── HTML event handler keywords (subset of JS keywords + common globals) ──
