@@ -19,6 +19,7 @@ Three sub-cases:
 
 import re
 from _3bvk_js_audit_helpers import resolve_js_path, rel
+from _3bvk_js_audit_helpers import build_html_global_names
 from _3bvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN, _NATIVE_GLOBALS, _JS_KEYWORDS, _CALLBACK_NAMES
 
 
@@ -230,12 +231,19 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
     # entirely. Search all_js for where the function is defined/exported
     # and report it so the caller knows what to add.
     # ------------------------------------------------------------------
+    # Collect names that are globally available via classic scripts loaded
+    # by the HTML page (same logic as audit 1e). Functions in classic
+    # scripts, inline <script> blocks, and explicit window.X = ...
+    # assignments are all on the global scope and need no import.
+    _html_global_names = build_html_global_names(js_info, all_js, root)
+
     already_covered = (
         set(imported_names.keys())
         | set(js_info.functions.keys())
         | getattr(js_info, 'class_names',    set())   # class Foo is callable without import
         | getattr(js_info, 'param_names',    set())   # params are locally scoped
         | getattr(js_info, 'window_globals', set())   # window.X = ... is already global
+        | _html_global_names                           # classic-script and inline-script globals
     )
     _ALL_KNOWN = _NATIVE_GLOBALS | _JS_KEYWORDS | _CALLBACK_NAMES
 

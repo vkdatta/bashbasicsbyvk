@@ -65,186 +65,14 @@ def _relative_import_path(source_path: Path, dest_path: Path, root: Path) -> str
     return s
 
 
-def _is_external_url(src):
-    s = src.strip().lower()
-    return s.startswith('http://') or s.startswith('https://') or s.startswith('//')
-
-
-def _strip_js_comments(src):
-    src = _RE_COMMENT_BLOCK.sub('', src)
-    return re.sub(r'//[^\n]*', '', src)
-
-
-# Matches loadScript("url") or loadScript('url') anywhere in the document,
-# including inside CDATA blocks and Blogger widget-setting wrappers.
-_RE_LOAD_SCRIPT_GLOBAL = re.compile(
-    r'(?<![.\w])loadScript\s*\(\s*(?:"([^"]+)"|\'([^\']+)\')\s*[,)]',
-    re.MULTILINE,
+# Global-name collection helpers moved to _3bvk_js_audit_helpers
+# so that other audits (1d, 1c, etc.) can import them without circular deps.
+from _3bvk_js_audit_helpers import (
+    _is_external_url,
+    _collect_global_names_from_classic_scripts,
+    _collect_window_globals,
+    build_html_global_names,
 )
-_RE_LOAD_MODULE_GLOBAL = re.compile(
-    r'(?<![.\w])loadModule\s*\(\s*(?:"([^"]+)"|\'([^\']+)\')\s*[,)]',
-    re.MULTILINE,
-)
-
-
-def _collect_global_names_from_classic_scripts(html_path: Path, all_js: dict, root: Path) -> set:
-    """
-    Scan the entire HTML file text for every script loaded as a classic
-    (non-module) script -- via static <script src>, loadScript(), or any
-    equivalent pattern anywhere in the file (including CDATA / Blogger
-    widget-setting blocks).
-
-    Collect every function name defined in those scripts.  These names land
-    on window/global scope and are legitimately callable from any other
-    classic script on the same page without an import.
-
-    loadModule() calls are excluded: module top-level bindings are NOT global.
-    Remote/external URLs are skipped (source not available locally).
-    """
-    global_names = set()
-
-    try:
-        html_src = read_file(html_path)
-    except Exception:
-        return global_names
-
-    script_srcs = []  # list of (src_attr, is_module)
-
-    # 1. Static <script src="..."> tags (existing behaviour)
-    _re_script_tag = re.compile(r'<script([^>]*)>', re.IGNORECASE)
-    _re_src        = re.compile(r'\bsrc=["\']([^"\']+)["\']', re.IGNORECASE)
-    _re_type       = re.compile(r'\btype=["\']([^"\']+)["\']', re.IGNORECASE)
-    for m in _re_script_tag.finditer(html_src):
-        attrs     = m.group(1)
-        src_m     = _re_src.search(attrs)
-        type_m    = _re_type.search(attrs)
-        is_module = bool(type_m and 'module' in type_m.group(1).lower())
-        if src_m:
-            script_srcs.append((src_m.group(1), is_module))
-
-    # 2. loadScript("url") calls anywhere in the document (covers CDATA,
-    #    Blogger b:widget-setting blocks, inline <script> bodies, etc.)
-    for m in _RE_LOAD_SCRIPT_GLOBAL.finditer(html_src):
-        src = m.group(1) or m.group(2)
-        if src:
-            script_srcs.append((src, False))   # classic
-
-    # 3. loadModule("url") calls -- is_module=True, will be excluded below
-    for m in _RE_LOAD_MODULE_GLOBAL.finditer(html_src):
-        src = m.group(1) or m.group(2)
-        if src:
-            script_srcs.append((src, True))    # module -- excluded below
-
-    # Build a filename -> JSFileInfo map for fallback matching of CDN URLs
-    filename_to_finfo = {}
-    for fpath, finfo in all_js.items():
-        filename_to_finfo.setdefault(fpath.name, []).append(finfo)
-
-    # Functions and classes defined directly in inline <script> blocks are
-    # globally available to all classic scripts on the same page.
-    # HTMLFileInfo._parse() already extracts these into inline_script_globals.
-    try:
-        global_names |= HTMLFileInfo(html_path).inline_script_globals
-    except Exception:
-        pass
-
-    for src_attr, is_module in script_srcs:
-        if is_module:       # modules are scoped, not global
-            continue
-
-        finfo = None
-
-        if not _is_external_url(src_attr):
-            # Try local path resolution first
-            rp = resolve_script_ref(src_attr, root, html_path)
-            if rp is not None and rp in all_js:
-                finfo = all_js[rp]
-        else:
-            # For CDN / external URLs, match by filename.
-            # e.g. "https://cdn.../notes-state.js" -> notes-state.js in all_js.
-            fname = src_attr.rstrip('/').split('/')[-1].split('?')[0]
-            candidates = filename_to_finfo.get(fname, [])
-            if len(candidates) == 1:
-                finfo = candidates[0]
-            # If multiple local files share the same name, skip (ambiguous).
-
-        if finfo is None:
-            continue
-
-        clean = _strip_js_comments(finfo.source)
-
-        global_names.update(finfo.functions.keys())
-        global_names.update(getattr(finfo, "class_names", set()))   # classes are also global in classic scripts
-        for m in re.finditer(r'\bfunction\s+(\w+)\s*\(', clean):
-            global_names.add(m.group(1))
-        for m in re.finditer(
-            r'\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|\w+)\s*=>',
-            clean,
-        ):
-            global_names.add(m.group(1))
-        for m in re.finditer(
-            r'\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(',
-            clean,
-        ):
-            global_names.add(m.group(1))
-
-    return global_names
-
-
-def _collect_window_globals(all_js) -> set:
-    """
-    Return the union of window_globals across every JS file in the project.
-
-    Any file -- classic or module -- can do  window.foo = ...  which puts foo
-    on the global scope unconditionally.  JSFileInfo already tracks these via
-    window_globals; we just aggregate them here.
-    """
-    names = set()
-    for finfo in all_js.values():
-        names |= getattr(finfo, "window_globals", set())
-    return names
-
-
-def _build_html_global_names(js_info, all_js, root) -> set:
-    """
-    Build the complete set of names that are legitimately on the global scope
-    for the page that loads js_info, combining two sources:
-
-    1. Functions defined in classic (non-module) scripts loaded by the HTML --
-       these land on window automatically because classic scripts share the
-       global scope.
-
-    2. Explicit window.X = ... assignments from ANY JS file (classic or
-       module).  A module that does  window.saveFoldState = saveFoldState
-       is deliberately publishing to the global scope; callers that reach for
-       it as a bare  saveFoldState()  call are correct and must not be flagged.
-    """
-    html_files = sorted(root.rglob('*.html')) + sorted(root.rglob('*.htm'))
-
-    loading_html = []
-    js_name = js_info.path.name
-    for html_path in html_files:
-        try:
-            html_src = read_file(html_path)
-        except Exception:
-            continue
-        if js_name in html_src:
-            loading_html.append(html_path)
-
-    if not loading_html:
-        idx = _find_index_html(root)
-        if idx:
-            loading_html = [idx]
-
-    global_names = set()
-    for html_path in loading_html:
-        global_names |= _collect_global_names_from_classic_scripts(html_path, all_js, root)
-
-    # Explicit window.X = ... assignments from any JS file publish to the
-    # global scope regardless of whether the file is a module or classic script.
-    global_names |= _collect_window_globals(all_js)
-
-    return global_names
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +84,7 @@ def audit_1e_missing_imports(js_info, all_js, root):
 
     # Names globally available via classic scripts loaded by the HTML page --
     # these require no import statement and must not be flagged.
-    globally_available = _build_html_global_names(js_info, all_js, root)
+    globally_available = build_html_global_names(js_info, all_js, root)
 
     clean  = strip_comments(js_info.source)
     nosstr = _strip_strings(clean)
