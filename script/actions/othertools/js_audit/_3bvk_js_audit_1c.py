@@ -15,7 +15,7 @@ no independent detection is required here.  External/remote URLs that cannot
 be resolved locally are simply skipped during filesystem resolution.
 """
 
-from _3bvk_js_audit_helpers import resolve_script_ref, _find_index_html, rel
+from _3bvk_js_audit_helpers import resolve_script_ref, _find_index_html, rel, build_html_global_names
 from _3bvk_js_audit_helpers import HTMLFileInfo
 
 
@@ -34,10 +34,18 @@ def audit_1c_html_events(html_info, all_js, root):
     # and valid targets for inline event handlers -- never flag them.
     inline_globals = getattr(html_info, 'inline_script_globals', set())
 
+    # Names globally available via classic scripts / inline blocks / window.X = ...
+    # loaded by this HTML page.  These are valid call targets for any inline
+    # event handler on the page and must never be flagged as missing.
+    html_global_names = build_html_global_names(html_info, all_js, root)
+
     for (event_code, func_names) in html_info.inline_events:
         for fname in func_names:
             # Defined in an inline <script> block on this page -- always valid
             if fname in inline_globals:
+                continue
+            # Available via a classic script or window.X = ... -- always valid
+            if fname in html_global_names:
                 continue
 
             definers = [
