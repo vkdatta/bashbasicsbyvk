@@ -1,5 +1,5 @@
 """
-_3bvk_js_audit_1b.py.py
+_3bvk_js_audit_1b.py
 Audit 1b -- Export Matching
 
 For every named import in a JS file, verifies that the destination file
@@ -92,20 +92,22 @@ def _build_annexure(ann_id, missing_names, imp, dest_path, dest_info,
     """Build the per-function detail rows for one Annexure block."""
     ann_rows = []
     for fname in missing_names:
-        if fname in dest_info.functions:
-            if fname in source_info.functions:
+        dest_defines   = fname in dest_info.functions   or fname in getattr(dest_info,   'class_names', set())
+        source_defines = fname in source_info.functions or fname in getattr(source_info, 'class_names', set())
+        if dest_defines:
+            if source_defines:
                 comment = (
-                    f'Function found in destination {dest_info.rel_path} but no export declaration. '
+                    f'Function/class found in destination {dest_info.rel_path} but no export declaration. '
                     f'Also directly declared in source {source_info.rel_path}, '
                     f'which overrides the import.'
                 )
             else:
                 comment = (
-                    f'Function found in {dest_info.rel_path} but no export declaration.'
+                    f'Function/class found in {dest_info.rel_path} but no export declaration.'
                 )
-        elif fname in source_info.functions:
+        elif source_defines:
             comment = (
-                f'Function found in source file {source_info.rel_path} itself '
+                f'Function/class found in source file {source_info.rel_path} itself '
                 f'-- no export needed for this import.'
             )
         else:
@@ -114,7 +116,8 @@ def _build_annexure(ann_id, missing_names, imp, dest_path, dest_info,
             for fpath, finfo in all_js.items():
                 if fpath == source_info.path:
                     continue
-                if fname in finfo.functions:
+                in_file = fname in finfo.functions or fname in getattr(finfo, 'class_names', set())
+                if in_file:
                     found_in.append(finfo.rel_path)
                     if fname in finfo.exports:
                         exported_in.append(finfo.rel_path)

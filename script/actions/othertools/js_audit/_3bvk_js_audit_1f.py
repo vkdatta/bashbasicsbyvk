@@ -31,15 +31,18 @@ def audit_1f_module_script_type(html_info, all_js, root):
 
         # Build a human-readable description of how this script is loaded
         # (static tag vs dynamic call) for use in error messages.
-        if sr.source == 'dynamic' and sr.loader:
-            load_desc  = f'{sr.loader}("{sr.src_attr}")'
-            fix_prefix = f'Change to {sr.loader.replace("Script", "Module")}' \
-                         if sr.loader == 'loadScript' else None
-        else:
-            load_desc  = f'<script src="{sr.src_attr}">'
-            fix_prefix = None
+        # getattr guards: old ScriptRef only has src_attr and is_module;
+        # new ones also carry source and loader.
+        sr_source = getattr(sr, 'source', 'static')
+        sr_loader = getattr(sr, 'loader', None)
+        sr_is_mod = getattr(sr, 'is_module', False)
 
-        if finfo.is_es_module and not sr.is_module:
+        if sr_source == 'dynamic' and sr_loader:
+            load_desc = f'{sr_loader}("{sr.src_attr}")'
+        else:
+            load_desc = f'<script src="{sr.src_attr}">'
+
+        if finfo.is_es_module and not sr_is_mod:
             uses = []
             if finfo.imports:
                 uses.append('import')
@@ -47,7 +50,7 @@ def audit_1f_module_script_type(html_info, all_js, root):
                 uses.append('export')
             uses_str = '/'.join(uses) if uses else 'import/export'
 
-            if sr.source == 'dynamic' and sr.loader == 'loadScript':
+            if sr_source == 'dynamic' and sr_loader == 'loadScript':
                 suggestion = f'Use loadModule("{sr.src_attr}") instead of loadScript(…)'
             else:
                 suggestion = f'<script type="module" src="{sr.src_attr}"></script>'
@@ -66,8 +69,8 @@ def audit_1f_module_script_type(html_info, all_js, root):
                 'Suggested Import': suggestion,
             })
 
-        elif sr.is_module and not finfo.is_es_module:
-            if sr.source == 'dynamic' and sr.loader == 'loadModule':
+        elif sr_is_mod and not finfo.is_es_module:
+            if sr_source == 'dynamic' and sr_loader == 'loadModule':
                 suggestion = f'Use loadScript("{sr.src_attr}") — file has no import/export'
             else:
                 suggestion = ''

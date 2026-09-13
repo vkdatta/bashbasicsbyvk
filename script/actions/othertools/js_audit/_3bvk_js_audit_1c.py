@@ -30,12 +30,20 @@ def audit_1c_html_events(html_info, all_js, root):
             if rp:
                 loaded_scripts.append((rp, sr))
 
+    # Names defined in inline <script> blocks of this HTML file are global
+    # and valid targets for inline event handlers -- never flag them.
+    inline_globals = getattr(html_info, 'inline_script_globals', set())
+
     for (event_code, func_names) in html_info.inline_events:
         for fname in func_names:
+            # Defined in an inline <script> block on this page -- always valid
+            if fname in inline_globals:
+                continue
+
             definers = [
                 (fpath, finfo)
                 for fpath, finfo in all_js.items()
-                if fname in finfo.functions
+                if fname in finfo.functions or fname in getattr(finfo, 'class_names', set())
             ]
 
             # Function not found anywhere
@@ -82,7 +90,7 @@ def audit_1c_html_events(html_info, all_js, root):
 
             if len(loaded_definers) == 1:
                 fpath, finfo, sr = loaded_definers[0]
-                if sr.is_module and fname not in finfo.window_globals:
+                if getattr(sr, "is_module", False) and fname not in getattr(finfo, "window_globals", set()):
                     rows.append({
                         'Sub Audit': '1c - HTML Event Resolution',
                         'Source': html_info.rel_path,
@@ -140,7 +148,7 @@ def _resolve_race(fname, loaded_definers, loaded_scripts):
         return loaded_definers[-1]
 
     def globally_exposed(fpath, finfo, sr):
-        return (not sr.is_module) or (fname in finfo.window_globals)
+        return (not getattr(sr, "is_module", False)) or (fname in getattr(finfo, "window_globals", set()))
 
     exposed = [(fp, fi, sr) for fp, fi, sr in ordered if globally_exposed(fp, fi, sr)]
     if not exposed:

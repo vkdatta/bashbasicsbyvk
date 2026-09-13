@@ -1,5 +1,5 @@
 """
-_3bvk_js_audit_1d.py.py
+_3bvk_js_audit_1d.py
 Audit 1d -- Imported Function in JS-built HTML
            (also covers "1d - Local Func in ES Module HTML"
             and       "1d - Unimported Func in JS-built HTML")
@@ -19,7 +19,7 @@ Three sub-cases:
 
 import re
 from _3bvk_js_audit_helpers import resolve_js_path, rel
-from _3bvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN, _NATIVE_GLOBALS, _JS_KEYWORDS
+from _3bvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN, _NATIVE_GLOBALS, _JS_KEYWORDS, _CALLBACK_NAMES
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
     # a JS-built HTML string but not window-exposed
     # ------------------------------------------------------------------
     if js_info.is_es_module:
-        local_funcs = set(js_info.functions.keys())
+        local_funcs = set(js_info.functions.keys()) | getattr(js_info, "class_names", set())
         if local_funcs:
             for tl_body in template_bodies:
                 for attr_m in _RE_EVT_ATTR.finditer(tl_body):
@@ -230,11 +230,14 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
     # entirely. Search all_js for where the function is defined/exported
     # and report it so the caller knows what to add.
     # ------------------------------------------------------------------
-    already_covered = set(imported_names.keys()) | set(js_info.functions.keys())
-    # Also exclude pure JS globals / keywords that _EVT_KNOWN already filters,
-    # but _EVT_KNOWN is applied inside _extract_event_functions so by here
-    # every fname is already a user-defined name.
-    _ALL_KNOWN = _NATIVE_GLOBALS | _JS_KEYWORDS
+    already_covered = (
+        set(imported_names.keys())
+        | set(js_info.functions.keys())
+        | getattr(js_info, 'class_names',    set())   # class Foo is callable without import
+        | getattr(js_info, 'param_names',    set())   # params are locally scoped
+        | getattr(js_info, 'window_globals', set())   # window.X = ... is already global
+    )
+    _ALL_KNOWN = _NATIVE_GLOBALS | _JS_KEYWORDS | _CALLBACK_NAMES
 
     for tl_body in template_bodies:
         for attr_m in _RE_EVT_ATTR.finditer(tl_body):
@@ -253,7 +256,7 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
                         continue
                     if fname in finfo.exports:
                         exported_in.append(finfo.rel_path)
-                    elif fname in finfo.functions:
+                    elif fname in finfo.functions or fname in getattr(finfo, 'class_names', set()):
                         defined_in.append(finfo.rel_path)
 
                 if exported_in:

@@ -1,5 +1,5 @@
 """
-_3bvk_js_audit_2.py.py
+_3bvk_js_audit_2.py
 Audit 2 -- Active / Dead Function Analysis
 
 For every function found in every JS file, counts how many times it is called
@@ -13,7 +13,18 @@ from _3bvk_js_audit_helpers import _is_traditional_decl
 
 
 def _count_calls(fname, src):
-    return len(re.findall(r'\b' + re.escape(fname) + r'\s*\(', src))
+    """
+    Count genuine bare calls to fname in src, excluding:
+      - method calls:      obj.fname()   (preceded by .)
+      - constructor calls: new fname()   (preceded by 'new ')
+    """
+    pattern = re.compile(
+        r'(?<![.\w])'
+        r'(?!(new|typeof|instanceof|extends|delete|void|await|yield)\s+)'
+        + re.escape(fname) +
+        r'\s*\(',
+    )
+    return len(pattern.findall(src))
 
 
 def audit_2_active_dead(all_js, all_html):
@@ -22,13 +33,20 @@ def audit_2_active_dead(all_js, all_html):
     all_html_text = ' '.join(hi.source for hi in all_html)
 
     for fpath, finfo in all_js.items():
-        for fname, func in finfo.functions.items():
+        # Merge functions and class_names into one iterable.
+        # class_names entries get a sentinel func value of None.
+        all_names = list(finfo.functions.items())
+        for cname in getattr(finfo, 'class_names', set()):
+            if cname not in finfo.functions:
+                all_names.append((cname, None))
+
+        for fname, func in all_names:
             usage_count = 0
             locations   = []
 
             # Self-calls (subtract 1 for the declaration itself)
             self_count = _count_calls(fname, finfo.source)
-            if _is_traditional_decl(fname, finfo.source):
+            if func is not None and _is_traditional_decl(fname, finfo.source):
                 self_count = max(0, self_count - 1)
             if self_count > 0:
                 usage_count += self_count
@@ -54,10 +72,15 @@ def audit_2_active_dead(all_js, all_html):
                 usage_count += 1
                 locations.append('IIFE (self-invoking)')
 
-            # Exported functions count as used
+            # Exported functions/classes count as used
             if fname in finfo.exports:
                 usage_count += 1
                 locations.append('exported')
+
+            # Explicitly window-exposed names count as used (intentional global)
+            if fname in getattr(finfo, 'window_globals', set()):
+                usage_count += 1
+                locations.append('window-exposed')
 
             is_active = usage_count > 0
             rows.append({
