@@ -19,6 +19,7 @@ Output:
   ~/.bashbasicsbyvk/recents.pid                 — PID of running daemon
   ~/.bashbasicsbyvk/recents.log                 — daemon log
   ~/.bashbasicsbyvk/.watchdog_install_attempted — pip attempt sentinel
+  ~/.bashbasicsbyvk/recents_exclude.conf        — user exclude rules (auto-created)
 
 Recents policy:
   • A file joins recents ONLY when it is modified (on_modified / mtime change).
@@ -38,13 +39,14 @@ from collections import OrderedDict
 from pathlib import Path
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-HOME       = Path.home()
-BVK_DIR    = HOME / ".bashbasicsbyvk"
-LIST_FILE  = BVK_DIR / "recents.list"
-PID_FILE   = BVK_DIR / "recents.pid"
-LOG_FILE   = BVK_DIR / "recents.log"
-SENTINEL   = BVK_DIR / ".watchdog_install_attempted"
-THIS_FILE  = Path(os.path.abspath(__file__))
+HOME         = Path.home()
+BVK_DIR      = HOME / ".bashbasicsbyvk"
+LIST_FILE    = BVK_DIR / "recents.list"
+PID_FILE     = BVK_DIR / "recents.pid"
+LOG_FILE     = BVK_DIR / "recents.log"
+SENTINEL     = BVK_DIR / ".watchdog_install_attempted"
+EXCLUDE_FILE = BVK_DIR / "recents_exclude.conf"
+THIS_FILE    = Path(os.path.abspath(__file__))
 
 MAX_RECENT     = 100
 FLUSH_DELAY    = 2.0     # seconds — debounce rapid edits
@@ -200,6 +202,127 @@ IGNORE_SUFFIXES = (".swp", ".swpx", ".tmp", "~", ".lock", ".pid", ".pyc", ".pyo"
 IGNORE_NAMES    = {"recents.list", "recents.pid", "recents.log",
                    "lastdir", ".bash_history", ".python_history"}
 
+# ── User exclude list ──────────────────────────────────────────────────────────
+# Loaded from EXCLUDE_FILE. Hot-reloaded whenever the file's mtime changes.
+# Four rule types (case-sensitive values, type keyword case-insensitive):
+#
+#   filename   .env          — blocks this basename anywhere in the fs
+#   foldername .git          — blocks any path whose components contain this name
+#   filepath   /abs/path/file.txt  — blocks this exact file only
+#   dirpath    /abs/path/dir       — blocks everything under this directory
+#
+# Lines starting with # are comments. Blank lines are ignored.
+
+_excl_lock        = threading.Lock()
+_excl_filenames   : set  = set()     # basenames
+_excl_foldernames : set  = set()     # path-segment names (universal)
+_excl_filepaths   : set  = set()     # exact absolute paths
+_excl_dirpaths    : list = []        # directory prefixes (trailing / normalised)
+_excl_mtime       : float = 0.0      # mtime of last successful load
+
+def _load_excludes(force: bool = False):
+    """Parse EXCLUDE_FILE and populate the four exclude sets/lists.
+    No-ops if the file hasn't changed since last load (unless force=True).
+    Creates a starter config with syntax guide if the file is absent."""
+    global _excl_mtime
+
+    # ── Ensure file exists with starter template ──
+    if not EXCLUDE_FILE.exists():
+        try:
+            EXCLUDE_FILE.write_text(
+                "# recents_exclude.conf — files/folders to hide from recents\n"
+                "#\n"
+                "# Syntax:  <type>  <value>\n"
+                "#   filename   NAME      — hides NAME everywhere (any directory)\n"
+                "#   foldername NAME      — hides everything inside any folder named NAME\n"
+                "#   filepath   /abs/path — hides this exact file only\n"
+                "#   dirpath    /abs/path — hides everything under this directory\n"
+                "#\n"
+                "# Examples:\n"
+                "#   filename   .env\n"
+                "#   foldername .git\n"
+                "#   foldername node_modules\n"
+                "#   foldername __pycache__\n"
+                "#   filepath   /home/user/notes/secret.txt\n"
+                "#   dirpath    /home/user/work/private\n"
+            )
+        except OSError:
+            pass
+        _excl_mtime = 0.0
+
+    # ── Skip reload if mtime unchanged ──
+    try:
+        mtime = EXCLUDE_FILE.stat().st_mtime
+    except OSError:
+        return
+    if not force and mtime == _excl_mtime:
+        return
+
+    # ── Parse ──
+    new_filenames   : set  = set()
+    new_foldernames : set  = set()
+    new_filepaths   : set  = set()
+    new_dirpaths    : list = []
+
+    try:
+        for raw in EXCLUDE_FILE.read_text(errors="replace").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(None, 1)
+            if len(parts) != 2:
+                continue
+            kind, value = parts[0].lower(), parts[1].strip()
+            if not value:
+                continue
+            if kind == "filename":
+                new_filenames.add(value)
+            elif kind == "foldername":
+                new_foldernames.add(value)
+            elif kind == "filepath":
+                new_filepaths.add(os.path.abspath(value))
+            elif kind == "dirpath":
+                # Normalise: ensure trailing sep so startswith works correctly
+                dp = os.path.abspath(value)
+                if not dp.endswith(os.sep):
+                    dp += os.sep
+                new_dirpaths.append(dp)
+    except OSError as e:
+        _log(f"exclude: read error: {e}")
+        return
+
+    with _excl_lock:
+        _excl_filenames.clear();   _excl_filenames.update(new_filenames)
+        _excl_foldernames.clear(); _excl_foldernames.update(new_foldernames)
+        _excl_filepaths.clear();   _excl_filepaths.update(new_filepaths)
+        _excl_dirpaths.clear();    _excl_dirpaths.extend(new_dirpaths)
+
+    _excl_mtime = mtime
+    _log(f"exclude: loaded {len(new_filenames)} filenames, "
+         f"{len(new_foldernames)} foldernames, "
+         f"{len(new_filepaths)} filepaths, "
+         f"{len(new_dirpaths)} dirpaths")
+
+def _excl_should_ignore(path: str) -> bool:
+    """Return True if path matches any user exclude rule."""
+    with _excl_lock:
+        # 1. Exact filepath
+        if path in _excl_filepaths:
+            return True
+        # 2. Filename (basename) match
+        if os.path.basename(path) in _excl_filenames:
+            return True
+        # 3. Directory prefix
+        for dp in _excl_dirpaths:
+            if path.startswith(dp):
+                return True
+        # 4. Folder-name segment — any component of the path
+        if _excl_foldernames:
+            parts = set(Path(path).parts)
+            if parts & _excl_foldernames:
+                return True
+    return False
+
 # ── Shared state ───────────────────────────────────────────────────────────────
 
 _lock   = threading.Lock()
@@ -218,6 +341,9 @@ def _should_ignore(path: str) -> bool:
     for p in IGNORE_PREFIXES:
         if path.startswith(p):
             return True
+    # ── User exclude list ──
+    if _excl_should_ignore(path):
+        return True
     return False
 
 def _record(path: str):
@@ -390,6 +516,10 @@ def _run_watchdog_watcher(Observer, FileSystemEventHandler):
 
     class _Handler(FileSystemEventHandler):
         def on_modified(self, e):
+            # Hot-reload exclude list whenever the config file is saved.
+            if not e.is_directory and e.src_path == str(EXCLUDE_FILE):
+                _load_excludes()
+                return
             # Only genuine edits to existing files join recents.
             if not e.is_directory:
                 _record(e.src_path)
@@ -471,6 +601,7 @@ def _run_polling_watcher():
 
     while True:
         time.sleep(POLL_INTERVAL)
+        _load_excludes()   # hot-reload if mtime changed
         try:
             cur = _scan_files(str(HOME))
         except Exception as e:
@@ -533,6 +664,7 @@ def run_daemon():
 
     _log(f"daemon started pid={os.getpid()}")
 
+    _load_excludes(force=True)   # initialise exclude list (creates file if absent)
     _load_existing()
 
     t = threading.Thread(target=_flusher, daemon=True)

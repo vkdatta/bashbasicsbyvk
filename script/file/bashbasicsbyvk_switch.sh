@@ -15,9 +15,169 @@
 # ── Storage roots ─────────────────────────────────────────────────────────────
 _SW_DIR="${HOME}/.bashbasicsbyvk/switch"
 _SW_RECENTS_LIST="${HOME}/.bashbasicsbyvk/recents.list"
+_SW_EXCLUDE_FILE="${HOME}/.bashbasicsbyvk/recents_exclude.conf"
 
 _sw_ensure_store() {
   mkdir -p "$_SW_DIR" 2>/dev/null
+}
+
+# ── Exclude list helpers ───────────────────────────────────────────────────────
+
+# Ensure the exclude file exists (daemon also creates it, but defence-in-depth)
+_sw_excl_ensure() {
+  if [ ! -f "$_SW_EXCLUDE_FILE" ]; then
+    cat > "$_SW_EXCLUDE_FILE" << 'EXCL_TEMPLATE'
+# recents_exclude.conf — files/folders to hide from recents
+#
+# Syntax:  <type>  <value>
+#   filename   NAME      — hides NAME everywhere (any directory)
+#   foldername NAME      — hides everything inside any folder named NAME
+#   filepath   /abs/path — hides this exact file only
+#   dirpath    /abs/path — hides everything under this directory
+#
+# Examples:
+#   filename   .env
+#   foldername .git
+#   foldername node_modules
+#   foldername __pycache__
+#   filepath   /home/user/notes/secret.txt
+#   dirpath    /home/user/work/private
+EXCL_TEMPLATE
+  fi
+}
+
+# Print a numbered, human-readable view of active (non-comment) exclude rules
+_sw_excl_list() {
+  _sw_excl_ensure
+  local idx=0 line kind value
+  echo "━━━ Exclude rules ($( grep -cv '^\s*#\|^\s*$' "$_SW_EXCLUDE_FILE" 2>/dev/null || echo 0 ) active) ━━━"
+  while IFS= read -r line; do
+    [[ "$line" =~ ^\s*# || -z "${line// }" ]] && continue
+    idx=$(( idx + 1 ))
+    read -r kind value <<< "$line"
+    case "$kind" in
+      filename)   printf '  %2d)  📄 filename   %s\n'  "$idx" "$value" ;;
+      foldername) printf '  %2d)  📁 foldername %s\n'  "$idx" "$value" ;;
+      filepath)   printf '  %2d)  🔒 filepath   %s\n'  "$idx" "$value" ;;
+      dirpath)    printf '  %2d)  🚫 dirpath    %s\n'  "$idx" "$value" ;;
+      *)          printf '  %2d)  ❓ %-10s %s\n' "$idx" "$kind" "$value" ;;
+    esac
+  done < "$_SW_EXCLUDE_FILE"
+  [ "$idx" -eq 0 ] && echo "  (no rules yet)"
+}
+
+# Add one rule interactively
+_sw_excl_add() {
+  _sw_excl_ensure
+  echo "━━━ Add exclude rule ━━━"
+  echo "  1) filename   — hide a filename everywhere"
+  echo "  2) foldername — hide a folder name everywhere (universal)"
+  echo "  3) filepath   — hide one exact file"
+  echo "  4) dirpath    — hide an entire directory tree"
+  printf "Type (1-4) or Enter to cancel: "
+  local t_choice
+  IFS= read -r t_choice
+  local kind
+  case "$t_choice" in
+    1) kind="filename"   ;;
+    2) kind="foldername" ;;
+    3) kind="filepath"   ;;
+    4) kind="dirpath"    ;;
+    *) echo "Cancelled."; return 0 ;;
+  esac
+  printf "Value: "
+  local value
+  IFS= read -r value
+  value="${value// /}"          # strip leading/trailing spaces
+  [ -z "$value" ] && { echo "Cancelled — empty value."; return 0; }
+  # For filepath/dirpath: resolve ~ and make absolute if path-like
+  if [[ "$kind" == filepath || "$kind" == dirpath ]]; then
+    value="${value/#\~/$HOME}"  # expand leading ~
+  fi
+  # Duplicate check
+  if grep -qE "^\s*${kind}\s+${value}\s*$" "$_SW_EXCLUDE_FILE" 2>/dev/null; then
+    echo "ℹ️  Rule already exists: $kind  $value"
+    return 0
+  fi
+  printf '%s  %s\n' "$kind" "$value" >> "$_SW_EXCLUDE_FILE"
+  echo "✅ Added: $kind  $value"
+  echo "   (daemon picks it up automatically — no restart needed)"
+}
+
+# Remove rule(s) by number (shown via _sw_excl_list)
+_sw_excl_remove() {
+  _sw_excl_ensure
+  _sw_excl_list
+  local total
+  total=$( grep -cv '^\s*#\|^\s*$' "$_SW_EXCLUDE_FILE" 2>/dev/null || echo 0 )
+  [ "$total" -eq 0 ] && return 0
+  printf "Remove rule number(s) (e.g. 1 or 1 3 5), or Enter to cancel: "
+  local nums
+  IFS= read -r nums
+  [ -z "$nums" ] && { echo "Cancelled."; return 0; }
+  # Build list of 1-based indices to delete (sorted descending so sed line
+  # numbers stay stable as we delete)
+  local sorted_nums
+  sorted_nums=$(echo "$nums" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -rn)
+  if [ -z "$sorted_nums" ]; then echo "⚠️  No valid numbers."; return 0; fi
+  # Map rule numbers → actual file line numbers
+  local line_nums=()
+  local idx=0 lineno=0 line
+  while IFS= read -r line; do
+    lineno=$(( lineno + 1 ))
+    [[ "$line" =~ ^\s*# || -z "${line// }" ]] && continue
+    idx=$(( idx + 1 ))
+    for n in $sorted_nums; do
+      [ "$n" -eq "$idx" ] && line_nums+=( "$lineno" )
+    done
+  done < "$_SW_EXCLUDE_FILE"
+  if [ "${#line_nums[@]}" -eq 0 ]; then echo "⚠️  No matching rules."; return 0; fi
+  # Delete lines from file (descending order keeps line numbers valid)
+  local tmp
+  tmp=$(mktemp)
+  cp "$_SW_EXCLUDE_FILE" "$tmp"
+  for ln in $(echo "${line_nums[@]}" | tr ' ' '\n' | sort -rn); do
+    sed -i "${ln}d" "$_SW_EXCLUDE_FILE"
+  done
+  rm -f "$tmp"
+  echo "🗑️  Removed ${#line_nums[@]} rule(s)."
+}
+
+# Open the config file in $EDITOR / nano / vi
+_sw_excl_edit() {
+  _sw_excl_ensure
+  local ed="${EDITOR:-}"
+  if [ -z "$ed" ]; then
+    command -v nano &>/dev/null && ed="nano" || ed="vi"
+  fi
+  echo "📝 Opening $_SW_EXCLUDE_FILE in $ed"
+  "$ed" "$_SW_EXCLUDE_FILE"
+  echo "   (daemon reloads automatically on save)"
+}
+
+# Main exclude manager — called by 'xe' inside recents tab
+_sw_excl_menu() {
+  while true; do
+    echo
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🚫 RECENTS EXCLUDE LIST"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    _sw_excl_list
+    echo
+    echo "  a) Add rule    r) Remove rule"
+    echo "  e) Edit file   q) Back to recents"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    printf "Choice: "
+    local xc
+    IFS= read -r xc
+    case "${xc,,}" in
+      a)  _sw_excl_add    ;;
+      r)  _sw_excl_remove ;;
+      e)  _sw_excl_edit   ;;
+      q|"") echo "↩️  Back to recents"; return 0 ;;
+      *)  echo "⚠️  Invalid: $xc" ;;
+    esac
+  done
 }
 
 # ── Tab state ─────────────────────────────────────────────────────────────────
@@ -138,7 +298,7 @@ _sw_menu_footer_bookmarks() {
 }
 
 _sw_menu_footer_recents() {
-  printf '\n[READ ONLY]   Select a file → open/edit/run/copy\nsw) Exit switch mode\n'
+  printf '\n[READ ONLY]   Select a file → open/edit/run/copy\nxe) Exclude list   sw) Exit switch mode\n'
 }
 
 _sw_set_viewport_for_tab() {
@@ -413,6 +573,11 @@ switch_menu() {
       sw|SW)
         echo "↩️  Exiting switch mode"
         break
+        ;;
+
+      xe|XE)
+        # Exclude list — accessible from either tab, most useful in recents
+        _sw_excl_menu
         ;;
 
       q)
