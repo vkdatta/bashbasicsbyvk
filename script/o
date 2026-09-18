@@ -538,14 +538,22 @@ _sync_highlight_from_buf() {
   _vp_count
   (( _vp_n == 0 )) && return
 
-  if [[ "$_buf" =~ ^([A-Za-z]+-{1,2})([0-9][0-9,-]*)$ ]]; then
+  if [[ "$_buf" =~ ^([A-Za-z]+-{1,2})(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)$ ]]; then
     local body="${BASH_REMATCH[2]}"
     # rebuild the multi-select set and repaint the changed rows
     local -A _old=()
     local k
     for k in "${!_msel_set[@]}"; do _old[$k]=1; done
     _msel_set=()
-    for k in $(parse_selection "$body" "$_vp_n"); do _msel_set[$k]=1; done
+    local -a _hl_indices=()
+    if [[ "$body" == "a" ]]; then
+      _hl_indices=($(seq 1 "$_vp_n"))
+    elif [[ "$body" =~ ^a-(.+)$ ]]; then
+      _hl_indices=($(_sp_parse_all_except "${BASH_REMATCH[1]}" "$_vp_n"))
+    else
+      _hl_indices=($(parse_selection "$body" "$_vp_n"))
+    fi
+    for k in "${_hl_indices[@]}"; do _msel_set[$k]=1; done
 
     # switch the highlight channel to multi if not already
     if [ "$_vp_hl_fn" != "_vp_is_hl_multi" ]; then
@@ -558,9 +566,11 @@ _sync_highlight_from_buf() {
       for k in "${!_old[@]}";      do [ -z "${_msel_set[$k]+x}" ] && _chg[$k]=1; done
       for k in "${!_msel_set[@]}"; do [ -z "${_old[$k]+x}"      ] && _chg[$k]=1; done
       for k in "${!_chg[@]}"; do _vp_repaint_row "$k"; done
-      # scroll to follow the last number in the list
-      local last="${body##*[,-]}"
-      [[ "$last" =~ ^[0-9]+$ ]] && _vp_ensure_visible "$last" && _vp_rerender
+      # scroll to follow the last number in the list (not applicable for a/a-spec)
+      if [[ "$body" != a* ]]; then
+        local last="${body##*[,-]}"
+        [[ "$last" =~ ^[0-9]+$ ]] && _vp_ensure_visible "$last" && _vp_rerender
+      fi
     fi
     _print_input_line
     return

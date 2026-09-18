@@ -218,8 +218,12 @@ _sp_resolve_itemlist() {
 
   local indices=()
 
+  # Bare "a" = select all items
+  if [[ "$itemlist" == "a" ]]; then
+    indices=($(seq 1 "${#items[@]}"))
+
   # All-except syntax:  a-<exclusion-spec>
-  if [[ "$itemlist" =~ ^a-(.+)$ ]]; then
+  elif [[ "$itemlist" =~ ^a-(.+)$ ]]; then
     local excl_spec="${BASH_REMATCH[1]}"
     indices=($(_sp_parse_all_except "$excl_spec" "${#items[@]}"))
     if [ ${#indices[@]} -eq 0 ]; then
