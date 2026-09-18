@@ -9,12 +9,10 @@ source "bashbasicsbyvk_organise.sh"
 source "bashbasicsbyvk_find.sh"
 source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_transfer.sh"
-source "bashbasicsbyvk_shortpath.sh"
-source "bashbasicsbyvk_mapper.sh"
+source "bashbasicsbyvk_route_core.sh"
 source "bashbasicsbyvk_help.sh"
 source "bashbasicsbyvk_viewport.sh"
 source "bashbasicsbyvk_refresh.sh"
-source "bashbasicsbyvk_shortcut_registry.sh"
 source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_functions.sh"
 source "bashbasicsbyvk_filter.sh"
@@ -850,13 +848,13 @@ case "$choice" in
     s)                      settings_menu ;;
     r)                      handle_rename ;;
     cd)                     cd "$path" && exec "$SHELL" ;;
-    m)                      map_directory ;;
     kl)                     kill -9 -1 ;;
     i)                      infinity_stones_menu ;;
     -u)                     bash _3bvk_upgrade_core ;;
-    d-)                     handle_shortpath_dispatch ;;
-    v-)                     handle_shortpath_view ;;
-    c-*|m-*|s-*)            handle_shortpath_stage "$choice" ;;
+    d-)                     handle_route_dispatch ;;
+    v-)                     handle_route_view ;;
+    p-*)                    handle_route_map "$choice" ;;
+    c-*|m-*|s-*)            handle_route_stage "$choice" ;;
     do-)                    handle_do_import ;;
     ups-*)                  handle_ups_upload "$choice" ;;
     up-*)                   handle_up_upload "$choice" ;;

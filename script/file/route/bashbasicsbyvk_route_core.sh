@@ -1,85 +1,25 @@
-_SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
+source "bashbasicsbyvk_route_fileapi.sh"
+source "bashbasicsbyvk_route_helpers.sh"
+source "bashbasicsbyvk_route_move.sh"
+source "bashbasicsbyvk_route_copy.sh"
+source "bashbasicsbyvk_route_shortcut.sh"
+source "bashbasicsbyvk_route_shortcut_registry.sh"
+source "bashbasicsbyvk_route_map.sh"
 
-source "bashbasicsbyvk_fileapi.sh"
+# ─────────────────────────────────────────────
+#  Public entry points (called from 'o')
+# ─────────────────────────────────────────────
 
-_SP_CP_FILE="${_SP_BUFFER_DIR}/copy.list"
-_SP_MV_FILE="${_SP_BUFFER_DIR}/move.list"
-_SP_SC_FILE="${_SP_BUFFER_DIR}/shortcut.list"
-
-_SP_CP_ONCE_FILE="${_SP_BUFFER_DIR}/copy.once.list"
-_SP_MV_ONCE_FILE="${_SP_BUFFER_DIR}/move.once.list"
-_SP_SC_ONCE_FILE="${_SP_BUFFER_DIR}/shortcut.once.list"
-
-_sp_ensure_store() {
-  mkdir -p "$_SP_BUFFER_DIR" 2>/dev/null
-  [ -f "$_SP_CP_FILE" ] || : > "$_SP_CP_FILE"
-  [ -f "$_SP_MV_FILE" ] || : > "$_SP_MV_FILE"
-  [ -f "$_SP_SC_FILE" ] || : > "$_SP_SC_FILE"
-  [ -f "$_SP_CP_ONCE_FILE" ] || : > "$_SP_CP_ONCE_FILE"
-  [ -f "$_SP_MV_ONCE_FILE" ] || : > "$_SP_MV_ONCE_FILE"
-  [ -f "$_SP_SC_ONCE_FILE" ] || : > "$_SP_SC_ONCE_FILE"
-}
-
-_sp_load() {
-  local -n _sp_out="$1"
-  local file="$2"
-  _sp_out=()
-  [ -f "$file" ] || return 0
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    _sp_out+=("$line")
-  done < "$file"
-}
-
-_sp_save() {
-  local -n _sp_in="$1"
-  local file="$2"
-  : > "$file"
-  local entry
-  for entry in "${_sp_in[@]}"; do
-    [ -n "$entry" ] && printf '%s\n' "$entry" >> "$file"
-  done
-}
-
-_sp_append() {
-  local file="$1"; shift
-  local -a existing=()
-  _sp_load existing "$file"
-  local added=0 dupes=0
-  local p
-  for p in "$@"; do
-    if _in_selection "$p" "${existing[@]}"; then
-      dupes=$((dupes+1))
-    else
-      existing+=("$p")
-      added=$((added+1))
-    fi
-  done
-  _sp_save existing "$file"
-  echo "$added|$dupes|${#existing[@]}"
-}
-
-_sp_resolve_itemlist() {
-  local itemlist="$1"
-  if [ ${#items[@]} -eq 0 ]; then
-    echo "❌ No items available in current view to reference"
-    return 1
-  fi
-  local indices
-  indices=($(parse_selection "$itemlist" "${#items[@]}"))
-  if [ ${#indices[@]} -eq 0 ]; then
-    echo "❌ No valid item numbers in '$itemlist'"
-    return 1
-  fi
-  sp_resolved=()
-  local idx
-  for idx in "${indices[@]}"; do
-    sp_resolved+=("${items[$((idx-1))]}")
-  done
-  return 0
-}
-
-handle_shortpath_stage() {
+# Route a raw route command (c-*, m-*, s-*, c--*, m--*, s--*) to
+# the correct operation/buffer.
+# Path-map commands (p-*) are routed to handle_route_map (route_map.sh).
+#
+# Syntax supported for the item-list portion:
+#   1,3,5          → items 1, 3 and 5
+#   1-7            → items 1 through 7
+#   a-1-5,7        → ALL items EXCEPT 1–5 and 7
+#   (any combo)
+handle_route_stage() {
   local raw="$1"
   local prefix persistent label file itemlist
 
@@ -95,81 +35,15 @@ handle_shortpath_stage() {
 
   itemlist="${raw:${#prefix}}"
 
-  _sp_ensure_store
-
-  if [ -z "$itemlist" ]; then
-    echo "⚠️  Usage: ${prefix}1,3,5  or  ${prefix}1-7"
-    return 0
-  fi
-
-  if $imaginary_mode; then
-    echo "⚠️  Too many items to index directly — narrow the view (group filter or forceshow) before using ${prefix} shortcuts."
-    return 0
-  fi
-
-  _sp_resolve_itemlist "$itemlist" || return 0
-
-  local result
-  result=$(_sp_append "$file" "${sp_resolved[@]}")
-  local added="${result%%|*}"
-  local rest="${result#*|}"
-  local dupes="${rest%%|*}"
-  local total="${rest#*|}"
-
-  local msg="📌 Buffered $added item(s) → $label"
-  [ "$dupes" -gt 0 ] && msg="$msg (skipped $dupes already buffered)"
-
-  local behavior
-  if $persistent; then
-    behavior="kept after d- applies it"
-  else
-    behavior="cleared automatically after d- applies it"
-  fi
-
-  echo "$msg — $label buffer now holds $total item(s). Use v- to review, d- to apply ($behavior)."
-  return 0
-}
-
-_sp_op_label() {
-  case "$1" in
-    cp) echo "Copy" ;;
-    mv) echo "Move" ;;
-    sc) echo "Shortcut" ;;
+  case "$raw" in
+    c--*|c-*) route_copy_stage     "$persistent" "$itemlist" ;;
+    m--*|m-*) route_move_stage     "$persistent" "$itemlist" ;;
+    s--*|s-*) route_shortcut_stage "$persistent" "$itemlist" ;;
   esac
 }
 
-_sp_apply_buffer() {
-  local kind="$1" file="$2" dest="$3"
-  local -a list=()
-  _sp_load list "$file"
-  [ ${#list[@]} -eq 0 ] && return 0
-
-  local -a live=()
-  local missing=0
-  local p
-  for p in "${list[@]}"; do
-    if [ -e "$p" ]; then
-      live+=("$p")
-    else
-      missing=$((missing+1))
-      echo "  ⚠️  Skipping missing item (no longer exists): $p"
-    fi
-  done
-
-  if [ ${#live[@]} -eq 0 ]; then
-    echo "ℹ️  $(_sp_op_label "$kind") buffer had no valid items to apply"
-    return 0
-  fi
-
-  echo "⚙️  Applying $(_sp_op_label "$kind") buffer (${#live[@]} item(s)) → $dest"
-  case "$kind" in
-    cp) perform_copy "$dest" "${live[@]}" ;;
-    mv) perform_move "$dest" "${live[@]}" ;;
-    sc) perform_shortcut "$dest" "${live[@]}" ;;
-  esac
-}
-
-handle_shortpath_dispatch() {
+# Apply all non-empty buffers to the current path destination.
+handle_route_dispatch() {
   _sp_ensure_store
   local dest="$path"
 
@@ -190,25 +64,29 @@ handle_shortpath_dispatch() {
 
   echo "📦 Destination: $dest"
 
-  [ ${#cp_list[@]} -gt 0 ] && _sp_apply_buffer cp "$_SP_CP_FILE" "$dest"
-  [ ${#mv_list[@]} -gt 0 ] && _sp_apply_buffer mv "$_SP_MV_FILE" "$dest"
-  [ ${#sc_list[@]} -gt 0 ] && _sp_apply_buffer sc "$_SP_SC_FILE" "$dest"
+  [ ${#cp_list[@]} -gt 0 ] && route_copy_apply     "$_SP_CP_FILE" "$dest"
+  [ ${#mv_list[@]} -gt 0 ] && route_move_apply     "$_SP_MV_FILE" "$dest"
+  [ ${#sc_list[@]} -gt 0 ] && route_shortcut_apply "$_SP_SC_FILE" "$dest"
 
   if [ ${#cp_once[@]} -gt 0 ]; then
-    _sp_apply_buffer cp "$_SP_CP_ONCE_FILE" "$dest"
+    route_copy_apply "$_SP_CP_ONCE_FILE" "$dest"
     : > "$_SP_CP_ONCE_FILE"
   fi
   if [ ${#mv_once[@]} -gt 0 ]; then
-    _sp_apply_buffer mv "$_SP_MV_ONCE_FILE" "$dest"
+    route_move_apply "$_SP_MV_ONCE_FILE" "$dest"
     : > "$_SP_MV_ONCE_FILE"
   fi
   if [ ${#sc_once[@]} -gt 0 ]; then
-    _sp_apply_buffer sc "$_SP_SC_ONCE_FILE" "$dest"
+    route_shortcut_apply "$_SP_SC_ONCE_FILE" "$dest"
     : > "$_SP_SC_ONCE_FILE"
   fi
 
   echo "✅ Buffer apply complete. Persistent (--) buffers were kept. One-time (-) buffers were cleared."
 }
+
+# ─────────────────────────────────────────────
+#  Buffer viewer (v-)
+# ─────────────────────────────────────────────
 
 _sp_view_one_buffer() {
   local label="$1" file="$2"
@@ -283,7 +161,7 @@ _sp_view_one_buffer() {
   done
 }
 
-handle_shortpath_view() {
+handle_route_view() {
   _sp_ensure_store
   while true; do
     local -a cp_list=() mv_list=() sc_list=()

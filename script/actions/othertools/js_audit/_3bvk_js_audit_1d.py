@@ -201,6 +201,15 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
     # Sub-check B: locally defined function in an ES-module used in
     # a JS-built HTML string but not window-exposed
     # ------------------------------------------------------------------
+    # Build a union of window_globals across ALL files. A common pattern
+    # is a 'core.js' that imports functions from sibling modules and
+    # re-exports them via window.X = X. If any file in the project has
+    # already done  window.fname = fname,  the function is reachable from
+    # inline event handlers and must NOT be flagged here.
+    all_window_globals = set()
+    for _finfo in all_js.values():
+        all_window_globals |= getattr(_finfo, 'window_globals', set())
+
     if js_info.is_es_module:
         local_funcs = set(js_info.functions.keys()) | getattr(js_info, "class_names", set())
         if local_funcs:
@@ -208,7 +217,7 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
                 for attr_m in _RE_EVT_ATTR.finditer(tl_body):
                     attr_value = attr_m.group(1) or attr_m.group(2) or attr_m.group(3) or ''
                     for fname in _extract_event_functions(attr_value):
-                        if fname in local_funcs and fname not in js_info.window_globals:
+                        if fname in local_funcs and fname not in all_window_globals:
                             rows.append({
                                 'Sub Audit': '1d - Local Func in ES Module HTML',
                                 'Source': js_info.rel_path,

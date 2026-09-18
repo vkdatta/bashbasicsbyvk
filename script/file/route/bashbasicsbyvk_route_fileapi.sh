@@ -689,34 +689,14 @@ _up_do_multipart_upload() {
 handle_up_upload() {
   local raw="$1"
   local itemlist="${raw#up-}"
-
-  if [ -z "$itemlist" ]; then
-    echo "⚠️  Usage: up-1,3,5  or  up-1-3,7  (files and folders both supported)"
-    return
-  fi
-  if $imaginary_mode; then
-    echo "⚠️  Too many items to index directly — narrow the view before using up-."
-    return
-  fi
-
-  _sp_resolve_itemlist "$itemlist" || return
+  _sp_guard_and_resolve "$itemlist" "up-" || return
   _up_do_multipart_upload "${sp_resolved[@]}"
 }
 
 handle_ups_upload() {
   local raw="$1"
   local itemlist="${raw#ups-}"
-
-  if [ -z "$itemlist" ]; then
-    echo "⚠️  Usage: ups-1,3,5  or  ups-1-3,7  (files only — no folders)"
-    return
-  fi
-  if $imaginary_mode; then
-    echo "⚠️  Too many items to index directly — narrow the view before using ups-."
-    return
-  fi
-
-  _sp_resolve_itemlist "$itemlist" || return
+  _sp_guard_and_resolve "$itemlist" "ups-" || return
 
   local p
   for p in "${sp_resolved[@]}"; do
