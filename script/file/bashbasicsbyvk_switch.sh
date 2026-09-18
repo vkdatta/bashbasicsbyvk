@@ -298,7 +298,7 @@ _sw_menu_footer_bookmarks() {
 }
 
 _sw_menu_footer_recents() {
-  printf '\n[READ ONLY]   Select a file → open/edit/run/copy\nxe) Exclude list   sw) Exit switch mode\n'
+  printf '\n[READ ONLY]   Select a file → open/edit/run/copy\nxe) Exclude list   clr) Clear list   sw) Exit switch mode\n'
 }
 
 _sw_set_viewport_for_tab() {
@@ -580,6 +580,23 @@ switch_menu() {
         _sw_excl_menu
         ;;
 
+ clr|CLR)
+        if [ "$_sw_tab" = "recents" ]; then
+          printf 'Clear all recents? This only clears the list, not your files. [y/N] '
+          local _clr_ans
+          IFS= read -r _clr_ans
+          if [[ "${_clr_ans,,}" == "y" ]]; then
+            : > "$_SW_RECENTS_LIST"
+            echo "✅ Recents list cleared."
+          else
+            echo "Cancelled."
+          fi
+        else
+          _sw_recents_blocked
+          _sw_do_fresh=false
+        fi
+        ;;
+        
       q)
         path="$_sw_saved_path"
         _sw_in_mode=0
