@@ -400,11 +400,18 @@ def _load_existing():
     if not LIST_FILE.exists():
         return
     try:
+        skipped = 0
         for line in LIST_FILE.read_text().splitlines():
             if line and os.path.isfile(line):
+                if _should_ignore(line):
+                    skipped += 1
+                    continue
                 _recent[line] = None
         while len(_recent) > MAX_RECENT:
             _recent.popitem(last=True)
+        if skipped:
+            _log(f"_load_existing: dropped {skipped} excluded entries from saved list")
+            _dirty.set()   # flush the cleaned list back to disk
     except OSError:
         pass
 
