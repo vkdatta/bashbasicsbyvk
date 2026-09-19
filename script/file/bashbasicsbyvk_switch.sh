@@ -673,7 +673,7 @@ switch_menu() {
       d-)           handle_shortpath_dispatch ;;
       v-)           handle_shortpath_view ;;
 
-      c-*|m-*|s-*)
+      c-*|m-*|s-*|b-*)
         [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_shortpath_stage "$_sw_choice"
         ;;
 

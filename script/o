@@ -864,7 +864,7 @@ case "$choice" in
     d-)                     handle_route_dispatch ;;
     v-)                     handle_route_view ;;
     p-*)                    handle_route_map "$choice" ;;
-    c-*|m-*|s-*)            handle_route_stage "$choice" ;;
+    c-*|m-*|s-*|b-*)        handle_route_stage "$choice" ;;
     do-)                    handle_do_import ;;
     ups-*)                  handle_ups_upload "$choice" ;;
     up-*)                   handle_up_upload "$choice" ;;

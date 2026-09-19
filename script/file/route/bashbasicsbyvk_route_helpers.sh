@@ -3,19 +3,23 @@ _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 _SP_CP_FILE="${_SP_BUFFER_DIR}/copy.list"
 _SP_MV_FILE="${_SP_BUFFER_DIR}/move.list"
 _SP_SC_FILE="${_SP_BUFFER_DIR}/shortcut.list"
+_SP_BM_FILE="${_SP_BUFFER_DIR}/bookmark.list"
 
 _SP_CP_ONCE_FILE="${_SP_BUFFER_DIR}/copy.once.list"
 _SP_MV_ONCE_FILE="${_SP_BUFFER_DIR}/move.once.list"
 _SP_SC_ONCE_FILE="${_SP_BUFFER_DIR}/shortcut.once.list"
+_SP_BM_ONCE_FILE="${_SP_BUFFER_DIR}/bookmark.once.list"
 
 _sp_ensure_store() {
   mkdir -p "$_SP_BUFFER_DIR" 2>/dev/null
   [ -f "$_SP_CP_FILE" ]      || : > "$_SP_CP_FILE"
   [ -f "$_SP_MV_FILE" ]      || : > "$_SP_MV_FILE"
   [ -f "$_SP_SC_FILE" ]      || : > "$_SP_SC_FILE"
+  [ -f "$_SP_BM_FILE" ]      || : > "$_SP_BM_FILE"
   [ -f "$_SP_CP_ONCE_FILE" ] || : > "$_SP_CP_ONCE_FILE"
   [ -f "$_SP_MV_ONCE_FILE" ] || : > "$_SP_MV_ONCE_FILE"
   [ -f "$_SP_SC_ONCE_FILE" ] || : > "$_SP_SC_ONCE_FILE"
+  [ -f "$_SP_BM_ONCE_FILE" ] || : > "$_SP_BM_ONCE_FILE"
 }
 
 _sp_load() {
@@ -62,6 +66,7 @@ _sp_op_label() {
     cp) echo "Copy" ;;
     mv) echo "Move" ;;
     sc) echo "Shortcut" ;;
+    bm) echo "Bookmark" ;;
   esac
 }
 
@@ -129,7 +134,7 @@ _sp_guard_and_resolve() {
 
 # Stage items into any op buffer.
 # Usage: _sp_stage_buffer <op> <persistent> <itemlist>
-#   op: cp | mv | sc
+#   op: cp | mv | sc | bm
 _sp_stage_buffer() {
   local op="$1" persistent="$2" itemlist="$3"
   local label file_persistent file_once pfx_persistent pfx_once
@@ -141,6 +146,8 @@ _sp_stage_buffer() {
         pfx_persistent="m--"; pfx_once="m-" ;;
     sc) label="SHORTCUT"; file_persistent="$_SP_SC_FILE"; file_once="$_SP_SC_ONCE_FILE"
         pfx_persistent="s--"; pfx_once="s-" ;;
+    bm) label="BOOKMARK"; file_persistent="$_SP_BM_FILE"; file_once="$_SP_BM_ONCE_FILE"
+        pfx_persistent="b--"; pfx_once="b-" ;;
   esac
 
   local file pfx
@@ -177,7 +184,7 @@ _sp_stage_buffer() {
 _sp_apply_buffer() {
   local op="$1" file="$2" dest="$3"
   local label
-  label=$(_sp_op_label "$op")   # "Copy" | "Move" | "Shortcut"
+  label=$(_sp_op_label "$op")   # "Copy" | "Move" | "Shortcut" | "Bookmark"
 
   local -a list=()
   _sp_load list "$file"
