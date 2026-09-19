@@ -88,7 +88,7 @@ _in_selection() {
   local item="$1"; shift
   # 'existing' MUST be local. Bash uses dynamic scoping, so without this the
   # loop writes into any caller variable of the same name -- _sp_append() in
-  # bashbasicbyvk_shortpath.sh keeps its buffer in `local -a existing`, and
+  # bashbasicbyvk_route.sh keeps its buffer in `local -a existing`, and
   # this loop was silently overwriting existing[0] on every call, dropping the
   # first staged item whenever 3+ items were staged at once.
   local existing

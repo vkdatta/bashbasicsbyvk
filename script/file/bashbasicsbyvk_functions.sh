@@ -389,11 +389,11 @@ functions_menu() {
         [ "$_fx_tab" = "udf" ] && handle_refresh || { _fx_do_fresh=false; }
         ;;
 
-      d-) handle_shortpath_dispatch ;;
-      v-) handle_shortpath_view ;;
+      d-) handle_route_dispatch ;;
+      v-) handle_route_view ;;
 
       c-*|m-*|s-*)
-        [ "$_fx_tab" = "udf" ] && handle_shortpath_stage "$_fx_choice" || { _fx_do_fresh=false; }
+        [ "$_fx_tab" = "udf" ] && handle_route_stage "$_fx_choice" || { _fx_do_fresh=false; }
         ;;
 
       _*) _fx_do_fresh=false ;;   # filter: viewport handles it live
