@@ -13,11 +13,12 @@
 #    Trim leading/trailing whitespace and CR from a string (in-place via nameref).
 #
 #  _csv_resolve_items
-#    Reads col1 of $csv_file as filenames or absolute paths.
-#    Resolves each against $path (basename match) or directly (absolute).
+#    Reads EVERY comma-separated value from EVERY non-blank line of $csv_file.
+#    Resolves each value as an absolute path (starts with /) or a basename
+#    matched in $path (maxdepth 1).
 #    On success : populates global selected_items[]  → returns 0
 #    On failure : prints error, selected_items=()    → returns 1
-#    Writes a result column back to the CSV (✅ / ⚠️  not found).
+#    Does NOT modify the CSV file.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ open_csv_menu() {
         done < <(find "$_csv_nav_path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null | sort -z)
 
         # ── Render list ───────────────────────────────────────────────────
+        echo "   ─────────────────────────────"
         if [ ${#_csv_items[@]} -eq 0 ]; then
             echo "  🛑 No folders or CSV files here."
         else
@@ -63,12 +65,12 @@ open_csv_menu() {
                 _i=$((_i + 1))
             done
         fi
-
         echo ""
         echo "  u) Up parent   x) Cancel   q) Quit"
+        echo "   ─────────────────────────────"
         read -p "CSV Nav: " _csv_choice
 
-        # ── Strip surrounding whitespace from input ────────────────────────
+        # strip surrounding whitespace
         _csv_choice="${_csv_choice#"${_csv_choice%%[![:space:]]*}"}"
         _csv_choice="${_csv_choice%"${_csv_choice##*[![:space:]]}"}"
 
@@ -106,7 +108,7 @@ open_csv_menu() {
                         return 0
                     fi
                 else
-                    echo "  ⚠️  Invalid selection — enter a number between 1 and ${#_csv_items[@]}."
+                    echo "  ⚠️  Invalid — enter a number between 1 and ${#_csv_items[@]}."
                 fi
                 ;;
         esac
@@ -127,18 +129,18 @@ _csv_trim() {
 # ---------------------------------------------------------------------------
 # _csv_resolve_items
 #
-# Reads col1 of $csv_file.  Each non-blank, non-header row is treated as
-# either an absolute path (starts with /) or a basename to find in $path.
+# Reads EVERY comma-separated value from EVERY non-blank line of $csv_file.
+# Each value is resolved as:
+#   - absolute path  (starts with /) → checked with -e
+#   - basename       → matched against $path at maxdepth 1
 #
-# Populates:  selected_items[]   — resolved absolute paths, deduplicated
-# Side-effect: rewrites col2 of the CSV with ✅ resolved / ⚠️  not found
-#
+# Populates selected_items[] with deduplicated absolute paths.
+# Does NOT touch the CSV file.
 # Returns 0 if at least one item resolved, 1 otherwise.
 # ---------------------------------------------------------------------------
 _csv_resolve_items() {
     selected_items=()
 
-    # ── Validate state ────────────────────────────────────────────────────
     if [ -z "$csv_file" ] || [ ! -f "$csv_file" ]; then
         echo "❌ No CSV file set — call open_csv_menu first."
         return 1
@@ -149,53 +151,57 @@ _csv_resolve_items() {
     echo "   Search path: $path"
     echo ""
 
-    # ── Parse col1 (name or absolute path), skip blank rows ───────────────
+    # ── Collect every non-blank cell from every row ───────────────────────
     local -a _raw_entries=()
-    local _col1 _rest
-    while IFS=, read -r _col1 _rest || [ -n "$_col1" ]; do
-        _csv_trim _col1
-        [ -z "$_col1" ] && continue
-        _raw_entries+=("$_col1")
+    local _line
+    while IFS= read -r _line || [ -n "$_line" ]; do
+        _line="${_line%$'\r'}"
+        [ -z "$_line" ] && continue
+        local _old_IFS="$IFS"
+        IFS=',' read -ra _cells <<< "$_line"
+        IFS="$_old_IFS"
+        local _cell
+        for _cell in "${_cells[@]}"; do
+            _cell="${_cell#"${_cell%%[![:space:]]*}"}"
+            _cell="${_cell%"${_cell##*[![:space:]]}"}"
+            [ -z "$_cell" ] && continue
+            _raw_entries+=("$_cell")
+        done
     done < "$csv_file"
 
     if [ ${#_raw_entries[@]} -eq 0 ]; then
-        echo "❌ No valid rows found in CSV."
+        echo "❌ No values found in CSV."
         return 1
     fi
 
-    echo "📋 Found ${#_raw_entries[@]} row(s) to resolve."
+    echo "📋 Found ${#_raw_entries[@]} value(s) to resolve."
     echo ""
 
-    # ── Resolve each entry ────────────────────────────────────────────────
-    local -a _result_tags=()   # parallel to _raw_entries: "ok" or "miss"
+    # ── Resolve each value ────────────────────────────────────────────────
     local -A _seen=()
     local _entry _abs
 
     for _entry in "${_raw_entries[@]}"; do
         if [[ "$_entry" == /* ]]; then
-            # ── Absolute path ─────────────────────────────────────────────
+            # absolute path
             if [ -e "$_entry" ]; then
-                _abs="$_entry"
-                if [ -z "${_seen[$_abs]+x}" ]; then
-                    selected_items+=("$_abs")
-                    _seen["$_abs"]=1
+                if [ -z "${_seen[$_entry]+x}" ]; then
+                    selected_items+=("$_entry")
+                    _seen["$_entry"]=1
                 fi
                 echo "  ✅ $_entry"
-                _result_tags+=("ok")
             else
-                echo "  ⚠️  Not found (absolute): $_entry"
-                _result_tags+=("miss")
+                echo "  ⚠️  Not found: $_entry"
             fi
         else
-            # ── Basename match in $path (maxdepth 1) ──────────────────────
+            # basename match in $path
             local -a _matched=()
             while IFS= read -r -d '' _f; do
                 [ "${_f##*/}" = "$_entry" ] && _matched+=("$_f")
             done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
 
             if [ ${#_matched[@]} -eq 0 ]; then
-                echo "  ⚠️  Not found in $path: $_entry"
-                _result_tags+=("miss")
+                echo "  ⚠️  Not found: $_entry"
             else
                 for _abs in "${_matched[@]}"; do
                     if [ -z "${_seen[$_abs]+x}" ]; then
@@ -203,55 +209,18 @@ _csv_resolve_items() {
                         _seen["$_abs"]=1
                     fi
                 done
-                local _mc="${#_matched[@]}"
-                local _mc_suffix=""; [ "$_mc" -gt 1 ] && _mc_suffix="  ($_mc matches)"
-                echo "  ✅ $_entry → ${_matched[0]##*/}${_mc_suffix}"
-                _result_tags+=("ok")
+                echo "  ✅ $_entry"
             fi
         fi
     done
 
-    # ── Write result column back to CSV ───────────────────────────────────
-    local _tmp_csv="${csv_file}.tmp"
-    local _write_idx=0
-    local _col1_raw _csv_rest
-
-    while IFS=, read -r _col1_raw _csv_rest || [ -n "$_col1_raw" ]; do
-        local _trimmed="$_col1_raw"
-        _csv_trim _trimmed
-        if [ -z "$_trimmed" ]; then
-            # Blank / header row — preserve as-is (strip old result col if present)
-            local _c1="$_col1_raw"
-            local _c2="${_csv_rest%%,*}"
-            # If it looks like a previous result tag, drop it; otherwise keep
-            local _tag_pat="^(✅|⚠️)"
-            if [[ "$_c2" =~ $_tag_pat ]]; then
-                printf '%s\n' "$_c1" >> "$_tmp_csv"
-            else
-                printf '%s\n' "${_col1_raw}${_csv_rest:+,$_csv_rest}" >> "$_tmp_csv"
-            fi
-            continue
-        fi
-        local _tag="${_result_tags[$_write_idx]:-miss}"
-        local _label
-        if [ "$_tag" = "ok" ]; then _label="✅ resolved"; else _label="⚠️  not found"; fi
-        printf '%s,%s\n' "$_col1_raw" "$_label" >> "$_tmp_csv"
-        _write_idx=$((_write_idx + 1))
-    done < "$csv_file"
-
-    mv "$_tmp_csv" "$csv_file"
-
-    # ── Summary ───────────────────────────────────────────────────────────
     echo ""
     if [ ${#selected_items[@]} -eq 0 ]; then
         echo "❌ No items resolved — nothing to operate on."
-        echo "   (CSV result column updated in: $(basename "$csv_file"))"
         return 1
     fi
 
-    local _miss=$(( ${#_raw_entries[@]} - ${#selected_items[@]} ))
-    echo "📌 Resolved ${#selected_items[@]} item(s)${_miss:+ ($__miss not found)}."
-    echo "   CSV updated: $(basename "$csv_file")"
+    echo "📌 Resolved ${#selected_items[@]} item(s)."
     echo ""
     return 0
 }
