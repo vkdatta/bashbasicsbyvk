@@ -75,6 +75,8 @@ declare -gA _vp_rowcache=()
 declare -ga _vp_hdr_arr=()
 declare -ga _vp_ftr_arr=()
 _vp_mode="items"
+_vp_rowtext_fn=""   # custom per-row renderer; empty = use display_items / _item_line_text
+_vp_count_fn=""     # custom item counter; empty = use ${#items[@]}
 _vp_start=1
 _vp_end=0
 _vp_page=0
@@ -159,6 +161,9 @@ _vp_cache_reset() {
 
 _vp_prime_rows() {
   [ "$_vp_mode" == "items" ] || return 0
+  # If a custom row-text function is set it owns every row — display_items
+  # must not pre-fill the cache or the custom icons are overwritten.
+  [ -n "${_vp_rowtext_fn:-}" ] && return 0
   declare -F display_items >/dev/null 2>&1 || return 0
   _vp_count
   (( _vp_n == 0 )) && return 0
