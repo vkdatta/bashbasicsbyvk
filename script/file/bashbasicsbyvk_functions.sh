@@ -27,8 +27,7 @@ _fx_in_mode=0      # 1 while inside functions_menu — enables ←/→ sentinel
 
 # ── ADF registry ─────────────────────────────────────────────────────────────
 #  Each entry: parallel arrays _fx_adf_labels[] and _fx_adf_fns[]
-#  Add new admin-defined functions by appending to _fx_adf_register calls
-#  at the bottom of this section.
+#  Add new admin-defined functions by appending _fx_adf_register calls below.
 
 _fx_adf_labels=()
 _fx_adf_fns=()
@@ -39,18 +38,265 @@ _fx_adf_register() {
   _fx_adf_fns+=("$2")
 }
 
-# ── ADF entry 1: rename.select.items.csv ─────────────────────────────────────
-#  Runs the CSV multi-mutation rename directly in the current path ($path).
-#  Identical to what "Multi Mutation (CSV)" used to do from the rename menu.
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 1 — rename.select.items.csv
+#  CSV batch rename: col1=old_name, col2=new_name, result written to col3.
+#  Identical to the old "Multi Mutation (CSV)" rename path.
+# ════════════════════════════════════════════════════════════════════════════
 
 _fx_adf_rename_csv() {
-  # _rename_multi_mutation operates on $path — no override needed.
   _rename_multi_mutation
 }
-
 _fx_adf_register "rename.select.items.csv" "_fx_adf_rename_csv"
 
-# ── Tab cycle ─────────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 2 — move.select.items
+#  Pick items interactively via viewport multi-picker, stage into move buffer.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_move_select() {
+  select_items_common "MOVE" || return
+  _sp_ensure_store
+  local item
+  for item in "${selected_items[@]}"; do
+    _sp_append "$_SP_MV_ONCE_FILE" "$item"
+    echo "📌 Staged for move: ${item##*/}"
+  done
+  echo "➡️  Navigate to destination, then use d- to apply."
+}
+_fx_adf_register "move.select.items" "_fx_adf_move_select"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 3 — move.select.items.csv
+#  CSV-driven move: col1 = filename or absolute path to stage into move buffer.
+#  Result column written back to col2 of the CSV.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_move_select_csv() {
+  open_csv_menu || return
+  [ -z "$csv_file" ] && return
+  _csv_resolve_items || return
+  _sp_ensure_store
+  local item
+  for item in "${selected_items[@]}"; do
+    _sp_append "$_SP_MV_ONCE_FILE" "$item"
+    echo "📌 Staged for move: ${item##*/}"
+  done
+  echo "➡️  Navigate to destination, then use d- to apply."
+}
+_fx_adf_register "move.select.items.csv" "_fx_adf_move_select_csv"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 4 — copy.select.items
+#  Pick items interactively, stage into copy buffer.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_copy_select() {
+  select_items_common "COPY" || return
+  _sp_ensure_store
+  local item
+  for item in "${selected_items[@]}"; do
+    _sp_append "$_SP_CP_ONCE_FILE" "$item"
+    echo "📌 Staged for copy: ${item##*/}"
+  done
+  echo "➡️  Navigate to destination, then use d- to apply."
+}
+_fx_adf_register "copy.select.items" "_fx_adf_copy_select"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 5 — copy.select.items.csv
+#  CSV-driven copy: col1 = filename or absolute path.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_copy_select_csv() {
+  open_csv_menu || return
+  [ -z "$csv_file" ] && return
+  _csv_resolve_items || return
+  _sp_ensure_store
+  local item
+  for item in "${selected_items[@]}"; do
+    _sp_append "$_SP_CP_ONCE_FILE" "$item"
+    echo "📌 Staged for copy: ${item##*/}"
+  done
+  echo "➡️  Navigate to destination, then use d- to apply."
+}
+_fx_adf_register "copy.select.items.csv" "_fx_adf_copy_select_csv"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 6 — shortcut.select.items
+#  Pick items interactively, stage into shortcut buffer.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_shortcut_select() {
+  select_items_common "SHORTCUT" || return
+  _sp_ensure_store
+  local item
+  for item in "${selected_items[@]}"; do
+    _sp_append "$_SP_SC_ONCE_FILE" "$item"
+    echo "📌 Staged for shortcut: ${item##*/}"
+  done
+  echo "➡️  Navigate to destination, then use d- to apply."
+}
+_fx_adf_register "shortcut.select.items" "_fx_adf_shortcut_select"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 7 — shortcut.select.items.csv
+#  CSV-driven shortcut: col1 = filename or absolute path.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_shortcut_select_csv() {
+  open_csv_menu || return
+  [ -z "$csv_file" ] && return
+  _csv_resolve_items || return
+  _sp_ensure_store
+  local item
+  for item in "${selected_items[@]}"; do
+    _sp_append "$_SP_SC_ONCE_FILE" "$item"
+    echo "📌 Staged for shortcut: ${item##*/}"
+  done
+  echo "➡️  Navigate to destination, then use d- to apply."
+}
+_fx_adf_register "shortcut.select.items.csv" "_fx_adf_shortcut_select_csv"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 8 — upload.select.items
+#  Pick items interactively, upload immediately via fileapi.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_upload_select() {
+  select_items_common "UPLOAD" || return
+  _up_do_multipart_upload "${selected_items[@]}"
+}
+_fx_adf_register "upload.select.items" "_fx_adf_upload_select"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 9 — upload.select.items.csv
+#  CSV-driven upload: col1 = filename or absolute path, uploaded immediately.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_upload_select_csv() {
+  open_csv_menu || return
+  [ -z "$csv_file" ] && return
+  _csv_resolve_items || return
+  _up_do_multipart_upload "${selected_items[@]}"
+}
+_fx_adf_register "upload.select.items.csv" "_fx_adf_upload_select_csv"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 10 — map.select.items
+#  Pick items interactively, generate directory tree map.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_map_select() {
+  select_items_common "MAP" || return
+  local map_output
+  map_output=$(_map_generate_for_paths "${selected_items[@]}")
+  echo ""
+  echo "1) Copy to clipboard"
+  echo "2) Save to txt file"
+  echo ""
+  local _map_choice
+  read -p "Choose option [1-2]: " _map_choice
+  case "$_map_choice" in
+    1)
+      printf "%s" "$map_output" | bashbasicsbyvk_copy
+      echo "✅ Map copied to clipboard"
+      ;;
+    2)
+      local _map_fname
+      read -p "Enter file name: " _map_fname
+      if [ -z "$_map_fname" ]; then
+        echo "🚫 Cancelled — no file name entered."
+      else
+        printf "%s" "$map_output" > "$path/$_map_fname"
+        echo "✅ Map saved as $path/$_map_fname"
+      fi
+      ;;
+    *)
+      echo "⚠️  Invalid option"
+      ;;
+  esac
+}
+_fx_adf_register "map.select.items" "_fx_adf_map_select"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 11 — map.select.items.csv
+#  CSV-driven map: col1 = filename or absolute path.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_map_select_csv() {
+  open_csv_menu || return
+  [ -z "$csv_file" ] && return
+  _csv_resolve_items || return
+  local map_output
+  map_output=$(_map_generate_for_paths "${selected_items[@]}")
+  echo ""
+  echo "1) Copy to clipboard"
+  echo "2) Save to txt file"
+  echo ""
+  local _map_choice
+  read -p "Choose option [1-2]: " _map_choice
+  case "$_map_choice" in
+    1)
+      printf "%s" "$map_output" | bashbasicsbyvk_copy
+      echo "✅ Map copied to clipboard"
+      ;;
+    2)
+      local _map_fname
+      read -p "Enter file name: " _map_fname
+      if [ -z "$_map_fname" ]; then
+        echo "🚫 Cancelled — no file name entered."
+      else
+        printf "%s" "$map_output" > "$path/$_map_fname"
+        echo "✅ Map saved as $path/$_map_fname"
+      fi
+      ;;
+    *)
+      echo "⚠️  Invalid option"
+      ;;
+  esac
+}
+_fx_adf_register "map.select.items.csv" "_fx_adf_map_select_csv"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 12 — bookmark.select.items
+#  Pick items interactively, stage into bookmark buffer.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_bookmark_select() {
+  select_items_common "BOOKMARK" || return
+  _sp_ensure_store
+  local item
+  for item in "${selected_items[@]}"; do
+    _sp_append "$_SP_BM_ONCE_FILE" "$item"
+    echo "📌 Staged for bookmark: ${item##*/}"
+  done
+  echo "➡️  Navigate to destination, then use d- to apply."
+}
+_fx_adf_register "bookmark.select.items" "_fx_adf_bookmark_select"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADF 13 — bookmark.select.items.csv
+#  CSV-driven bookmark: col1 = filename or absolute path.
+# ════════════════════════════════════════════════════════════════════════════
+
+_fx_adf_bookmark_select_csv() {
+  open_csv_menu || return
+  [ -z "$csv_file" ] && return
+  _csv_resolve_items || return
+  _sp_ensure_store
+  local item
+  for item in "${selected_items[@]}"; do
+    _sp_append "$_SP_BM_ONCE_FILE" "$item"
+    echo "📌 Staged for bookmark: ${item##*/}"
+  done
+  echo "➡️  Navigate to destination, then use d- to apply."
+}
+_fx_adf_register "bookmark.select.items.csv" "_fx_adf_bookmark_select_csv"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Tab cycle
+# ════════════════════════════════════════════════════════════════════════════
 
 _fx_tab_next() {
   case "$_fx_tab" in
@@ -109,7 +355,6 @@ _fx_set_viewport_for_tab() {
     adf) ftr=_fx_menu_footer_adf ;;
     udf) ftr=_fx_menu_footer_udf ;;
   esac
-  # ADF uses a synthetic flat list, never imaginary mode
   _vp_mode="items"
   _vp_header_fn=_fx_menu_header
   _vp_footer_fn="$ftr"
@@ -130,18 +375,14 @@ _fx_build_items_for_tab() {
   case "$_fx_tab" in
 
     adf)
-      # Synthetic items — one per registered ADF, displayed as plain names.
-      # We fake absolute paths so the viewport renders them like files.
       local i
       for i in "${!_fx_adf_labels[@]}"; do
         items+=("${_fx_adf_labels[$i]}")
       done
-      # _all_items mirrors items (no metadata needed for synthetic list)
       _all_items=("${items[@]}")
       ;;
 
     udf)
-      # Real filesystem browse of the execute directory
       local _saved_path="$path"
       path="$_FX_EXEC_DIR"
 
@@ -185,8 +426,6 @@ _fx_build_items_for_tab() {
         fi
       fi
 
-      # Restore browsing path — UDF scripts execute in outer $path (restored
-      # after functions_menu returns), but the viewport shows the exec dir.
       path="$_saved_path"
       ;;
   esac
@@ -210,15 +449,12 @@ _fx_adf_handle_selection() {
 }
 
 # ── UDF selection handler ─────────────────────────────────────────────────────
-#  Scripts in the execute dir are run with the OUTER path as cwd.
-#  Directory entries are navigated normally.
 
 _fx_udf_handle_selection() {
   local choice="$1"
   local _exec_path="$_FX_EXEC_DIR"
 
   if $imaginary_mode; then
-    # Reuse bookmark imaginary logic (same algorithm)
     _sw_bookmarks_handle_selection "$choice"
     return $?
   fi
@@ -229,7 +465,6 @@ _fx_udf_handle_selection() {
       path="$selected"; group_prefix=""; force_show=false; return 0
     fi
     if [ -f "$selected" ]; then
-      # Run script in the OUTER path (saved before entering functions_menu)
       echo ""
       echo "▶  Running: ${selected##*/}"
       echo "   (in: $_fx_outer_path)"
@@ -269,7 +504,6 @@ _fx_tab_redraw() {
 functions_menu() {
   _fx_ensure_store
 
-  # Remember the outer path — all functions execute here
   local _fx_outer_path="$path"
   local _fx_saved_prefix="$group_prefix"
   local _fx_saved_force="$force_show"
@@ -278,16 +512,14 @@ functions_menu() {
   group_prefix=""
   force_show=false
   _fx_in_mode=1
-  _sw_in_mode=1    # viewport reads _sw_in_mode to emit __sw_tab_left/right__ sentinels
+  _sw_in_mode=1
 
-  # Expose outer path for UDF handler
   _fx_outer_path="$_fx_outer_path"
 
   local _fx_choice
 
   shopt -s nullglob
 
-  # ── First render ─────────────────────────────────────────────────────────────
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   _fx_build_items_for_tab
   _fx_set_viewport_for_tab
@@ -303,7 +535,6 @@ functions_menu() {
 
     shopt -s nocasematch
 
-    # ── Tab-switch sentinels ──────────────────────────────────────────────────
     case "$_fx_choice" in
       __sw_tab_right__)
         _fx_tab_next
@@ -396,7 +627,7 @@ functions_menu() {
         [ "$_fx_tab" = "udf" ] && handle_route_stage "$_fx_choice" || { _fx_do_fresh=false; }
         ;;
 
-      _*) _fx_do_fresh=false ;;   # filter: viewport handles it live
+      _*) _fx_do_fresh=false ;;
 
       *)
         case "$_fx_tab" in
@@ -408,7 +639,6 @@ functions_menu() {
 
     shopt -u nocasematch
 
-    # ── Re-render after action ────────────────────────────────────────────────
     if $_fx_do_fresh; then
       declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
       _fx_build_items_for_tab
@@ -423,9 +653,8 @@ functions_menu() {
 
   shopt -u nocasematch
   _fx_in_mode=0
-  _sw_in_mode=0    # restore — we set this on entry
+  _sw_in_mode=0
 
-  # Restore outer context
   path="$_fx_outer_path"
   group_prefix="$_fx_saved_prefix"
   force_show="$_fx_saved_force"
