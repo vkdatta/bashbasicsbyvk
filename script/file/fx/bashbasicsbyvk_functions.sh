@@ -258,6 +258,9 @@ _fx_set_viewport_for_tab() {
   _vp_hl_fn=_vp_is_hl_single
   _msel_set=()
   _vp_input_fn=_print_input_line
+  # Always wipe the row cache here — _vp_rowtext_fn just changed, so any
+  # rows cached by _item_line_text (all 📄) must not survive into the next render.
+  _vp_cache_reset
 }
 
 # ── Item builder per tab ──────────────────────────────────────────────────────
