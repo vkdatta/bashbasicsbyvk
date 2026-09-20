@@ -234,9 +234,9 @@ _fx_adf_rowtext() {
   local label="${items[$((i-1))]}"
   local typ="${_fx_adf_item_type[$((i-1))]:-fn}"
   if [ "$typ" = "folder" ]; then
-    printf -v _vp_line " %2d) 📁  %s" "$i" "$label"
+    printf -v _vp_line " %2d) 📁 %s" "$i" "$label"
   else
-    printf -v _vp_line " %2d) 📄  %s" "$i" "$label"
+    printf -v _vp_line " %2d) 📄 %s" "$i" "$label"
   fi
 }
 
