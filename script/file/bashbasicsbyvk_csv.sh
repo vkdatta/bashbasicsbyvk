@@ -203,7 +203,9 @@ _csv_resolve_items() {
                         _seen["$_abs"]=1
                     fi
                 done
-                echo "  ✅ $_entry → ${_matched[0]##*/}${#_matched[@]:+  (${#_matched[@]} match(es))}"
+                local _mc="${#_matched[@]}"
+                local _mc_suffix=""; [ "$_mc" -gt 1 ] && _mc_suffix="  ($_mc matches)"
+                echo "  ✅ $_entry → ${_matched[0]##*/}${_mc_suffix}"
                 _result_tags+=("ok")
             fi
         fi
