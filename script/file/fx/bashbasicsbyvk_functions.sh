@@ -232,7 +232,10 @@ _fx_set_viewport_for_tab() {
     adf) ftr=_fx_menu_footer_adf ;;
     udf) ftr=_fx_menu_footer_udf ;;
   esac
-  _vp_mode="items"
+  case "$_fx_tab" in
+    adf) _vp_mode="imaginary" ;;   # virtual labels — no filesystem icon rendering
+    *)   _vp_mode="items"     ;;
+  esac
   _vp_header_fn=_fx_menu_header
   _vp_footer_fn="$ftr"
   _vp_hl_fn=_vp_is_hl_single
@@ -253,6 +256,7 @@ _fx_build_items_for_tab() {
 
     adf)
       _fx_adf_build_items   # populates items[], _fx_adf_item_type[], _fx_adf_item_idx[]
+      imaginary_mode=true   # items are virtual labels, not filesystem paths — suppress file icons
       ;;
 
     udf)
