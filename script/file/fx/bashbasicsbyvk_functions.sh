@@ -108,7 +108,7 @@ _fx_adf_build_items() {
   # 1. immediate sub-folders (sorted)
   local sub
   while IFS= read -r sub; do
-    items+=("📁  $sub")
+    items+=("$sub")
     _fx_adf_item_type+=("folder")
     _fx_adf_item_idx+=("$sub")
   done < <(_fx_adf_list_subfolders | sort)
@@ -226,16 +226,33 @@ _fx_menu_footer_udf() {
   [ -n "$group_prefix" ] && printf 'back) Remove last prefix (%s*)\n' "${group_prefix^^}"
 }
 
+# Custom row renderer for the ADF tab.
+# Reads _fx_adf_item_type[] to pick the right icon, so folders always get 📁
+# and functions always get 📄 — exactly once, with no file-path resolution.
+_fx_adf_rowtext() {
+  local i="$1"
+  local label="${items[$((i-1))]}"
+  local typ="${_fx_adf_item_type[$((i-1))]:-fn}"
+  if [ "$typ" = "folder" ]; then
+    printf -v _vp_line " %2d) 📁  %s" "$i" "$label"
+  else
+    printf -v _vp_line " %2d) 📄  %s" "$i" "$label"
+  fi
+}
+
 _fx_set_viewport_for_tab() {
   local ftr
   case "$_fx_tab" in
-    adf) ftr=_fx_menu_footer_adf ;;
-    udf) ftr=_fx_menu_footer_udf ;;
+    adf)
+      ftr=_fx_menu_footer_adf
+      _vp_rowtext_fn=_fx_adf_rowtext   # bypass file-path displayer for ADF items
+      ;;
+    udf)
+      ftr=_fx_menu_footer_udf
+      _vp_rowtext_fn=                   # clear so UDF uses the normal _item_line_text path
+      ;;
   esac
-  case "$_fx_tab" in
-    adf) _vp_mode="imaginary" ;;   # virtual labels — no filesystem icon rendering
-    *)   _vp_mode="items"     ;;
-  esac
+  _vp_mode="items"
   _vp_header_fn=_fx_menu_header
   _vp_footer_fn="$ftr"
   _vp_hl_fn=_vp_is_hl_single
@@ -256,7 +273,6 @@ _fx_build_items_for_tab() {
 
     adf)
       _fx_adf_build_items   # populates items[], _fx_adf_item_type[], _fx_adf_item_idx[]
-      imaginary_mode=true   # items are virtual labels, not filesystem paths — suppress file icons
       ;;
 
     udf)
