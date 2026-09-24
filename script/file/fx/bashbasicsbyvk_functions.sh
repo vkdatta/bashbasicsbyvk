@@ -145,17 +145,11 @@ _fx_adf_breadcrumb() {
 _FX_ADF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_rename_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_move_select.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_move_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_copy_select.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_copy_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_shortcut_select.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_shortcut_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_select.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_map_select.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_map_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_bookmark_select.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_bookmark_csv.sh"
 
 # ════════════════════════════════════════════════════════════════════════════
