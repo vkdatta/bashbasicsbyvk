@@ -1,21 +1,15 @@
 #!/usr/bin/env bash
-# bashbasicsbyvk_adf_bookmark_csv.sh
-# adf-route='bookmark/bookmark.select.items.csv'
+# bashbasicsbyvk_adf_upload_csv.sh
+# adf-route='file_fx/upload/upload.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
-#  ADF — bookmark.select.items.csv
-#  CSV-driven bookmark: col1 = filename or absolute path.
+#  ADF — upload.select.items.csv
+#  CSV-driven upload: col1 = filename or absolute path, uploaded immediately.
 # ════════════════════════════════════════════════════════════════════════════
 
-_fx_adf_bookmark_select_csv() {
+_fx_adf_upload_select_csv() {
   open_csv_menu || return
   [ -z "$csv_file" ] && return
   _csv_resolve_items || return
-  _sp_ensure_store
-  local item
-  for item in "${selected_items[@]}"; do
-    _sp_append "$_SP_BM_ONCE_FILE" "$item"
-    echo "📌 Staged for bookmark: ${item##*/}"
-  done
-  echo "➡️  Navigate to destination, then use d- to apply."
+  _up_do_multipart_upload "${selected_items[@]}"
 }
-_fx_adf_register "bookmark.select.items.csv" "_fx_adf_bookmark_select_csv" "bookmark/bookmark.select.items.csv"
+_fx_adf_register "upload.select.items.csv" "_fx_adf_upload_select_csv" "upload/upload.select.items.csv"

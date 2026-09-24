@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_copy_csv.sh
-# adf-route='copy/copy.select.items.csv'
+# adf-route='file_fx/copy/copy.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — copy.select.items.csv
 #  CSV-driven copy: col1 = filename or absolute path.

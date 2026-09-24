@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_map_csv.sh
-# adf-route='map/map.select.items.csv'
+# adf-route='file_fx/map/map.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — map.select.items.csv
 #  CSV-driven map: col1 = filename or absolute path.
