@@ -18,4 +18,4 @@ _fx_adf_shortcut_select_csv() {
   done
   echo "➡️  Navigate to destination, then use d- to apply."
 }
-_fx_adf_register "shortcut.select.items.csv" "_fx_adf_shortcut_select_csv" "shortcut/shortcut.select.items.csv"
+_fx_adf_register "shortcut.select.items.csv" "_fx_adf_shortcut_select_csv" "file_fx/shortcut/shortcut.select.items.csv"

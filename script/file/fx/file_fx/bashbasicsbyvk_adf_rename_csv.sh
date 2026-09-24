@@ -10,4 +10,4 @@
 _fx_adf_rename_csv() {
   _rename_multi_mutation
 }
-_fx_adf_register "rename.select.items.csv" "_fx_adf_rename_csv" "rename/rename.select.items.csv"
+_fx_adf_register "rename.select.items.csv" "_fx_adf_rename_csv" "file_fx/rename/rename.select.items.csv"

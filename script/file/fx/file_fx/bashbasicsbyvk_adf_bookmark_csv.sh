@@ -18,4 +18,4 @@ _fx_adf_bookmark_select_csv() {
   done
   echo "➡️  Navigate to destination, then use d- to apply."
 }
-_fx_adf_register "bookmark.select.items.csv" "_fx_adf_bookmark_select_csv" "bookmark/bookmark.select.items.csv"
+_fx_adf_register "bookmark.select.items.csv" "_fx_adf_bookmark_select_csv" "file_fx/bookmark/bookmark.select.items.csv"

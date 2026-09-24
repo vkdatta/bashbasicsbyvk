@@ -12,4 +12,4 @@ _fx_adf_upload_select_csv() {
   _csv_resolve_items || return
   _up_do_multipart_upload "${selected_items[@]}"
 }
-_fx_adf_register "upload.select.items.csv" "_fx_adf_upload_select_csv" "upload/upload.select.items.csv"
+_fx_adf_register "upload.select.items.csv" "_fx_adf_upload_select_csv" "file_fx/upload/upload.select.items.csv"

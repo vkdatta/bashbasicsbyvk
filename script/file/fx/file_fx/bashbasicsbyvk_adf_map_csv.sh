@@ -38,4 +38,4 @@ _fx_adf_map_select_csv() {
       ;;
   esac
 }
-_fx_adf_register "map.select.items.csv" "_fx_adf_map_select_csv" "map/map.select.items.csv"
+_fx_adf_register "map.select.items.csv" "_fx_adf_map_select_csv" "file_fx/map/map.select.items.csv"

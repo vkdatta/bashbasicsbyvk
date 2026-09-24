@@ -18,4 +18,4 @@ _fx_adf_copy_select_csv() {
   done
   echo "➡️  Navigate to destination, then use d- to apply."
 }
-_fx_adf_register "copy.select.items.csv" "_fx_adf_copy_select_csv" "copy/copy.select.items.csv"
+_fx_adf_register "copy.select.items.csv" "_fx_adf_copy_select_csv" "file_fx/copy/copy.select.items.csv"
