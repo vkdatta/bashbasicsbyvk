@@ -80,8 +80,7 @@ _fx_adf_list_subfolders() {
     local child=""
     if [ -z "$cur" ]; then
       [ -z "$folder" ] && continue          # this fn is at root, no sub-folder
-      [[ "$folder" == */* ]] && continue    # deeper than one level
-      child="$folder"
+      child="${folder%%/*}"                 # first path segment (e.g. "file_fx" from "file_fx/copy")
     else
       [[ "$folder" != "$cur/"* ]] && continue
       local rest="${folder#$cur/}"
