@@ -1055,3 +1055,126 @@ _filter_clear() {
   _meta_loaded=false
   _vp_cache_reset
 }
+
+# ── Item builder shims (sourced from main; live here because they wrap ─────────
+# build_items_with_meta / apply_sort which are defined above)
+
+build_items_for_prefix() {
+  build_items_with_meta "$1" "$2"
+  apply_sort
+}
+
+build_all_items() {
+  build_items_with_meta "$1" ""
+  apply_sort
+}
+
+# ── Imaginary group logic ──────────────────────────────────────────────────────
+
+get_imaginary_groups() {
+  local p="$1"
+  local pfx="$2"
+  declare -gA group_counts=()
+  group_chars=()
+  local chars=()
+  local -A _seen_chars=()
+
+  while IFS= read -r -d '' entry; do
+    local bn="${entry##*/}"
+    [[ "$bn" == "." || "$bn" == ".." ]] && continue
+    if ! $show_hidden_files && [[ "$bn" == .* ]]; then
+      continue
+    fi
+    [[ ${#bn} -le ${#pfx} ]] && continue
+    local bn_lower="${bn,,}"
+    [[ "$bn_lower" != "$pfx"* ]] && continue
+    local next="${bn_lower:${#pfx}:1}"
+
+    if [[ "$next" =~ ^[a-z]$ ]]; then
+      local upper="${next^^}"
+      group_counts["$upper"]=$(( ${group_counts["$upper"]:-0} + 1 ))
+      [ -z "${_seen_chars["$upper"]+x}" ] && chars+=("$upper") && _seen_chars["$upper"]=1
+    elif [[ "$next" =~ ^[0-9]$ ]]; then
+      group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
+      [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
+    else
+      case "$next" in
+        _|.|'-'|'('|')'|'['|']'|'{'|'}'|@|'!'|'~'|'+'|'='|'^'|'&'|'%'|'$'|','|';'|"'"|' ')
+          group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
+          [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
+          ;;
+        *)
+          group_counts["#"]=$(( ${group_counts["#"]:-0} + 1 ))
+          [ -z "${_seen_chars["#"]+x}" ] && chars+=("#") && _seen_chars["#"]=1
+          ;;
+      esac
+    fi
+  done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+
+  group_chars=("${chars[@]}")
+}
+
+build_imaginary_groups() {
+  local p="$1"
+  local pfx="$2"
+  local total="$3"
+  _imag_banner="📂 Too many items ($total). Imaginary groups by next character:"
+  get_imaginary_groups "$p" "$pfx"
+
+  local specials=()
+  local digits=()
+  local letters=()
+  local fallback=()
+
+  for ch in "${group_chars[@]}"; do
+    if [[ "$ch" =~ ^[A-Z]$ ]]; then
+      letters+=("$ch")
+    elif [[ "$ch" =~ ^[0-9]$ ]]; then
+      digits+=("$ch")
+    elif [[ "$ch" == "#" ]]; then
+      fallback+=("$ch")
+    else
+      specials+=("$ch")
+    fi
+  done
+
+  IFS=$'\n' sorted_specials=($(builtin printf '%s\n' "${specials[@]}" | sort))
+  IFS=$'\n' sorted_digits=($(builtin printf '%s\n' "${digits[@]}" | sort))
+  IFS=$'\n' sorted_letters=($(builtin printf '%s\n' "${letters[@]}" | sort))
+  unset IFS
+
+  local sorted=("${sorted_specials[@]}" "${sorted_digits[@]}" "${sorted_letters[@]}" "${fallback[@]}")
+
+  imaginary_map=()
+  imaginary_lines=()
+  local idx=1
+  for ch in "${sorted[@]}"; do
+    local cnt="${group_counts[$ch]}"
+    imaginary_lines+=("$(builtin printf ' %2d) 📁 %s (%d items)' "$idx" "$ch" "$cnt")")
+    imaginary_map+=("$ch")
+    idx=$((idx+1))
+  done
+}
+
+# Kept for callers that still want print-immediately behaviour.
+display_imaginary_groups() {
+  build_imaginary_groups "$1" "$2" "$3"
+  builtin printf "%s\n" "$_imag_banner" "${imaginary_lines[@]}"
+}
+
+# ── Highlighted multi-select row renderer ─────────────────────────────────────
+
+_render_items_with_highlight() {
+  local -A hl=()
+  local x
+  for x in "$@"; do hl["$x"]=1; done
+  local i line
+  for ((i=1; i<=${#items[@]}; i++)); do
+    line=$(_item_line_text "$i")
+    if [ -n "${hl[$i]+x}" ]; then
+      builtin printf '%s\n' "$(_highlight "$line")"
+    else
+      builtin printf '%s\n' "$line"
+    fi
+  done
+}

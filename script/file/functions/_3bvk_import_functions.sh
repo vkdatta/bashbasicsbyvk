@@ -1,0 +1,6 @@
+source "bashbasicsbyvk_rename.sh"
+source "bashbasicsbyvk_organise.sh"
+source "bashbasicsbyvk_find.sh"
+source "bashbasicsbyvk_transfer.sh"
+source "bashbasicsbyvk_create.sh"
+source "bashbasicsbyvk_delete.sh"
