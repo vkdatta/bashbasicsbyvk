@@ -11,7 +11,6 @@ source "bashbasicsbyvk_help.sh"
 source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_functions.sh"
-source "bashbasicsbyvk_filter.sh"
 source "bashbasicsbyvk_infinity.sh"
 
 
