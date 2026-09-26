@@ -6,11 +6,12 @@ source "_3bvk_import_staging.sh"
 
 source "bashbasicsbyvk_run.sh"
 source "bashbasicsbyvk_csv.sh"
-source "_3bvk_import_settings.sh"
+source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_help.sh"
 source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_functions.sh"
+source "bashbasicsbyvk_filter.sh"
 source "bashbasicsbyvk_infinity.sh"
 
 

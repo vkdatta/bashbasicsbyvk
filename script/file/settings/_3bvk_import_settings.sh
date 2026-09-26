@@ -1,6 +1,0 @@
-source "bashbasicsbyvk_colors.sh"
-source "bashbasicsbyvk_filter.sh"
-source "bashbasicsbyvk_hidefiles.sh"
-source "bashbasicsbyvk_importnano.sh"
-source "bashbasicsbyvk_indexmode.sh"
-source "bashbasicsbyvk_settings.sh"
