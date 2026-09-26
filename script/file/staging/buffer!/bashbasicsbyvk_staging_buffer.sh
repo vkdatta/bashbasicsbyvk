@@ -1,16 +1,3 @@
-source "bashbasicsbyvk_route_fileapi.sh"
-source "bashbasicsbyvk_route_helpers.sh"
-source "bashbasicsbyvk_route_move.sh"
-source "bashbasicsbyvk_route_copy.sh"
-source "bashbasicsbyvk_route_shortcut.sh"
-source "bashbasicsbyvk_route_shortcut_registry.sh"
-source "bashbasicsbyvk_route_map.sh"
-source "bashbasicsbyvk_route_bookmark.sh"
-
-# ─────────────────────────────────────────────
-#  Public entry points (called from 'o')
-# ─────────────────────────────────────────────
-
 # Route a raw route command (c-*, m-*, s-*, b-*, c--*, m--*, s--*, b--*) to
 # the correct operation/buffer.
 # Path-map commands (p-*) are routed to handle_route_map (route_map.sh).
