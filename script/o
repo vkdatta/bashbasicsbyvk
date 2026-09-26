@@ -28,6 +28,112 @@ trap 'stty "$_orig_stty" 2>/dev/null; [ -n "$path" ] && printf "%s" "$path" > "$
 # (_print_input_line, _update_highlight, _vp_goto, _nav_jump_to,
 #  _sync_highlight_from_buf are defined in bashbasicsbyvk_viewport.sh)
 
+_print_input_line() {
+  builtin printf '\r\033[K'
+  builtin printf "Select: %s" "$_buf"
+  local back=$(( ${#_buf} - _pos ))
+  [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
+}
+
+_update_highlight() {
+  local old="$1" new="$2"
+  if [ "$old" -ge 1 ] && [ "$old" -ne "$new" ]; then
+    _vp_repaint_row "$old"
+  fi
+  if [ "$new" -ge 1 ]; then
+    _vp_repaint_row "$new"
+  fi
+  return 0
+}
+
+_vp_goto() {
+  local old="$1" new="$2"
+  if _vp_ensure_visible "$new"; then
+    _vp_rerender
+  else
+    _update_highlight "$old" "$new"
+    $_vp_input_fn
+  fi
+}
+
+_nav_jump_to() {
+  $_can_nav || return 0
+  _vp_count
+  (( _vp_n == 0 )) && return 0
+  local target="$1" old="${_hl_index:-0}"
+  (( target < 1 )) && target=1
+  (( target > _vp_n )) && target=$_vp_n
+  _hl_index=$target
+  _buf="$_hl_index"; _pos=${#_buf}
+  if [ "$target" -eq "$old" ]; then
+    $_vp_input_fn
+  else
+    _vp_goto "$old" "$_hl_index"
+  fi
+  return 0
+}
+
+_sync_highlight_from_buf() {
+  $_can_nav || return
+  _vp_count
+  (( _vp_n == 0 )) && return
+
+  if [[ "$_buf" =~ ^([A-Za-z]+-{1,2})(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)$ ]]; then
+    local body="${BASH_REMATCH[2]}"
+    local -A _old=()
+    local k
+    for k in "${!_msel_set[@]}"; do _old[$k]=1; done
+    _msel_set=()
+    local -a _hl_indices=()
+    if [[ "$body" == "a" ]]; then
+      _hl_indices=($(seq 1 "$_vp_n"))
+    elif [[ "$body" =~ ^a-(.+)$ ]]; then
+      _hl_indices=($(_sp_parse_all_except "${BASH_REMATCH[1]}" "$_vp_n"))
+    else
+      _hl_indices=($(parse_selection "$body" "$_vp_n"))
+    fi
+    for k in "${_hl_indices[@]}"; do _msel_set[$k]=1; done
+
+    if [ "$_vp_hl_fn" != "_vp_is_hl_multi" ]; then
+      _vp_hl_fn=_vp_is_hl_multi
+      _hl_index=0
+      _vp_rerender
+    else
+      local -A _chg=()
+      for k in "${!_old[@]}";      do [ -z "${_msel_set[$k]+x}" ] && _chg[$k]=1; done
+      for k in "${!_msel_set[@]}"; do [ -z "${_old[$k]+x}"      ] && _chg[$k]=1; done
+      for k in "${!_chg[@]}"; do _vp_repaint_row "$k"; done
+      if [[ "$body" != a* ]]; then
+        local last="${body##*[,-]}"
+        [[ "$last" =~ ^[0-9]+$ ]] && _vp_ensure_visible "$last" && _vp_rerender
+      fi
+    fi
+    _print_input_line
+    return
+  fi
+
+  if [ "${_vp_hl_fn:-}" = "_vp_is_hl_multi" ]; then
+    _msel_set=()
+    _vp_hl_fn=_vp_is_hl_single
+    _hl_index=0
+    _vp_rerender
+    _print_input_line
+  fi
+
+  [[ "$_buf" =~ ^[0-9]+$ ]] || return
+  local n=$((10#$_buf))
+  (( n < 1 )) && n=1
+  (( n > _vp_n )) && n=$_vp_n
+  if [ "$n" -ne "${_hl_index:-0}" ]; then
+    local old="${_hl_index:-0}"
+    _hl_index=$n
+    _vp_goto "$old" "$_hl_index"
+  fi
+}
+
+
+
+
 _read_choice() {
   choice=""
   _can_nav=false
