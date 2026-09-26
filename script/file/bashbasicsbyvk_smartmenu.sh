@@ -327,7 +327,7 @@ _sm_looks_multi() {
 
 # Does the surrounding menu advertise a command-prefix grammar?
 # Two shapes are recognised:
-#   dashed  — c-1,3 / m--2-4  (route staging)
+#   dashed  — c-1,3 / m--2-4  (staging staging)
 #   bare    — s1-5 / s1,3     (transfer "prefix s to select")
 # We look at help text for either a literal "letter-digit" example
 # or an explicit "prefix <x>" tip, and remember which letters are

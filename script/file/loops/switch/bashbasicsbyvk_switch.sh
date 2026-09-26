@@ -670,11 +670,11 @@ switch_menu() {
         [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_refresh
         ;;
 
-      d-)           handle_route_dispatch ;;
-      v-)           handle_route_view ;;
+      d-)           handle_staging_dispatch ;;
+      v-)           handle_staging_view ;;
 
       c-*|m-*|s-*|b-*)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_route_stage "$_sw_choice"
+        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_staging_stage "$_sw_choice"
         ;;
 
       _*)           _sw_do_fresh=false ;;   # filter: viewport handles it live

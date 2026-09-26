@@ -1,12 +1,12 @@
-source "bashbasicsbyvk_route_helpers.sh"
+source "bashbasicsbyvk_staging_helpers.sh"
 
 # Stage / apply logic lives in _sp_stage_buffer / _sp_apply_buffer (helpers.sh).
-route_bookmark_stage() { _sp_stage_buffer bm "$1" "$2"; }
+staging_bookmark_stage() { _sp_stage_buffer bm "$1" "$2"; }
 
 # Apply: create a .swlink file at $dest for every path in $file.
 # _swlink_write is defined in bashbasicsbyvk_switch.sh and is always
 # sourced before this is called.
-route_bookmark_apply() {
+staging_bookmark_apply() {
   local file="$1" dest="$2"
 
   local -a list=()

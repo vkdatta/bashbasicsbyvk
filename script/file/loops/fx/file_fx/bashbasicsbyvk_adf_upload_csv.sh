@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_upload_csv.sh
-# adf-route='file_fx/upload/upload.select.items.csv'
+# adf-staging='file_fx/upload/upload.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — upload.select.items.csv
 #  CSV-driven upload: col1 = filename or absolute path, uploaded immediately.

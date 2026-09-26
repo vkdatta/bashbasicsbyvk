@@ -1,4 +1,4 @@
-source "bashbasicsbyvk_route_helpers.sh"
+source "bashbasicsbyvk_staging_helpers.sh"
 
 # ─────────────────────────────────────────────
 #  map_directory  —  p- prefix entry point
@@ -16,7 +16,7 @@ source "bashbasicsbyvk_route_helpers.sh"
 #    2) Save to txt file
 # ─────────────────────────────────────────────
 
-handle_route_map() {
+handle_staging_map() {
   local raw="$1"         # the full token typed by the user, e.g. "p-a" or "p-1,6"
   local itemlist="${raw:2}"   # strip leading "p-"
 

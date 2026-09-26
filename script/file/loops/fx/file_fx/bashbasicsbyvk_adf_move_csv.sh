@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_move_csv.sh
-# adf-route='file_fx/move/move.select.items.csv'
+# adf-staging='file_fx/move/move.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — move.select.items.csv
 #  CSV-driven move: col1 = filename or absolute path to stage into move buffer.

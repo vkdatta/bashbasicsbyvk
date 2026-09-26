@@ -1,26 +1,26 @@
-source "bashbasicsbyvk_route_fileapi.sh"
-source "bashbasicsbyvk_route_helpers.sh"
-source "bashbasicsbyvk_route_move.sh"
-source "bashbasicsbyvk_route_copy.sh"
-source "bashbasicsbyvk_route_shortcut.sh"
-source "bashbasicsbyvk_route_shortcut_registry.sh"
-source "bashbasicsbyvk_route_map.sh"
-source "bashbasicsbyvk_route_bookmark.sh"
+source "bashbasicsbyvk_staging_fileapi.sh"
+source "bashbasicsbyvk_staging_helpers.sh"
+source "bashbasicsbyvk_staging_move.sh"
+source "bashbasicsbyvk_staging_copy.sh"
+source "bashbasicsbyvk_staging_shortcut.sh"
+source "bashbasicsbyvk_staging_shortcut_registry.sh"
+source "bashbasicsbyvk_staging_map.sh"
+source "bashbasicsbyvk_staging_bookmark.sh"
 
 # ─────────────────────────────────────────────
 #  Public entry points (called from 'o')
 # ─────────────────────────────────────────────
 
-# Route a raw route command (c-*, m-*, s-*, b-*, c--*, m--*, s--*, b--*) to
+# Route a raw staging command (c-*, m-*, s-*, b-*, c--*, m--*, s--*, b--*) to
 # the correct operation/buffer.
-# Path-map commands (p-*) are routed to handle_route_map (route_map.sh).
+# Path-map commands (p-*) are stagingd to handle_staging_map (staging_map.sh).
 #
 # Syntax supported for the item-list portion:
 #   1,3,5          → items 1, 3 and 5
 #   1-7            → items 1 through 7
 #   a-1-5,7        → ALL items EXCEPT 1–5 and 7
 #   (any combo)
-handle_route_stage() {
+handle_staging_stage() {
   local raw="$1"
   local prefix persistent label file itemlist
 
@@ -39,15 +39,15 @@ handle_route_stage() {
   itemlist="${raw:${#prefix}}"
 
   case "$raw" in
-    c--*|c-*) route_copy_stage     "$persistent" "$itemlist" ;;
-    m--*|m-*) route_move_stage     "$persistent" "$itemlist" ;;
-    s--*|s-*) route_shortcut_stage "$persistent" "$itemlist" ;;
-    b--*|b-*) route_bookmark_stage "$persistent" "$itemlist" ;;
+    c--*|c-*) staging_copy_stage     "$persistent" "$itemlist" ;;
+    m--*|m-*) staging_move_stage     "$persistent" "$itemlist" ;;
+    s--*|s-*) staging_shortcut_stage "$persistent" "$itemlist" ;;
+    b--*|b-*) staging_bookmark_stage "$persistent" "$itemlist" ;;
   esac
 }
 
 # Apply all non-empty buffers to the current path destination.
-handle_route_dispatch() {
+handle_staging_dispatch() {
   _sp_ensure_store
   local dest="$path"
 
@@ -70,25 +70,25 @@ handle_route_dispatch() {
 
   echo "📦 Destination: $dest"
 
-  [ ${#cp_list[@]} -gt 0 ] && route_copy_apply     "$_SP_CP_FILE" "$dest"
-  [ ${#mv_list[@]} -gt 0 ] && route_move_apply     "$_SP_MV_FILE" "$dest"
-  [ ${#sc_list[@]} -gt 0 ] && route_shortcut_apply "$_SP_SC_FILE" "$dest"
-  [ ${#bm_list[@]} -gt 0 ] && route_bookmark_apply "$_SP_BM_FILE" "$dest"
+  [ ${#cp_list[@]} -gt 0 ] && staging_copy_apply     "$_SP_CP_FILE" "$dest"
+  [ ${#mv_list[@]} -gt 0 ] && staging_move_apply     "$_SP_MV_FILE" "$dest"
+  [ ${#sc_list[@]} -gt 0 ] && staging_shortcut_apply "$_SP_SC_FILE" "$dest"
+  [ ${#bm_list[@]} -gt 0 ] && staging_bookmark_apply "$_SP_BM_FILE" "$dest"
 
   if [ ${#cp_once[@]} -gt 0 ]; then
-    route_copy_apply "$_SP_CP_ONCE_FILE" "$dest"
+    staging_copy_apply "$_SP_CP_ONCE_FILE" "$dest"
     : > "$_SP_CP_ONCE_FILE"
   fi
   if [ ${#mv_once[@]} -gt 0 ]; then
-    route_move_apply "$_SP_MV_ONCE_FILE" "$dest"
+    staging_move_apply "$_SP_MV_ONCE_FILE" "$dest"
     : > "$_SP_MV_ONCE_FILE"
   fi
   if [ ${#sc_once[@]} -gt 0 ]; then
-    route_shortcut_apply "$_SP_SC_ONCE_FILE" "$dest"
+    staging_shortcut_apply "$_SP_SC_ONCE_FILE" "$dest"
     : > "$_SP_SC_ONCE_FILE"
   fi
   if [ ${#bm_once[@]} -gt 0 ]; then
-    route_bookmark_apply "$_SP_BM_ONCE_FILE" "$dest"
+    staging_bookmark_apply "$_SP_BM_ONCE_FILE" "$dest"
     : > "$_SP_BM_ONCE_FILE"
   fi
 
@@ -172,7 +172,7 @@ _sp_view_one_buffer() {
   done
 }
 
-handle_route_view() {
+handle_staging_view() {
   _sp_ensure_store
   while true; do
     local -a cp_list=() mv_list=() sc_list=() bm_list=()

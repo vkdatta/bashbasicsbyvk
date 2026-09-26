@@ -26,39 +26,39 @@ _fx_tab="adf"      # adf | udf
 _fx_in_mode=0      # 1 while inside functions_menu — enables ←/→ sentinel
 
 # ── ADF registry ─────────────────────────────────────────────────────────────
-#  Tree-based registry.  Each ADF file can declare a route at its top:
-#    adf-route='navigation/other/currentfile'
+#  Tree-based registry.  Each ADF file can declare a staging at its top:
+#    adf-staging='navigation/other/currentfile'
 #  which places the function at that path in the ADF tree.
-#  Functions without a route go into the root level.
+#  Functions without a staging go into the root level.
 #
 #  Internal parallel arrays (one element per registered function):
 #    _fx_adf_labels[]   — display label
 #    _fx_adf_fns[]      — bash function name to invoke
-#    _fx_adf_routes[]   — folder part of route, e.g. "navigation/other"
-#    _fx_adf_names[]    — leaf segment (last part of route, or label if no route)
+#    _fx_adf_stagings[]   — folder part of staging, e.g. "navigation/other"
+#    _fx_adf_names[]    — leaf segment (last part of staging, or label if no staging)
 #
 #  Runtime navigation:
-#    _fx_adf_cur_route  — current folder the user is browsing ('' = root)
+#    _fx_adf_cur_staging  — current folder the user is browsing ('' = root)
 
 _fx_adf_labels=()
 _fx_adf_fns=()
-_fx_adf_routes=()
+_fx_adf_stagings=()
 _fx_adf_names=()
-_fx_adf_cur_route=""   # current folder inside ADF tree
+_fx_adf_cur_staging=""   # current folder inside ADF tree
 
 _fx_adf_register() {
-  # Usage: _fx_adf_register "Display Label" function_name [route]
-  # route = full adf-route value, e.g. "navigation/other/myfile"
-  local label="$1" fn="$2" route="${3:-}"
+  # Usage: _fx_adf_register "Display Label" function_name [staging]
+  # staging = full adf-staging value, e.g. "navigation/other/myfile"
+  local label="$1" fn="$2" staging="${3:-}"
   local folder="" leaf=""
-  if [ -n "$route" ]; then
-    route="${route#/}"; route="${route%/}"   # strip leading/trailing slashes
-    if [[ "$route" == */* ]]; then
-      folder="${route%/*}"
-      leaf="${route##*/}"
+  if [ -n "$staging" ]; then
+    staging="${staging#/}"; staging="${staging%/}"   # strip leading/trailing slashes
+    if [[ "$staging" == */* ]]; then
+      folder="${staging%/*}"
+      leaf="${staging##*/}"
     else
       folder=""
-      leaf="$route"
+      leaf="$staging"
     fi
   else
     folder=""
@@ -66,17 +66,17 @@ _fx_adf_register() {
   fi
   _fx_adf_labels+=("$label")
   _fx_adf_fns+=("$fn")
-  _fx_adf_routes+=("$folder")
+  _fx_adf_stagings+=("$folder")
   _fx_adf_names+=("$leaf")
 }
 
 # ── ADF tree helpers ──────────────────────────────────────────────────────────
 
-# Print unique immediate sub-folder names at _fx_adf_cur_route
+# Print unique immediate sub-folder names at _fx_adf_cur_staging
 _fx_adf_list_subfolders() {
-  local cur="$_fx_adf_cur_route" i folder seen=()
-  for i in "${!_fx_adf_routes[@]}"; do
-    folder="${_fx_adf_routes[$i]}"
+  local cur="$_fx_adf_cur_staging" i folder seen=()
+  for i in "${!_fx_adf_stagings[@]}"; do
+    folder="${_fx_adf_stagings[$i]}"
     local child=""
     if [ -z "$cur" ]; then
       [ -z "$folder" ] && continue          # this fn is at root, no sub-folder
@@ -102,7 +102,7 @@ _fx_adf_build_items() {
   _fx_adf_item_type=()   # parallel: "folder" or "fn"
   _fx_adf_item_idx=()    # parallel: sub-folder name (folder) or index into _fx_adf_fns[] (fn)
 
-  local cur="$_fx_adf_cur_route"
+  local cur="$_fx_adf_cur_staging"
 
   # 1. immediate sub-folders (sorted)
   local sub
@@ -114,8 +114,8 @@ _fx_adf_build_items() {
 
   # 2. functions whose folder == cur exactly
   local i
-  for i in "${!_fx_adf_routes[@]}"; do
-    local folder="${_fx_adf_routes[$i]}"
+  for i in "${!_fx_adf_stagings[@]}"; do
+    local folder="${_fx_adf_stagings[$i]}"
     if [ -z "$cur" ]; then
       [ -n "$folder" ] && continue   # lives in a sub-folder, skip
     else
@@ -131,11 +131,11 @@ _fx_adf_build_items() {
 
 # Breadcrumb string shown in the ADF header
 _fx_adf_breadcrumb() {
-  if [ -z "$_fx_adf_cur_route" ]; then echo "/"; else echo "/$_fx_adf_cur_route"; fi
+  if [ -z "$_fx_adf_cur_staging" ]; then echo "/"; else echo "/$_fx_adf_cur_staging"; fi
 }
 
 # ════════════════════════════════════════════════════════════════════════════
-#  ADF function files — each file declares its own adf-route and calls
+#  ADF function files — each file declares its own adf-staging and calls
 #  _fx_adf_register.  Source them all here in load order.
 #  To add a new ADF function: create bashbasicsbyvk_adf_<folder>_<name>.sh
 #  alongside this file and add a source line below.
@@ -185,7 +185,7 @@ _fx_menu_header() {
   case "$_fx_tab" in
     adf)
       printf '🛠️  ADF %s\n' "$(_fx_adf_breadcrumb)"
-      [ -n "$_fx_adf_cur_route" ] && printf '  u) Up   (in: /%s)\n' "$_fx_adf_cur_route"
+      [ -n "$_fx_adf_cur_staging" ] && printf '  u) Up   (in: /%s)\n' "$_fx_adf_cur_staging"
       ;;
     *)
       printf '📂 %s%s\n' "$path" "${group_prefix:+ [group: ${group_prefix^^}*]}"
@@ -205,7 +205,7 @@ _fx_menu_footer_adf() {
   local total="${#_fx_adf_labels[@]}"
   local here="${#items[@]}"
   printf '\n[ADF — Admin Defined]  %d item(s) here  (%d total)\n' "$here" "$total"
-  if [ -n "$_fx_adf_cur_route" ]; then
+  if [ -n "$_fx_adf_cur_staging" ]; then
     printf 'Select to open folder or run function   u) Up   fx) Exit\n'
   else
     printf 'Select to open folder or run function   fx) Exit\n'
@@ -335,10 +335,10 @@ _fx_adf_handle_selection() {
   case "$itype" in
     folder)
       # Navigate into sub-folder
-      if [ -z "$_fx_adf_cur_route" ]; then
-        _fx_adf_cur_route="$iidx"
+      if [ -z "$_fx_adf_cur_staging" ]; then
+        _fx_adf_cur_staging="$iidx"
       else
-        _fx_adf_cur_route="$_fx_adf_cur_route/$iidx"
+        _fx_adf_cur_staging="$_fx_adf_cur_staging/$iidx"
       fi
       ;;
     fn)
@@ -417,7 +417,7 @@ functions_menu() {
   local _fx_saved_force="$force_show"
 
   _fx_tab="adf"
-  _fx_adf_cur_route=""   # always start at ADF root
+  _fx_adf_cur_staging=""   # always start at ADF root
   group_prefix=""
   force_show=false
   _fx_in_mode=1
@@ -447,13 +447,13 @@ functions_menu() {
     case "$_fx_choice" in
       __sw_tab_right__)
         _fx_tab_next
-        [ "$_fx_tab" = "adf" ] && _fx_adf_cur_route=""
+        [ "$_fx_tab" = "adf" ] && _fx_adf_cur_staging=""
         _fx_tab_redraw
         shopt -u nocasematch; continue
         ;;
       __sw_tab_left__)
         _fx_tab_prev
-        [ "$_fx_tab" = "adf" ] && _fx_adf_cur_route=""
+        [ "$_fx_tab" = "adf" ] && _fx_adf_cur_staging=""
         _fx_tab_redraw
         shopt -u nocasematch; continue
         ;;
@@ -478,11 +478,11 @@ functions_menu() {
 
       u)
         if [ "$_fx_tab" = "adf" ]; then
-          if [ -n "$_fx_adf_cur_route" ]; then
-            if [[ "$_fx_adf_cur_route" == */* ]]; then
-              _fx_adf_cur_route="${_fx_adf_cur_route%/*}"
+          if [ -n "$_fx_adf_cur_staging" ]; then
+            if [[ "$_fx_adf_cur_staging" == */* ]]; then
+              _fx_adf_cur_staging="${_fx_adf_cur_staging%/*}"
             else
-              _fx_adf_cur_route=""
+              _fx_adf_cur_staging=""
             fi
           else
             echo "↩️  Already at ADF root"
@@ -576,13 +576,13 @@ functions_menu() {
         fi
         ;;
 
-      d-) handle_route_dispatch ;;
-      v-) handle_route_view ;;
+      d-) handle_staging_dispatch ;;
+      v-) handle_staging_view ;;
 
       c-*|m-*|s-*)
         if [ "$_fx_tab" = "udf" ]; then
           local _saved_path_rs="$path"; path="$_FX_EXEC_DIR"
-          handle_route_stage "$_fx_choice"
+          handle_staging_stage "$_fx_choice"
           path="$_saved_path_rs"
         else
           _fx_do_fresh=false

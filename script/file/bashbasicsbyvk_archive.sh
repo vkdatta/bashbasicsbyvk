@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Archive handling — compress and decompress via item-index prefixes
-# Requires: _sp_resolve_itemlist, parse_selection (from bashbasicbyvk_route.sh)
+# Requires: _sp_resolve_itemlist, parse_selection (from bashbasicbyvk_staging.sh)
 #
 # z-<list>   compress items by number  →  z-1,3,5   z-2-6
 # uz-<list>  decompress items by number → uz-2       uz-1,4,7

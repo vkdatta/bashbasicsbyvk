@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_rename_csv.sh
-# adf-route='file_fx/rename/rename.select.items.csv'
+# adf-staging='file_fx/rename/rename.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — rename.select.items.csv
 #  CSV batch rename: col1=old_name, col2=new_name, result written to col3.
