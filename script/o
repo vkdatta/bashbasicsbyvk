@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
 
 source "_3bvk_import_engine.sh"
+source "_3bvk_import_functions.sh"
 source "bashbasicsbyvk_run.sh"
 source "bashbasicsbyvk_csv.sh"
-source "bashbasicsbyvk_rename.sh"
 source "bashbasicsbyvk_archive.sh"
-source "bashbasicsbyvk_organise.sh"
-source "bashbasicsbyvk_find.sh"
 source "bashbasicsbyvk_settings.sh"
-source "bashbasicsbyvk_transfer.sh"
 source "bashbasicsbyvk_staging_core.sh"
 source "bashbasicsbyvk_help.sh"
 source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_functions.sh"
 source "bashbasicsbyvk_filter.sh"
-source "bashbasicsbyvk_create.sh"
 source "bashbasicsbyvk_infinity.sh"
 
 
