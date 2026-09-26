@@ -130,30 +130,3 @@ case "$main_choice" in
     *) echo "Invalid choice" ;;
 esac
 }
-
-# ---------------------------------------------------------------------------
-# compress_format_settings
-# Lets the user choose the default compression format for z-.
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# filter_mode_settings
-# Controls how the = live filter matches filenames.
-#   partial — substring match (=config matches longword_xdconfig)
-#   exact   — prefix match   (=config matches config_file)
-# ---------------------------------------------------------------------------
-filter_mode_settings() {
-  echo ""
-  echo "Filter mode (used by = filter):"
-  echo "1) partial — match anywhere in name  (=config → longword_xdconfig ✔)"
-  echo "2) exact   — prefix match only       (=config → config_file ✔)"
-  read -r -p "Choice [1-2]: " fm_choice
-  fm_choice="${fm_choice%$'\r'}"
-  case "$fm_choice" in
-    1) filter_mode="partial" ;;
-    2) filter_mode="exact"   ;;
-    *) echo "Invalid choice — no changes made." ; return ;;
-  esac
-  save_settings
-  echo "✅ Filter mode set to: $filter_mode"
-}
