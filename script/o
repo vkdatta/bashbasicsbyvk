@@ -17,7 +17,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _bvk_wake_recents_daemon
 
-trap 'stty "$_orig_stty" 2>/dev/null; [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"' EXIT
+# Cleanup: terminal state, last-dir record, and any lingering dsize tmp dir.
+trap 'stty "$_orig_stty" 2>/dev/null; \
+      [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
+      [ -n "${_BVK_DSIZE_TMP:-}" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
+      true' EXIT
 
 _orig_stty=$(stty -g 2>/dev/null)
 
@@ -45,6 +49,8 @@ while true; do
   _all_items=()
   items=()
   _hl_index=0
+  _imag_filter_active=false
+  _imag_filter_query=""
 
   _has_group_view=false
   [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
@@ -52,14 +58,7 @@ while true; do
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
     imaginary_mode=true
     if [ -n "$group_prefix" ]; then
-      local_arr=()
-      while IFS= read -r -d '' _f; do
-        _bn="${_f##*/}"
-        [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-        ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
-        [[ "${_bn,,}" != "$group_prefix"* ]] && continue
-        local_arr+=("$_f")
-      done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+      mapfile -t local_arr < <(_bvk_prefix_scan "$path" "$group_prefix")
       pfx_count="${#local_arr[@]}"
       if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
         imaginary_mode=false
@@ -74,20 +73,13 @@ while true; do
     fi
   elif [ "$total" -gt "${index_mode_threshold:-200}" ] && $force_show; then
     imaginary_mode=false
-    if [ -n "$group_prefix" ]; then
-      build_items_with_meta "$path" "$group_prefix"
-    else
-      build_items_with_meta "$path" ""
-    fi
+    build_items_with_meta "$path" "$group_prefix"
     apply_sort
   fi
 
   if ! $imaginary_mode; then
-    if [ ${#items[@]} -eq 0 ] && [ -n "$group_prefix" ]; then
+    if [ ${#items[@]} -eq 0 ]; then
       build_items_with_meta "$path" "$group_prefix"
-      apply_sort
-    elif [ ${#items[@]} -eq 0 ]; then
-      build_items_with_meta "$path" ""
       apply_sort
     fi
   fi
@@ -148,5 +140,4 @@ while true; do
     fx)          functions_menu ;;
     *)           handle_selection "$choice" ;;
   esac
-
 done

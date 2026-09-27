@@ -18,29 +18,81 @@ fast_count() {
   echo "${#arr[@]}"
 }
 
+# ═══════════════════════════════════════════════════════════════════════════
+# count_items_in_path — single os.scandir, ~80ms for 200k.
+# ═══════════════════════════════════════════════════════════════════════════
 count_items_in_path() {
   local p="$1"
-  local total
-  if $show_hidden_files; then
-    local a=("$p"/*)
-    local b=("$p"/.*)
-    local count_a="${#a[@]}"
-    local count_b="${#b[@]}"
-    [[ "${a[0]}" == "$p/*" ]] && count_a=0
-    local filtered=0
-    for x in "${b[@]}"; do
-      local bn; bn=$(basename "$x")
-      [[ "$bn" == "." || "$bn" == ".." ]] && continue
-      ((filtered++))
-    done
-    total=$((count_a + filtered))
-  else
-    local a=("$p"/*)
-    total="${#a[@]}"
-    [[ "${a[0]}" == "$p/*" ]] && total=0
-  fi
-  echo "$total"
+  python3 - "$p" "${show_hidden_files:-false}" <<'PYEOF'
+import os, sys
+path = sys.argv[1]
+show_hidden = sys.argv[2] == "true"
+try:
+    n = sum(
+        1 for e in os.scandir(path)
+        if e.name not in (".", "..") and (show_hidden or not e.name.startswith("."))
+    )
+    print(n)
+except Exception:
+    print(0)
+PYEOF
 }
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _bvk_prefix_scan — single scandir, prints paths matching group_prefix.
+# ═══════════════════════════════════════════════════════════════════════════
+_bvk_prefix_scan() {
+  local p="$1"
+  local pfx="$2"
+  python3 - "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
+import os, sys
+path = sys.argv[1]
+pfx  = sys.argv[2].lower()
+show_hidden = sys.argv[3] == "true"
+try:
+    with os.scandir(path) as it:
+        for e in it:
+            bn = e.name
+            if bn in (".", ".."): continue
+            if not show_hidden and bn.startswith("."): continue
+            if pfx and not bn.lower().startswith(pfx): continue
+            print(e.path)
+except Exception as ex:
+    sys.stderr.write(f"scandir: {ex}\n")
+PYEOF
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _bvk_fallback_scan — the "#" branch in handle_selection.
+# ═══════════════════════════════════════════════════════════════════════════
+_bvk_fallback_scan() {
+  local p="$1"
+  local pfx="$2"
+  python3 - "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
+import os, sys
+path = sys.argv[1]
+pfx  = sys.argv[2].lower()
+show_hidden = sys.argv[3] == "true"
+pfx_len = len(pfx)
+SPECIALS = set("_.-()[]{}@!~+=^&%$,;' ")
+try:
+    with os.scandir(path) as it:
+        for e in it:
+            bn = e.name
+            if bn in (".", ".."): continue
+            if not show_hidden and bn.startswith("."): continue
+            bl = bn.lower()
+            if pfx and not bl.startswith(pfx): continue
+            if len(bl) <= pfx_len: continue
+            nxt = bl[pfx_len]
+            if nxt.isalpha() or nxt.isdigit() or nxt in SPECIALS:
+                continue
+            print(e.path)
+except Exception as ex:
+    sys.stderr.write(f"scandir: {ex}\n")
+PYEOF
+}
+
 build_items_for_prefix() {
   build_items_with_meta "$1" "$2"
   apply_sort
@@ -51,76 +103,150 @@ build_all_items() {
   apply_sort
 }
 
+# ═══════════════════════════════════════════════════════════════════════════
+# get_imaginary_groups — single pass, ~150ms for 200k.
+# ═══════════════════════════════════════════════════════════════════════════
 get_imaginary_groups() {
   local p="$1"
   local pfx="$2"
   declare -gA group_counts=()
   group_chars=()
-  local chars=()
-  local -A _seen_chars=()
 
-  while IFS= read -r -d '' entry; do
-    local bn="${entry##*/}"
-    [[ "$bn" == "." || "$bn" == ".." ]] && continue
-    if ! $show_hidden_files && [[ "$bn" == .* ]]; then
-      continue
-    fi
-    [[ ${#bn} -le ${#pfx} ]] && continue
-    local bn_lower="${bn,,}"
-    [[ "$bn_lower" != "$pfx"* ]] && continue
-    local next="${bn_lower:${#pfx}:1}"
+  local py_out
+  py_out=$(python3 - "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
+import os, sys
+path = sys.argv[1]
+pfx  = sys.argv[2].lower()
+show_hidden = sys.argv[3] == "true"
+pfx_len = len(pfx)
+SPECIALS = set("_.-()[]{}@!~+=^&%$,;' ")
 
-    if [[ "$next" =~ ^[a-z]$ ]]; then
-      local upper="${next^^}"
-      group_counts["$upper"]=$(( ${group_counts["$upper"]:-0} + 1 ))
-      [ -z "${_seen_chars["$upper"]+x}" ] && chars+=("$upper") && _seen_chars["$upper"]=1
-    elif [[ "$next" =~ ^[0-9]$ ]]; then
-      group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
-      [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
-    else
-      case "$next" in
-        _|.|'-'|'('|')'|'['|']'|'{'|'}'|@|'!'|'~'|'+'|'='|'^'|'&'|'%'|'$'|','|';'|"'"|' ')
-          group_counts["$next"]=$(( ${group_counts["$next"]:-0} + 1 ))
-          [ -z "${_seen_chars["$next"]+x}" ] && chars+=("$next") && _seen_chars["$next"]=1
-          ;;
-        *)
-          group_counts["#"]=$(( ${group_counts["#"]:-0} + 1 ))
-          [ -z "${_seen_chars["#"]+x}" ] && chars+=("#") && _seen_chars["#"]=1
-          ;;
-      esac
-    fi
-  done < <(find "$p" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+counts = {}
+order  = []
 
-  group_chars=("${chars[@]}")
+try:
+    with os.scandir(path) as it:
+        for e in it:
+            bn = e.name
+            if bn in (".", ".."): continue
+            if not show_hidden and bn.startswith("."): continue
+            bl = bn.lower()
+            if len(bl) <= pfx_len: continue
+            if pfx and not bl.startswith(pfx): continue
+            nxt = bl[pfx_len]
+            if   nxt.isalpha(): ch = nxt.upper()
+            elif nxt.isdigit(): ch = nxt
+            elif nxt in SPECIALS: ch = nxt
+            else: ch = "#"
+            if ch not in counts:
+                counts[ch] = 0
+                order.append(ch)
+            counts[ch] += 1
+except Exception as ex:
+    sys.stderr.write(f"scandir: {ex}\n")
+
+for ch in order:
+    print(f"{ch}\t{counts[ch]}")
+PYEOF
+  )
+
+  while IFS=$'\t' read -r ch cnt; do
+    [ -z "$ch" ] && continue
+    group_counts["$ch"]="$cnt"
+    group_chars+=("$ch")
+  done <<< "$py_out"
 }
 
-build_imaginary_groups() {
+# ═══════════════════════════════════════════════════════════════════════════
+# get_imaginary_groups_filtered — filtered variant for imaginary-mode filter.
+# ═══════════════════════════════════════════════════════════════════════════
+get_imaginary_groups_filtered() {
   local p="$1"
   local pfx="$2"
-  local total="$3"
+  local query="$3"
+  declare -gA group_counts=()
+  group_chars=()
+
+  local py_out
+  py_out=$(python3 - "$p" "$pfx" "$query" "${filter_mode:-partial}" "${show_hidden_files:-false}" <<'PYEOF'
+import os, sys
+path   = sys.argv[1]
+pfx    = sys.argv[2].lower()
+query  = sys.argv[3].lower()
+mode   = sys.argv[4]
+show_hidden = sys.argv[5] == "true"
+pfx_len = len(pfx)
+SPECIALS = set("_.-()[]{}@!~+=^&%$,;' ")
+
+counts = {}
+order  = []
+
+try:
+    with os.scandir(path) as it:
+        for e in it:
+            bn = e.name
+            if bn in (".", ".."): continue
+            if not show_hidden and bn.startswith("."): continue
+            bl = bn.lower()
+            if pfx and not bl.startswith(pfx): continue
+            if len(bl) <= pfx_len: continue
+            if query:
+                tail = bl[pfx_len:]
+                if mode == "exact":
+                    if not tail.startswith(query): continue
+                else:
+                    if query not in tail: continue
+            nxt = bl[pfx_len]
+            if   nxt.isalpha(): ch = nxt.upper()
+            elif nxt.isdigit(): ch = nxt
+            elif nxt in SPECIALS: ch = nxt
+            else: ch = "#"
+            if ch not in counts:
+                counts[ch] = 0
+                order.append(ch)
+            counts[ch] += 1
+except Exception as ex:
+    sys.stderr.write(f"scandir: {ex}\n")
+
+for ch in order:
+    print(f"{ch}\t{counts[ch]}")
+PYEOF
+  )
+
+  while IFS=$'\t' read -r ch cnt; do
+    [ -z "$ch" ] && continue
+    group_counts["$ch"]="$cnt"
+    group_chars+=("$ch")
+  done <<< "$py_out"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _rebuild_imaginary_display — sort + format block, shared by filtered and
+# unfiltered paths.
+# ═══════════════════════════════════════════════════════════════════════════
+_rebuild_imaginary_display() {
+  local total="$1"
   _imag_banner="📂 Too many items ($total). Imaginary groups by next character:"
-  get_imaginary_groups "$p" "$pfx"
 
-  local specials=()
-  local digits=()
-  local letters=()
-  local fallback=()
-
+  local specials=() digits=() letters=() fallback=()
   for ch in "${group_chars[@]}"; do
-    if [[ "$ch" =~ ^[A-Z]$ ]]; then
-      letters+=("$ch")
-    elif [[ "$ch" =~ ^[0-9]$ ]]; then
-      digits+=("$ch")
-    elif [[ "$ch" == "#" ]]; then
-      fallback+=("$ch")
-    else
-      specials+=("$ch")
+    if   [[ "$ch" =~ ^[A-Z]$ ]]; then letters+=("$ch")
+    elif [[ "$ch" =~ ^[0-9]$ ]]; then digits+=("$ch")
+    elif [[ "$ch" == "#" ]];      then fallback+=("$ch")
+    else                               specials+=("$ch")
     fi
   done
 
-  IFS=$'\n' sorted_specials=($(builtin printf '%s\n' "${specials[@]}" | sort))
-  IFS=$'\n' sorted_digits=($(builtin printf '%s\n' "${digits[@]}" | sort))
-  IFS=$'\n' sorted_letters=($(builtin printf '%s\n' "${letters[@]}" | sort))
+  local -a sorted_specials=() sorted_digits=() sorted_letters=()
+  if [ ${#specials[@]} -gt 0 ]; then
+    IFS=$'\n' sorted_specials=($(builtin printf '%s\n' "${specials[@]}" | sort))
+  fi
+  if [ ${#digits[@]} -gt 0 ]; then
+    IFS=$'\n' sorted_digits=($(builtin printf '%s\n' "${digits[@]}" | sort))
+  fi
+  if [ ${#letters[@]} -gt 0 ]; then
+    IFS=$'\n' sorted_letters=($(builtin printf '%s\n' "${letters[@]}" | sort))
+  fi
   unset IFS
 
   local sorted=("${sorted_specials[@]}" "${sorted_digits[@]}" "${sorted_letters[@]}" "${fallback[@]}")
@@ -129,31 +255,38 @@ build_imaginary_groups() {
   imaginary_lines=()
   local idx=1
   for ch in "${sorted[@]}"; do
-    local cnt="${group_counts[$ch]}"
+    [ -z "$ch" ] && continue
+    local cnt="${group_counts[$ch]:-0}"
     imaginary_lines+=("$(builtin printf ' %2d) 📁 %s (%d items)' "$idx" "$ch" "$cnt")")
     imaginary_map+=("$ch")
     idx=$((idx+1))
   done
 }
 
+build_imaginary_groups() {
+  local p="$1"
+  local pfx="$2"
+  local total="$3"
+  get_imaginary_groups "$p" "$pfx"
+  _rebuild_imaginary_display "$total"
+}
+
 display_imaginary_groups() {
   build_imaginary_groups "$1" "$2" "$3"
   builtin printf "%s\n" "$_imag_banner" "${imaginary_lines[@]}"
 }
+
 select_items_common() {
   local prompt="$1"
   if [ ${#items[@]} -eq 0 ]; then
     echo "❌ No items available"
     return 1
   fi
-
   local _prompt="$prompt"
   local -A _msel_set=()
   local _buf _pos itemlist
-
   _vp_mode="items"
   _multi_prompt_loop
-
   itemlist="$_buf"
   local indices=($(parse_selection "$itemlist" "${#items[@]}"))
   selected_items=()
@@ -171,19 +304,15 @@ select_imaginary_items_common() {
   local p="$1"
   local pfx="$2"
   local prompt="${3:-DELETE}"
-
   if [ "${#imaginary_map[@]}" -eq 0 ]; then
     echo "❌ No groups available"
     return 1
   fi
-
   local _prompt="$prompt"
   local -A _msel_set=()
   local _buf _pos
-
   _vp_mode="imaginary"
   _multi_prompt_loop
-
   local indices=($(parse_selection "$_buf" "${#imaginary_map[@]}"))
   if [ "${#indices[@]}" -eq 0 ]; then
     echo "❌ No valid groups selected"
@@ -239,7 +368,6 @@ handle_selection() {
   if $imaginary_mode; then
     local matched=false
     local ch=""
-
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#imaginary_map[@]}" ]; then
       ch="${imaginary_map[$((choice-1))]}"
       matched=true
@@ -247,30 +375,15 @@ handle_selection() {
       local uc="${choice^^}"
       for gc in "${imaginary_map[@]}"; do
         if [[ "$gc" == "$uc" ]] || [[ "$gc" == "$choice" ]]; then
-          ch="$gc"
-          matched=true
-          break
+          ch="$gc"; matched=true; break
         fi
       done
     fi
-
     if $matched; then
       if [ "$ch" == "#" ]; then
         imaginary_mode=false
         items=()
-        while IFS= read -r -d '' _f; do
-          _bn="${_f##*/}"
-          [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-          ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
-          local _bn_lower="${_bn,,}"
-          [ -n "$group_prefix" ] && [[ "$_bn_lower" != "$group_prefix"* ]] && continue
-          local _next="${_bn_lower:${#group_prefix}:1}"
-          case "$_next" in
-            [a-zA-Z0-9]|_|.|'-'|'('|')'|'['|']'|'{'|'}'|@|'!'|'~'|'+'|'='|'^'|'&'|'%'|'$'|','|';'|"'"|' ')
-              continue ;;
-          esac
-          items+=("$_f")
-        done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+        mapfile -t items < <(_bvk_fallback_scan "$path" "$group_prefix")
         _collect_metadata
         apply_sort
       elif [[ "$ch" =~ ^[A-Z]$ ]]; then
@@ -287,7 +400,6 @@ handle_selection() {
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
       selected="${items[$((choice-1))]}"
       local bn="${selected##*/}"
-
       if [[ "$bn" == *.shortcut ]]; then
         local sc_target sc_type
         sc_target=$(_shortcut_resolve "$selected")
@@ -296,21 +408,15 @@ handle_selection() {
           return
         fi
         sc_type=$(_shortcut_read_field "$selected" "SHORTCUT_TYPE")
-
         if [ "$sc_type" == "dir" ] || [ -d "$sc_target" ]; then
-          path="$sc_target"
-          group_prefix=""
-          force_show=false
+          path="$sc_target"; group_prefix=""; force_show=false
         else
           handle_file "$sc_target"
         fi
         return
       fi
-
       if [ -d "$selected" ]; then
-        path="$selected"
-        group_prefix=""
-        force_show=false
+        path="$selected"; group_prefix=""; force_show=false
       elif [ -f "$selected" ]; then
         handle_file "$selected"
       fi
@@ -319,6 +425,7 @@ handle_selection() {
     fi
   fi
 }
+
 _menu_header() {
   echo
   local _hdr_loc="📂 Location: $path${group_prefix:+ [group: ${group_prefix^^}*]}"
@@ -383,14 +490,11 @@ _print_input_line() {
 
 _update_highlight() {
   local old="$1" new="$2"
-  if [ "$old" -ge 1 ] && [ "$old" -ne "$new" ]; then
-    _vp_repaint_row "$old"
-  fi
-  if [ "$new" -ge 1 ]; then
-    _vp_repaint_row "$new"
-  fi
+  if [ "$old" -ge 1 ] && [ "$old" -ne "$new" ]; then _vp_repaint_row "$old"; fi
+  if [ "$new" -ge 1 ]; then _vp_repaint_row "$new"; fi
   return 0
 }
+
 _vp_goto() {
   local old="$1" new="$2"
   if _vp_ensure_visible "$new"; then
@@ -410,11 +514,7 @@ _nav_jump_to() {
   (( target > _vp_n )) && target=$_vp_n
   _hl_index=$target
   _buf="$_hl_index"; _pos=${#_buf}
-  if [ "$target" -eq "$old" ]; then
-    $_vp_input_fn
-  else
-    _vp_goto "$old" "$_hl_index"
-  fi
+  if [ "$target" -eq "$old" ]; then $_vp_input_fn; else _vp_goto "$old" "$_hl_index"; fi
   return 0
 }
 
@@ -422,7 +522,6 @@ _sync_highlight_from_buf() {
   $_can_nav || return
   _vp_count
   (( _vp_n == 0 )) && return
-
   if [[ "$_buf" =~ ^([A-Za-z]+-{1,2})(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)$ ]]; then
     local body="${BASH_REMATCH[2]}"
     local -A _old=()
@@ -438,7 +537,6 @@ _sync_highlight_from_buf() {
       _hl_indices=($(parse_selection "$body" "$_vp_n"))
     fi
     for k in "${_hl_indices[@]}"; do _msel_set[$k]=1; done
-
     if [ "$_vp_hl_fn" != "_vp_is_hl_multi" ]; then
       _vp_hl_fn=_vp_is_hl_multi
       _hl_index=0
@@ -456,7 +554,6 @@ _sync_highlight_from_buf() {
     _print_input_line
     return
   fi
-
   if [ "${_vp_hl_fn:-}" = "_vp_is_hl_multi" ]; then
     _msel_set=()
     _vp_hl_fn=_vp_is_hl_single
@@ -464,17 +561,17 @@ _sync_highlight_from_buf() {
     _vp_rerender
     _print_input_line
   fi
-
   [[ "$_buf" =~ ^[0-9]+$ ]] || return
   local n=$((10#$_buf))
   (( n < 1 )) && n=1
-  (( n > _vp_n )) && n=$_vp_n
+  (( n > _vp_n )) && n=_vp_n
   if [ "$n" -ne "${_hl_index:-0}" ]; then
     local old="${_hl_index:-0}"
     _hl_index=$n
     _vp_goto "$old" "$_hl_index"
   fi
 }
+
 _read_choice() {
   choice=""
   _can_nav=false
@@ -499,6 +596,15 @@ _read_choice() {
     _rc=$?
     if [ "$_rc" -gt 128 ]; then
       _vp_poll_tick
+      # Pick up any completed recursive dir-size results and repaint.
+      if declare -F _dir_size_job_poll >/dev/null 2>&1; then
+        if _dir_size_job_poll; then
+          _vp_cache_reset
+          _vp_prime_rows
+          _vp_redraw_in_place
+          _vp_poll_active
+        fi
+      fi
       if _vp_check_resize; then
         _vp_cache_reset
         _vp_prime_rows
@@ -516,29 +622,25 @@ _read_choice() {
         up)
           if $_can_nav; then
             local old="$_hl_index"
-            if [ "$_hl_index" -lt 1 ]; then
-              _hl_index="$_vp_n"
+            if [ "$_hl_index" -lt 1 ]; then _hl_index="$_vp_n"
             else
               _hl_index=$(( _hl_index - 1 ))
               [ "$_hl_index" -lt 1 ] && _hl_index="$_vp_n"
             fi
             _buf="$_hl_index"; _pos=${#_buf}
             _vp_goto "$old" "$_hl_index"
-          fi
-          ;;
+          fi ;;
         down)
           if $_can_nav; then
             local old="$_hl_index"
-            if [ "$_hl_index" -lt 1 ]; then
-              _hl_index=1
+            if [ "$_hl_index" -lt 1 ]; then _hl_index=1
             else
               _hl_index=$(( _hl_index + 1 ))
               [ "$_hl_index" -gt "$_vp_n" ] && _hl_index=1
             fi
             _buf="$_hl_index"; _pos=${#_buf}
             _vp_goto "$old" "$_hl_index"
-          fi
-          ;;
+          fi ;;
         pgup)   _nav_jump_to $(( _hl_index - _vp_page_step )) ;;
         pgdn)   _nav_jump_to $(( _hl_index + _vp_page_step )) ;;
         home)   _nav_jump_to 1 ;;
@@ -547,27 +649,21 @@ _read_choice() {
           if [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ]; then
             choice="__sw_tab_right__"; break
           elif [ "$_pos" -lt "${#_buf}" ]; then
-            _pos=$(( _pos + 1 ))
-            builtin printf '\033[1C'
-          fi
-          ;;
+            _pos=$(( _pos + 1 )); builtin printf '\033[1C'
+          fi ;;
         left)
           if [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ]; then
             choice="__sw_tab_left__"; break
           elif [ "$_pos" -gt 0 ]; then
-            _pos=$(( _pos - 1 ))
-            builtin printf '\033[1D'
-          fi
-          ;;
+            _pos=$(( _pos - 1 )); builtin printf '\033[1D'
+          fi ;;
         *) : ;;
       esac
       continue
     fi
 
     case "$key" in
-      "")
-        break
-        ;;
+      "") break ;;
       $'\x7f'|$'\x08')
         if ! _filter_on_backspace; then
           if [ "$_pos" -gt 0 ]; then
@@ -576,8 +672,7 @@ _read_choice() {
             _print_input_line
             _sync_highlight_from_buf
           fi
-        fi
-        ;;
+        fi ;;
       $'\x01') _nav_jump_to 1 ;;
       $'\x05') _nav_jump_to "$_vp_n" ;;
       *)
@@ -587,8 +682,7 @@ _read_choice() {
           _pos=$(( _pos + 1 ))
           _print_input_line
           _sync_highlight_from_buf
-        fi
-        ;;
+        fi ;;
     esac
   done
 
@@ -596,12 +690,11 @@ _read_choice() {
   stty "$_orig_stty" 2>/dev/null
   echo
 
-  if [ -n "$_buf" ]; then
-    choice="$_buf"
-  elif $_can_nav && [ "$_hl_index" -ge 1 ]; then
-    choice="$_hl_index"
+  if [ -n "$_buf" ]; then choice="$_buf"
+  elif $_can_nav && [ "$_hl_index" -ge 1 ]; then choice="$_hl_index"
   fi
 }
+
 _BVK_LASTDIR_FILE="${HOME}/.bashbasicsbyvk/lastdir"
 _BVK_RECENTS_PID_FILE="${HOME}/.bashbasicsbyvk/recents.pid"
 
@@ -615,17 +708,12 @@ _bvk_wake_recents_daemon() {
   local _daemon_script=""
   local _c
   for _c in "${_candidates[@]}"; do
-    if [ -f "$_c" ]; then
-      _daemon_script="$_c"
-      break
-    fi
+    if [ -f "$_c" ]; then _daemon_script="$_c"; break; fi
   done
   [ -n "$_daemon_script" ] || return
-
   local _pid
   _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
   kill -0 "$_pid" 2>/dev/null && return
-
   if [ -x "$_daemon_script" ]; then
     "$_daemon_script" </dev/null >/dev/null 2>&1 &
   elif command -v python3 >/dev/null 2>&1; then
@@ -635,6 +723,7 @@ _bvk_wake_recents_daemon() {
   fi
   disown
 }
+
 path="$(pwd -P)"
 export BVK_FILEMANAGER_BOUNDARY="$path"
 selected_items=()

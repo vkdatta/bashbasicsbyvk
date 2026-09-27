@@ -1,53 +1,41 @@
 # bashbasicsbyvk_displayer.sh
 # ════════════════════════════════════════════════════════════════════════════
-# Windowed just-in-time displayer.
+# Windowed JIT displayer. Aggressive ProcessPoolExecutor on all stat-heavy
+# paths; async background pool for recursive directory sizes.
 #
-# Architecture
-# ────────────
-#   Layer 1  — Name index   : full sorted list of paths, names only.
-#                             Built by one Python os.scandir() call (~30ms
-#                             for 10k entries). No stat. No metadata.
-#
-#   Layer 2  — Hot window   : ±_BVK_WIN_RADIUS rows around the viewport.
-#                             Metadata (size, mtime, icon, children) fetched
-#                             by one batched Python stat call per window shift.
-#                             Stored in item_size / item_mtime / item_icon /
-#                             item_children associative arrays, keyed by path.
-#                             Entries outside the window are evicted.
-#
-#   Layer 3  — On-demand    : Recursive dir size only when user explicitly
-#                             enables "size" suffix AND hovers a dir long
-#                             enough. Never computed eagerly.
-#
-# Python is called via embedded heredocs — no external .py files, no daemon,
-# no disk cache, no background processes left behind.
-#
-# Public interface (unchanged from the old displayer)
-# ────────────────────────────────────────────────────
-#   build_items_with_meta  dir [prefix]  — populate items[]
-#   apply_sort                           — sort items[] per sort_mode
-#   display_items                        — render visible rows
-#   _collect_metadata                    — (now: load window around _hl_index)
-#   _ensure_meta                         — (now: idempotent window check)
-#   sort_order_settings                  — settings UI
-#   display_suffix_settings              — settings UI
-#   group_view_settings                  — settings UI
-#   _filter_*                            — live prefix filter
+# Layer 1  — Name index   : Python scandir, sorted by name or stat sort.
+# Layer 2  — Hot window   : ±60 rows, batch stat via ProcessPoolExecutor.
+# Layer 3  — Recursive    : async background pool, splits top dirs by subdir
+#                           fanout. Never blocks render.
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Core arrays ───────────────────────────────────────────────────────────────
 
 declare -gA item_size=()
 declare -gA item_mtime=()
-declare -gA item_icon=()       # dir|archive|image|plugin|exec|plain|shortcut
-declare -gA item_children=()   # -1 for files, ≥0 for dirs
+declare -gA item_icon=()
+declare -gA item_children=()
+declare -gA item_dsize=()          # recursive dir size cache
 declare -g  _meta_loaded=false
 declare -g  _hl_index=0
 
-# Window tracking — which band of items[] has real metadata right now.
-declare -g _win_lo=0   # 1-based, inclusive
-declare -g _win_hi=0   # 1-based, inclusive
-_BVK_WIN_RADIUS=60     # load this many rows above and below viewport centre
+declare -g _win_lo=0
+declare -g _win_hi=0
+_BVK_WIN_RADIUS=60
+
+declare -g _items_presorted=false
+declare -g _items_presorted_mode=""
+
+# Async recursive dir-size job state
+declare -g _BVK_DSIZE_JOB_PID=""
+declare -g _BVK_DSIZE_JOB_IN=""
+declare -g _BVK_DSIZE_JOB_OUT=""
+
+# Per-session temp dir for job scratch
+if [ -z "${_BVK_DSIZE_TMP:-}" ]; then
+  _BVK_DSIZE_TMP="$(mktemp -d -t bvk-dsize.XXXXXX 2>/dev/null)"
+  export _BVK_DSIZE_TMP
+fi
 
 # ── Rendering helpers ─────────────────────────────────────────────────────────
 
@@ -55,7 +43,7 @@ _bold()        { printf '\033[1m%s\033[0m'   "$1"; }
 _highlight()   { printf '\033[1;7m%s\033[0m' "$1"; }
 _highlight_v() { _hl_out=$'\033[1;7m'"$1"$'\033[0m'; }
 
-# ── Icon detection (bash — used only in the window-fetch fallback) ─────────────
+# ── Icon detection (window-fetch fallback only) ───────────────────────────────
 
 _is_archive() {
   local lower="${1##*/}"; lower="${lower,,}"
@@ -110,28 +98,18 @@ _is_plugin() {
   esac
 }
 
-# ── Python helpers — embedded, called via process substitution ────────────────
-#
-# _PY_SCAN  : given a directory, returns sorted name-only index.
-#             Output: one absolute path per line.
-#             sort_mode is passed as $1 so Python can sort by name without
-#             any stat calls (az/za). For mtime/size sorts Python does one
-#             os.scandir() with stat-from-DirEntry (free on Linux).
-#
-# _PY_META  : given a list of paths on stdin, returns pipe-delimited metadata.
-#             Output: path|size_bytes|mtime_epoch|children|icon_type
-#             children=-1 for files; for dirs it is a shallow scandir count
-#             (NOT recursive) — fast and sufficient for the display column.
-#             Recursive size is never computed here.
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# _py_scan_script — Layer 1: name index with optional parallel stat.
+# ═══════════════════════════════════════════════════════════════════════════════
 _py_scan_script() {
-# One heredoc, no temp file, called as:  python3 <(_py_scan_script) DIR MODE HIDDEN PFX
 python3 - "$@" <<'PYEOF'
 import os, sys, stat as st_mod
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
 
 dirpath  = sys.argv[1]
-mode     = sys.argv[2]          # az za new old big small
-hidden   = sys.argv[3] == "1"   # show hidden files
+mode     = sys.argv[2]
+hidden   = sys.argv[3] == "1"
 pfx      = sys.argv[4].lower() if len(sys.argv) > 4 else ""
 
 _ARCHIVE_MULTI = (".tar.gz",".tar.bz2",".tar.xz",".tar.zst",".tar.lz",
@@ -173,31 +151,61 @@ def icon(name, is_dir, mode_bits):
     if ext in _EXEC or bool(mode_bits & 0o111): return "exec"
     return "plain"
 
-needs_stat = mode in ("new","old","big","small")
+def _stat_chunk(args):
+    dirpath_c, names = args
+    out = []
+    for name in names:
+        p = os.path.join(dirpath_c, name)
+        try:
+            s = os.stat(p, follow_symlinks=True)
+            isd = st_mod.S_ISDIR(s.st_mode)
+            sz = 0 if isd else s.st_size
+            mt = s.st_mtime
+            out.append((p, name.lower(), sz, mt))
+        except Exception:
+            out.append((p, name.lower(), 0, 0.0))
+    return out
 
-entries = []
+def _pick_ctx():
+    methods = mp.get_all_start_methods()
+    if "fork" in methods:
+        return mp.get_context("fork")
+    return mp.get_context()
+
+names = []
 try:
     with os.scandir(dirpath) as it:
         for e in it:
-            try:
-                bn = e.name
-                if not hidden and bn.startswith("."): continue
-                if pfx and not bn.lower().startswith(pfx): continue
-                if needs_stat:
-                    s   = e.stat(follow_symlinks=True)
-                    sz  = s.st_size if not e.is_dir(follow_symlinks=True) else 0
-                    mt  = s.st_mtime
-                    ic  = icon(bn, e.is_dir(follow_symlinks=True), s.st_mode)
-                    entries.append((e.path, bn.lower(), sz, mt, ic))
-                else:
-                    entries.append((e.path, bn.lower(), 0, 0.0, ""))
-            except Exception:
-                pass
+            bn = e.name
+            if bn in (".", ".."): continue
+            if not hidden and bn.startswith("."): continue
+            if pfx and not bn.lower().startswith(pfx): continue
+            names.append(bn)
 except Exception as ex:
     sys.stderr.write(f"scan error: {ex}\n")
     sys.exit(1)
 
-# Sort
+needs_stat = mode in ("new","old","big","small")
+
+entries = []
+if not needs_stat:
+    entries = [(os.path.join(dirpath, n), n.lower(), 0, 0.0) for n in names]
+elif len(names) < 400:
+    entries = _stat_chunk((dirpath, names))
+else:
+    nproc = min(os.cpu_count() or 4, 8)
+    total = len(names)
+    chunk_size = max(500, total // (nproc * 4))
+    chunks = [names[i:i+chunk_size] for i in range(0, total, chunk_size)]
+    work = [(dirpath, c) for c in chunks]
+    ctx = _pick_ctx()
+    try:
+        with ProcessPoolExecutor(max_workers=nproc, mp_context=ctx) as ex:
+            for r in ex.map(_stat_chunk, work, chunksize=1):
+                entries.extend(r)
+    except Exception:
+        entries = _stat_chunk((dirpath, names))
+
 if   mode == "az":    entries.sort(key=lambda x: x[1])
 elif mode == "za":    entries.sort(key=lambda x: x[1], reverse=True)
 elif mode == "new":   entries.sort(key=lambda x: x[3], reverse=True)
@@ -210,10 +218,14 @@ for e in entries:
 PYEOF
 }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# _py_meta_script — Layer 2: batch stat for the visible window.
+# ═══════════════════════════════════════════════════════════════════════════════
 _py_meta_script() {
-# Reads absolute paths from $1 file, writes pipe-delimited metadata to stdout.
 python3 - "$1" <<'PYEOF'
 import os, sys, stat as st_mod
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 paths_file = sys.argv[1]
 
@@ -256,70 +268,209 @@ def icon(name, is_dir, mode_bits):
     if ext in _EXEC or bool(mode_bits & 0o111): return "exec"
     return "plain"
 
-def children_count(path):
-    try:
-        return sum(1 for _ in os.scandir(path))
-    except Exception:
-        return -1
-
-with open(paths_file) as fh:
-    paths = [l.rstrip("\n") for l in fh if l.strip()]
-
-out = []
-for p in paths:
+def stat_one(p):
     try:
         s       = os.stat(p, follow_symlinks=True)
         is_dir  = st_mod.S_ISDIR(s.st_mode)
         sz      = 0 if is_dir else s.st_size
         mt      = int(s.st_mtime)
-        ch      = children_count(p) if is_dir else -1
+        if is_dir:
+            try:
+                ch = sum(1 for _ in os.scandir(p))
+            except Exception:
+                ch = -1
+        else:
+            ch = -1
         ic      = icon(os.path.basename(p), is_dir, s.st_mode)
-        out.append(f"{p}|{sz}|{mt}|{ch}|{ic}")
+        return f"{p}|{sz}|{mt}|{ch}|{ic}"
     except Exception:
-        out.append(f"{p}|0|0|-1|plain")
+        return f"{p}|0|0|-1|plain"
 
-sys.stdout.write("\n".join(out) + "\n")
+def _meta_chunk(chunk):
+    return [stat_one(p) for p in chunk]
+
+def _pick_ctx():
+    methods = mp.get_all_start_methods()
+    if "fork" in methods:
+        return mp.get_context("fork")
+    return mp.get_context()
+
+with open(paths_file) as fh:
+    paths = [l.rstrip("\n") for l in fh if l.strip()]
+
+if not paths:
+    sys.exit(0)
+
+n = len(paths)
+results = []
+
+if n < 400:
+    workers = min(8, n)
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        results = list(ex.map(stat_one, paths))
+else:
+    nproc = min(os.cpu_count() or 4, 8)
+    chunk_size = max(200, n // (nproc * 4))
+    chunks = [paths[i:i+chunk_size] for i in range(0, n, chunk_size)]
+    ctx = _pick_ctx()
+    try:
+        with ProcessPoolExecutor(max_workers=nproc, mp_context=ctx) as ex:
+            for r in ex.map(_meta_chunk, chunks, chunksize=1):
+                results.extend(r)
+    except Exception:
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            results = list(ex.map(stat_one, paths))
+
+sys.stdout.write("\n".join(results) + "\n")
 PYEOF
 }
 
-# ── build_items_with_meta — Layer 1: name index only ─────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# _py_recursive_size — Layer 3: aggressive parallel recursive dir sizes.
 #
-# Calls _py_scan_script which does one os.scandir(), sorts by the current
-# sort_mode, and prints one absolute path per line.
-# For az/za: ~30–50ms for 10k.  For new/old/big/small: ~80–150ms for 10k
-# (stat is free from DirEntry on Linux).
-# No metadata arrays are filled here — that happens lazily in _load_window.
+# Splits each top dir into per-subdir tasks when fanout ≥ 4, so a single
+# window dir with 200 subdirs becomes 200 parallel tasks. Aggregates by
+# top dir at the end. Runs in background via & disown from bash.
+# ═══════════════════════════════════════════════════════════════════════════════
+_py_recursive_size() {
+python3 - "$1" <<'PYEOF'
+import os, sys
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
 
+paths_file = sys.argv[1]
+
+def _pick_ctx():
+    m = mp.get_all_start_methods()
+    return mp.get_context("fork") if "fork" in m else mp.get_context()
+
+def _walk_size(path):
+    """Iterative DFS, symlink-loop protected."""
+    total = 0
+    stack = [path]
+    seen = set()
+    while stack:
+        d = stack.pop()
+        try:
+            real = os.path.realpath(d)
+            if real in seen:
+                continue
+            seen.add(real)
+        except Exception:
+            pass
+        try:
+            with os.scandir(d) as it:
+                for e in it:
+                    try:
+                        if e.is_dir(follow_symlinks=False):
+                            stack.append(e.path)
+                        elif e.is_file(follow_symlinks=False):
+                            total += e.stat(follow_symlinks=False).st_size
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    return total
+
+def _plan(paths):
+    """
+    Each task is (top_path, walk_path, base_offset, tag).
+      tag == "walk"  → recurse walk_path, add base_offset
+      tag == "base"  → just return base_offset (immediate files of top)
+    """
+    tasks = []
+    for p in paths:
+        try:
+            entries = list(os.scandir(p))
+        except Exception:
+            tasks.append((p, p, 0, "walk"))
+            continue
+        subdirs = []
+        base = 0
+        for e in entries:
+            try:
+                if e.is_dir(follow_symlinks=False):
+                    subdirs.append(e.path)
+                elif e.is_file(follow_symlinks=False):
+                    base += e.stat(follow_symlinks=False).st_size
+            except Exception:
+                pass
+        if len(subdirs) >= 4:
+            for sd in subdirs:
+                tasks.append((p, sd, 0, "walk"))
+            if base:
+                tasks.append((p, p, base, "base"))
+        else:
+            tasks.append((p, p, base, "walk"))
+    return tasks
+
+def _run(task):
+    top, walk, base, tag = task
+    if tag == "base":
+        return (top, base)
+    return (top, _walk_size(walk) + base)
+
+with open(paths_file) as fh:
+    paths = [l.rstrip("\n") for l in fh if l.strip()]
+
+if not paths:
+    sys.exit(0)
+
+tasks = _plan(paths)
+
+if len(tasks) <= 1:
+    results = [_run(t) for t in tasks]
+else:
+    nproc = min(os.cpu_count() or 4, 8, len(tasks))
+    try:
+        with ProcessPoolExecutor(max_workers=nproc,
+                                 mp_context=_pick_ctx()) as ex:
+            results = list(ex.map(_run, tasks, chunksize=1))
+    except Exception:
+        results = [_run(t) for t in tasks]
+
+totals = {}
+for top, sz in results:
+    totals[top] = totals.get(top, 0) + sz
+
+for p in paths:
+    print(f"{p}|{totals.get(p, 0)}")
+PYEOF
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# build_items_with_meta / apply_sort — Layer 1
+# ═══════════════════════════════════════════════════════════════════════════════
 build_items_with_meta() {
   local p="$1"
   local pfx="${2:-}"
   items=()
-  item_size=()
-  item_mtime=()
-  item_icon=()
-  item_children=()
+  item_size=(); item_mtime=(); item_icon=(); item_children=()
   _meta_loaded=false
-  _win_lo=0
-  _win_hi=0
+  _win_lo=0; _win_hi=0
 
   local hidden_flag=0
   $show_hidden_files && hidden_flag=1
   local mode="${sort_mode:-az}"
 
-  while IFS= read -r line; do
-    [ -n "$line" ] && items+=("$line")
-  done < <(_py_scan_script "$p" "$mode" "$hidden_flag" "$pfx" 2>/dev/null)
+  mapfile -t items < <(_py_scan_script "$p" "$mode" "$hidden_flag" "$pfx" 2>/dev/null)
+
+  _items_presorted=true
+  _items_presorted_mode="$mode"
 }
 
-# apply_sort — re-sort items[] that are already loaded.
-# For az/za sorts by bash (cheap, names already in items[]).
-# For metadata sorts, calls Python again on the current items[] list.
-# This keeps apply_sort a no-op when build_items_with_meta already sorted.
 apply_sort() {
   local mode="${sort_mode:-az}"
-  [ ${#items[@]} -eq 0 ] && return
+  [ ${#items[@]} -eq 0 ] && { _items_presorted=true; _items_presorted_mode="$mode"; return; }
 
-  # az/za: bash sort on basename is fast enough for any realistic items[] size
+  if [ "${_items_presorted:-false}" = "true" ] && \
+     [ "${_items_presorted_mode:-}" = "$mode" ]; then
+    _win_lo=0; _win_hi=0
+    item_size=(); item_mtime=(); item_icon=(); item_children=()
+    _meta_loaded=false
+    return
+  fi
+
   case "$mode" in
     az|za)
       local flag; [ "$mode" = "za" ] && flag="-r" || flag=""
@@ -333,31 +484,52 @@ apply_sort() {
                         printf '%s\t%s\n' "$k" "$f"
                       done | sort -f $flag -t$'\t' -k1,1 | cut -f2-)
       items=()
-      while IFS= read -r line; do [ -n "$line" ] && items+=("$line"); done <<< "$sorted_output"
+      mapfile -t items <<< "$sorted_output"
       ;;
     new|old|big|small)
-      # Python re-sort using DirEntry stat (free on Linux)
-      local hidden_flag=0; $show_hidden_files && hidden_flag=1
-      # We already have items[]; just ask Python to stat and sort them.
       local tmp_in; tmp_in=$(mktemp)
       printf '%s\n' "${items[@]}" > "$tmp_in"
       local sorted_output
       sorted_output=$(python3 - "$tmp_in" "$mode" <<'PYEOF'
-import os, sys
-paths_file = sys.argv[1]
-mode       = sys.argv[2]
+import os, sys, stat as st_mod
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+
+paths_file = sys.argv[1]; mode = sys.argv[2]
+
+def _chunk(paths):
+    out = []
+    for p in paths:
+        try:
+            s = os.stat(p, follow_symlinks=True)
+            sz = 0 if os.path.isdir(p) else s.st_size
+            out.append((p, sz, s.st_mtime))
+        except Exception:
+            out.append((p, 0, 0.0))
+    return out
+
+def _ctx():
+    m = mp.get_all_start_methods()
+    return mp.get_context("fork") if "fork" in m else mp.get_context()
+
 with open(paths_file) as fh:
     paths = [l.rstrip("\n") for l in fh if l.strip()]
+
+n = len(paths)
 records = []
-for p in paths:
+if n < 400:
+    records = _chunk(paths)
+else:
+    nproc = min(os.cpu_count() or 4, 8)
+    cs = max(500, n // (nproc * 4))
+    chunks = [paths[i:i+cs] for i in range(0, n, cs)]
     try:
-        s      = os.stat(p, follow_symlinks=True)
-        is_dir = os.path.isdir(p)
-        sz     = 0 if is_dir else s.st_size
-        mt     = s.st_mtime
-        records.append((p, sz, mt))
+        with ProcessPoolExecutor(max_workers=nproc, mp_context=_ctx()) as ex:
+            for r in ex.map(_chunk, chunks, chunksize=1):
+                records.extend(r)
     except Exception:
-        records.append((p, 0, 0.0))
+        records = _chunk(paths)
+
 if   mode == "new":   records.sort(key=lambda x: x[2], reverse=True)
 elif mode == "old":   records.sort(key=lambda x: x[2])
 elif mode == "big":   records.sort(key=lambda x: x[1], reverse=True)
@@ -368,22 +540,21 @@ PYEOF
       )
       rm -f "$tmp_in"
       items=()
-      while IFS= read -r line; do [ -n "$line" ] && items+=("$line"); done <<< "$sorted_output"
+      mapfile -t items <<< "$sorted_output"
       ;;
   esac
 
-  # Window is now stale — clear it so next render re-fetches.
+  _items_presorted=true
+  _items_presorted_mode="$mode"
+
   _win_lo=0; _win_hi=0
   item_size=(); item_mtime=(); item_icon=(); item_children=()
   _meta_loaded=false
 }
 
-# ── _load_window — Layer 2: fetch metadata for centre ± radius ────────────────
-#
-# centre: 1-based index (usually _hl_index or the middle of the viewport).
-# Fetches metadata for [lo..hi] from items[], skipping paths already loaded.
-# Uses one Python call for the whole batch → one round-trip to the kernel.
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# _load_window — Layer 2 metadata for centre ± radius.
+# ═══════════════════════════════════════════════════════════════════════════════
 _load_window() {
   local centre="${1:-1}"
   local n="${#items[@]}"
@@ -394,12 +565,10 @@ _load_window() {
   (( lo < 1 )) && lo=1
   (( hi > n )) && hi=$n
 
-  # Nothing to do if this band is already loaded.
   if (( _win_lo > 0 && lo >= _win_lo && hi <= _win_hi )); then
     return
   fi
 
-  # Collect paths in [lo..hi] that don't have metadata yet.
   local tmp_in; tmp_in=$(mktemp)
   local i
   for (( i=lo; i<=hi; i++ )); do
@@ -407,7 +576,6 @@ _load_window() {
     [ -z "${item_size[$f]+x}" ] && printf '%s\n' "$f"
   done > "$tmp_in"
 
-  # If nothing is missing, skip the Python call.
   if [ ! -s "$tmp_in" ]; then
     rm -f "$tmp_in"
     _win_lo=$lo; _win_hi=$hi
@@ -415,7 +583,6 @@ _load_window() {
     return
   fi
 
-  # One batched Python stat call.
   while IFS='|' read -r fpath fsize fmtime fchildren ftype; do
     [ -z "$fpath" ] && continue
     item_size["$fpath"]="$fsize"
@@ -425,13 +592,12 @@ _load_window() {
   done < <(_py_meta_script "$tmp_in" 2>/dev/null)
   rm -f "$tmp_in"
 
-  # Evict entries outside [lo-radius .. hi+radius] to cap memory.
   local evict_lo=$(( lo - _BVK_WIN_RADIUS ))
   local evict_hi=$(( hi + _BVK_WIN_RADIUS ))
   if (( _win_lo > 0 )); then
     local j
     for (( j=_win_lo; j<lo; j++ )); do
-      (( j < evict_lo )) || continue   # keep the extended buffer
+      (( j < evict_lo )) || continue
       local pf="${items[$((j-1))]}"
       unset "item_size[$pf]" "item_mtime[$pf]" "item_icon[$pf]" "item_children[$pf]"
     done
@@ -446,8 +612,6 @@ _load_window() {
   _meta_loaded=true
 }
 
-# ── _collect_metadata / _ensure_meta — public compat wrappers ─────────────────
-
 _collect_metadata() {
   local centre="${_hl_index:-1}"
   (( centre < 1 )) && centre=1
@@ -455,11 +619,14 @@ _collect_metadata() {
 }
 
 _ensure_meta() {
-  # Called before render. Shift window to current highlight if needed.
   local centre="${_hl_index:-1}"
   (( centre < 1 )) && centre=1
   if (( _win_lo < 1 || centre < _win_lo || centre > _win_hi )); then
     _load_window "$centre"
+  fi
+  # Kick off background recursive dir-size for any newly visible dirs.
+  if declare -F _load_dir_size_window >/dev/null 2>&1; then
+    _load_dir_size_window
   fi
 }
 
@@ -474,14 +641,80 @@ _needs_metadata() {
   return 1
 }
 
-# Recursive dir size is never auto-computed. Return placeholder if not ready.
 _needs_dir_size() {
   [[ " ${display_suffix_set:-} " == *" size "* ]] && return 0
-  case "${sort_mode:-az}" in big|small) return 0 ;; esac
   return 1
 }
 
-# ── Size / time formatters (zero-fork, variable-setting) ─────────────────────
+# ── Async recursive dir-size orchestration ────────────────────────────────────
+
+# Spawn (or replace) a background job that computes recursive sizes for
+# any dirs in the current window that don't yet have cached sizes.
+# Non-blocking: returns immediately.
+_load_dir_size_window() {
+  _needs_dir_size || return 0
+  [ "$_win_lo" -lt 1 ] && return 0
+
+  # If a job is still running, do not spawn another.
+  if [ -n "$_BVK_DSIZE_JOB_PID" ] && kill -0 "$_BVK_DSIZE_JOB_PID" 2>/dev/null; then
+    return 0
+  fi
+  # Previous job left state around after exiting without poll — clean.
+  if [ -n "$_BVK_DSIZE_JOB_IN" ] && [ -f "$_BVK_DSIZE_JOB_IN" ]; then
+    rm -f "$_BVK_DSIZE_JOB_IN" "$_BVK_DSIZE_JOB_OUT"
+  fi
+  _BVK_DSIZE_JOB_PID=""
+  _BVK_DSIZE_JOB_IN=""
+  _BVK_DSIZE_JOB_OUT=""
+
+  local tmp_in; tmp_in=$(mktemp "$_BVK_DSIZE_TMP/in.XXXXXX" 2>/dev/null) || tmp_in=$(mktemp)
+  local i f
+  for (( i=_win_lo; i<=_win_hi; i++ )); do
+    f="${items[$((i-1))]}"
+    [ -d "$f" ] || continue
+    [ -n "${item_dsize[$f]+x}" ] && continue
+    printf '%s\n' "$f"
+  done > "$tmp_in"
+
+  if [ ! -s "$tmp_in" ]; then
+    rm -f "$tmp_in"
+    return 0
+  fi
+
+  _BVK_DSIZE_JOB_IN="$tmp_in"
+  _BVK_DSIZE_JOB_OUT="${tmp_in}.out"
+
+  _py_recursive_size "$tmp_in" > "$_BVK_DSIZE_JOB_OUT" 2>/dev/null &
+  _BVK_DSIZE_JOB_PID=$!
+  disown 2>/dev/null || true
+  return 0
+}
+
+# Called from the poll loop. Returns 0 if a completed job was harvested
+# (caller should repaint), 1 otherwise.
+_dir_size_job_poll() {
+  [ -z "$_BVK_DSIZE_JOB_PID" ] && return 1
+  kill -0 "$_BVK_DSIZE_JOB_PID" 2>/dev/null && return 1
+
+  # Job finished — harvest.
+  if [ -f "$_BVK_DSIZE_JOB_OUT" ]; then
+    while IFS='|' read -r dp ds; do
+      [ -z "$dp" ] && continue
+      item_dsize["$dp"]="${ds:-0}"
+    done < "$_BVK_DSIZE_JOB_OUT"
+    rm -f "$_BVK_DSIZE_JOB_OUT" "$_BVK_DSIZE_JOB_IN"
+  fi
+
+  _BVK_DSIZE_JOB_PID=""
+  _BVK_DSIZE_JOB_IN=""
+  _BVK_DSIZE_JOB_OUT=""
+
+  # Immediately kick off the next batch for any new visible dirs.
+  _load_dir_size_window
+  return 0
+}
+
+# ── Size / time formatters ────────────────────────────────────────────────────
 
 _fmt_size_v() {
   local b="${1:-0}"
@@ -519,7 +752,7 @@ _fmt_time_v() {
 }
 _fmt_time() { local _ft_out; _fmt_time_v "$1"; printf '%s' "$_ft_out"; }
 
-# ── Suffix builder — ext | size | time | children ────────────────────────────
+# ── Suffix builder — now shows real recursive sizes for dirs ──────────────────
 
 _build_suffix_v() {
   local fpath="$1"
@@ -537,15 +770,19 @@ _build_suffix_v() {
         fi
         ;;
       size)
-        local sz="${item_size[$fpath]:-}"
-        if [ -z "$sz" ]; then
-          _bs_out+=" | ..."
+        if [ -d "$fpath" ]; then
+          # Recursive size for dirs, from async cache.
+          local dsz="${item_dsize[$fpath]:-}"
+          if [ -n "$dsz" ]; then
+            _fmt_size_v "$dsz"
+            _bs_out+=" | $_fs_out"
+          else
+            _bs_out+=" | ⏳"
+          fi
         else
-          # Dirs: size from metadata is flat inode size (0 if unknown).
-          # Show "---" to signal that recursive size is not computed,
-          # rather than a misleading "0B".
-          if [ -d "$fpath" ] && (( sz == 0 )); then
-            _bs_out+=" | ---"
+          local sz="${item_size[$fpath]:-}"
+          if [ -z "$sz" ]; then
+            _bs_out+=" | ..."
           else
             _fmt_size_v "$sz"
             _bs_out+=" | $_fs_out"
@@ -566,7 +803,7 @@ _build_suffix_v() {
         if [ -z "$ch" ]; then
           _bs_out+=" | ..."
         elif (( ch < 0 )); then
-          : # file — no children token shown
+          :
         else
           _bs_out+=" | ${ch} items"
         fi
@@ -576,7 +813,7 @@ _build_suffix_v() {
 }
 _build_suffix() { local _bs_out; _build_suffix_v "$1"; printf '%s' "$_bs_out"; }
 
-# ── Icon resolution — reads item_icon[] set by Python; bash fallback ──────────
+# ── Icon resolution ───────────────────────────────────────────────────────────
 
 _resolve_display_parts_v() {
   local f="$1"
@@ -598,7 +835,6 @@ _resolve_display_parts_v() {
       *)        _rdp_icon="📄" ;;
     esac
   else
-    # Metadata not loaded yet for this row — use type-check fallback.
     if   [ -d "$f" ];         then _rdp_icon="📁"
     elif _is_archive "$f";    then _rdp_icon="📦"
     elif _is_image   "$f";    then _rdp_icon="🌄"
@@ -608,8 +844,6 @@ _resolve_display_parts_v() {
     fi
   fi
 }
-
-# ── Shortcut display ──────────────────────────────────────────────────────────
 
 _shortcut_display_parts() {
   local sc_file="$1"
@@ -780,6 +1014,7 @@ sort_order_settings() {
   read -r -p "Choice [1-6] (blank = no change): " c
   if [[ "$c" =~ ^[1-6]$ ]]; then
     sort_mode="${modes[$((c-1))]}"
+    _items_presorted=false
     save_settings
     echo "✅ Sort mode set to: ${labels[$((c-1))]}"
   else
@@ -791,7 +1026,7 @@ sort_order_settings() {
 
 _show_suffix_state() {
   local tokens=("ext" "size" "time" "children")
-  local labels=("Extension (.sh)" "File size (4.2K  — dirs show --- until computed)" "Modified time" "Children count (dirs only)")
+  local labels=("Extension (.sh)" "File size (4.2K  — dirs show ⏳ until computed)" "Modified time" "Children count (dirs only)")
   echo
   echo "Display suffix components:"
   for i in "${!tokens[@]}"; do
@@ -834,13 +1069,11 @@ display_suffix_settings() {
 
     case "$action" in
       q) break ;;
-
       n)
         display_suffix_set=""
         save_settings
         echo "✅ All suffixes cleared"
         ;;
-
       a)
         echo "Add by number (comma/range, e.g. 1,3 or 1-4):"
         read -r -p "Numbers: " inp
@@ -858,7 +1091,6 @@ display_suffix_settings() {
         display_suffix_set="${display_suffix_set%% }"
         $changed && save_settings && echo "✅ Added" || echo "Already set — no change"
         ;;
-
       r)
         if [ -z "$display_suffix_set" ]; then echo "Nothing to remove"; continue; fi
         echo "Remove by number (comma/range):"
@@ -877,7 +1109,6 @@ display_suffix_settings() {
         display_suffix_set="${_arr[*]}"
         $changed && save_settings && echo "✅ Removed" || echo "Not present — no change"
         ;;
-
       t)
         _show_time_format_state
         echo "Set time format [1-6] (blank = no change):"
@@ -890,7 +1121,6 @@ display_suffix_settings() {
           echo "No change"
         fi
         ;;
-
       *) echo "⚠️  Invalid action. Use a/r/t/n/q" ;;
     esac
   done
@@ -938,12 +1168,10 @@ group_view_settings() {
 
     case "$action" in
       q) break ;;
-
       u)
         group_view_levels=(); group_view_levels_str=""
         save_settings; echo "✅ Grouping turned off"
         ;;
-
       a)
         echo "Add level(s) by number (comma/range):"
         read -r -p "Numbers [1-4]: " inp
@@ -958,10 +1186,9 @@ group_view_settings() {
         $changed || echo "All already in chain — no change"
         $changed && group_view_levels_str="${group_view_levels[*]}" && save_settings && echo "✅ Level(s) added"
         ;;
-
       r)
         [ ${#group_view_levels[@]} -eq 0 ] && { echo "Chain is empty"; continue; }
-        echo "Remove level(s) by number (comma/range) [based on available levels list above]:"
+        echo "Remove level(s) by number (comma/range):"
         read -r -p "Numbers [1-4]: " inp
         [ -z "$inp" ] && { echo "No change"; continue; }
         local sel; sel=$(_parse_multi_select "$inp" 4)
@@ -979,7 +1206,6 @@ group_view_settings() {
           echo "None of those were in the chain — no change"
         fi
         ;;
-
       o)
         [ ${#group_view_levels[@]} -le 1 ] && { echo "Need at least 2 levels in chain to reorder"; continue; }
         echo "Current chain:"
@@ -1006,7 +1232,6 @@ group_view_settings() {
           save_settings; echo "✅ Chain reordered: ${group_view_levels[*]}"
         fi
         ;;
-
       *) echo "⚠️  Invalid action. Use a/r/o/u/q" ;;
     esac
   done
@@ -1031,7 +1256,6 @@ _filter_apply() {
       [[ "${bn,,}" == "$q"* ]] && items+=("$f")
     done
   fi
-  # Reset window so next render fetches fresh metadata for the filtered set.
   _win_lo=0; _win_hi=0
   _meta_loaded=false
   _vp_cache_reset
