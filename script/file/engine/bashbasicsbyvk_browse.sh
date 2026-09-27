@@ -39,7 +39,7 @@ PYEOF
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# _bvk_prefix_scan — single scandir, prints paths matching group_prefix.
+# _bvk_prefix_scan — files matching group_prefix.
 # ═══════════════════════════════════════════════════════════════════════════
 _bvk_prefix_scan() {
   local p="$1"
@@ -104,7 +104,7 @@ build_all_items() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# get_imaginary_groups — single pass, ~150ms for 200k.
+# get_imaginary_groups — unfiltered.
 # ═══════════════════════════════════════════════════════════════════════════
 get_imaginary_groups() {
   local p="$1"
@@ -158,7 +158,7 @@ PYEOF
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# get_imaginary_groups_filtered — filtered variant for imaginary-mode filter.
+# get_imaginary_groups_filtered — with query applied.
 # ═══════════════════════════════════════════════════════════════════════════
 get_imaginary_groups_filtered() {
   local p="$1"
@@ -221,12 +221,15 @@ PYEOF
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# _rebuild_imaginary_display — sort + format block, shared by filtered and
-# unfiltered paths.
+# _rebuild_imaginary_display — sort + format block.
 # ═══════════════════════════════════════════════════════════════════════════
 _rebuild_imaginary_display() {
   local total="$1"
-  _imag_banner="📂 Too many items ($total). Imaginary groups by next character:"
+  if [ -n "${_filter_query:-}" ]; then
+    _imag_banner="📂 $total matching items (filtered). Imaginary groups by next character:"
+  else
+    _imag_banner="📂 Too many items ($total). Imaginary groups by next character:"
+  fi
 
   local specials=() digits=() letters=() fallback=()
   for ch in "${group_chars[@]}"; do
@@ -430,9 +433,21 @@ _menu_header() {
   echo
   local _hdr_loc="📂 Location: $path${group_prefix:+ [group: ${group_prefix^^}*]}"
   if [ -n "$_filter_query" ]; then
-    local _fcnt="${#items[@]}"
-    local _tcnt="${#_all_items[@]}"
-    _hdr_loc+="  🔍 filter: ${_filter_query^^}*  (${_fcnt}/${_tcnt} items)"
+    if ${imaginary_mode:-false}; then
+      local _itot=0 _ch
+      for _ch in "${group_chars[@]}"; do
+        _itot=$(( _itot + ${group_counts[$_ch]:-0} ))
+      done
+      _hdr_loc+="  🔍 filter: ${_filter_query^^}*  (${_itot} matches)"
+    else
+      local _fcnt="${#items[@]}"
+      local _tcnt="${#_all_items[@]}"
+      if [ "$_tcnt" -gt 0 ]; then
+        _hdr_loc+="  🔍 filter: ${_filter_query^^}*  (${_fcnt}/${_tcnt} items)"
+      else
+        _hdr_loc+="  🔍 filter: ${_filter_query^^}*  (${_fcnt} matches)"
+      fi
+    fi
   fi
   echo "$_hdr_loc"
 }
@@ -459,10 +474,9 @@ _menu_body_flat() {
 }
 
 _menu_footer_lines() {
-  builtin printf "\nu) Up   cd) Change directory   t) Transfer\nd) Delete   c) Create   f) Find    r) Rename\nq/h) Quit/Home   s) Settings   x) Organise\n-h) Help   -u) Upgrade\n"
-  [ -n "$group_prefix" ] && echo "back) Remove last prefix char (current: ${group_prefix^^}*)"
+  builtin printf "\nu) Up/Back   cd) Change directory   t) Transfer\nd) Delete   c) Create   f) Find    r) Rename\nq/h) Quit/Home   s) Settings   x) Organise\n-h) Help   -u) Upgrade\n"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
-    echo "Group view is set but above threshold. Press forceshow to enable grouped display"
+    echo "Group view is set but above threshold. Press fs to enable grouped display"
   fi
 }
 
@@ -596,7 +610,6 @@ _read_choice() {
     _rc=$?
     if [ "$_rc" -gt 128 ]; then
       _vp_poll_tick
-      # Pick up any completed recursive dir-size results and repaint.
       if declare -F _dir_size_job_poll >/dev/null 2>&1; then
         if _dir_size_job_poll; then
           _vp_cache_reset

@@ -17,7 +17,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _bvk_wake_recents_daemon
 
-# Cleanup: terminal state, last-dir record, and any lingering dsize tmp dir.
 trap 'stty "$_orig_stty" 2>/dev/null; \
       [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
       [ -n "${_BVK_DSIZE_TMP:-}" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
@@ -106,9 +105,12 @@ while true; do
   case "$choice" in
     q)           if $_sw_did_switch; then cd "$path" && exec "$SHELL"; else exit 0; fi ;;
     -h)          open_help ;;
-    u)           if [ "$path" != "/" ]; then path=$(dirname "$path"); group_prefix=""; force_show=false; fi ;;
-    back)        if [ -n "$group_prefix" ]; then group_prefix="${group_prefix%?}"; force_show=false; fi ;;
-    forceshow)   handle_force_show ;;
+    u)           if [ -n "$group_prefix" ]; then
+                   group_prefix="${group_prefix%?}"; force_show=false
+                 elif [ "$path" != "/" ]; then
+                   path=$(dirname "$path"); group_prefix=""; force_show=false
+                 fi ;;
+    fs|forceshow) handle_force_show ;;
     c)           handle_create ;;
     t)           transfer_menu ;;
     d)           delete_items ;;
