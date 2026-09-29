@@ -9,7 +9,7 @@
 _fx_adf_upload_select_csv() {
   open_csv_menu || return
   [ -z "$csv_file" ] && return
-  _csv_resolve_items || return
+  _csv_resolve_report "Uploading" || return
   _up_do_multipart_upload "${selected_items[@]}"
 }
 _fx_adf_register "upload.select.items.csv" "_fx_adf_upload_select_csv" "file_fx/upload/upload.select.items.csv"

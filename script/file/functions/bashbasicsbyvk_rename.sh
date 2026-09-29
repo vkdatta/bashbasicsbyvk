@@ -12,7 +12,70 @@
 # Called automatically after every successful mv inside this script.
 # ---------------------------------------------------------------------------
 _sync_shortcuts_for_rename() {
+  # Batch mode (CSV rename): just remember the pair; synced once afterwards.
+  if [ "${_RN_DEFER:-0}" = "1" ]; then
+    _RN_DEF_OLD+=("$1"); _RN_DEF_NEW+=("$2")
+    return 0
+  fi
   _scr_rename_sync "$1" "$2"
+}
+
+# ---------------------------------------------------------------------------
+# Batch shortcut-registry sync for CSV rename.
+# Applies ALL renames in ONE registry pass instead of load+rewrite per rename.
+# Uses the registry's own _scr_load/_scr_save; registry code is unchanged.
+# ---------------------------------------------------------------------------
+_RN_DEFER=0; _RN_DEF_OLD=(); _RN_DEF_NEW=()
+
+_rn_defer_begin() { _RN_DEFER=1; _RN_DEF_OLD=(); _RN_DEF_NEW=(); }
+
+_rn_flush_deferred() {
+  _RN_DEFER=0
+  if [ "${#_RN_DEF_OLD[@]}" -eq 0 ] || [ ! -f "$_SCR_FILE" ]; then
+    _RN_DEF_OLD=(); _RN_DEF_NEW=(); return 0
+  fi
+  local -A _pold=()
+  local i
+  for i in "${!_RN_DEF_OLD[@]}"; do _pold["k:${_RN_DEF_OLD[$i]}"]=1; done
+
+  local -a entries=() out=()
+  _scr_load entries
+  local e sc_file old_target cur new_target o nw tmp_file hit updated=0 dirty=0
+  for e in "${entries[@]}"; do
+    sc_file="${e%%${_SCR_SEP}*}"
+    old_target="${e#*${_SCR_SEP}}"
+    hit=0; cur="$old_target"
+    while [ -n "$cur" ]; do
+      if [ -n "${_pold["k:$cur"]+x}" ]; then hit=1; break; fi
+      [[ "$cur" == */* ]] || break
+      cur="${cur%/*}"
+    done
+    if [ "$hit" -eq 0 ]; then out+=("$e"); continue; fi
+
+    new_target="$old_target"
+    for i in "${!_RN_DEF_OLD[@]}"; do
+      o="${_RN_DEF_OLD[$i]}"; nw="${_RN_DEF_NEW[$i]}"
+      if [ "$new_target" = "$o" ]; then new_target="$nw"
+      elif [[ "$new_target" == "${o}/"* ]]; then new_target="${nw}/${new_target#"${o}/"}"
+      fi
+    done
+    if [ "$new_target" = "$old_target" ]; then out+=("$e"); continue; fi
+
+    dirty=1
+    if [ -f "$sc_file" ]; then
+      tmp_file=$(mktemp) || { out+=("$e"); continue; }
+      if sed "s|^SHORTCUT_TARGET=.*|SHORTCUT_TARGET=${new_target}|" "$sc_file" > "$tmp_file" \
+         && mv -- "$tmp_file" "$sc_file"; then
+        updated=$((updated + 1)); out+=("${sc_file}${_SCR_SEP}${new_target}")
+      else
+        rm -f "$tmp_file"; out+=("$e")
+      fi
+    fi
+  done
+  [ "$dirty" -eq 1 ] && _scr_save out
+  _RN_DEF_OLD=(); _RN_DEF_NEW=()
+  [ "$updated" -gt 0 ] && echo "📎 $updated shortcut(s) updated to reflect new paths."
+  return 0
 }
 # ---------------------------------------------------------------------------
 # _do_rename_mv <old_path> <new_path>
@@ -157,12 +220,9 @@ _rename_multi_mutation() {
   open_csv_menu || return
   [ -z "$csv_file" ] && return
 
-  echo ""
-  echo "🔄 Processing renames from: $(basename "$csv_file")"
-
   local -a rn_old=() rn_new=() rn_counts=()
 
-  # Parse CSV — col1=old_name, col2=new_name, skip blank/header rows
+  # Parse CSV — col1=old_name, col2=new_name (no forks)
   while IFS=, read -r _old _new _rest || [ -n "$_old" ]; do
     _old="${_old#"${_old%%[![:space:]]*}"}"; _old="${_old%"${_old##*[![:space:]]}"}"
     _old="${_old%$'\r'}"
@@ -173,50 +233,50 @@ _rename_multi_mutation() {
     rn_new+=("$_new")
   done < "$csv_file"
 
-  if [ ${#rn_old[@]} -eq 0 ]; then
+  local total=${#rn_old[@]}
+  if [ "$total" -eq 0 ]; then
     echo "❌ No valid rows found in CSV."
     return
   fi
 
-  local abs_csv
-  abs_csv=$(cd "$(dirname "$csv_file")" && pwd)/$(basename "$csv_file")
+  local -a fail_names=() fail_reasons=()
+  local ok=0 row_idx old_name new_name tgt rc renamed errf errmsg
+  local base="${path%/}"
+  errf=$(mktemp)
 
-  echo "📋 Found ${#rn_old[@]} rename(s) to apply in: $path"
-  echo ""
+  # Registry sync is deferred and done ONCE at the end (not per rename).
+  _rn_defer_begin
 
   for row_idx in "${!rn_old[@]}"; do
-    local old_name="${rn_old[$row_idx]}"
-    local new_name="${rn_new[$row_idx]}"
+    old_name="${rn_old[$row_idx]}"
+    new_name="${rn_new[$row_idx]}"
+    tgt="$base/$old_name"
+    renamed=0
 
-    # Find items in $path (maxdepth 1) whose basename matches exactly
-    local -a matched=()
-    while IFS= read -r -d '' _f; do
-      [ "${_f##*/}" = "$old_name" ] && matched+=("$_f")
-    done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
-
-    if [ ${#matched[@]} -eq 0 ]; then
-      echo "  Row $((row_idx+1)): \"$old_name\" → \"$new_name\"  ⚠️  Not found (0 matches)"
-      rn_counts+=("0")
-      continue
-    fi
-
-    local renamed=0
-    for _f in "${matched[@]}"; do
-      local _new_path="${_f%/*}/$new_name"
-      _do_rename_mv "$_f" "$_new_path"
-      local rc=$?
+    if [[ "$old_name" == */* || "$old_name" == "." || "$old_name" == ".." ]]; then
+      fail_names+=("$old_name"); fail_reasons+=("row $((row_idx+1)): old name must be a bare name in the current folder")
+    elif [ ! -e "$tgt" ] && [ ! -L "$tgt" ]; then
+      fail_names+=("$old_name"); fail_reasons+=("row $((row_idx+1)): not found in $path")
+    elif [ -z "$new_name" ]; then
+      fail_names+=("$old_name"); fail_reasons+=("row $((row_idx+1)): new name (column 2) is empty")
+    else
+      _do_rename_mv "$tgt" "$base/$new_name" 2>"$errf"
+      rc=$?
       case $rc in
-        0) renamed=$((renamed + 1)) ;;
-        2) echo "  Row $((row_idx+1)): \"$old_name\" → \"$new_name\"  ⚠️  Target already exists — skipped" ;;
+        0) renamed=1; ok=$((ok + 1)) ;;
+        2) fail_names+=("$old_name"); fail_reasons+=("row $((row_idx+1)): target \"$new_name\" already exists") ;;
+        *) errmsg=""
+           [ -s "$errf" ] && IFS= read -r errmsg < "$errf"
+           fail_names+=("$old_name"); fail_reasons+=("row $((row_idx+1)): rename failed${errmsg:+ — $errmsg}") ;;
       esac
-    done
-    echo "  Row $((row_idx+1)): \"$old_name\" → \"$new_name\"  ✅ $renamed renamed"
+    fi
     rn_counts+=("$renamed")
   done
+  rm -f "$errf"
 
-  # Write counts back to col3 of the CSV
-  echo ""
-  echo "📝 Writing rename counts back to CSV..."
+  _rn_flush_deferred
+
+  # Write counts back to col3 of the CSV (single pass, no forks)
   local tmp_csv="${csv_file}.tmp"
   local write_idx=0
   while IFS=, read -r _old _new _rest || [ -n "$_old" ]; do
@@ -232,9 +292,14 @@ _rename_multi_mutation() {
   done < "$csv_file" > "$tmp_csv"
   mv "$tmp_csv" "$csv_file"
 
-  echo "✅ CSV updated with rename counts: $(basename "$csv_file")"
-  echo ""
-  echo "🎉 Multi Mutation rename complete — ${#rn_old[@]} pattern(s) processed."
+  echo "✅ Renamed: ${ok}/${total} names   (counts written to $(basename "$csv_file"))"
+  local i
+  if [ ${#fail_names[@]} -gt 0 ]; then
+    echo "⚠️  ${#fail_names[@]} failed:"
+    for i in "${!fail_names[@]}"; do
+      printf '   ❌ %s — %s\n' "${fail_names[$i]}" "${fail_reasons[$i]}"
+    done
+  fi
 }
 
 # ---------------------------------------------------------------------------

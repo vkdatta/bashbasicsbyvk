@@ -9,7 +9,7 @@
 _fx_adf_map_select_csv() {
   open_csv_menu || return
   [ -z "$csv_file" ] && return
-  _csv_resolve_items || return
+  _csv_resolve_report "Mapping" || return
   local map_output
   map_output=$(_map_generate_for_paths "${selected_items[@]}")
   echo ""
