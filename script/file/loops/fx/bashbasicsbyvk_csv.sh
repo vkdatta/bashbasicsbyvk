@@ -38,19 +38,25 @@ open_csv_menu() {
         echo "📂 CSV SELECT — Location: $_csv_nav_path"
 
         # ── Build item list: dirs + .csv files only ───────────────────────
+        # Pure-bash globbing: no find, no sort, no per-file loop, no forks.
+        #   "*/"         -> directories only (one readdir)
+        #   "*.[cC][sS][vV]" -> .csv files matched by the glob itself
         local -a _csv_items=()
-        while IFS= read -r -d '' _e; do
-            local _bn="${_e##*/}"
-            [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-            if [ -d "$_e" ]; then
-                _csv_items+=("$_e")
-            elif [[ "${_bn,,}" == *.csv ]]; then
-                _csv_items+=("$_e")
-            fi
-        done < <(find "$_csv_nav_path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null | sort -z)
+        local _e _sg
+        _sg=$(shopt -p nullglob dotglob nocaseglob)
+        shopt -s nullglob dotglob
+        shopt -u nocaseglob
+        local _dir="${_csv_nav_path%/}"
+        for _e in "$_dir"/*/; do
+            _csv_items+=("${_e%/}")
+        done
+        for _e in "$_dir"/*.[cC][sS][vV]; do
+            [ -d "$_e" ] || _csv_items+=("$_e")
+        done
+        eval "$_sg"
 
-        # ── Render list ───────────────────────────────────────────────────
-        echo "   ─────────────────────────────"
+        # ── Render list (single rule at the bottom only — the fx menu above
+        #    already ends with its own rule, so a top rule here doubled it) ──
         if [ ${#_csv_items[@]} -eq 0 ]; then
             echo "  🛑 No folders or CSV files here."
         else
