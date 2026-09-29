@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+
+source "_3bvk_import_engine.sh"
+source "_3bvk_import_functions.sh"
+source "_3bvk_import_staging.sh"
+
+source "bashbasicsbyvk_run.sh"
+source "bashbasicsbyvk_csv.sh"
+source "_3bvk_import_settings.sh"
+source "bashbasicsbyvk_help.sh"
+source "bashbasicsbyvk_refresh.sh"
+source "bashbasicsbyvk_switch.sh"
+source "bashbasicsbyvk_functions.sh"
+source "bashbasicsbyvk_infinity.sh"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+_bvk_wake_recents_daemon
+
+trap 'stty "$_orig_stty" 2>/dev/null; \
+      [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
+      [ -n "${_BVK_DSIZE_TMP:-}" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
+      true' EXIT
+
+_orig_stty=$(stty -g 2>/dev/null)
+
+if [ $# -eq 1 ]; then
+  target="$1"
+  if [ -d "$target" ]; then
+    path=$(get_abs_path "$target")
+  elif [ -f "$target" ]; then
+    selected=$(get_abs_path "$target")
+    handle_file "$selected"
+    exit $?
+  else
+    echo "❌ Error: '$target' not found" >&2
+    exit 1
+  fi
+fi
+
+shopt -s nullglob
+while true; do
+  declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
+  total=$(count_items_in_path "$path")
+
+  imaginary_mode=false
+  _filter_query=""
+  _all_items=()
+  items=()
+  _hl_index=0
+  _imag_filter_active=false
+  _imag_filter_query=""
+
+  _has_group_view=false
+  [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
+
+  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
+    imaginary_mode=true
+    if [ -n "$group_prefix" ]; then
+      mapfile -t local_arr < <(_bvk_prefix_scan "$path" "$group_prefix")
+      pfx_count="${#local_arr[@]}"
+      if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
+        imaginary_mode=false
+        items=("${local_arr[@]}")
+        _collect_metadata
+        apply_sort
+      else
+        build_imaginary_groups "$path" "$group_prefix" "$pfx_count"
+      fi
+    else
+      build_imaginary_groups "$path" "" "$total"
+    fi
+  elif [ "$total" -gt "${index_mode_threshold:-200}" ] && $force_show; then
+    imaginary_mode=false
+    build_items_with_meta "$path" "$group_prefix"
+    apply_sort
+  fi
+
+  if ! $imaginary_mode; then
+    if [ ${#items[@]} -eq 0 ]; then
+      build_items_with_meta "$path" "$group_prefix"
+      apply_sort
+    fi
+  fi
+
+  if $imaginary_mode; then
+    _vp_mode="imaginary"
+    _vp_header_fn=_menu_header_imaginary
+  else
+    _vp_mode="items"
+    _vp_header_fn=_menu_header_flat
+  fi
+  _vp_footer_fn=_menu_footer_lines
+  _vp_hl_fn=_vp_is_hl_single
+  _msel_set=()
+  _vp_input_fn=_print_input_line
+  _vp_start=1
+  _vp_cache_reset
+  _vp_prime_rows
+  _vp_render_fresh
+
+  _read_choice
+
+  shopt -s nocasematch
+  case "$choice" in
+    q)           if $_sw_did_switch; then cd "$path" && exec "$SHELL"; else exit 0; fi ;;
+    -h)          open_help ;;
+    u)           if [ -n "$group_prefix" ]; then
+                   group_prefix="${group_prefix%?}"; force_show=false
+                 elif [ "$path" != "/" ]; then
+                   path=$(dirname "$path"); group_prefix=""; force_show=false
+                 fi ;;
+    fs|forceshow) handle_force_show ;;
+    c)           handle_create ;;
+    t)           transfer_menu ;;
+    d)           delete_items ;;
+    f)           find_menu ;;
+    x)           organise_menu ;;
+    s)           settings_menu ;;
+    r)           handle_rename ;;
+    cd)          cd "$path" && exec "$SHELL" ;;
+    kl)          kill -9 -1 ;;
+    i)           infinity_stones_menu ;;
+    -u)          bash _3bvk_upgrade_core ;;
+    d-)          handle_staging_dispatch ;;
+    v-)          handle_staging_view ;;
+    p-*)         handle_staging_map "$choice" ;;
+    c-*|m-*|s-*|b-*)  handle_staging_stage "$choice" ;;
+    do-)         handle_do_import ;;
+    ups-*)       handle_ups_upload "$choice" ;;
+    up-*)        handle_up_upload "$choice" ;;
+    uz-*)        handle_decompress_items "$choice" ;;
+    z-*)         handle_compress_items "$choice" ;;
+    clear)       hash -r ;;
+    =*)          ;;
+    disk)        df -h ;;
+    ram)         free -h ;;
+    rf)          handle_refresh ;;
+    scr-sync)    handle_scr_sync ;;
+    sast)        bashbasicsbyvk_sast ;;
+    sw)          switch_menu ;;
+    fx)          functions_menu ;;
+    *)           handle_selection "$choice" ;;
+  esac
+done

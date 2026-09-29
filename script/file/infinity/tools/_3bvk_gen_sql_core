@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+import os
+import sys
+import csv
+
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+
+
+def format_value(val):
+    escaped = str(val).replace("'", "''")
+    return f"'{escaped}'"
+
+
+def read_file(filepath, ext):
+    if ext == ".csv":
+        with open(filepath, newline="", encoding="utf-8-sig") as f:
+            rows = [r for r in csv.reader(f) if any(c.strip() for c in r)]
+        if not rows:
+            return None, None
+        return [h.strip() for h in rows[0]], rows[1:]
+    else:
+        if not HAS_PANDAS:
+            print("\n  ERROR: pandas + openpyxl required.  pip install pandas openpyxl\n")
+            return None, None
+        df = pd.read_excel(filepath, dtype=str, keep_default_na=False, na_values=[])
+        return list(df.columns), df.values.tolist()
+
+
+print("=" * 60)
+print("  CSV / EXCEL  →  SQL GENERATOR")
+print("=" * 60)
+
+cwd     = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+ALLOWED = {".csv", ".xlsx", ".xls", ".xlsm"}
+
+while True:
+    filename = input("\nEnter file name (with extension): ").strip()
+    if not filename:
+        continue
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED:
+        print(f"  Only {', '.join(sorted(ALLOWED))} files are accepted.")
+        continue
+    filepath = os.path.join(cwd, filename)
+    if not os.path.isfile(filepath):
+        print(f"  File not found: {filepath}")
+        continue
+    break
+
+print(f"\n  Reading '{filename}' ...")
+headers, body = read_file(filepath, ext)
+
+if headers is None:
+    print("  ERROR: Could not read file or file is empty. Exiting.")
+    exit()
+
+print(f"  Columns  : {len(headers)}")
+print(f"  Data rows: {len(body)}")
+print(f"  Headers  : {', '.join(headers)}")
+
+print("""
+Select statement type:
+  1 = INSERT INTO
+  2 = INSERT OR IGNORE INTO
+  3 = INSERT OR REPLACE INTO
+  4 = UPDATE
+""")
+
+while True:
+    choice = input("Enter choice (1 / 2 / 3 / 4): ").strip()
+    if choice == "1":
+        stmt_type = "INSERT INTO"; break
+    if choice == "2":
+        stmt_type = "INSERT OR IGNORE INTO"; break
+    if choice == "3":
+        stmt_type = "INSERT OR REPLACE INTO"; break
+    if choice == "4":
+        stmt_type = "UPDATE"; break
+    print("  Please enter 1, 2, 3 or 4.")
+
+print(f"  --> Using: {stmt_type}")
+
+pk_cols = []
+if stmt_type == "UPDATE":
+    while True:
+        raw = input("\nEnter Primary Key column(s), comma separated: ").strip()
+        if not raw:
+            continue
+        pk_cols = [c.strip() for c in raw.split(",") if c.strip()]
+        missing = [p for p in pk_cols if p not in headers]
+        if missing:
+            print(f"  These columns not found in file: {', '.join(missing)}")
+            print(f"  Available columns: {', '.join(headers)}")
+            continue
+        set_cols = [h for h in headers if h not in pk_cols]
+        if not set_cols:
+            print("  All columns are PKs — nothing left for SET clause.")
+            continue
+        print(f"  WHERE : {', '.join(pk_cols)}")
+        print(f"  SET   : {', '.join(set_cols)}")
+        break
+
+while True:
+    table_name = input("\nEnter table name: ").strip()
+    if table_name:
+        break
+
+col_list  = ", ".join(headers)
+sql_lines = []
+
+for row in body:
+    padded = list(row) + [""] * (len(headers) - len(row))
+    row_map = {headers[i]: padded[i] for i in range(len(headers))}
+
+    if stmt_type == "UPDATE":
+        set_clause   = ", ".join(
+            f"{c} = {format_value(row_map[c])}" for c in set_cols
+        )
+        where_clause = " AND ".join(
+            f"{p} = {format_value(row_map[p])}" for p in pk_cols
+        )
+        sql_lines.append(
+            f"UPDATE {table_name} SET {set_clause} WHERE {where_clause};"
+        )
+    else:
+        values = ", ".join(format_value(row_map[h]) for h in headers)
+        sql_lines.append(
+            f"{stmt_type} {table_name} ({col_list}) VALUES ({values});"
+        )
+
+out_name = f"{os.path.splitext(filename)[0]}_{table_name}.sql"
+out_path = os.path.join(cwd, out_name)
+
+with open(out_path, "w", encoding="utf-8") as f:
+    f.write("\n".join(sql_lines))
+
+print(f"\n  Done!  {len(body)} rows written -> {out_path}\n")

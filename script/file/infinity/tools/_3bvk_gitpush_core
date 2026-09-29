@@ -1,0 +1,1336 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+TARGET="${1:-$(pwd)}"
+DEFAULT_COMMIT_MESSAGE="Codebase Updated"
+
+TMP_DIR=""
+SWAP_BACKUP=""
+
+# ============================================================
+# Helpers
+# ============================================================
+
+die() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+warn() {
+    echo "WARNING: $*"
+}
+
+info() {
+    echo "INFO: $*"
+}
+
+ok() {
+    echo "OK: $*"
+}
+
+cleanup() {
+    # Temporary staging only.
+    # Never automatically delete SWAP_BACKUP here.
+    if [[ -n "${TMP_DIR:-}" && -d "$TMP_DIR" ]]; then
+        rm -rf -- "$TMP_DIR"
+    fi
+}
+
+trap cleanup EXIT
+
+# ============================================================
+# Requirements / Automatic GitHub CLI Installation
+# ============================================================
+
+require_git() {
+    if command -v git >/dev/null 2>&1; then
+        return 0
+    fi
+
+    die "git is not installed.
+
+Install Git first, then run this script again."
+}
+
+install_gh() {
+    echo
+    echo "GitHub CLI (gh) is not installed."
+    echo
+
+    case "$(uname -s 2>/dev/null || true)" in
+
+        Linux)
+            # ------------------------------------------------
+            # Termux / Android
+            # ------------------------------------------------
+
+            if command -v pkg >/dev/null 2>&1 &&
+               [[ -n "${PREFIX:-}" ]] &&
+               [[ "${PREFIX:-}" == *"com.termux"* ||
+                  "${PREFIX:-}" == *"/data/data/"* ]]; then
+
+                echo "Detected: Termux / Android"
+                echo
+                echo "The GitHub CLI will be installed with:"
+                echo
+                echo "  pkg install gh"
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                pkg install gh ||
+                    die "Could not install GitHub CLI with Termux pkg."
+
+            # ------------------------------------------------
+            # Debian / Ubuntu
+            # ------------------------------------------------
+
+            elif command -v apt-get >/dev/null 2>&1 &&
+                 command -v sudo >/dev/null 2>&1; then
+
+                echo "Detected: Debian/Ubuntu-style Linux"
+                echo
+                echo "GitHub's official APT repository will be configured."
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                command -v curl >/dev/null 2>&1 ||
+                    die "curl is required to install GitHub CLI.
+
+Install it with:
+
+  sudo apt update
+  sudo apt install curl"
+
+                sudo mkdir -p -m 755 /etc/apt/keyrings ||
+                    die "Could not create APT keyring directory."
+
+                curl -fsSL \
+                    https://cli.github.com/packages/githubcli-archive-keyring.gpg |
+                    sudo tee \
+                    /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+                    >/dev/null ||
+                    die "Could not download GitHub CLI signing key."
+
+                sudo chmod go+r \
+                    /etc/apt/keyrings/githubcli-archive-keyring.gpg ||
+                    die "Could not set GitHub CLI key permissions."
+
+                echo \
+                    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
+                    sudo tee \
+                    /etc/apt/sources.list.d/github-cli.list \
+                    >/dev/null ||
+                    die "Could not configure GitHub CLI APT repository."
+
+                sudo apt-get update ||
+                    die "APT update failed."
+
+                sudo apt-get install -y gh ||
+                    die "Could not install GitHub CLI."
+
+            # ------------------------------------------------
+            # DNF
+            # ------------------------------------------------
+
+            elif command -v dnf >/dev/null 2>&1 &&
+                 command -v sudo >/dev/null 2>&1; then
+
+                echo "Detected: DNF-based Linux"
+                echo
+                echo "GitHub's official RPM repository will be configured."
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                sudo dnf install -y \
+                    'dnf-command(config-manager)' ||
+                    die "Could not install DNF repository manager."
+
+                sudo dnf config-manager \
+                    --add-repo \
+                    https://cli.github.com/packages/rpm/gh-cli.repo ||
+                    die "Could not configure GitHub CLI RPM repository."
+
+                sudo dnf install -y gh ||
+                    die "Could not install GitHub CLI."
+
+            # ------------------------------------------------
+            # Pacman
+            # ------------------------------------------------
+
+            elif command -v pacman >/dev/null 2>&1 &&
+                 command -v sudo >/dev/null 2>&1; then
+
+                echo "Detected: Arch Linux"
+                echo
+                echo "GitHub CLI will be installed with:"
+                echo
+                echo "  sudo pacman -S github-cli"
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                sudo pacman -S --noconfirm github-cli ||
+                    die "Could not install GitHub CLI."
+
+            # ------------------------------------------------
+            # APK / Alpine
+            # ------------------------------------------------
+
+            elif command -v apk >/dev/null 2>&1; then
+
+                echo "Detected: Alpine Linux"
+                echo
+                echo "GitHub CLI will be installed with:"
+                echo
+                echo "  apk add github-cli"
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                if [[ "$(id -u)" -eq 0 ]]; then
+                    apk add github-cli
+                elif command -v sudo >/dev/null 2>&1; then
+                    sudo apk add github-cli
+                else
+                    die "Root or sudo is required to install GitHub CLI."
+                fi
+
+            else
+
+                die "GitHub CLI (gh) is not installed and this Linux distribution could not be identified automatically.
+
+Install GitHub CLI manually, then run this script again.
+
+Official installation documentation:
+  https://cli.github.com/manual/installation"
+
+            fi
+            ;;
+
+        Darwin)
+            # ------------------------------------------------
+            # macOS
+            # ------------------------------------------------
+
+            if command -v brew >/dev/null 2>&1; then
+
+                echo "Detected: macOS + Homebrew"
+                echo
+                echo "GitHub CLI will be installed with:"
+                echo
+                echo "  brew install gh"
+                echo
+
+                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+
+                case "${answer:-Y}" in
+                    y|Y|yes|YES|Yes)
+                        ;;
+                    *)
+                        die "GitHub CLI installation cancelled."
+                        ;;
+                esac
+
+                brew install gh ||
+                    die "Could not install GitHub CLI with Homebrew."
+
+            else
+
+                die "GitHub CLI (gh) is not installed.
+
+Homebrew was not detected.
+
+Install Homebrew or GitHub CLI manually, then run this script again."
+            fi
+            ;;
+
+        *)
+            die "GitHub CLI (gh) is not installed and automatic installation is not supported for this operating system.
+
+Install GitHub CLI manually, then run this script again."
+            ;;
+    esac
+
+    # --------------------------------------------------------
+    # Verify installation.
+    # --------------------------------------------------------
+
+    hash -r 2>/dev/null || true
+
+    command -v gh >/dev/null 2>&1 ||
+        die "GitHub CLI installation completed but 'gh' is still not available in PATH."
+
+    ok "GitHub CLI installed:"
+    echo "  $(gh --version | head -n 1)"
+}
+
+require_git
+
+if ! command -v gh >/dev/null 2>&1; then
+    install_gh
+fi
+
+# ============================================================
+# Resolve target
+# ============================================================
+
+[[ -d "$TARGET" ]] ||
+    die "Target directory does not exist: $TARGET"
+
+TARGET="$(cd "$TARGET" && pwd -P)"
+
+# ============================================================
+# GitHub authentication
+# ============================================================
+
+if ! gh auth status --active --hostname github.com >/dev/null 2>&1; then
+    die "GitHub CLI is not authenticated.
+
+Run:
+
+  gh auth login"
+fi
+
+gh auth setup-git --hostname github.com >/dev/null 2>&1 ||
+    die "Could not configure Git to use GitHub CLI credentials."
+
+GH_USER="$(gh api user --jq '.login')" ||
+    die "Could not determine GitHub username."
+
+[[ -n "$GH_USER" ]] ||
+    die "GitHub username is empty."
+
+# ============================================================
+# Repository identity
+# ============================================================
+
+update_repo_identity() {
+    REPO_NAME="$(basename "$TARGET")"
+
+    [[ -n "$REPO_NAME" ]] ||
+        die "Could not determine repository name."
+
+    [[ "$REPO_NAME" =~ ^[A-Za-z0-9._-]+$ ]] ||
+        die "Invalid GitHub repository name: $REPO_NAME"
+
+    REPO_FULL="$GH_USER/$REPO_NAME"
+    REMOTE_URL="https://github.com/$REPO_FULL.git"
+}
+
+update_repo_identity
+
+# ============================================================
+# Git identity
+# ============================================================
+
+check_git_identity() {
+    local name
+    local email
+
+    name="$(git config user.name 2>/dev/null || true)"
+    email="$(git config user.email 2>/dev/null || true)"
+
+    [[ -n "$name" && -n "$email" ]] ||
+        die "Git user.name and user.email must be configured.
+
+Run:
+
+  git config --global user.name \"Your Name\"
+  git config --global user.email \"you@example.com\""
+}
+
+# ============================================================
+# Confirmation
+# ============================================================
+
+confirm_action() {
+    local description="$1"
+    local code
+    local entered
+
+    code="$(printf '%06d' "$(( RANDOM % 1000000 ))")"
+
+    echo
+    echo "============================================================"
+    echo "$description"
+    echo "============================================================"
+    echo
+    echo "Confirmation code: $code"
+    echo
+
+    read -r -p "Enter the confirmation code: " entered
+
+    [[ "$entered" == "$code" ]] ||
+        die "Confirmation failed."
+
+    ok "Confirmation accepted."
+}
+
+# ============================================================
+# GitHub repository existence
+#
+# IMPORTANT:
+# A failed `gh repo view` is NOT automatically treated as
+# "repository does not exist".
+#
+# 404 = nonexistent
+# anything else = abort
+# ============================================================
+
+github_repo_exists() {
+    local response
+    local status_line
+
+    if response="$(
+        gh repo view "$REPO_FULL" \
+            --json name \
+            --jq '.name' \
+            2>/dev/null
+    )"; then
+
+        [[ -n "$response" ]] ||
+            die "GitHub returned an empty repository response."
+
+        return 0
+    fi
+
+    # `gh repo view` failed.
+    # Ask GitHub directly so we can distinguish 404 from
+    # authentication, permission, API, network, or server errors.
+
+    response="$(
+        gh api "repos/$REPO_FULL" \
+            --include \
+            --silent \
+            2>/dev/null || true
+    )"
+
+    status_line="$(
+        printf '%s\n' "$response" |
+            grep -m1 -E '^HTTP/[0-9.]+ [0-9]{3}([[:space:]]|$)' ||
+            true
+    )"
+
+    if [[ "$status_line" =~ ^HTTP/[0-9.]+[[:space:]]404([[:space:]]|$) ]]; then
+        return 1
+    fi
+
+    if [[ -n "$status_line" ]]; then
+        die "Could not determine whether GitHub repository exists.
+
+GitHub response:
+  $status_line
+
+No repository was created."
+    fi
+
+    die "Could not contact GitHub to determine whether repository exists.
+
+No repository was created."
+}
+
+# ============================================================
+# GitHub repository metadata
+# ============================================================
+
+get_repo_metadata() {
+    gh repo view "$REPO_FULL" \
+        --json isEmpty,defaultBranchRef,url \
+        --jq '[.isEmpty, (.defaultBranchRef.name // ""), .url] | @tsv'
+}
+
+# ============================================================
+# Current branch
+# ============================================================
+
+get_current_branch() {
+    local branch
+
+    branch="$(git branch --show-current 2>/dev/null || true)"
+
+    if [[ -z "$branch" ]]; then
+        branch="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+    fi
+
+    [[ -n "$branch" ]] ||
+        die "Could not determine the current Git branch."
+
+    printf '%s\n' "$branch"
+}
+
+# ============================================================
+# Ensure repository root
+# ============================================================
+
+ensure_git_root() {
+    local root
+    local answer
+
+    root="$(git -C "$TARGET" rev-parse --show-toplevel 2>/dev/null || true)"
+
+    [[ -n "$root" ]] ||
+        die "Could not determine Git repository root."
+
+    root="$(cd "$root" && pwd -P)"
+
+    if [[ "$root" != "$TARGET" ]]; then
+
+        echo
+        warn "Target is inside an existing Git repository."
+        echo
+        echo "Git root:"
+        echo "  $root"
+        echo
+        echo "Target:"
+        echo "  $TARGET"
+        echo
+
+        read -r -p "Use the Git repository root instead? [y/N]: " answer
+
+        case "${answer:-N}" in
+            y|Y|yes|YES|Yes)
+                TARGET="$root"
+
+                # TARGET changed.
+                # Recalculate GitHub repository identity.
+                update_repo_identity
+                ;;
+            *)
+                die "Target is not the Git repository root."
+                ;;
+        esac
+    fi
+}
+
+# ============================================================
+# Ensure origin
+# ============================================================
+
+ensure_origin() {
+    if git remote get-url origin >/dev/null 2>&1; then
+        info "Origin already exists:"
+        echo "  $(git remote get-url origin)"
+        return 0
+    fi
+
+    git remote add origin "$REMOTE_URL"
+
+    ok "Origin added:"
+    echo "  $REMOTE_URL"
+}
+
+# ============================================================
+# Version selection
+# ============================================================
+
+select_version() {
+    local choice
+
+    echo
+    echo "Select version bump type:"
+    echo "1) Patch  (#patch) [DEFAULT]"
+    echo "2) Minor  (#minor)"
+    echo "3) Major  (#major)"
+    echo "4) None   (Skip version tag)"
+    echo
+
+    read -r -p "Enter choice [1-4, Default: 1]: " choice
+
+    case "$choice" in
+        2)
+            VERSION="#minor"
+            ;;
+        3)
+            VERSION="#major"
+            ;;
+        4)
+            VERSION=""
+            ;;
+        1|"")
+            VERSION="#patch"
+            ;;
+        *)
+            warn "Invalid option. Defaulting to #patch."
+            VERSION="#patch"
+            ;;
+    esac
+}
+
+# ============================================================
+# Commit
+# ============================================================
+
+create_commit() {
+    local user_msg
+    local final_msg
+    local answer
+
+    # FIRST check for actual working-tree/index changes.
+    # This must happen BEFORE asking for version bump or commit message.
+    git add .
+
+    if git diff --cached --quiet; then
+        return 1
+    fi
+
+    check_git_identity
+    select_version
+
+    echo
+    read -r -p \
+        "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " \
+        user_msg
+
+    user_msg="${user_msg:-$DEFAULT_COMMIT_MESSAGE}"
+    final_msg="$user_msg"
+
+    if [[ -n "$VERSION" ]]; then
+        if [[ "$final_msg" =~ (^|[[:space:]])#(patch|minor|major)([[:space:]]|$) ]]; then
+            info "Commit message already contains a version tag."
+        else
+            final_msg="$final_msg $VERSION"
+        fi
+    fi
+
+    echo
+    echo "Commit message:"
+    echo "  $final_msg"
+    echo
+    echo "Changes:"
+    git status --short
+    echo
+
+    read -r -p "Create this commit? [Y/n]: " answer
+
+    case "${answer:-Y}" in
+        y|Y|yes|YES|Yes)
+            ;;
+        *)
+            die "Commit cancelled."
+            ;;
+    esac
+
+    git commit -m "$final_msg" ||
+        die "Git commit failed. No push was attempted."
+
+    ok "Commit created."
+    return 0
+}
+
+# ============================================================
+# Push
+# ============================================================
+
+push_repository() {
+    local branch="$1"
+    local push_output
+    local local_version
+    local remote_version
+    local remote_commit
+    local remote_author
+    local confirmation
+    local challenge
+    local typed
+
+    echo
+    echo "============================================================"
+    echo "Pushing"
+    echo "============================================================"
+
+    # Existing upstream:
+    # Try the normal push first. If Git rejects it because the remote
+    # contains work that is not local, inspect the divergence and offer
+    # an explicit, high-friction force-push recovery.
+    if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" \
+        >/dev/null 2>&1; then
+
+        info "Upstream exists."
+        info "Running normal git push."
+
+        if push_output="$(git push 2>&1)"; then
+            printf '%s\n' "$push_output"
+            ok "Push completed."
+            return 0
+        fi
+
+        printf '%s\n' "$push_output" >&2
+
+        # A normal push can fail for many reasons. Only enter the
+        # recovery flow for a genuine non-fast-forward/diverged branch.
+        if ! git fetch origin "$branch"; then
+            die "Push failed and the remote could not be fetched.
+
+The local commit remains intact.
+No force push was performed."
+        fi
+
+        if git merge-base --is-ancestor "origin/$branch" HEAD >/dev/null 2>&1; then
+            die "Push failed, but the remote branch is not ahead of this local branch.
+
+The failure does not appear to be a non-fast-forward divergence.
+No force push was performed."
+        fi
+
+        if git merge-base --is-ancestor HEAD "origin/$branch" >/dev/null 2>&1; then
+            die "Push failed because the remote branch is ahead of the local branch.
+
+The local commit remains intact.
+No force push was performed."
+        fi
+
+        # The branches have genuinely diverged.
+        local_version="unknown"
+        remote_version="unknown"
+
+        if [[ -f package.json ]] && command -v node >/dev/null 2>&1; then
+            local_version="$(node -p "require('./package.json').version" 2>/dev/null || echo unknown)"
+        fi
+
+        if git cat-file -e "origin/$branch:package.json" 2>/dev/null; then
+            if command -v node >/dev/null 2>&1; then
+                remote_version="$(git show "origin/$branch:package.json" | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version||"unknown")}catch(e){console.log("unknown")}})' 2>/dev/null || echo unknown)"
+            fi
+        fi
+
+        remote_commit="$(git log -1 --format='%h' "origin/$branch")"
+        remote_author="$(git log -1 --format='%an' "origin/$branch")"
+
+        echo
+        echo "⚠️  GIT REMOTE DIVERGENCE DETECTED"
+        echo
+        echo "GitHub already has work that is not present locally."
+        echo
+        echo "Last remote commit: $remote_commit"
+        echo "Last committed by:  $remote_author"
+        echo "Remote version:      $remote_version"
+        echo "Local version:       $local_version"
+        echo
+        echo "⚠️  DANGER: Overriding the remote branch will replace the"
+        echo "remote branch history with your local branch history."
+        echo "Any remote-only commits will no longer be reachable from $branch"
+        echo "unless they are preserved elsewhere."
+        echo
+        read -r -p "Do you want to override the remote with local version $local_version? [y/N]: " confirmation
+
+        case "$confirmation" in
+            y|Y|yes|YES|Yes)
+                ;;
+            *)
+                die "Override cancelled.
+
+The local commit remains intact.
+No force push was performed."
+                ;;
+        esac
+
+        if command -v shuf >/dev/null 2>&1; then
+            challenge="$(shuf -i 100000-999999 -n 1)"
+        else
+            challenge="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ' | tail -n 1)"
+            challenge="${challenge:0:6}"
+            [[ "$challenge" =~ ^[0-9]{6}$ ]] || challenge="$(date +%s | tail -c 7)"
+        fi
+
+        echo
+        echo "⚠️  FINAL FORCE-PUSH CONFIRMATION"
+        echo
+        echo "This is a destructive operation."
+        echo "Type this number exactly to continue:"
+        echo
+        echo "  $challenge"
+        echo
+        read -r -p "Confirmation number: " typed
+
+        if [[ "$typed" != "$challenge" ]]; then
+            die "Confirmation failed.
+
+The local commit remains intact.
+No force push was performed."
+        fi
+
+        echo
+        echo "⚠️  Force-pushing local $branch to origin/$branch..."
+
+        if git push --force-with-lease origin "$branch"; then
+            ok "Force push completed."
+        else
+            die "Force push failed.
+
+The local commit remains intact.
+No further push was attempted."
+        fi
+
+    else
+
+        # No upstream:
+        # dynamically use actual current branch.
+        info "No upstream exists."
+        info "Setting upstream for branch: $branch"
+
+        if git push -u origin "$branch"; then
+            ok "Push completed."
+        else
+            die "Initial push failed.
+
+The local commit remains intact.
+No force push was performed."
+        fi
+    fi
+}
+# ============================================================
+# Copy project tree excluding .git
+# ============================================================
+
+copy_project_tree() {
+    local source="$1"
+    local destination="$2"
+    local item
+
+    if command -v rsync >/dev/null 2>&1; then
+
+        rsync -a \
+            --exclude=".git" \
+            "$source/" \
+            "$destination/"
+
+    else
+
+        shopt -s dotglob nullglob
+
+        for item in "$source"/*; do
+            [[ "$(basename "$item")" == ".git" ]] && continue
+            cp -a -- "$item" "$destination/"
+        done
+
+        shopt -u dotglob nullglob
+    fi
+}
+
+# ============================================================
+# Replace working tree while preserving .git
+# ============================================================
+
+replace_working_tree() {
+    local source="$1"
+    local destination="$2"
+    local item
+
+    if command -v rsync >/dev/null 2>&1; then
+
+        rsync -a \
+            --delete \
+            --exclude=".git" \
+            "$source/" \
+            "$destination/"
+
+    else
+
+        find "$destination" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            ! -name ".git" \
+            -exec rm -rf -- {} +
+
+        shopt -s dotglob nullglob
+
+        for item in "$source"/*; do
+            [[ "$(basename "$item")" == ".git" ]] && continue
+            cp -a -- "$item" "$destination/"
+        done
+
+        shopt -u dotglob nullglob
+    fi
+}
+
+# ============================================================
+# Validate prepared recovery repository
+# ============================================================
+
+validate_prepared_repository() {
+    local expected_branch="$1"
+    local branch
+
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+        return 1
+
+    git rev-parse HEAD >/dev/null 2>&1 ||
+        return 1
+
+    git remote get-url origin >/dev/null 2>&1 ||
+        return 1
+
+    branch="$(git branch --show-current 2>/dev/null || true)"
+
+    [[ -n "$branch" ]] ||
+        return 1
+
+    [[ "$branch" == "$expected_branch" ]] ||
+        return 1
+
+    git status --short >/dev/null 2>&1 ||
+        return 1
+
+    return 0
+}
+
+# ============================================================
+# Roll back recovery swap
+#
+# Called only after original TARGET has already been moved to
+# SWAP_BACKUP.
+# ============================================================
+
+rollback_recovery() {
+    local failure_reason="$1"
+
+    warn "$failure_reason"
+    warn "Attempting automatic rollback..."
+
+    # If the replacement TARGET exists, remove it first.
+    if [[ -e "$TARGET" ]]; then
+        if ! rm -rf -- "$TARGET"; then
+            die "CRITICAL: Could not remove failed recovered repository.
+
+Original project remains at:
+
+  $SWAP_BACKUP"
+        fi
+    fi
+
+    # Restore original project.
+    if [[ -e "$SWAP_BACKUP" ]]; then
+
+        if mv -- "$SWAP_BACKUP" "$TARGET"; then
+            SWAP_BACKUP=""
+            ok "Original project was restored."
+            return 0
+        fi
+
+        die "CRITICAL: Automatic rollback failed.
+
+Original project is still located at:
+
+  $SWAP_BACKUP"
+    fi
+
+    die "CRITICAL: Original project backup could not be found."
+}
+
+# ============================================================
+# CASE 1
+# Existing local Git repository
+# ============================================================
+
+if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+
+    info "Existing local Git repository detected."
+
+    ensure_git_root
+    cd "$TARGET"
+
+    BRANCH="$(get_current_branch)"
+
+    info "Current branch: $BRANCH"
+
+    if git remote get-url origin >/dev/null 2>&1; then
+
+        info "Origin:"
+        echo "  $(git remote get-url origin)"
+
+    else
+
+        confirm_action \
+            "No origin exists. The project will be connected to: $REPO_FULL"
+
+        if github_repo_exists; then
+
+            info "GitHub repository already exists."
+
+            ensure_origin
+
+        else
+
+            echo
+            echo "GitHub repository does not exist:"
+            echo "  $REPO_FULL"
+            echo
+
+            read -r -p "Make repository private? [Y/n]: " private_answer
+
+            case "${private_answer:-Y}" in
+                n|N|no|NO|No)
+                    VISIBILITY="--public"
+                    ;;
+                *)
+                    VISIBILITY="--private"
+                    ;;
+            esac
+
+            info "Creating GitHub repository..."
+
+            gh repo create \
+                "$REPO_FULL" \
+                "$VISIBILITY" ||
+                die "Could not create GitHub repository."
+
+            ensure_origin
+
+            ok "GitHub repository created."
+        fi
+    fi
+
+# ============================================================
+# CASE 2 / CASE 3
+# No local Git repository
+# ============================================================
+
+else
+
+    info "No local Git repository detected."
+
+    cd "$TARGET"
+
+    # ========================================================
+    # GitHub repository exists
+    # ========================================================
+
+    if github_repo_exists; then
+
+        info "GitHub repository exists: $REPO_FULL"
+
+        REPO_INFO="$(get_repo_metadata)" ||
+            die "Could not read GitHub repository metadata."
+
+        IFS=$'\t' read -r IS_EMPTY DEFAULT_BRANCH GITHUB_URL <<< "$REPO_INFO"
+
+        REMOTE_URL="$GITHUB_URL"
+
+        [[ -n "$REMOTE_URL" ]] ||
+            die "GitHub returned an empty repository URL."
+
+        # ====================================================
+        # CASE 3A
+        # Existing GitHub history
+        # ====================================================
+
+        if [[ "$IS_EMPTY" != "true" ]]; then
+
+            [[ -n "$DEFAULT_BRANCH" ]] ||
+                die "GitHub repository has history but no default branch."
+
+            info "GitHub repository contains history."
+            info "Recovery branch: $DEFAULT_BRANCH"
+
+            confirm_action \
+                "GitHub history will be recovered and the current project tree will replace its working tree."
+
+            # ------------------------------------------------
+            # Same-filesystem staging.
+            # ------------------------------------------------
+
+            PARENT_DIR="$(dirname "$TARGET")"
+            TARGET_NAME="$(basename "$TARGET")"
+
+            TMP_DIR="$(
+                mktemp -d \
+                    "$PARENT_DIR/.${TARGET_NAME}.git-recovery.XXXXXX"
+            )" ||
+                die "Could not create recovery staging directory."
+
+            CLONE_DIR="$TMP_DIR/repository"
+            PROJECT_DIR="$TMP_DIR/current-project"
+
+            mkdir -p "$PROJECT_DIR"
+
+            # ------------------------------------------------
+            # Preserve current project.
+            # ------------------------------------------------
+
+            copy_project_tree "$TARGET" "$PROJECT_DIR"
+
+            # ------------------------------------------------
+            # Recover GitHub repository.
+            # ------------------------------------------------
+
+            gh repo clone \
+                "$REPO_FULL" \
+                "$CLONE_DIR" \
+                -- \
+                --branch "$DEFAULT_BRANCH" ||
+                die "Could not recover GitHub repository history."
+
+            [[ -d "$CLONE_DIR/.git" ]] ||
+                die "Recovered repository does not contain .git."
+
+            # ------------------------------------------------
+            # Replace only working tree.
+            # ------------------------------------------------
+
+            replace_working_tree "$PROJECT_DIR" "$CLONE_DIR"
+
+            # ------------------------------------------------
+            # Validate prepared repository BEFORE swap.
+            # ------------------------------------------------
+
+            cd "$CLONE_DIR"
+
+            if ! validate_prepared_repository "$DEFAULT_BRANCH"; then
+                die "Prepared recovery repository failed validation."
+            fi
+
+            info "Prepared repository passed validation."
+
+            # =================================================
+            # SAFE DIRECTORY SWAP
+            # =================================================
+
+            SWAP_BACKUP="$(
+                mktemp -d \
+                    "$PARENT_DIR/.${TARGET_NAME}.git-recovery-backup.XXXXXX"
+            )" ||
+                die "Could not create recovery backup path."
+
+            # mktemp created an empty directory.
+            # Remove it so TARGET can be renamed into that path.
+            rmdir -- "$SWAP_BACKUP" ||
+                die "Could not prepare recovery backup path."
+
+            # ------------------------------------------------
+            # Move original project to backup.
+            # ------------------------------------------------
+
+            mv -- "$TARGET" "$SWAP_BACKUP" ||
+                die "Could not move the original project aside."
+
+            # ------------------------------------------------
+            # Move prepared repository into TARGET.
+            #
+            # Same parent + same filesystem = directory rename.
+            # ------------------------------------------------
+
+            if ! mv -- "$CLONE_DIR" "$TARGET"; then
+
+                rollback_recovery \
+                    "Repository replacement failed."
+
+            fi
+
+            # ------------------------------------------------
+            # CRITICAL:
+            # Validate AFTER the actual swap.
+            # If anything is wrong, rollback automatically.
+            # ------------------------------------------------
+
+            cd "$TARGET"
+
+            if ! validate_prepared_repository "$DEFAULT_BRANCH"; then
+
+                rollback_recovery \
+                    "Final recovered repository failed post-swap validation."
+
+            fi
+
+            BRANCH="$DEFAULT_BRANCH"
+            ORIGIN="$(git remote get-url origin)"
+
+            info "Recovered branch: $BRANCH"
+            info "Recovered origin: $ORIGIN"
+
+            ok "GitHub history recovered."
+            ok "Project tree replaced successfully."
+
+            # ------------------------------------------------
+            # Only after successful final validation:
+            # delete original project backup.
+            # ------------------------------------------------
+
+            rm -rf -- "$SWAP_BACKUP"
+            SWAP_BACKUP=""
+
+        # ====================================================
+        # CASE 3B
+        # Existing EMPTY GitHub repository
+        # ====================================================
+
+        else
+
+            info "GitHub repository exists but is empty."
+
+            confirm_action \
+                "The empty GitHub repository will be connected to this project."
+
+            git init
+
+            BRANCH="$(get_current_branch)"
+
+            info "Initialized branch: $BRANCH"
+
+            git remote add origin "$REMOTE_URL"
+
+            ok "Origin added."
+        fi
+
+    # ========================================================
+    # CASE 2
+    # Completely new project
+    # ========================================================
+
+    else
+
+        info "No local Git repository and no GitHub repository found."
+
+        confirm_action \
+            "A new Git repository and GitHub repository will be created for: $REPO_FULL"
+
+        echo
+
+        read -r -p "Make repository private? [Y/n]: " private_answer
+
+        case "${private_answer:-Y}" in
+            n|N|no|NO|No)
+                VISIBILITY="--public"
+                ;;
+            *)
+                VISIBILITY="--private"
+                ;;
+        esac
+
+        # ----------------------------------------------------
+        # Initialize locally first.
+        # ----------------------------------------------------
+
+        git init
+
+        BRANCH="$(get_current_branch)"
+
+        info "Initialized branch: $BRANCH"
+
+        # ----------------------------------------------------
+        # Create empty GitHub repository.
+        # ----------------------------------------------------
+
+        info "Creating GitHub repository..."
+
+        gh repo create \
+            "$REPO_FULL" \
+            "$VISIBILITY" ||
+            die "Could not create GitHub repository."
+
+        ensure_origin
+
+        ok "GitHub repository created."
+    fi
+fi
+
+# ============================================================
+# Final validation
+# ============================================================
+
+cd "$TARGET"
+
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+    die "Target is not a valid Git repository."
+
+BRANCH="$(get_current_branch)"
+
+git remote get-url origin >/dev/null 2>&1 ||
+    die "No origin remote exists. Cannot push."
+
+ORIGIN="$(git remote get-url origin)"
+
+echo
+echo "============================================================"
+echo "Repository"
+echo "============================================================"
+echo "Path:   $TARGET"
+echo "Branch: $BRANCH"
+echo "Origin: $ORIGIN"
+echo "============================================================"
+
+# ============================================================
+# Commit / Push
+# ============================================================
+
+# A clean working tree does NOT mean there is nothing to push.
+# A previous push may have failed after a local commit was created.
+# If so, create_commit returns 1 WITHOUT prompting for version/message,
+# and we continue directly to push/recovery.
+
+if create_commit; then
+    info "New commit created. Proceeding to push."
+else
+    info "No new working-tree changes."
+
+    if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+        UNPUSHED_COUNT="$(git rev-list --count "@{u}..HEAD" 2>/dev/null || echo 0)"
+
+        if [[ "$UNPUSHED_COUNT" -gt 0 ]]; then
+            info "$UNPUSHED_COUNT unpushed local commit(s) detected."
+            info "Skipping version and commit prompts."
+            info "Proceeding directly to push/recovery."
+        else
+            info "No unpushed local commits."
+            info "Nothing to push."
+            exit 0
+        fi
+    else
+        info "No upstream exists. Proceeding with initial push."
+    fi
+fi
+
+# ============================================================
+# Push
+# ============================================================
+
+push_repository "$BRANCH"
+
+echo
+echo "============================================================"
+echo "DONE"
+echo "============================================================"
+echo "Repository: $REPO_FULL"
+echo "Branch:     $BRANCH"
+echo "============================================================"

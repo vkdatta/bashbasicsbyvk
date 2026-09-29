@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+if [ -z "$1" ]; then
+  echo "Usage: erase <filename>"
+  exit 1
+fi
+if [ -f "$1" ]; then
+  echo -n "Erase all contents of '$1'? (yes/no): "
+  read confirm
+  if [ "$confirm" = "yes" ]; then
+    > "$1"
+    echo "Contents of $1 erased."
+  else
+    echo "Canceled."
+  fi
+else
+  echo "File '$1' not found."
+  exit 1
+fi

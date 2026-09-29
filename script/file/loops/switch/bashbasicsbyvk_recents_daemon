@@ -1,0 +1,704 @@
+#!/usr/bin/env python3
+"""
+bashbasicsbyvk_recents_daemon
+──────────────────────────────
+Self-bootstrapping persistent daemon that tracks recently modified files.
+
+Watcher backends:
+  • watchdog (inotify) — preferred, instant
+  • polling fallback   — used when watchdog isn't available
+
+Self-install:
+  On first run, if watchdog is missing, the daemon attempts a one-shot
+  `pip install --user watchdog` in the background. Success is logged and
+  picked up on the next restart. Failures are logged and the daemon stays
+  on the polling backend.
+
+Output:
+  ~/.bashbasicsbyvk/recents.list                — newest-first, max 100 paths
+  ~/.bashbasicsbyvk/recents.pid                 — PID of running daemon
+  ~/.bashbasicsbyvk/recents.log                 — daemon log
+  ~/.bashbasicsbyvk/.watchdog_install_attempted — pip attempt sentinel
+  ~/.bashbasicsbyvk/recents_exclude.conf        — user exclude rules (auto-created)
+
+Recents policy:
+  • A file joins recents ONLY when it is modified (on_modified / mtime change).
+  • Created, moved, and renamed files do NOT join recents.
+  • If a file already in recents is renamed/moved, its entry is updated to the
+    new path so the list stays accurate.
+  • If a file already in recents is deleted, its entry is removed.
+"""
+
+import os
+import sys
+import signal
+import subprocess
+import threading
+import time
+from collections import OrderedDict
+from pathlib import Path
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+HOME         = Path.home()
+BVK_DIR      = HOME / ".bashbasicsbyvk"
+LIST_FILE    = BVK_DIR / "recents.list"
+PID_FILE     = BVK_DIR / "recents.pid"
+LOG_FILE     = BVK_DIR / "recents.log"
+SENTINEL     = BVK_DIR / ".watchdog_install_attempted"
+EXCLUDE_FILE = BVK_DIR / "recents_exclude.conf"
+THIS_FILE    = Path(os.path.abspath(__file__))
+
+MAX_RECENT     = 100
+FLUSH_DELAY    = 2.0     # seconds — debounce rapid edits
+POLL_INTERVAL  = 3.0     # seconds — polling fallback cadence
+POLL_MAX_DEPTH = 6       # max directory depth for polling fallback
+INSTALL_RETRY  = 86400   # seconds — don't retry pip install before this
+PIP_TIMEOUT    = 120     # seconds
+
+# ── Environment detection ──────────────────────────────────────────────────────
+
+def _is_termux():
+    return "com.termux" in str(HOME) or os.environ.get("TERMUX_VERSION") is not None
+
+def _has_systemd_user():
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "is-system-running"],
+            capture_output=True, timeout=3
+        )
+        out = r.stdout.decode().strip()
+        return r.returncode in (0, 1) and out in ("running", "degraded")
+    except Exception:
+        return False
+
+# ── Self-bootstrap (service persistence) ───────────────────────────────────────
+
+SERVICE_NAME = "bashbasicsbyvk-recents"
+
+def _systemd_unit_path():
+    cfg = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+    return cfg / "systemd" / "user" / f"{SERVICE_NAME}.service"
+
+def _install_systemd():
+    unit = _systemd_unit_path()
+    unit.parent.mkdir(parents=True, exist_ok=True)
+    python = sys.executable
+    unit.write_text(f"""[Unit]
+Description=bashbasicsbyvk recents file watcher
+After=default.target
+
+[Service]
+Type=simple
+ExecStart={python} {THIS_FILE} --daemon
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+""")
+    try:
+        subprocess.run(["systemctl", "--user", "daemon-reload"], timeout=5)
+        subprocess.run(["systemctl", "--user", "enable", SERVICE_NAME], timeout=5)
+        subprocess.run(["systemctl", "--user", "start",  SERVICE_NAME], timeout=5)
+        return True
+    except Exception:
+        return False
+
+def _install_termux_bashrc():
+    """Install/repair the ~/.bashrc wake hook. Idempotent.
+
+    Calls the daemon WITHOUT --daemon so it goes through main()'s
+    is_alive() gate — prevents duplicate daemons when many shells open
+    at once. bootstrap() re-execs with --daemon.
+    """
+    bashrc = HOME / ".bashrc"
+    marker   = "# bashbasicsbyvk-recents-daemon"
+    new_line = f"( python '{THIS_FILE}' </dev/null >/dev/null 2>&1 & disown )"
+
+    text  = bashrc.read_text() if bashrc.exists() else ""
+    lines = text.splitlines()
+
+    for i in range(len(lines) - 1):
+        if lines[i].strip() == marker and lines[i+1] == new_line:
+            return
+
+    out, skip = [], False
+    for ln in lines:
+        if skip:
+            skip = False
+            continue
+        if ln.strip() == marker:
+            skip = True
+            continue
+        out.append(ln)
+
+    out.append(marker)
+    out.append(new_line)
+    try:
+        bashrc.write_text("\n".join(out) + "\n")
+    except OSError:
+        pass
+
+def bootstrap():
+    BVK_DIR.mkdir(parents=True, exist_ok=True)
+
+    if _is_termux():
+        _install_termux_bashrc()
+        _start_background()
+        sys.exit(0)
+
+    if _has_systemd_user():
+        if _install_systemd():
+            sys.exit(0)
+
+    _start_background()
+    sys.exit(0)
+
+def _start_background():
+    proc = subprocess.Popen(
+        [sys.executable, str(THIS_FILE), "--daemon"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    time.sleep(0.5)
+    try:
+        PID_FILE.write_text(str(proc.pid) + "\n")
+    except OSError:
+        pass
+    return proc.pid
+
+# ── Liveness ───────────────────────────────────────────────────────────────────
+
+def is_alive():
+    if not PID_FILE.exists():
+        return False
+    try:
+        pid = int(PID_FILE.read_text().strip())
+        os.kill(pid, 0)
+        return True
+    except (ValueError, ProcessLookupError, PermissionError, OSError):
+        return False
+
+# ── Logging ────────────────────────────────────────────────────────────────────
+
+def _log(msg):
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    except OSError:
+        pass
+
+# ── Ignores ────────────────────────────────────────────────────────────────────
+
+IGNORE_PREFIXES = (
+    str(BVK_DIR),
+    str(HOME / ".cache"),
+    str(HOME / ".local/share/recently-used"),
+    "/proc", "/sys", "/dev", "/run", "/tmp",
+)
+IGNORE_SUFFIXES = (".swp", ".swpx", ".tmp", "~", ".lock", ".pid", ".pyc", ".pyo")
+IGNORE_NAMES    = {"recents.list", "recents.pid", "recents.log",
+                   "lastdir", ".bash_history", ".python_history"}
+
+# ── User exclude list ──────────────────────────────────────────────────────────
+# Loaded from EXCLUDE_FILE. Hot-reloaded whenever the file's mtime changes.
+# Four rule types (case-sensitive values, type keyword case-insensitive):
+#
+#   filename   .env          — blocks this basename anywhere in the fs
+#   foldername .git          — blocks any path whose components contain this name
+#   filepath   /abs/path/file.txt  — blocks this exact file only
+#   dirpath    /abs/path/dir       — blocks everything under this directory
+#
+# Lines starting with # are comments. Blank lines are ignored.
+
+_excl_lock        = threading.Lock()
+_excl_filenames   : set  = set()     # basenames
+_excl_foldernames : set  = set()     # path-segment names (universal)
+_excl_filepaths   : set  = set()     # exact absolute paths
+_excl_dirpaths    : list = []        # directory prefixes (trailing / normalised)
+_excl_mtime       : float = 0.0      # mtime of last successful load
+
+def _load_excludes(force: bool = False):
+    """Parse EXCLUDE_FILE and populate the four exclude sets/lists.
+    No-ops if the file hasn't changed since last load (unless force=True).
+    Creates a starter config with syntax guide if the file is absent."""
+    global _excl_mtime
+
+    # ── Ensure file exists with starter template ──
+    if not EXCLUDE_FILE.exists():
+        try:
+            EXCLUDE_FILE.write_text(
+                "# recents_exclude.conf — files/folders to hide from recents\n"
+                "#\n"
+                "# Syntax:  <type>  <value>\n"
+                "#   filename   NAME      — hides NAME everywhere (any directory)\n"
+                "#   foldername NAME      — hides everything inside any folder named NAME\n"
+                "#   filepath   /abs/path — hides this exact file only\n"
+                "#   dirpath    /abs/path — hides everything under this directory\n"
+                "#\n"
+                "# Examples:\n"
+                "#   filename   .env\n"
+                "#   foldername .git\n"
+                "#   foldername node_modules\n"
+                "#   foldername __pycache__\n"
+                "#   filepath   /home/user/notes/secret.txt\n"
+                "#   dirpath    /home/user/work/private\n"
+            )
+        except OSError:
+            pass
+        _excl_mtime = 0.0
+
+    # ── Skip reload if mtime unchanged ──
+    try:
+        mtime = EXCLUDE_FILE.stat().st_mtime
+    except OSError:
+        return
+    if not force and mtime == _excl_mtime:
+        return
+
+    # ── Parse ──
+    new_filenames   : set  = set()
+    new_foldernames : set  = set()
+    new_filepaths   : set  = set()
+    new_dirpaths    : list = []
+
+    try:
+        for raw in EXCLUDE_FILE.read_text(errors="replace").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(None, 1)
+            if len(parts) != 2:
+                continue
+            kind, value = parts[0].lower(), parts[1].strip()
+            if not value:
+                continue
+            if kind == "filename":
+                new_filenames.add(value)
+            elif kind == "foldername":
+                new_foldernames.add(value)
+            elif kind == "filepath":
+                new_filepaths.add(os.path.abspath(value))
+            elif kind == "dirpath":
+                # Normalise: ensure trailing sep so startswith works correctly
+                dp = os.path.abspath(value)
+                if not dp.endswith(os.sep):
+                    dp += os.sep
+                new_dirpaths.append(dp)
+    except OSError as e:
+        _log(f"exclude: read error: {e}")
+        return
+
+    with _excl_lock:
+        _excl_filenames.clear();   _excl_filenames.update(new_filenames)
+        _excl_foldernames.clear(); _excl_foldernames.update(new_foldernames)
+        _excl_filepaths.clear();   _excl_filepaths.update(new_filepaths)
+        _excl_dirpaths.clear();    _excl_dirpaths.extend(new_dirpaths)
+
+    _excl_mtime = mtime
+    _log(f"exclude: loaded {len(new_filenames)} filenames, "
+         f"{len(new_foldernames)} foldernames, "
+         f"{len(new_filepaths)} filepaths, "
+         f"{len(new_dirpaths)} dirpaths")
+
+def _excl_should_ignore(path: str) -> bool:
+    """Return True if path matches any user exclude rule."""
+    with _excl_lock:
+        # 1. Exact filepath
+        if path in _excl_filepaths:
+            return True
+        # 2. Filename (basename) match
+        if os.path.basename(path) in _excl_filenames:
+            return True
+        # 3. Directory prefix
+        for dp in _excl_dirpaths:
+            if path.startswith(dp):
+                return True
+        # 4. Folder-name segment — any component of the path
+        if _excl_foldernames:
+            parts = set(Path(path).parts)
+            if parts & _excl_foldernames:
+                return True
+    return False
+
+# ── Shared state ───────────────────────────────────────────────────────────────
+
+_lock   = threading.Lock()
+_recent : OrderedDict = OrderedDict()
+_dirty  = threading.Event()
+
+def _should_ignore(path: str) -> bool:
+    name = os.path.basename(path)
+    if name.startswith("."):
+        return True
+    if name in IGNORE_NAMES:
+        return True
+    for s in IGNORE_SUFFIXES:
+        if path.endswith(s):
+            return True
+    for p in IGNORE_PREFIXES:
+        if path.startswith(p):
+            return True
+    # ── User exclude list ──
+    if _excl_should_ignore(path):
+        return True
+    return False
+
+def _record(path: str):
+    """Add or promote path to the top of recents. Only called for genuine edits."""
+    if _should_ignore(path) or not os.path.isfile(path):
+        return
+    with _lock:
+        _recent.pop(path, None)
+        new = OrderedDict(); new[path] = None; new.update(_recent)
+        _recent.clear(); _recent.update(new)
+        while len(_recent) > MAX_RECENT:
+            _recent.popitem(last=True)
+    _dirty.set()
+
+def _update_path(old_path: str, new_path: str):
+    """Rename an existing recents entry in-place. Does NOT add new entries."""
+    with _lock:
+        if old_path not in _recent:
+            return
+        # Rebuild OrderedDict preserving order, swapping the key
+        new = OrderedDict()
+        for k in _recent:
+            new[new_path if k == old_path else k] = None
+        _recent.clear()
+        _recent.update(new)
+    _dirty.set()
+
+def _remove_path(path: str):
+    """Remove a path from recents if present. Called on deletion."""
+    with _lock:
+        if path not in _recent:
+            return
+        del _recent[path]
+    _dirty.set()
+
+def _flusher():
+    while True:
+        _dirty.wait()
+        _dirty.clear()
+        time.sleep(FLUSH_DELAY)
+        _flush_to_disk()
+
+def _flush_to_disk():
+    with _lock:
+        lines = list(_recent.keys())
+    tmp = LIST_FILE.with_suffix(".tmp")
+    try:
+        tmp.write_text("\n".join(lines) + ("\n" if lines else ""))
+        os.replace(tmp, LIST_FILE)
+    except OSError:
+        pass
+
+def _load_existing():
+    if not LIST_FILE.exists():
+        return
+    try:
+        skipped = 0
+        for line in LIST_FILE.read_text().splitlines():
+            if line and os.path.isfile(line):
+                if _should_ignore(line):
+                    skipped += 1
+                    continue
+                _recent[line] = None
+        while len(_recent) > MAX_RECENT:
+            _recent.popitem(last=True)
+        if skipped:
+            _log(f"_load_existing: dropped {skipped} excluded entries from saved list")
+            _dirty.set()   # flush the cleaned list back to disk
+    except OSError:
+        pass
+
+def _cleanup(signum=None, frame=None):
+    _flush_to_disk()
+    try: PID_FILE.unlink()
+    except OSError: pass
+    sys.exit(0)
+
+# ── watchdog import / self-install ─────────────────────────────────────────────
+
+def _refresh_import_paths():
+    """Make sure user site-packages is on sys.path and Python's import
+    caches are invalidated. Needed after a fresh `pip install --user`."""
+    try:
+        import site, importlib
+        try:
+            site.addsitedir(site.getusersitepackages())
+        except Exception:
+            pass
+        importlib.invalidate_caches()
+    except Exception:
+        pass
+
+def _try_import_watchdog():
+    _refresh_import_paths()
+    try:
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+        return Observer, FileSystemEventHandler
+    except ImportError as e:
+        _log(f"watchdog import failed: {e}")
+        return None, None
+
+def _should_attempt_install():
+    if not SENTINEL.exists():
+        return True
+    try:
+        age = time.time() - SENTINEL.stat().st_mtime
+        return age > INSTALL_RETRY
+    except OSError:
+        return True
+
+def _run_pip(args):
+    cmd = [sys.executable, "-m", "pip", "install",
+           "--no-input", "--disable-pip-version-check"] + args
+    _log(f"pip: {' '.join(cmd)}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=PIP_TIMEOUT)
+        out = proc.stdout.decode(errors="replace").strip()
+        err = proc.stderr.decode(errors="replace").strip()
+        if out:
+            _log(f"pip stdout tail: {out[-500:]}")
+        if err:
+            _log(f"pip stderr tail: {err[-500:]}")
+        return proc.returncode
+    except subprocess.TimeoutExpired:
+        _log(f"pip install timed out after {PIP_TIMEOUT}s")
+        return 124
+    except Exception as e:
+        _log(f"pip install raised {type(e).__name__}: {e}")
+        return 1
+
+def _try_install_watchdog():
+    """One-shot pip install. Tries plain --user first, then falls back to
+    --break-system-packages for PEP 668–managed environments. Records a
+    sentinel so we don't hammer pip on every daemon start."""
+    _log("watchdog missing — attempting one-shot pip install")
+
+    attempts = [
+        ["--user", "watchdog"],
+        ["--user", "--break-system-packages", "watchdog"],
+    ]
+
+    success = False
+    for extra in attempts:
+        rc = _run_pip(extra)
+        if rc == 0:
+            success = True
+            _log("pip install watchdog succeeded")
+            break
+        _log(f"pip attempt rc={rc} (args={extra})")
+
+    try:
+        SENTINEL.write_text(
+            f"{time.strftime('%Y-%m-%d %H:%M:%S')} "
+            f"{'ok' if success else 'failed'}\n"
+        )
+    except OSError:
+        pass
+
+    # Verify the install by re-importing in this process
+    _refresh_import_paths()
+    try:
+        import importlib
+        if "watchdog" in sys.modules:
+            importlib.reload(sys.modules["watchdog"])
+        from watchdog.observers import Observer  # noqa: F401
+        _log("watchdog now importable")
+        return True
+    except Exception as e:
+        _log(f"watchdog still not importable after install: {e}")
+        return False
+
+# ── Watcher: watchdog (inotify) ────────────────────────────────────────────────
+
+def _run_watchdog_watcher(Observer, FileSystemEventHandler):
+    watch_roots = [str(HOME)]
+
+    class _Handler(FileSystemEventHandler):
+        def on_modified(self, e):
+            # Hot-reload exclude list whenever the config file is saved.
+            if not e.is_directory and e.src_path == str(EXCLUDE_FILE):
+                _load_excludes()
+                return
+            # Only genuine edits to existing files join recents.
+            if not e.is_directory:
+                _record(e.src_path)
+
+        def on_moved(self, e):
+            # Rename/move: update the path if already in recents, don't add it.
+            if not e.is_directory:
+                _update_path(e.src_path, e.dest_path)
+
+        def on_deleted(self, e):
+            # Remove from recents if present, don't error if not.
+            if not e.is_directory:
+                _remove_path(e.src_path)
+
+        # on_created intentionally omitted — new files must not appear in recents.
+
+    observer = Observer()
+    handler  = _Handler()
+    for root in watch_roots:
+        if os.path.isdir(root):
+            observer.schedule(handler, root, recursive=True)
+
+    observer.start()
+    _log(f"observer started watching {watch_roots}")
+
+    try:
+        while observer.is_alive():
+            time.sleep(1)
+        _log("observer died unexpectedly")
+    finally:
+        try:
+            observer.stop(); observer.join()
+        except Exception:
+            pass
+
+# ── Watcher: polling fallback ──────────────────────────────────────────────────
+
+def _prune_dirname(dirpath, name):
+    if name.startswith("."):
+        return True
+    full = os.path.join(dirpath, name)
+    for p in IGNORE_PREFIXES:
+        if full.startswith(p):
+            return True
+    return False
+
+def _scan_files(root, max_depth=POLL_MAX_DEPTH):
+    results = {}
+    root = os.path.abspath(root)
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+        rel   = os.path.relpath(dirpath, root)
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+        dirnames[:] = [
+            d for d in dirnames
+            if (depth + 1) <= max_depth and not _prune_dirname(dirpath, d)
+        ]
+        for fn in filenames:
+            if fn.startswith("."):
+                continue
+            fp = os.path.join(dirpath, fn)
+            if _should_ignore(fp):
+                continue
+            try:
+                st = os.stat(fp)
+            except OSError:
+                continue
+            results[fp] = st.st_mtime
+    return results
+
+def _run_polling_watcher():
+    _log(f"polling watcher starting (interval={POLL_INTERVAL}s, depth={POLL_MAX_DEPTH})")
+    t0 = time.time()
+    try:
+        seen = _scan_files(str(HOME))
+    except Exception as e:
+        _log(f"initial scan failed: {type(e).__name__}: {e}")
+        seen = {}
+    _log(f"primed with {len(seen)} files in {time.time()-t0:.2f}s")
+
+    while True:
+        time.sleep(POLL_INTERVAL)
+        _load_excludes()   # hot-reload if mtime changed
+        try:
+            cur = _scan_files(str(HOME))
+        except Exception as e:
+            _log(f"scan error: {type(e).__name__}: {e}")
+            continue
+
+        # Only record files that EXISTED before and have a newer mtime — pure edits.
+        # New files (old is None) are intentionally skipped.
+        for path, mtime in cur.items():
+            old = seen.get(path)
+            if old is not None and mtime > old:
+                _record(path)
+
+        # Remove deleted files from recents if they were there.
+        # Note: polling cannot distinguish rename from delete+create, so a
+        # renamed file just gets removed from recents (can't follow the new name).
+        for path in list(seen):
+            if path not in cur:
+                _remove_path(path)
+
+        seen = cur
+
+# ── Dispatcher ─────────────────────────────────────────────────────────────────
+
+def _run_watcher():
+    Observer, FileSystemEventHandler = _try_import_watchdog()
+
+    # Not available? Try a one-shot install — but never block the watcher
+    # on pip. If pip succeeds, watchdog gets picked up on the next restart.
+    if Observer is None and _should_attempt_install():
+        t = threading.Thread(
+            target=_try_install_watchdog, name="pip-install-watchdog",
+            daemon=True,
+        )
+        t.start()
+
+    if Observer is not None:
+        _log("using watchdog (inotify) watcher")
+        try:
+            _run_watchdog_watcher(Observer, FileSystemEventHandler)
+            return
+        except Exception as e:
+            import traceback
+            _log(f"watchdog watcher failed: {type(e).__name__}: {e}")
+            _log(traceback.format_exc())
+            _log("falling back to polling watcher")
+    else:
+        _log("watchdog unavailable — using polling watcher")
+
+    _run_polling_watcher()
+
+# ── Daemon loop ────────────────────────────────────────────────────────────────
+
+def run_daemon():
+    BVK_DIR.mkdir(parents=True, exist_ok=True)
+    PID_FILE.write_text(str(os.getpid()) + "\n")
+
+    signal.signal(signal.SIGTERM, _cleanup)
+    signal.signal(signal.SIGINT,  _cleanup)
+
+    _log(f"daemon started pid={os.getpid()}")
+
+    _load_excludes(force=True)   # initialise exclude list (creates file if absent)
+    _load_existing()
+
+    t = threading.Thread(target=_flusher, daemon=True)
+    t.start()
+
+    try:
+        _run_watcher()
+    except Exception as e:
+        import traceback
+        _log(f"watcher crashed: {type(e).__name__}: {e}")
+        _log(traceback.format_exc())
+    finally:
+        _cleanup()
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+def main():
+    daemon_mode = "--daemon" in sys.argv
+
+    if daemon_mode:
+        run_daemon()
+        return
+
+    if is_alive():
+        return
+
+    bootstrap()
+
+if __name__ == "__main__":
+    main()

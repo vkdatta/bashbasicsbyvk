@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+if [ -z "$1" ]; then
+  echo "Usage: overwrite <filename>"
+  exit 1
+fi
+
+if [ -n "$DEVSHELL_PROJECT_ID" ]; then
+    METHOD="manual"
+elif command -v pbpaste &> /dev/null \
+  || command -v xclip &> /dev/null \
+  || command -v xsel &> /dev/null \
+  || command -v wl-paste &> /dev/null \
+  || command -v termux-clipboard-get &> /dev/null \
+  || command -v powershell.exe &> /dev/null; then
+    METHOD="auto"
+else
+    METHOD="manual"
+fi
+
+if [ "$METHOD" == "auto" ]; then
+    if command -v pbpaste &> /dev/null; then
+        CMD="pbpaste"
+    elif command -v xclip &> /dev/null; then
+        CMD="xclip -selection clipboard -o"
+    elif command -v xsel &> /dev/null; then
+        CMD="xsel --clipboard --output"
+    elif command -v wl-paste &> /dev/null; then
+        CMD="wl-paste"
+    elif command -v termux-clipboard-get &> /dev/null; then
+        CMD="termux-clipboard-get"
+    elif command -v powershell.exe &> /dev/null; then
+        CMD="powershell.exe -Command Get-Clipboard"
+    fi
+
+    $CMD > "$1"
+    echo "✅ Success: Overwrote '$1' using $CMD."
+else
+    echo "📥 Headless Environment Detected."
+    echo "1. Paste your content (Ctrl+V or Long-press)."
+    echo "2. On a NEW LINE, type 'DONE' and press Enter to save."
+    echo "--------------------------------------------------"
+
+    tmpfile=$(mktemp)
+
+    while IFS= read -r line; do
+        if [[ "$line" == "DONE" ]]; then
+            break
+        fi
+        echo "$line" >> "$tmpfile"
+    done
+
+    mv "$tmpfile" "$1"
+    echo "--------------------------------------------------"
+    echo "✅ Success: Clipboard content saved to '$1'."
+fi

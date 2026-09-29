@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+
+import ast
+import re
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Dict, Set, List
+
+@dataclass
+class SymbolDef:
+    name: str
+    kind: str
+    signature: str
+    file_path: str
+    line: int
+
+@dataclass
+class FileIndex:
+    path: str
+    lang: str
+    definitions: Dict[str, SymbolDef] = field(default_factory=dict)
+    imports: Set[str] = field(default_factory=set)
+
+class UniversalRepoIndexer:
+    IGNORE_DIRS = {
+        ".git", ".venv", "venv", "node_modules", "__pycache__", 
+        "dist", "build", ".next", ".cache"
+    }
+
+    def __init__(self, root_dir: str = "."):
+        self.root_dir = Path(root_dir).resolve()
+        self.files: Dict[str, FileIndex] = {}
+        self.global_symbol_index: Dict[str, SymbolDef] = {}
+
+    def _parse_python(self, code: str, rel_path: str, file_idx: FileIndex):
+        try:
+            tree = ast.parse(code, filename=rel_path)
+        except Exception:
+            return
+
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                args = [arg.arg for arg in node.args.args]
+                prefix = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
+                sig = f"{prefix} {node.name}({', '.join(args)}): ..."
+                sym = SymbolDef(node.name, "function", sig, rel_path, node.lineno)
+                file_idx.definitions[node.name] = sym
+                self.global_symbol_index[node.name] = sym
+
+            elif isinstance(node, ast.ClassDef):
+                sig = f"class {node.name}: ..."
+                sym = SymbolDef(node.name, "class", sig, rel_path, node.lineno)
+                file_idx.definitions[node.name] = sym
+                self.global_symbol_index[node.name] = sym
+
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    file_idx.imports.add(alias.asname or alias.name)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    file_idx.imports.add(alias.asname or alias.name)
+
+    def _parse_javascript(self, code: str, rel_path: str, file_idx: FileIndex):
+        lines = code.splitlines()
+        func_regex = re.compile(r'(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)')
+        arrow_regex = re.compile(r'(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:\([^)]*\)|[a-zA-Z0-9_]+)\s*=>')
+        class_regex = re.compile(r'(?:export\s+)?class\s+([a-zA-Z0-9_]+)')
+        import_regex = re.compile(r'import\s+.*?\{?([a-zA-Z0-9_,\s]+)\}?\s+from\s+[\'"]([^\'"]+)[\'"]')
+
+        for idx, line in enumerate(lines, 1):
+            line_str = line.strip()
+            m_func = func_regex.search(line_str)
+            if m_func:
+                name, args = m_func.group(1), m_func.group(2)
+                sig = f"function {name}({args})"
+                sym = SymbolDef(name, "function", sig, rel_path, idx)
+                file_idx.definitions[name] = sym
+                self.global_symbol_index[name] = sym
+
+            m_arrow = arrow_regex.search(line_str)
+            if m_arrow:
+                name = m_arrow.group(1)
+                sig = f"const {name} = (...) => ..."
+                sym = SymbolDef(name, "function", sig, rel_path, idx)
+                file_idx.definitions[name] = sym
+                self.global_symbol_index[name] = sym
+
+            m_class = class_regex.search(line_str)
+            if m_class:
+                name = m_class.group(1)
+                sig = f"class {name} {{ ... }}"
+                sym = SymbolDef(name, "class", sig, rel_path, idx)
+                file_idx.definitions[name] = sym
+                self.global_symbol_index[name] = sym
+
+            m_imp = import_regex.search(line_str)
+            if m_imp:
+                raw_imports = m_imp.group(1).split(',')
+                for item in raw_imports:
+                    clean_item = item.strip().split(' as ')[0].strip()
+                    if clean_item:
+                        file_idx.imports.add(clean_item)
+
+    def _parse_html(self, code: str, rel_path: str, file_idx: FileIndex):
+        lines = code.splitlines()
+        id_regex = re.compile(r'id=["\']([a-zA-Z0-9_\-]+)["\']')
+        script_src = re.compile(r'<script[^>]+src=["\']([^"\']+)["\']')
+        link_href = re.compile(r'<link[^>]+href=["\']([^"\']+)["\']')
+
+        for idx, line in enumerate(lines, 1):
+            for m in id_regex.finditer(line):
+                id_name = m.group(1)
+                sig = f'<... id="{id_name}">'
+                file_idx.definitions[id_name] = SymbolDef(id_name, "html_id", sig, rel_path, idx)
+            for m in script_src.finditer(line):
+                file_idx.imports.add(m.group(1))
+            for m in link_href.finditer(line):
+                file_idx.imports.add(m.group(1))
+
+    def _parse_css(self, code: str, rel_path: str, file_idx: FileIndex):
+        lines = code.splitlines()
+        class_id_regex = re.compile(r'([\.#][a-zA-Z0-9_\-]+)\s*\{')
+
+        for idx, line in enumerate(lines, 1):
+            m = class_id_regex.search(line)
+            if m:
+                selector = m.group(1)
+                sig = f"{selector} {{ ... }}"
+                file_idx.definitions[selector] = SymbolDef(selector, "css_selector", sig, rel_path, idx)
+
+    def _parse_generic(self, code: str, rel_path: str, file_idx: FileIndex):
+        lines = code.splitlines()
+        func_regex = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_*\s]+\s+([a-zA-Z0-9_]+)\s*\([^)]*\)\s*\{?')
+        
+        for idx, line in enumerate(lines, 1):
+            m = func_regex.search(line.strip())
+            if m:
+                name = m.group(1)
+                sig = f"{name}(...)"
+                file_idx.definitions[name] = SymbolDef(name, "function", sig, rel_path, idx)
+                self.global_symbol_index[name] = sym = SymbolDef(name, "function", sig, rel_path, idx)
+
+    def scan_file(self, file_path: Path):
+        rel_path = str(file_path.relative_to(self.root_dir))
+        ext = file_path.suffix.lower()
+
+        try:
+            code = file_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return
+
+        file_idx = FileIndex(path=rel_path, lang=ext or "text")
+
+        if ext == ".py":
+            self._parse_python(code, rel_path, file_idx)
+        elif ext in (".js", ".jsx", ".ts", ".tsx"):
+            self._parse_javascript(code, rel_path, file_idx)
+        elif ext in (".html", ".htm"):
+            self._parse_html(code, rel_path, file_idx)
+        elif ext == ".css":
+            self._parse_css(code, rel_path, file_idx)
+        else:
+            self._parse_generic(code, rel_path, file_idx)
+
+        self.files[rel_path] = file_idx
+
+    def run(self):
+        for entry in self.root_dir.rglob("*"):
+            if entry.is_file():
+                if any(part in self.IGNORE_DIRS or part.startswith(".") for part in entry.parts[:-1]):
+                    continue
+                self.scan_file(entry)
+
+    def generate_repo_map(self) -> str:
+        output = ["# REPOSITORY MAP & CROSS-FILE DEPENDENCIES\n"]
+
+        for file_path, file_idx in self.files.items():
+            output.append(f"📁 [File: {file_path}] ({file_idx.lang})")
+
+            if file_idx.definitions:
+                output.append("  Exports / Signatures / Selectors:")
+                for sym in file_idx.definitions.values():
+                    output.append(f"    - {sym.signature} (line {sym.line})")
+
+            resolved = []
+            for imp in file_idx.imports:
+                if imp in self.global_symbol_index:
+                    target = self.global_symbol_index[imp]
+                    if target.file_path != file_path:
+                        resolved.append(f"    - Uses '{imp}' -> Defined in {target.file_path}:{target.line}")
+                else:
+                    for other_path in self.files:
+                        if imp in other_path and other_path != file_path:
+                            resolved.append(f"    - References File -> {other_path}")
+
+            if resolved:
+                output.append("  Cross-File Dependencies:")
+                output.extend(list(set(resolved)))
+
+            output.append("")
+
+        return "\n".join(output)
+
+if __name__ == "__main__":
+    indexer = UniversalRepoIndexer(root_dir=".")
+    indexer.run()
+    
+    repo_map = indexer.generate_repo_map()
+    
+    Path("repo_map.txt").write_text(repo_map)
+    print(repo_map)
+    print("\n[SUCCESS] Universal Repo map saved to 'repo_map.txt'")
