@@ -14,6 +14,7 @@ DEFAULT_DISPLAY_TIME_FORMAT="full"
 DEFAULT_GROUP_VIEW_LEVELS=""
 DEFAULT_COMPRESS_FORMAT="ask"
 DEFAULT_FILTER_MODE="partial"
+DEFAULT_DISPLAY_FILTER_PERSIST=false
 
 unset show_hidden_files
 unset index_mode_threshold
@@ -25,6 +26,7 @@ unset display_time_format
 unset group_view_levels_str
 unset compress_format
 unset filter_mode
+unset display_filter_persist
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
 
@@ -38,6 +40,7 @@ unset filter_mode
 : "${group_view_levels_str:=$DEFAULT_GROUP_VIEW_LEVELS}"
 : "${compress_format:=$DEFAULT_COMPRESS_FORMAT}"
 : "${filter_mode:=$DEFAULT_FILTER_MODE}"
+: "${display_filter_persist:=$DEFAULT_DISPLAY_FILTER_PERSIST}"
 
 declare -ga group_view_levels=()
 if [ -n "$group_view_levels_str" ]; then
@@ -56,6 +59,7 @@ save_settings() {
     echo "group_view_levels_str=\"${group_view_levels[*]}\""
     echo "compress_format=$compress_format"
     echo "filter_mode=$filter_mode"
+    echo "display_filter_persist=$display_filter_persist"
   } > "$SETTINGS_FILE"
 }
 
@@ -81,6 +85,7 @@ restore_all_defaults() {
   group_view_levels=()
   group_view_levels_str=""
   compress_format=$DEFAULT_COMPRESS_FORMAT
+  display_filter_persist=$DEFAULT_DISPLAY_FILTER_PERSIST
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "$mode_choice" in
     2) _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER" ;;
@@ -112,8 +117,9 @@ settings_menu() {
   echo "9) $gv_label"
   echo "10) Compress format      ($compress_format)"
   echo "11) Filter mode          ($filter_mode)"
+  echo "12) Display filter       (.d — presets, keep between sessions: $display_filter_persist)"
 
-  read -r -p "Enter choice [1-11]: " main_choice
+  read -r -p "Enter choice [1-12]: " main_choice
 
 case "$main_choice" in
     1) hidden_file_settings ;; # bashbasicsbyvk_hidefiles.sh
@@ -127,6 +133,7 @@ case "$main_choice" in
     9) group_view_settings ;; # bashbasicsbyvk_displayer.sh
     10) compress_format_settings ;; # Current
     11) filter_mode_settings ;;    # bashbasicsbyvk_filter.sh
+    12) display_filter_settings ;; # bashbasicsbyvk_display_filter.sh
     *) echo "Invalid choice" ;;
 esac
 }

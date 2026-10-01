@@ -279,8 +279,13 @@ display_imaginary_groups() {
   builtin printf "%s\n" "$_imag_banner" "${imaginary_lines[@]}"
 }
 
+# select_items_common <PROMPT> [allow_a]
+#   allow_a: also accept  a  (all)  and  a-<exclusions>  (all except),
+#            e.g. a-1-5,7 — same grammar as the c-/m-/s- staging shortcuts.
 select_items_common() {
   local prompt="$1"
+  local _multi_allow_a=false
+  [ "${2:-}" == "allow_a" ] && _multi_allow_a=true
   if [ ${#items[@]} -eq 0 ]; then
     echo "❌ No items available"
     return 1
@@ -290,8 +295,19 @@ select_items_common() {
   local _buf _pos itemlist
   _vp_mode="items"
   _multi_prompt_loop
-  itemlist="$_buf"
-  local indices=($(parse_selection "$itemlist" "${#items[@]}"))
+  itemlist="${_buf// /}"
+  local indices=()
+  if $_multi_allow_a && [[ "$itemlist" == "a" ]]; then
+    indices=($(seq 1 "${#items[@]}"))
+  elif $_multi_allow_a && [[ "$itemlist" =~ ^a-(.+)$ ]]; then
+    indices=($(_sp_parse_all_except "${BASH_REMATCH[1]}" "${#items[@]}"))
+    if [ ${#indices[@]} -eq 0 ]; then
+      echo "❌ All-except filter excluded every item"
+      return 1
+    fi
+  else
+    indices=($(parse_selection "$itemlist" "${#items[@]}"))
+  fi
   selected_items=()
   for idx in "${indices[@]}"; do
     selected_items+=("${items[$((idx-1))]}")
@@ -454,6 +470,9 @@ _menu_header() {
 
 _menu_header_flat() {
   _menu_header
+  [ -n "${_sel_banner:-}" ] && echo "$_sel_banner"
+  [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"
+  [ -n "${_disp_banner:-}" ] && echo "$_disp_banner"
   if $_has_group_view; then
     _gv_chain="${group_view_levels[*]}"
     echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
@@ -462,6 +481,8 @@ _menu_header_flat() {
 
 _menu_header_imaginary() {
   _menu_header
+  [ -n "${_sel_banner:-}" ] && echo "$_sel_banner"
+  [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"
   echo "$_imag_banner"
 }
 
@@ -710,6 +731,7 @@ _read_choice() {
 
 _BVK_LASTDIR_FILE="${HOME}/.bashbasicsbyvk/lastdir"
 _BVK_RECENTS_PID_FILE="${HOME}/.bashbasicsbyvk/recents.pid"
+_BVK_DAEMON_VERSION=2      # must match DAEMON_VERSION in bashbasicsbyvk_recents_daemon
 
 _bvk_wake_recents_daemon() {
   local _candidates=(
@@ -726,7 +748,10 @@ _bvk_wake_recents_daemon() {
   [ -n "$_daemon_script" ] || return
   local _pid
   _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
-  kill -0 "$_pid" 2>/dev/null && return
+  # alive AND current version → nothing to do.  Alive but older (pre-upgrade) →
+  # fall through: the daemon script itself replaces the old process.
+  local _ver; _ver=$(cat "${HOME}/.bashbasicsbyvk/daemon.version" 2>/dev/null)
+  kill -0 "$_pid" 2>/dev/null && [ "$_ver" = "$_BVK_DAEMON_VERSION" ] && return
   if [ -x "$_daemon_script" ]; then
     "$_daemon_script" </dev/null >/dev/null 2>&1 &
   elif command -v python3 >/dev/null 2>&1; then

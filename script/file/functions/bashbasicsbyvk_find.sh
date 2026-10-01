@@ -373,7 +373,12 @@ PYEOF
     echo "📋 Found ${#results[@]} results:"
     for i in "${!results[@]}"; do
         local rel=$(realpath --relative-to="$path" "${results[$i]}" 2>/dev/null || basename "${results[$i]}")
-        printf "%3d) %s\n" $((i+1)) "$rel"
+        local _ln; printf -v _ln "%3d) %s" $((i+1)) "$rel"
+        if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "${results[$i]}" "$_ln"; then
+            printf '%s\n' "$_smk_out"      # selected with .s — green "+"
+        else
+            printf '%s\n' "$_ln"
+        fi
     done
 
     echo "Enter item number to navigate | q) exit"

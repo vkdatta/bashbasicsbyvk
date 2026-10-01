@@ -843,6 +843,8 @@ _resolve_display_parts_v() {
     else                           _rdp_icon="📄"
     fi
   fi
+  # favourites: alias ("Alias (name)") / ⭐ marker while favourite mode is paused
+  [ -n "${_FAV_LABEL[$f]+x}" ] && _rdp_bn="${_FAV_LABEL[$f]}"
 }
 
 _shortcut_display_parts() {

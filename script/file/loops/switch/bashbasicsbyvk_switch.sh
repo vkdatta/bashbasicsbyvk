@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_switch.sh
 # ════════════════════════════════════════════════════════════════════════════
-#  SWITCH — two-tab overlay inside the main file-manager loop
+#  SWITCH — three-tab overlay inside the main file-manager loop
 #
 #  Tabs (← / → to cycle when input is empty):
 #    📌 Bookmarks  ~/.bashbasicsbyvk/switch/   — .swlink bookmark files
 #    🕐 Recents    ~/.bashbasicsbyvk/recents.list — daemon-maintained, read-only
+#    ⭐ Favourites the favourites of the folder you came from (manage them:
+#                  N open/go · b remove · rn rename alias · e edit file).
+#                  Adding is done in the file view with  fa.
 #
 #  Execute / scripting has moved to bashbasicsbyvk_functions.sh (fx tab).
 #  Tab switch is in-place: the block redraws inside the existing terminal
@@ -181,7 +184,7 @@ _sw_excl_menu() {
 }
 
 # ── Tab state ─────────────────────────────────────────────────────────────────
-_sw_tab="bookmarks"   # bookmarks | recents
+_sw_tab="bookmarks"   # bookmarks | recents | favourites
 _sw_in_mode=0         # 1 while inside switch_menu — enables ←/→ sentinel
 _sw_did_switch=false  # set true on successful path jump — changes q behaviour
 
@@ -251,23 +254,29 @@ _sw_build_recents() {
 
 _sw_tab_next() {
   case "$_sw_tab" in
-    bookmarks) _sw_tab=recents ;;
-    recents)   _sw_tab=bookmarks ;;
+    bookmarks)  _sw_tab=recents ;;
+    recents)    _sw_tab=favourites ;;
+    favourites) _sw_tab=bookmarks ;;
   esac
 }
 
 _sw_tab_prev() {
   case "$_sw_tab" in
-    bookmarks) _sw_tab=recents ;;
-    recents)   _sw_tab=bookmarks ;;
+    bookmarks)  _sw_tab=favourites ;;
+    recents)    _sw_tab=bookmarks ;;
+    favourites) _sw_tab=recents ;;
   esac
 }
 
+# recents and favourites are "managed" tabs: the normal file commands are blocked
+_sw_is_ro() { [ "$_sw_tab" = "recents" ] || [ "$_sw_tab" = "favourites" ]; }
+
 _sw_tab_label() {
-  local bm="📌 Bookmarks" rc="🕐 Recents"
+  local bm="📌 Bookmarks" rc="🕐 Recents" fv="⭐ Favourites"
   case "$_sw_tab" in
-    bookmarks) printf '[%s]   %s'  "$bm" "$rc" ;;
-    recents)   printf ' %s  [%s]' "$bm" "$rc" ;;
+    bookmarks)  printf '[%s]   %s   %s'  "$bm" "$rc" "$fv" ;;
+    recents)    printf ' %s  [%s]   %s'  "$bm" "$rc" "$fv" ;;
+    favourites) printf ' %s   %s  [%s]'  "$bm" "$rc" "$fv" ;;
   esac
 }
 
@@ -279,6 +288,7 @@ _sw_menu_header() {
   local _loc
   case "$_sw_tab" in
     recents) _loc="(recently modified — read only)" ;;
+    favourites) _loc="⭐ favourites of: $_sw_outer_path" ;;
     *)       _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}" ;;
   esac
   printf '📂 %s\n' "$_loc"
@@ -297,6 +307,10 @@ _sw_menu_footer_bookmarks() {
   [ -n "$group_prefix" ] && printf 'back) Remove last prefix (%s*)\n' "${group_prefix^^}"
 }
 
+_sw_menu_footer_favourites() {
+  printf '\n⭐ N) open / go    b) Remove    rn) Rename (alias)    e) Edit file\nsw) Exit switch mode      (add favourites in the file view:  fa)\n'
+}
+
 _sw_menu_footer_recents() {
   printf '\n[READ ONLY]   Select a file → open/edit/run/copy\nxe) Exclude list   clr) Clear list   sw) Exit switch mode\n'
 }
@@ -306,6 +320,7 @@ _sw_set_viewport_for_tab() {
   case "$_sw_tab" in
     bookmarks) ftr=_sw_menu_footer_bookmarks ;;
     recents)   ftr=_sw_menu_footer_recents   ;;
+    favourites) ftr=_sw_menu_footer_favourites ;;
   esac
   if $imaginary_mode; then
     _vp_mode="imaginary"
@@ -323,6 +338,7 @@ _sw_set_viewport_for_tab() {
 # ── Item builder per tab ──────────────────────────────────────────────────────
 
 _sw_build_items_for_tab() {
+  _FAV_LABEL=()
   imaginary_mode=false
   _filter_query=""
   _all_items=()
@@ -333,6 +349,10 @@ _sw_build_items_for_tab() {
 
     recents)
       _sw_build_recents
+      ;;
+
+    favourites)
+      _fav_sw_build "$_sw_outer_path"
       ;;
 
     bookmarks)
@@ -382,7 +402,11 @@ _sw_build_items_for_tab() {
 # ── Read-only guard ───────────────────────────────────────────────────────────
 
 _sw_recents_blocked() {
-  printf '⚠️  Read-only in Recents — use Bookmarks tab or fx (functions) for scripts\n'
+  if [ "$_sw_tab" = "favourites" ]; then
+    printf '⚠️  Not available in Favourites — use b / rn / e here, or go to the Bookmarks tab\n'
+  else
+    printf '⚠️  Read-only in Recents — use Bookmarks tab or fx (functions) for scripts\n'
+  fi
 }
 
 # ── Bookmarks selection ───────────────────────────────────────────────────────
@@ -461,6 +485,28 @@ _sw_bookmarks_handle_selection() {
   return 0
 }
 
+# ── Favourites selection ──────────────────────────────────────────────────────
+# Folder → jump there (leaves sw).  File → open like anywhere else.
+
+_sw_favourites_handle_selection() {
+  local choice="$1"
+  [[ "$choice" =~ ^[0-9]+$ ]] || { echo "⚠️  Invalid"; return 0; }
+  [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ] || { echo "⚠️  Out of range"; return 0; }
+  local t="${items[$((choice-1))]}"
+  if [ ! -e "$t" ]; then
+    local _mv="${_FAV_MOVED_TO[$t]:-}"
+    if [ -n "$_mv" ] && [ -e "$_mv" ]; then          # the daemon saw it move — follow it
+      if [ -d "$_mv" ]; then _sw_result_path="$_mv"; else _sw_result_path="${_mv%/*}"; fi
+      echo "📍 ${t##*/} moved — going to: $_sw_result_path"
+      return 1
+    fi
+    echo "⚠️  Missing: ${t##*/} — remove it with b"; return 0
+  fi
+  if [ -d "$t" ]; then _sw_result_path="$t"; return 1; fi
+  handle_file "$t"
+  return 0
+}
+
 # ── Recents selection ─────────────────────────────────────────────────────────
 
 _sw_recents_handle_selection() {
@@ -485,6 +531,7 @@ _sw_tab_redraw() {
   case "$_sw_tab" in
     bookmarks) path="$_SW_DIR" ;;
     recents)   : ;;
+    favourites) path="$_sw_outer_path" ;;   # pickers show the folder these favourites belong to
   esac
   group_prefix=""
   force_show=false
@@ -606,7 +653,7 @@ switch_menu() {
       -h) open_help ;;
 
       u)
-        if [ "$_sw_tab" = "recents" ]; then
+        if _sw_is_ro; then
           _sw_recents_blocked; _sw_do_fresh=false
         elif [ "$path" != "$_SW_DIR" ] && [ "$path" != "/" ]; then
           path=$(dirname "$path"); group_prefix=""; force_show=false
@@ -616,7 +663,7 @@ switch_menu() {
         ;;
 
       back)
-        if [ "$_sw_tab" = "recents" ]; then
+        if _sw_is_ro; then
           _sw_recents_blocked; _sw_do_fresh=false
         else
           [ -n "$group_prefix" ] && group_prefix="${group_prefix%?}" && force_show=false
@@ -624,42 +671,58 @@ switch_menu() {
         ;;
 
       forceshow)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_force_show
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_force_show
         ;;
 
       a|A)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || _sw_add_path "$_sw_outer_path" "$path"
+        if [ "$_sw_tab" = "favourites" ]; then
+          echo "ℹ️  Add favourites from the file view with  fa  (numbers, ranges, or a .s expression)"; _sw_do_fresh=false
+        else
+          _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || _sw_add_path "$_sw_outer_path" "$path"
+        fi
         ;;
 
       b|B)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || _sw_remove_paths
+        if [ "$_sw_tab" = "favourites" ]; then _fav_sw_remove "$_sw_outer_path"
+        else _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || _sw_remove_paths
+        fi
+        ;;
+
+      rn|RN)
+        if [ "$_sw_tab" = "favourites" ]; then _fav_sw_rename "$_sw_outer_path"
+        else echo "ℹ️  rn renames favourites — use r for files here"; _sw_do_fresh=false; fi
+        ;;
+
+      e|E)
+        if [ "$_sw_tab" = "favourites" ]; then _fav_sw_edit "$_sw_outer_path"
+        else echo "ℹ️  e edits the favourites file — open the ⭐ Favourites tab first"; _sw_do_fresh=false; fi
         ;;
 
       c)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_create
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_create
         ;;
 
       d)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || delete_items
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || delete_items
         ;;
 
       t)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || transfer_menu
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || transfer_menu
         ;;
 
       x)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || organise_menu
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || organise_menu
         ;;
 
       r)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_rename
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_rename
         ;;
 
       f)            find_menu ;;
       s)            settings_menu ;;
 
       cd)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || { cd "$path" && exec "$SHELL"; }
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || { cd "$path" && exec "$SHELL"; }
         ;;
 
       m)            map_directory ;;
@@ -667,14 +730,14 @@ switch_menu() {
       ram)          free -h ;;
 
       rf)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_refresh
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_refresh
         ;;
 
       d-)           handle_staging_dispatch ;;
       v-)           handle_staging_view ;;
 
       c-*|m-*|s-*|b-*)
-        [ "$_sw_tab" = "recents" ] && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_staging_stage "$_sw_choice"
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_staging_stage "$_sw_choice"
         ;;
 
       _*)           _sw_do_fresh=false ;;   # filter: viewport handles it live
@@ -702,6 +765,23 @@ switch_menu() {
             ;;
           recents)
             _sw_recents_handle_selection "$_sw_choice"
+            ;;
+          favourites)
+            _sw_favourites_handle_selection "$_sw_choice"
+            _sw_rc=$?
+            if [ "$_sw_rc" -eq 1 ] && [ -n "$_sw_result_path" ]; then
+              group_prefix="$_sw_saved_prefix"
+              force_show="$_sw_saved_force"
+              local _sw_cd_target="$_sw_result_path"
+              cd -- "$_sw_cd_target" 2>/dev/null || true
+              path="$_sw_cd_target"
+              _sw_did_switch=true
+              _sw_result_path=""
+              _sw_saved_path=""
+              _sw_in_mode=0
+              printf '🔀 → %s\n' "$_sw_cd_target"
+              return 0
+            fi
             ;;
         esac
         ;;

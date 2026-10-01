@@ -240,7 +240,12 @@ local_navigator() {
             printf "%2d) %s %s\n" "$idx" "$_nav_icon" "$_sc_name"
           else
             [ -d "$item" ] && _nav_icon="📁" || _nav_icon="📄"
-            printf "%2d) %s %s\n" "$idx" "$_nav_icon" "$_nav_bn"
+            local _nav_ln; printf -v _nav_ln "%2d) %s %s" "$idx" "$_nav_icon" "$_nav_bn"
+            if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "$item" "$_nav_ln"; then
+              printf '%s\n' "$_smk_out"     # selected with .s — green "+"
+            else
+              printf '%s\n' "$_nav_ln"
+            fi
           fi
           idx=$((idx+1))
         done
@@ -569,14 +574,31 @@ gcloud_navigator() {
   done
 }
 
+# Compact result line for copy/move: "Moved x out of n item(s)" + failed items only.
+# Usage: _transfer_report <Verb> <ok> <total> <dest> [failed-line ...]
+_transfer_report() {
+  local verb="$1" ok="$2" total="$3" dest="$4"
+  shift 4
+  local icon="✅"
+  [ $# -gt 0 ] && icon="⚠️ "
+  echo "$icon $verb $ok out of $total item(s) → $dest"
+  if [ $# -gt 0 ]; then
+    echo "❌ Failed ($#):"
+    local f
+    for f in "$@"; do echo "  • $f"; done
+  fi
+}
+
 perform_copy() {
   local dest="$1"
   shift
   local src_items=("$@")
+  local total=${#src_items[@]} ok=0
+  local -a failed=()
   local item err
   for item in "${src_items[@]}"; do
     if [ ! -e "$item" ]; then
-      echo "  ⚠️  Skipped (not found): $item"
+      failed+=("$(basename -- "$item") — not found")
       continue
     fi
     local base name ext count newbase
@@ -595,29 +617,33 @@ perform_copy() {
       count=$((count+1))
     done
     if err=$(cp -r -- "$item" "$dest/$newbase" 2>&1); then
-      echo "  ✅ Copied: $(basename -- "$item") → $dest/$newbase"
+      ok=$((ok+1))
     else
-      echo "  ❌ Failed: $(basename -- "$item") — ${err:-cp returned $?}"
+      failed+=("$base — ${err:-cp returned $?}")
     fi
   done
+  _transfer_report "Copied" "$ok" "$total" "$dest" "${failed[@]}"
 }
 
 perform_move() {
   local dest="$1"
   shift
   local src_items=("$@")
+  local total=${#src_items[@]} ok=0
+  local -a failed=()
   local item err
   for item in "${src_items[@]}"; do
     if [ ! -e "$item" ]; then
-      echo "  ⚠️  Skipped (not found): $item"
+      failed+=("$(basename -- "$item") — not found")
       continue
     fi
     if err=$(mv -- "$item" "$dest/" 2>&1); then
-      echo "  ✅ Moved: $(basename -- "$item") → $dest/"
+      ok=$((ok+1))
     else
-      echo "  ❌ Failed: $(basename -- "$item") — ${err:-mv returned $?}"
+      failed+=("$(basename -- "$item") — ${err:-mv returned $?}")
     fi
   done
+  _transfer_report "Moved" "$ok" "$total" "$dest" "${failed[@]}"
 }
 
 _shortcut_read_field() {
@@ -930,10 +956,8 @@ transfer_menu() {
     1|2)
       if [ "$t_op" == "copy" ]; then
         perform_copy "$final_dest" "${selected_items[@]}"
-        echo "✅ Copy complete → $final_dest"
       elif [ "$t_op" == "move" ]; then
         perform_move "$final_dest" "${selected_items[@]}"
-        echo "✅ Move complete → $final_dest"
       else
         perform_shortcut "$final_dest" "${selected_items[@]}"
         echo "✅ Shortcuts created → $final_dest"

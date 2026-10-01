@@ -190,13 +190,19 @@ _sp_apply_buffer() {
   _sp_load list "$file"
   [ ${#list[@]} -eq 0 ] && return 0
 
+  # cp/mv: pass the full list — perform_* count it and report missing/failed
+  # items in their own compact summary. sc: skip missing items up front.
+  case "$op" in
+    cp) perform_copy "$dest" "${list[@]}"; return ;;
+    mv) perform_move "$dest" "${list[@]}"; return ;;
+  esac
+
   local -a live=()
-  local missing=0 p
+  local p
   for p in "${list[@]}"; do
     if [ -e "$p" ]; then
       live+=("$p")
     else
-      missing=$((missing+1))
       echo "  ⚠️  Skipping missing item (no longer exists): $p"
     fi
   done
@@ -208,8 +214,6 @@ _sp_apply_buffer() {
 
   echo "⚙️  Applying $label buffer (${#live[@]} item(s)) → $dest"
   case "$op" in
-    cp) perform_copy     "$dest" "${live[@]}" ;;
-    mv) perform_move     "$dest" "${live[@]}" ;;
     sc) perform_shortcut "$dest" "${live[@]}" ;;
   esac
 }
