@@ -3,7 +3,7 @@ delete_items() {
   if $imaginary_mode; then
     select_imaginary_items_common "$path" "$group_prefix" && _ok=true
   else
-    select_items_common "DELETE" && _ok=true
+    select_items_common "DELETE" allow_a && _ok=true
   fi
   if $_ok; then
     local _has_shortcuts=false

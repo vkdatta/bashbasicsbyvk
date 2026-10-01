@@ -150,6 +150,10 @@ source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_shortcut_csv.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_csv.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_map_csv.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_bookmark_csv.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_common.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_ext.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_date.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selection.sh"
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Tab cycle

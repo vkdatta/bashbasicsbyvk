@@ -188,6 +188,18 @@ _vp_is_hl_single() { [ "$1" -eq "${_hl_index:-0}" ]; }
 _vp_is_hl_multi()  { [ -n "${_msel_set[$1]+x}" ]; }
 _vp_is_hl() { $_vp_hl_fn "$1"; }
 
+# Selection mark for row $1 → sets _smk_out, returns 0 when the row's item is in
+# the .s selection.  Only for screens that list real files through the default
+# row renderer (screens with their own row-text function list functions/menus,
+# and grouped view rows are groups — they get the header count instead).
+_vp_mark_sel() {
+  [ "$_vp_mode" == "items" ] || return 1
+  [ -z "${_vp_rowtext_fn:-}" ] || return 1
+  [ -s "${_SEL_FILE:-/nonexistent}" ] || return 1
+  declare -F _sel_mark_v >/dev/null 2>&1 || return 1
+  _sel_mark_v "${items[$(( $1 - 1 ))]:-}" "$_vp_line"
+}
+
 _vp_build_chrome() {
   mapfile -t _vp_hdr_arr < <($_vp_header_fn)
   mapfile -t _vp_ftr_arr < <($_vp_footer_fn)
@@ -303,6 +315,7 @@ _vp_emit() {
     for ((i=_vp_start; i<=_vp_end; i++)); do
       _vp_row_text "$i"
       line="$_vp_line"
+      _vp_mark_sel "$i" && line="$_smk_out"
       _vp_is_hl "$i" && line="$(_highlight "$line")"
       _vp_el "$line"
     done
@@ -354,6 +367,7 @@ _vp_repaint_row() {
   (( i < _vp_start || i > _vp_end )) && return 1
   _vp_row_text "$i"
   line="$_vp_line"
+  _vp_mark_sel "$i" && line="$_smk_out"
   _vp_is_hl "$i" && line="$(_highlight "$line")"
   _repaint_line_above "$(_vp_dist "$i")" "$line"
   return 0
@@ -470,9 +484,16 @@ _multi_compute_set() {
   _msel_set=()
   local idx
   _vp_count
-  for idx in $(parse_selection "$_buf" "$_vp_n"); do
-    _msel_set["$idx"]=1
-  done
+  local _b="${_buf// /}"
+  if [ "${_multi_allow_a:-false}" == "true" ] && [[ "$_b" == "a" ]]; then
+    for idx in $(seq 1 "$_vp_n"); do _msel_set["$idx"]=1; done
+  elif [ "${_multi_allow_a:-false}" == "true" ] && [[ "$_b" =~ ^a-([0-9][0-9,-]*)$ ]]; then
+    for idx in $(_sp_parse_all_except "${BASH_REMATCH[1]}" "$_vp_n"); do _msel_set["$idx"]=1; done
+  else
+    for idx in $(parse_selection "$_buf" "$_vp_n"); do
+      _msel_set["$idx"]=1
+    done
+  fi
 }
 
 _multi_print_input_line() {
@@ -494,7 +515,11 @@ _multi_header_fn() {
 
 _multi_footer_fn() {
   echo
-  echo "$_prompt (supports ranges: 1-10,15-20,33)"
+  if [ "${_multi_allow_a:-false}" == "true" ]; then
+    echo "$_prompt (ranges: 1-10,15-20,33   a = all   a-1-5,7 = all except)"
+  else
+    echo "$_prompt (supports ranges: 1-10,15-20,33)"
+  fi
   echo "up/down ±1, PgUp/PgDn ±${_vp_page_step}, Home/End first/last, left/right move cursor"
 }
 

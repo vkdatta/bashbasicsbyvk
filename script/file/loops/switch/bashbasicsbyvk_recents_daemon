@@ -48,6 +48,10 @@ SENTINEL     = BVK_DIR / ".watchdog_install_attempted"
 EXCLUDE_FILE = BVK_DIR / "recents_exclude.conf"
 THIS_FILE    = Path(os.path.abspath(__file__))
 
+DAEMON_VERSION = 2                                  # bump when behaviour changes (old daemons get replaced)
+VERSION_FILE   = BVK_DIR / "daemon.version"
+STATUS_FILE    = BVK_DIR / "daemon.status"
+
 MAX_RECENT     = 100
 FLUSH_DELAY    = 2.0     # seconds — debounce rapid edits
 POLL_INTERVAL  = 3.0     # seconds — polling fallback cadence
@@ -417,6 +421,8 @@ def _load_existing():
 
 def _cleanup(signum=None, frame=None):
     _flush_to_disk()
+    try: _p4_stop()
+    except Exception: pass
     try: PID_FILE.unlink()
     except OSError: pass
     sys.exit(0)
@@ -522,6 +528,15 @@ def _run_watchdog_watcher(Observer, FileSystemEventHandler):
     watch_roots = [str(HOME)]
 
     class _Handler(FileSystemEventHandler):
+        def on_any_event(self, e):
+            # Phase 4: favourites upkeep + index invalidation (never raises)
+            try:
+                if e.event_type in ("created", "deleted", "moved", "modified"):
+                    _p4_event(e.event_type, e.src_path,
+                              getattr(e, "dest_path", "") or "", e.is_directory)
+            except Exception as ex:
+                _log(f"p4 event error: {type(ex).__name__}: {ex}")
+
         def on_modified(self, e):
             # Hot-reload exclude list whenever the config file is saved.
             if not e.is_directory and e.src_path == str(EXCLUDE_FILE):
@@ -551,6 +566,7 @@ def _run_watchdog_watcher(Observer, FileSystemEventHandler):
 
     observer.start()
     _log(f"observer started watching {watch_roots}")
+    _p4_events_flowing(True)
 
     try:
         while observer.is_alive():
@@ -631,6 +647,284 @@ def _run_polling_watcher():
 
         seen = cur
 
+# ══ Phase 4: favourites upkeep + background index ═════════════════════════════
+#
+#  Besides recents, the daemon now
+#   • keeps favourites attached when items / folders are renamed or moved
+#     (live from events, plus a full reconcile at start and every 10 min — that
+#     also covers anything that happened while it was not running),
+#   • invalidates cached folder sizes when something below them changes,
+#   • pre-warms the duplicate-hash / folder-size index for "hot" folders so
+#     .s.dup and .s.size answer fast,
+#   • writes ~/.bashbasicsbyvk/daemon.status (shown by the  .dm  command).
+#  All of it is best-effort and low priority; recents behaviour is unchanged.
+
+FAV_RECONCILE_EVERY = 600     # seconds
+WARM_START_DELAY    = int(os.environ.get("BVK_WARM_DELAY", "20"))   # seconds after start before the first warm
+WARM_EVERY          = 1800    # seconds between warm cycles
+WARM_BUDGET         = 120     # max seconds spent on ONE root per cycle
+INVALIDATE_DELAY    = 2.0     # debounce for folder-size invalidation
+STATUS_EVERY        = 15
+
+def _load_sibling(name):
+    """Import _3bvk_*.py that sits next to this script (flat install or repo)."""
+    try:
+        import importlib.util
+        path = os.path.join(os.path.dirname(os.path.realpath(__file__)), name + ".py")
+        if not os.path.isfile(path):
+            return None
+        spec = importlib.util.spec_from_file_location(name, path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception as e:
+        _log(f"could not load {name}: {type(e).__name__}: {e}")
+        return None
+
+_fav_lib = None
+_idx_lib = None
+_idx = None                       # shared Index connection (guarded by _idx_lock)
+_idx_lock = threading.Lock()
+_p4_lock  = threading.Lock()
+_stats = {
+    "backend": "starting", "started": 0, "fav_followed": 0, "fav_reconciles": 0,
+    "fav_located": 0, "last_fav_reconcile": 0, "last_warm": [], "last_warm_at": 0,
+    "invalidations": 0,
+}
+_fav_dirs = set()                 # folders that have a favourites file
+_fav_moved_targets = set()        # where #moved= entries point
+_fav_snapshot_dirty = threading.Event()
+_warm_now = threading.Event()         # SIGUSR1  (.dm.warm)  → warm immediately
+_fav_sync_now = threading.Event()     # SIGUSR2  (.dm.sync)  → favourites reconcile immediately
+_inval_changed = set()
+_inval_drop = set()
+_inval_event = threading.Event()
+_BVK_STR = str(BVK_DIR)
+
+def _p4_skip_dir(path):
+    return path.startswith(_BVK_STR) or "/." in path[len(str(HOME)):]
+
+def _refresh_fav_snapshot():
+    global _fav_dirs, _fav_moved_targets
+    if _fav_lib is None:
+        return
+    try:
+        favs = _fav_lib.load_all()
+        with _p4_lock:
+            _fav_dirs = {f.dirpath for f in favs}
+            _fav_moved_targets = {it.moved for f in favs for it in f.items if it.moved}
+    except Exception as e:
+        _log(f"fav snapshot failed: {type(e).__name__}: {e}")
+
+def _p4_event(kind, src, dest, is_dir):
+    """Called for EVERY filesystem event (alongside the recents logic)."""
+    if src.startswith(_BVK_STR) or (dest and dest.startswith(_BVK_STR)):
+        # our own state files; a change in favourites/ means the snapshot is stale
+        if "/favourites/" in src or (dest and "/favourites/" in dest):
+            _fav_snapshot_dirty.set()
+        return
+    # ── index: forget cached folder sizes of every ancestor ──────────────────
+    if _idx_lib is not None and kind in ("created", "deleted", "moved", "modified"):
+        if not (is_dir and kind == "modified"):
+            with _p4_lock:
+                _inval_changed.add(src)
+                if dest:
+                    _inval_changed.add(dest)
+                if is_dir and kind in ("deleted", "moved"):
+                    _inval_drop.add(src)
+            _inval_event.set()
+    # ── favourites: follow renames / moves ───────────────────────────────────
+    if _fav_lib is not None and kind == "moved" and dest:
+        with _p4_lock:
+            fav_dirs = list(_fav_dirs)
+            targets = _fav_moved_targets
+        sdir, ddir = os.path.dirname(src), os.path.dirname(dest)
+        relevant = False
+        if is_dir:
+            relevant = any(d == src or d.startswith(src + "/") for d in fav_dirs) \
+                       or any(t == src or t.startswith(src + "/") for t in targets)
+        if not relevant:
+            relevant = sdir in fav_dirs or ddir in fav_dirs or src in targets
+        if relevant:
+            try:
+                n = _fav_lib.on_dir_moved(src, dest) if is_dir else 0
+                n += _fav_lib.on_item_moved(src, dest)
+                if n:
+                    _stats["fav_followed"] += n
+                    _log(f"favourites followed: {src} -> {dest}")
+                _fav_snapshot_dirty.set()
+            except Exception as e:
+                _log(f"favourite follow failed: {type(e).__name__}: {e}")
+
+def _invalidator():
+    """Debounced: drop cached folder sizes for everything that changed."""
+    while True:
+        _inval_event.wait()
+        _inval_event.clear()
+        time.sleep(INVALIDATE_DELAY)
+        with _p4_lock:
+            changed, drop = list(_inval_changed), list(_inval_drop)
+            _inval_changed.clear(); _inval_drop.clear()
+        if not (changed or drop) or _idx is None:
+            continue
+        try:
+            with _idx_lock:
+                _idx.dir_invalidate(changed, drop)
+            _stats["invalidations"] += 1
+        except Exception as e:
+            _log(f"invalidate failed: {type(e).__name__}: {e}")
+
+def _fav_maintainer():
+    """Snapshot refresh on demand + a full reconcile at start and periodically."""
+    last_full = 0.0
+    time.sleep(3)
+    while True:
+        if _fav_snapshot_dirty.is_set():
+            _fav_snapshot_dirty.clear()
+            _refresh_fav_snapshot()
+        if _fav_lib is not None and (time.time() - last_full > FAV_RECONCILE_EVERY or _fav_sync_now.is_set()):
+            _fav_sync_now.clear()
+            last_full = time.time()
+            try:
+                st = _fav_lib.reconcile_all(search_roots=[str(HOME)], budget=60, skip=_p4_skip_dir)
+                _stats["fav_reconciles"] += 1
+                _stats["fav_located"] += st.get("located", 0)
+                _stats["last_fav_reconcile"] = int(time.time())
+                if st.get("changed") or st.get("located"):
+                    _log(f"favourites reconcile: {st}")
+                _refresh_fav_snapshot()
+            except Exception as e:
+                _log(f"fav reconcile failed: {type(e).__name__}: {e}")
+        _fav_snapshot_dirty.wait(timeout=5)
+
+def _warmer():
+    """Throttled background pre-computation of hashes + folder sizes."""
+    time.sleep(WARM_START_DELAY)
+    while True:
+        if _idx_lib is not None and _idx is not None:
+            try:
+                with _p4_lock:
+                    favd = list(_fav_dirs)
+                roots = _idx_lib.read_roots(favd)
+                results = []
+                for root, rec in roots:
+                    if _p4_skip_dir(root):
+                        continue
+                    with _idx_lock:
+                        res = _idx_lib.warm_root(_idx, root, rec, budget=WARM_BUDGET)
+                    results.append(res)
+                    time.sleep(1)
+                _stats["last_warm"] = results[-10:]
+                _stats["last_warm_at"] = int(time.time())
+                _write_status()
+                if results:
+                    _log("warm cycle: " + ", ".join(f"{r['root']}({r['files']}f,{r['seconds']}s)" for r in results))
+            except Exception as e:
+                import traceback
+                _log(f"warm failed: {type(e).__name__}: {e}")
+                _log(traceback.format_exc())
+        _warm_now.wait(timeout=WARM_EVERY)
+        _warm_now.clear()
+
+def _write_status():
+    import json
+    try:
+        with _idx_lock:
+            idx_stats = _idx.stats() if _idx is not None else {}
+    except Exception:
+        idx_stats = {}
+    with _p4_lock:
+        favn = len(_fav_dirs)
+    with _lock:
+        recents = len(_recent)
+    doc = {
+        "version": DAEMON_VERSION, "pid": os.getpid(), "updated": int(time.time()),
+        "recents": recents, "fav_folders": favn, "index": idx_stats,
+        **{k: v for k, v in _stats.items()},
+    }
+    try:
+        tmp = STATUS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(doc))
+        os.replace(tmp, STATUS_FILE)
+    except OSError:
+        pass
+
+def _status_loop():
+    while True:
+        _write_status()
+        time.sleep(STATUS_EVERY)
+
+def _write_roots_template():
+    conf = BVK_DIR / "index_roots.conf"
+    if conf.exists():
+        return
+    try:
+        conf.write_text(
+            "# Folders the daemon keeps \"warm\" so .s.dup / .s.size answer instantly.\n"
+            "# One folder per line (whole tree).  Add  \"  shallow\"  after a path to skip subfolders.\n"
+            "# Folders you run .s.dup / .s.size in are added automatically (index/hot.list),\n"
+            "# and so are folders that have favourites.  Lines starting with # are ignored.\n"
+            "#\n"
+            "#   /data/data/com.termux/files/home/icons\n"
+            "#   /data/data/com.termux/files/home/downloads  shallow\n")
+    except OSError:
+        pass
+
+def _p4_start():
+    """Open the index, load libs, start the helper threads."""
+    global _fav_lib, _idx_lib, _idx
+    _stats["started"] = int(time.time())
+    try:
+        os.nice(10)                      # never compete with the user's work
+    except (OSError, AttributeError):
+        pass
+    _fav_lib = _load_sibling("_3bvk_fav_lib")
+    _idx_lib = _load_sibling("_3bvk_index_lib")
+    if _idx_lib is not None:
+        try:
+            _idx = _idx_lib.Index()
+            _idx.bump_epoch()            # restarted daemon → every cached folder size is untrusted
+            _idx.meta_set("daemon_pid", os.getpid())
+            _idx.meta_set("events_ok", "0")   # becomes 1 only once inotify is running
+        except Exception as e:
+            _log(f"index unavailable: {type(e).__name__}: {e}")
+            _idx = None
+    try:
+        VERSION_FILE.write_text(str(DAEMON_VERSION) + "\n")
+    except OSError:
+        pass
+    _write_roots_template()
+    try:
+        signal.signal(signal.SIGUSR1, lambda s, f: _warm_now.set())
+        signal.signal(signal.SIGUSR2, lambda s, f: _fav_sync_now.set())
+    except (ValueError, AttributeError):
+        pass
+    _refresh_fav_snapshot()
+    for target, name in ((_invalidator, "invalidator"), (_fav_maintainer, "fav-maintainer"),
+                         (_warmer, "warmer"), (_status_loop, "status")):
+        threading.Thread(target=target, name=name, daemon=True).start()
+    _log(f"phase-4 services up: favourites={'on' if _fav_lib else 'off'} index={'on' if _idx else 'off'}")
+
+def _p4_events_flowing(flag):
+    _stats["backend"] = "watchdog" if flag else "polling"
+    if _idx is not None:
+        try:
+            with _idx_lock:
+                _idx.meta_set("events_ok", "1" if flag else "0")
+        except Exception:
+            pass
+    _write_status()
+
+def _p4_stop():
+    if _idx is not None:
+        try:
+            with _idx_lock:
+                _idx.meta_set("daemon_pid", 0)
+                _idx.meta_set("events_ok", "0")
+        except Exception:
+            pass
+    _write_status()
+
 # ── Dispatcher ─────────────────────────────────────────────────────────────────
 
 def _run_watcher():
@@ -658,6 +952,7 @@ def _run_watcher():
     else:
         _log("watchdog unavailable — using polling watcher")
 
+    _p4_events_flowing(False)
     _run_polling_watcher()
 
 # ── Daemon loop ────────────────────────────────────────────────────────────────
@@ -673,6 +968,7 @@ def run_daemon():
 
     _load_excludes(force=True)   # initialise exclude list (creates file if absent)
     _load_existing()
+    _p4_start()                  # favourites upkeep + background index
 
     t = threading.Thread(target=_flusher, daemon=True)
     t.start()
@@ -696,7 +992,20 @@ def main():
         return
 
     if is_alive():
-        return
+        # An older daemon (pre-Phase-4) keeps running old code after an upgrade:
+        # replace it when the version stamp does not match.
+        try:
+            running = VERSION_FILE.read_text().strip() if VERSION_FILE.exists() else "1"
+        except OSError:
+            running = "1"
+        if running == str(DAEMON_VERSION):
+            return
+        try:
+            os.kill(int(PID_FILE.read_text().strip()), signal.SIGTERM)
+            time.sleep(1.0)
+            _log(f"replaced daemon v{running} with v{DAEMON_VERSION}")
+        except (ValueError, OSError):
+            pass
 
     bootstrap()
 

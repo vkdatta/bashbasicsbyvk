@@ -3,6 +3,7 @@
 source "_3bvk_import_engine.sh"
 source "_3bvk_import_functions.sh"
 source "_3bvk_import_staging.sh"
+source "_3bvk_import_select.sh"
 
 source "bashbasicsbyvk_run.sh"
 source "bashbasicsbyvk_csv.sh"
@@ -16,6 +17,7 @@ source "bashbasicsbyvk_infinity.sh"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _bvk_wake_recents_daemon
+_disp_startup
 
 trap 'stty "$_orig_stty" 2>/dev/null; \
       [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
@@ -54,7 +56,13 @@ while true; do
   _has_group_view=false
   [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
 
-  if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
+  _disp_begin   # .d display filter: sets _disp_on
+  _sel_begin    # selection count for the header (marks are drawn by the viewport)
+  _fav_begin    # favourites: sets _fav_on (mode priority: favourite > imaginary > normal)
+
+  if $_fav_on; then
+    _fav_build_items
+  elif [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && ! $_disp_on; then
     imaginary_mode=true
     if [ -n "$group_prefix" ]; then
       mapfile -t local_arr < <(_bvk_prefix_scan "$path" "$group_prefix")
@@ -70,7 +78,7 @@ while true; do
     else
       build_imaginary_groups "$path" "" "$total"
     fi
-  elif [ "$total" -gt "${index_mode_threshold:-200}" ] && $force_show; then
+  elif [ "$total" -gt "${index_mode_threshold:-200}" ] && { $force_show || $_disp_on; }; then
     imaginary_mode=false
     build_items_with_meta "$path" "$group_prefix"
     apply_sort
@@ -82,6 +90,8 @@ while true; do
       apply_sort
     fi
   fi
+
+  $imaginary_mode || _disp_apply   # narrow to the .d display filter
 
   if $imaginary_mode; then
     _vp_mode="imaginary"
@@ -110,7 +120,9 @@ while true; do
                  elif [ "$path" != "/" ]; then
                    path=$(dirname "$path"); group_prefix=""; force_show=false
                  fi ;;
-    fs|forceshow) handle_force_show ;;
+    fs|forceshow) handle_force_show_guarded ;;
+    ns)          handle_normal_show ;;
+    fa|fa\ *)    handle_fav_add "$choice" ;;
     c)           handle_create ;;
     t)           transfer_menu ;;
     d)           delete_items ;;
@@ -138,6 +150,9 @@ while true; do
     rf)          handle_refresh ;;
     scr-sync)    handle_scr_sync ;;
     sast)        bashbasicsbyvk_sast ;;
+    .s|.s.*|.s\ *|.r|.r.*|.r\ *)  handle_select_cmd "$choice" ;;
+    .dm|.dm.*)   handle_daemon_cmd "$choice" ;;
+    .d|.d.*|.d\ *)  handle_display_cmd "$choice" ;;
     sw)          switch_menu ;;
     fx)          functions_menu ;;
     *)           handle_selection "$choice" ;;

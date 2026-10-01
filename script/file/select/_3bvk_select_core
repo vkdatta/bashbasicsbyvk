@@ -1,0 +1,806 @@
+#!/usr/bin/env python3
+"""
+_3bvk_select_core — expression engine behind the  .s  select commands.
+
+Modes
+  scan EXPR
+      Parse only.  Prints:
+          RECURSIVE=0|1
+          CSV<TAB><clause label>        (one line per .csv clause, left→right)
+      Exit 2 + "ERR: ..." on stderr for a bad expression.
+
+  run EXPR PATH SHOW_HIDDEN(0|1) [CSVFILE ...]
+      Evaluate EXPR against PATH.  CSVFILE args map, in order, to the .csv
+      clauses reported by `scan`.  Prints matching absolute paths,
+      NUL-separated.  Exit 2 + "ERR: ..." on stderr for a bad expression.
+
+Environment
+  BVK_RULES_DIR      folder holding *.rule files (for  .s.rule NAME)
+  BVK_NO_RECURSIVE   1 = ignore -r (display filters only ever look at one folder)
+
+Headers may start with .s (select) or .d (display) — identical grammar.
+
+Grammar (see README / .s help)
+  clause  := .s[.type][.kind][.csv[(or|and)]] args...
+  ops     := &  (AND)   |  (OR)   !  (NOT)   plain space = AND   ( ) grouping
+  flag    := -r  (recursive, anywhere in the expression)
+"""
+import hashlib
+import os
+import re
+import stat as statmod
+import sys
+import time
+from datetime import datetime
+
+MAX_RULE_DEPTH = 5
+
+# ── optional background index (hash + folder-size cache) ─────────────────────
+def _load_lib(name):
+    """Import a sibling module by file path (works for the flat install too)."""
+    try:
+        import importlib.util
+        here = os.path.dirname(os.path.realpath(__file__))
+        path = os.path.join(here, name + '.py')
+        if not os.path.isfile(path):
+            return None
+        spec = importlib.util.spec_from_file_location(name, path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
+IDXLIB = _load_lib('_3bvk_index_lib')
+IDX = None                 # open Index while a run is in progress
+USED_HEAVY = {'dup': False, 'dirsize': False}   # → register the folder as "hot"
+ROOT = None                # folder being searched (lets the hash cache skip a prefix scan)
+
+
+class SelError(Exception):
+    pass
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Tokenizer
+# ══════════════════════════════════════════════════════════════════════════════
+HEADER_RE = re.compile(r'^\.[sd]((?:\.[A-Za-z]+)*)(?:\((or|and)\))?$', re.I)   # .s = select, .d = display
+
+
+def tokenize(text):
+    """Return list of tokens:
+       ('op','&'|'|')  ('not',)  ('lp',)  ('rp',)  ('word', text, quoted)"""
+    toks = []
+    i, n, depth = 0, len(text), 0
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+            continue
+        if c in '&|':
+            toks.append(('op', c))
+            i += 1
+            continue
+        # word-start specials: "(" / "!" only mean grouping / NOT when they
+        # are glued to a clause header, another paren, or stand alone.
+        nxt = text[i + 1] if i + 1 < n else ' '
+        if c == '(' and (nxt.isspace() or nxt in '.!('):
+            toks.append(('lp',))
+            depth += 1
+            i += 1
+            continue
+        if c == '!' and (nxt.isspace() or nxt in '.('):
+            toks.append(('not',))
+            i += 1
+            continue
+        # ordinary word (quotes allowed inside)
+        buf, quoted = [], False
+        while i < n and not text[i].isspace():
+            ch = text[i]
+            if ch == '"':
+                quoted = True
+                i += 1
+                while i < n and text[i] != '"':
+                    buf.append(text[i])
+                    i += 1
+                if i >= n:
+                    raise SelError('unterminated quote (")')
+                i += 1
+                continue
+            if ch in '&|':
+                break
+            buf.append(ch)
+            i += 1
+        word = ''.join(buf)
+        if word == ')' and not quoted and depth == 0:
+            raise SelError("unmatched ')'")
+        closers = 0
+        if not quoted:
+            while depth - closers > 0 and word.endswith(')') and word.count(')') > word.count('('):
+                word = word[:-1]
+                closers += 1
+        if word or quoted:
+            toks.append(('word', word, quoted))
+        for _ in range(closers):
+            toks.append(('rp',))
+            depth -= 1
+    return toks
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Value parsers — size
+# ══════════════════════════════════════════════════════════════════════════════
+UNITS = {'': 1, 'b': 1, 'k': 1024, 'kb': 1024, 'm': 1024 ** 2, 'mb': 1024 ** 2,
+         'g': 1024 ** 3, 'gb': 1024 ** 3, 't': 1024 ** 4, 'tb': 1024 ** 4}
+SIZE_RE = re.compile(r'^(\d+(?:\.\d+)?)([a-z]*)$', re.I)
+
+
+def parse_size_value(tok):
+    m = SIZE_RE.match(tok)
+    if not m or m.group(2).lower() not in UNITS:
+        raise SelError("bad size '%s' (examples: 500kb, 3mb, 1gb, 0)" % tok)
+    unit = UNITS[m.group(2).lower()]
+    return float(m.group(1)) * unit, unit
+
+
+def size_item(item):
+    """One comma-item → predicate(size_bytes)."""
+    m = re.match(r'^(<=|>=|<|>)(.+)$', item)
+    if m:
+        op, (val, _) = m.group(1), parse_size_value(m.group(2))
+        return {'<': lambda s: s < val, '>': lambda s: s > val,
+                '<=': lambda s: s <= val, '>=': lambda s: s >= val}[op]
+    if '..' in item:
+        a, b = item.split('..', 1)
+        lo, hi = parse_size_value(a)[0], parse_size_value(b)[0]
+        if lo > hi:
+            lo, hi = hi, lo
+        return lambda s: lo <= s <= hi
+    val, unit = parse_size_value(item)
+    if unit == 1:
+        return lambda s: s == int(val)
+    shown = round(val / unit, 1)
+    return lambda s: round(s / unit, 1) == shown
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Value parsers — time      (YYYY | MMYYYY | DDMMYYYY | 2020s | lastNd)
+# ══════════════════════════════════════════════════════════════════════════════
+def _ts(dt):
+    return dt.timestamp()
+
+
+def period(tok):
+    """Token → (start_ts inclusive, end_ts exclusive)."""
+    m = re.match(r'^(\d{4})s$', tok, re.I)
+    if m:
+        y = int(m.group(1))
+        if y % 10:
+            raise SelError("bad decade '%s' (example: 2020s)" % tok)
+        return _ts(datetime(y, 1, 1)), _ts(datetime(y + 10, 1, 1))
+    if not tok.isdigit():
+        raise SelError("bad date '%s' — use YYYY, MMYYYY or DDMMYYYY (no dashes)" % tok)
+    try:
+        if len(tok) == 4:
+            y = int(tok)
+            return _ts(datetime(y, 1, 1)), _ts(datetime(y + 1, 1, 1))
+        if len(tok) == 6:
+            mo, y = int(tok[:2]), int(tok[2:])
+            ny, nm = (y + 1, 1) if mo == 12 else (y, mo + 1)
+            return _ts(datetime(y, mo, 1)), _ts(datetime(ny, nm, 1))
+        if len(tok) == 8:
+            d, mo, y = int(tok[:2]), int(tok[2:4]), int(tok[4:])
+            s = datetime(y, mo, d)
+            return _ts(s), _ts(s) + 86400
+    except ValueError as e:
+        raise SelError("invalid date '%s' (%s)" % (tok, e))
+    raise SelError("bad date '%s' — %d digits; use 4 (YYYY), 6 (MMYYYY) or 8 (DDMMYYYY)" % (tok, len(tok)))
+
+
+def time_item(item):
+    """One comma-item → (lo_ts|None inclusive, hi_ts|None exclusive)."""
+    m = re.match(r'^last(\d+)([dwmy])$', item, re.I)
+    if m:
+        per = {'d': 86400, 'w': 7 * 86400, 'm': 30 * 86400, 'y': 365 * 86400}[m.group(2).lower()]
+        return time.time() - int(m.group(1)) * per, None
+    m = re.match(r'^(<=|>=|<|>)(.+)$', item)
+    if m:
+        op = m.group(1)
+        s, e = period(m.group(2))
+        return {'<': (None, s), '>': (e, None), '<=': (None, e), '>=': (s, None)}[op]
+    if '..' in item:
+        a, b = item.split('..', 1)
+        (sa, ea), (sb, eb) = period(a), period(b)
+        if sa > sb:
+            (sa, ea), (sb, eb) = (sb, eb), (sa, ea)
+        return sa, eb
+    return period(item)
+
+
+def make_range_pred(words, item_fn, is_time):
+    """words: list[str]; each word = comma-OR group; words AND together."""
+    groups = []
+    for w in words:
+        items = [x for x in w.split(',') if x]
+        if not items:
+            continue
+        groups.append([item_fn(x) for x in items])
+    if not groups:
+        raise SelError('missing value')
+    if is_time:
+        def test(v):
+            for grp in groups:
+                if not any((lo is None or v >= lo) and (hi is None or v < hi) for lo, hi in grp):
+                    return False
+            return True
+    else:
+        def test(v):
+            return all(any(p(v) for p in grp) for grp in groups)
+    return test
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CSV cell reader — same rules as the app's _csv_resolve_items:
+#  every comma-separated cell of every non-blank line, trimmed, blanks skipped.
+# ══════════════════════════════════════════════════════════════════════════════
+def read_csv_values(path):
+    vals = []
+    try:
+        with open(path, encoding='utf-8-sig', errors='replace') as fh:
+            for line in fh:
+                line = line.rstrip('\r\n')
+                if not line.strip():
+                    continue
+                for cell in line.split(','):
+                    cell = cell.strip().strip('\r')
+                    if cell:
+                        vals.append(cell)
+    except OSError as e:
+        raise SelError("cannot read CSV '%s': %s" % (path, e))
+    return vals
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Parser  →  AST
+#    ('and',[..]) ('or',[..]) ('not',n) ('pred',dict)
+# ══════════════════════════════════════════════════════════════════════════════
+KINDS_WITH_CSV = {'ext', 'sw', 'ew', 'contains', 'time', 'csv'}
+KINDS = {'ext', 'sw', 'ew', 'contains', 'size', 'time', 'csv', 'dup', 'empty', 'rule'}
+
+
+class Parser:
+    def __init__(self, text, rules_dir, depth=0, state=None):
+        self.rules_dir = rules_dir
+        self.depth = depth
+        # shared across nested rule parses
+        self.state = state if state is not None else {'recursive': False, 'csv': []}
+        toks = tokenize(text)
+        # -r flag anywhere as a standalone unquoted word
+        clean = []
+        for t in toks:
+            if t[0] == 'word' and t[1] == '-r' and not t[2]:
+                self.state['recursive'] = True
+            else:
+                clean.append(t)
+        self.toks = clean
+        self.i = 0
+
+    # -- token helpers
+    def peek(self):
+        return self.toks[self.i] if self.i < len(self.toks) else None
+
+    def is_header(self, t):
+        return t is not None and t[0] == 'word' and not t[2] and HEADER_RE.match(t[1]) is not None
+
+    def starts_unary(self, t):
+        return t is not None and (t[0] in ('not', 'lp') or self.is_header(t))
+
+    # -- grammar
+    def parse(self):
+        if not self.toks:
+            raise SelError('empty expression')
+        node = self.p_or()
+        if self.i < len(self.toks):
+            t = self.toks[self.i]
+            raise SelError("unexpected '%s'" % (t[1] if t[0] == 'word' else t[0]))
+        return node
+
+    def p_or(self):
+        parts = [self.p_and()]
+        while self.peek() == ('op', '|'):
+            self.i += 1
+            parts.append(self.p_and())
+        return parts[0] if len(parts) == 1 else ('or', parts)
+
+    def p_and(self):
+        parts = [self.p_unary()]
+        while True:
+            t = self.peek()
+            if t == ('op', '&'):
+                self.i += 1
+                parts.append(self.p_unary())
+            elif self.starts_unary(t):
+                parts.append(self.p_unary())     # plain space = AND
+            else:
+                break
+        return parts[0] if len(parts) == 1 else ('and', parts)
+
+    def p_unary(self):
+        t = self.peek()
+        if t is None:
+            raise SelError('expression ends unexpectedly')
+        if t[0] == 'not':
+            self.i += 1
+            return ('not', self.p_unary())
+        if t[0] == 'lp':
+            self.i += 1
+            node = self.p_or()
+            if self.peek() != ('rp',):
+                raise SelError("missing ')'")
+            self.i += 1
+            return node
+        if self.is_header(t):
+            return self.p_clause()
+        raise SelError("expected a .s clause, got '%s'" % (t[1] if t[0] == 'word' else t[0]))
+
+    def p_clause(self):
+        head = self.toks[self.i][1]
+        self.i += 1
+        m = HEADER_RE.match(head)
+        segs = [s.lower() for s in m.group(1).split('.') if s]
+        logic = (m.group(2) or 'or').lower()
+        args = []                                   # [(text, quoted)]
+        while True:
+            t = self.peek()
+            if t is not None and t[0] == 'word' and not self.is_header(t):
+                args.append((t[1], t[2]))
+                self.i += 1
+            else:
+                break
+        return self.build(head, segs, logic, args)
+
+    # -- clause builder
+    def build(self, head, segs, logic, args):
+        if segs[:1] in (['a'], ['f'], ['d']) and len(segs) <= 2 and args \
+                and segs[-1] in ('a', 'f', 'd'):
+            raise SelError("'%s' takes no values" % head)
+        # type scope prefixes
+        scope = None
+        if segs[:1] == ['a']:
+            rest = segs[1:]
+            if not rest:
+                return ('pred', {'kind': 'all'})
+            if rest in (['f'], ['d']):
+                return ('pred', {'kind': 'type', 'dir': rest[0] == 'd'})
+            raise SelError("unknown clause '%s'" % head)
+        if segs[:1] in (['f'], ['d']):
+            if len(segs) == 1:
+                return ('pred', {'kind': 'type', 'dir': segs[0] == 'd'})
+            scope = ('pred', {'kind': 'type', 'dir': segs[0] == 'd'})
+            segs = segs[1:]
+        node = self.build_kind(head, segs, logic, args)
+        return ('and', [scope, node]) if scope else node
+
+    def build_kind(self, head, segs, logic, args):
+        if not segs:                                # ".s a.png,b.png"
+            vals = self.split_values(args)
+            if not vals:
+                raise SelError("'.s' / '.d' needs names — or use .s.a / .d.a for everything")
+            return ('pred', {'kind': 'names', 'vals': {v.lower() for v in vals}})
+
+        kind, rest = segs[0], segs[1:]
+        if kind not in KINDS:
+            raise SelError("unknown clause '%s'" % head)
+
+        # ---- no-argument kinds
+        if kind in ('dup', 'empty'):
+            if args:
+                raise SelError("'%s' takes no values" % head)
+            if kind == 'empty':
+                if rest:
+                    raise SelError("unknown clause '%s'" % head)
+                return ('pred', {'kind': 'empty'})
+            if rest not in ([], ['all']):
+                raise SelError("unknown clause '%s'" % head)
+            return ('pred', {'kind': 'dup', 'all': rest == ['all'], 'paths': None})
+
+        # ---- rule reference
+        if kind == 'rule':
+            if rest or len(args) != 1:
+                raise SelError('usage: .s.rule NAME')
+            return self.load_rule(args[0][0])
+
+        # ---- ".s.csv" = names listed in a CSV
+        if kind == 'csv':
+            if rest:
+                raise SelError("unknown clause '%s'" % head)
+            return ('pred', {'kind': 'csvnames', 'csv': self.new_csv('.s.csv'),
+                             'inline': self.split_values(args)})
+
+        # ---- kinds that optionally take a CSV
+        use_csv = False
+        if rest == ['csv']:
+            use_csv = True
+        elif rest:
+            raise SelError("unknown clause '%s'" % head)
+        if use_csv and kind not in KINDS_WITH_CSV:
+            raise SelError("'.s.%s' has no .csv form" % kind)
+        csv_idx = self.new_csv(head.split('(')[0]) if use_csv else None
+
+        if kind == 'size':
+            words = [a[0] for a in args]
+            if not words:
+                raise SelError('.s.size needs a value (e.g. >3mb, 1mb..5mb, 0)')
+            return ('pred', {'kind': 'size', 'fn': make_range_pred(words, size_item, False)})
+
+        if kind == 'time':
+            words = [a[0] for a in args]
+            if use_csv:
+                return ('pred', {'kind': 'time', 'csv': csv_idx, 'inline': words,
+                                 'logic': logic})
+            if not words:
+                raise SelError('.s.time needs a value (e.g. 2024, <2026, 032024, 2020s)')
+            return ('pred', {'kind': 'time', 'fn': make_range_pred(words, time_item, True)})
+
+        # text-list kinds: ext / sw / ew / contains
+        return ('pred', {'kind': kind, 'csv': csv_idx, 'inline': self.split_values(args),
+                         'logic': logic if use_csv else 'or'})
+
+    def new_csv(self, label):
+        idx = len(self.state['csv'])
+        self.state['csv'].append(label)
+        return idx
+
+    @staticmethod
+    def split_values(args):
+        vals = []
+        for text, quoted in args:
+            if quoted:
+                vals.append(text)
+            else:
+                vals.extend(x for x in text.split(',') if x)
+        return vals
+
+    def load_rule(self, name):
+        if self.depth >= MAX_RULE_DEPTH:
+            raise SelError('rules nested too deeply (loop?)')
+        if not re.match(r'^[A-Za-z0-9_-]+$', name):
+            raise SelError("bad rule name '%s'" % name)
+        path = os.path.join(self.rules_dir, name + '.rule')
+        if not os.path.isfile(path):
+            raise SelError("rule '%s' not found" % name)
+        expr, rec = '', False
+        with open(path, encoding='utf-8', errors='replace') as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                k, _, v = line.partition('=')
+                k = k.strip().upper()
+                if k == 'EXPR':
+                    expr = v.split('  #')[0].strip()
+                elif k == 'RECURSIVE' and v.strip().lower() in ('true', '1', 'yes'):
+                    rec = True
+        if not expr:
+            raise SelError("rule '%s' has no EXPR" % name)
+        if rec:
+            self.state['recursive'] = True
+        sub = Parser(expr, self.rules_dir, self.depth + 1, self.state)
+        return sub.parse()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Universe + entries
+# ══════════════════════════════════════════════════════════════════════════════
+class Entry:
+    __slots__ = ('path', 'name', 'isdir', '_st', '_size', '_empty', '_lname')
+
+    def __init__(self, path, name, isdir):
+        self.path, self.name, self.isdir = path, name, isdir
+        self._lname = name.lower()
+        self._st = False
+        self._size = None
+        self._empty = None
+
+    @property
+    def st(self):
+        if self._st is False:
+            try:
+                self._st = os.lstat(self.path)
+            except OSError:
+                self._st = None
+        return self._st
+
+    @property
+    def mtime(self):
+        return self.st.st_mtime if self.st else 0
+
+    @property
+    def size(self):
+        if self._size is None:
+            if self.isdir:
+                if IDXLIB is not None:
+                    USED_HEAVY['dirsize'] = True
+                    self._size = IDXLIB.dir_size(self.path, IDX)       # cached when the daemon can vouch for it
+                else:
+                    total = 0
+                    for root, dirs, files in os.walk(self.path):
+                        for f in files:
+                            try:
+                                total += os.lstat(os.path.join(root, f)).st_size
+                            except OSError:
+                                pass
+                    self._size = total
+            else:
+                self._size = self.st.st_size if self.st else 0
+        return self._size
+
+    @property
+    def is_empty(self):
+        if self._empty is None:
+            if self.isdir:
+                try:
+                    with os.scandir(self.path) as it:
+                        self._empty = next(it, None) is None
+                except OSError:
+                    self._empty = False
+            else:
+                self._empty = self.size == 0
+        return self._empty
+
+    @property
+    def ext(self):
+        if self.isdir:
+            return None
+        return self._lname.rpartition('.')[2] if '.' in self._lname else ''
+
+
+def build_universe(root, recursive, show_hidden):
+    out = []
+    if not os.path.isdir(root):
+        raise SelError("not a folder: %s" % root)
+    if not recursive:
+        try:
+            with os.scandir(root) as it:
+                for e in it:
+                    if not show_hidden and e.name.startswith('.'):
+                        continue
+                    try:
+                        isdir = e.is_dir(follow_symlinks=False)
+                    except OSError:
+                        isdir = False
+                    out.append(Entry(e.path, e.name, isdir))
+        except OSError as ex:
+            raise SelError(str(ex))
+    else:
+        for r, dirs, files in os.walk(root):
+            if not show_hidden:
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for d in dirs:
+                out.append(Entry(os.path.join(r, d), d, True))
+            for f in files:
+                if not show_hidden and f.startswith('.'):
+                    continue
+                out.append(Entry(os.path.join(r, f), f, False))
+    out.sort(key=lambda e: e.path.lower())
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Duplicate finder  (size → head hash → full hash)
+# ══════════════════════════════════════════════════════════════════════════════
+def _hash(path, limit=None):
+    h = hashlib.sha1()
+    try:
+        with open(path, 'rb') as fh:
+            if limit:
+                h.update(fh.read(limit))
+            else:
+                for chunk in iter(lambda: fh.read(1 << 20), b''):
+                    h.update(chunk)
+    except OSError:
+        return None
+    return h.digest()
+
+
+def find_dups(entries, keep_all):
+    """Duplicate files in `entries`.  Uses the cached hashes when available."""
+    if IDXLIB is not None:
+        USED_HEAVY['dup'] = True
+        recs, byp = [], {}
+        for e in entries:
+            st = e.st
+            if e.isdir or st is None or not statmod.S_ISREG(st.st_mode) or st.st_size == 0:
+                continue
+            recs.append((e.path, st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev))
+            byp[e.path] = e
+        result = set()
+        for group in IDXLIB.dup_groups(recs, IDX, prefix=ROOT):
+            same = sorted((byp[p] for p in group), key=lambda x: (x.mtime, x.path))
+            for e in (same if keep_all else same[1:]):
+                result.add(e.path)
+        return result
+    return find_dups_plain(entries, keep_all)
+
+
+def find_dups_plain(entries, keep_all):
+    by_size = {}
+    seen_inodes = set()
+    for e in entries:
+        st = e.st
+        if e.isdir or st is None or not statmod.S_ISREG(st.st_mode) or st.st_size == 0:
+            continue
+        key = (st.st_dev, st.st_ino)
+        if key in seen_inodes:                      # hard link to a file already seen
+            continue
+        seen_inodes.add(key)
+        by_size.setdefault(st.st_size, []).append(e)
+    result = set()
+    for group in by_size.values():
+        if len(group) < 2:
+            continue
+        by_head = {}
+        for e in group:
+            h = _hash(e.path, 65536)
+            if h is not None:
+                by_head.setdefault(h, []).append(e)
+        for sub in by_head.values():
+            if len(sub) < 2:
+                continue
+            by_full = {}
+            for e in sub:
+                h = _hash(e.path)
+                if h is not None:
+                    by_full.setdefault(h, []).append(e)
+            for same in by_full.values():
+                if len(same) < 2:
+                    continue
+                same.sort(key=lambda x: (x.mtime, x.path))
+                for e in (same if keep_all else same[1:]):
+                    result.add(e.path)
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Evaluation
+# ══════════════════════════════════════════════════════════════════════════════
+def walk_preds(node):
+    if node[0] in ('and', 'or'):
+        for n in node[1]:
+            yield from walk_preds(n)
+    elif node[0] == 'not':
+        yield from walk_preds(node[1])
+    else:
+        yield node[1]
+
+
+def bind_csv(node, csv_paths):
+    """Resolve every csv-backed predicate into concrete value sets / functions."""
+    for p in walk_preds(node):
+        if p.get('csv') is None:
+            continue
+        idx = p['csv']
+        if idx >= len(csv_paths):
+            raise SelError('missing CSV for clause %d' % (idx + 1))
+        vals = read_csv_values(csv_paths[idx])
+        if not vals:
+            raise SelError("CSV '%s' has no values" % os.path.basename(csv_paths[idx]))
+        if p['kind'] == 'time':
+            cells = vals + [x for w in p['inline'] for x in w.split(',') if x]
+            items = [time_item(v) for v in cells]
+            inside = lambda v, lo, hi: (lo is None or v >= lo) and (hi is None or v < hi)
+            if p.get('logic') == 'and':
+                p['fn'] = lambda v, items=items: all(inside(v, lo, hi) for lo, hi in items)
+            else:
+                p['fn'] = lambda v, items=items: any(inside(v, lo, hi) for lo, hi in items)
+        elif p['kind'] == 'csvnames':
+            p['vals'] = {v.lower() for v in vals + p['inline']}
+        else:
+            p['vals'] = vals + p['inline']
+
+
+def prepare(node, entries):
+    for p in walk_preds(node):
+        k = p['kind']
+        if k == 'dup' and p['paths'] is None:
+            p['paths'] = find_dups(entries, p['all'])
+        elif k in ('ext', 'sw', 'ew', 'contains'):
+            if p.get('csv') is None:
+                p['vals'] = p['inline']
+            vals = p['vals']
+            if not vals:
+                raise SelError('missing value for .s.%s' % k)
+            if k == 'ext':
+                p['vals'] = {v.lstrip('.').lower() for v in vals}
+            else:
+                p['vals'] = [v.lower() for v in vals]
+
+
+def test(node, e):
+    t = node[0]
+    if t == 'and':
+        return all(test(n, e) for n in node[1])
+    if t == 'or':
+        return any(test(n, e) for n in node[1])
+    if t == 'not':
+        return not test(node[1], e)
+    p = node[1]
+    k = p['kind']
+    if k == 'all':
+        return True
+    if k == 'type':
+        return e.isdir == p['dir']
+    if k == 'names':
+        return e._lname in p['vals'] or e.path.lower() in p['vals']
+    if k == 'csvnames':
+        return e._lname in p['vals'] or e.path.lower() in p['vals']
+    if k == 'ext':
+        if e.isdir:
+            return False
+        x = e.ext
+        return ('noext' in p['vals'] and x == '') or (x != '' and x in p['vals'])
+    if k in ('sw', 'ew', 'contains'):
+        n = e._lname
+        if k == 'contains':
+            fn = lambda v: v in n
+        elif k == 'sw':
+            fn = n.startswith
+        else:
+            stem = n.rpartition('.')[0] if ('.' in n and not e.isdir) else n
+            fn = lambda v: n.endswith(v) or (stem or n).endswith(v)
+        res = [fn(v) for v in p['vals']]
+        return all(res) if p.get('logic') == 'and' else any(res)
+    if k == 'size':
+        return p['fn'](e.size)
+    if k == 'time':
+        return p['fn'](e.mtime)
+    if k == 'dup':
+        return e.path in p['paths']
+    if k == 'empty':
+        return e.is_empty
+    raise SelError('internal: unknown predicate %s' % k)
+
+
+def main(argv):
+    rules_dir = os.environ.get('BVK_RULES_DIR') or os.path.expanduser('~/.bashbasicsbyvk/rules')
+    if len(argv) < 3 or argv[1] not in ('scan', 'run'):
+        print('ERR: usage: scan EXPR | run EXPR PATH HIDDEN [CSV...]', file=sys.stderr)
+        return 2
+    mode, expr = argv[1], argv[2]
+    try:
+        parser = Parser(expr, rules_dir)
+        ast = parser.parse()
+        if mode == 'scan':
+            print('RECURSIVE=%d' % (1 if parser.state['recursive'] else 0))
+            for label in parser.state['csv']:
+                print('CSV\t' + label)
+            return 0
+        root = os.path.abspath(argv[3])
+        show_hidden = argv[4] in ('1', 'true')
+        bind_csv(ast, argv[5:])
+        recursive = parser.state['recursive'] and os.environ.get('BVK_NO_RECURSIVE') != '1'
+        entries = build_universe(root, recursive, show_hidden)
+        global IDX, ROOT
+        ROOT = root
+        IDX = IDXLIB.open_index() if IDXLIB is not None else None
+        try:
+            prepare(ast, entries)
+            out = sys.stdout.buffer
+            for e in entries:
+                if test(ast, e):
+                    out.write(e.path.encode('utf-8', 'surrogateescape') + b'\0')
+            out.flush()
+            if IDXLIB is not None and (USED_HEAVY['dup'] or USED_HEAVY['dirsize']):
+                IDXLIB.register_hot(root, recursive)       # daemon keeps this folder warm
+        finally:
+            if IDX is not None:
+                IDX.close()
+        return 0
+    except SelError as ex:
+        print('ERR: %s' % ex, file=sys.stderr)
+        return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
