@@ -879,7 +879,7 @@ handle_do_import() {
     return 1
   fi
   # HTTPS only + strict shape: also prevents option/argument injection into curl/node.
-  if [[ ! "$link" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/[A-Za-z0-9_-]{16,256}$ ]]; then
+  if [[ ! "$link" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/[A-Za-z0-9_-]{16,255}$ ]]; then
     echo "❌ Only well-formed https:// links are accepted."
     return 1
   fi
