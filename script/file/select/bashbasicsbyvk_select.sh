@@ -98,7 +98,7 @@ _sel_begin() {
     _SEL_CNT_GEN=$_SEL_GEN
   fi
   _sel_banner=""
-  [ "${_SEL_CNT:-0}" -gt 0 ] && _sel_banner="🎯 ${_SEL_CNT} selected — marked +   (.s.show · .s.clear · fx → file_fx/selection)"
+  [ "${_SEL_CNT:-0}" -gt 0 ] && _sel_banner="🎯 ${_SEL_CNT} selected — marked +   (.s.show · .s.clear · fx → <action>/<action>.selected.items)"
 }
 
 # Load only paths that still exist; reports how many vanished.
@@ -162,7 +162,8 @@ _sel_help() {
 LOGIC  space or &  = AND      |  = OR      !  = NOT      ( )  groups
  -r  at the end = search subfolders
 AFTER  .s.add EXPR  .s.sub EXPR  .s.show  .s.clear  .s.shown
-       then fx → file_fx/selection to copy/move/delete/...
+       then fx → <action>/<action>.selected.items  (copy move shortcut bookmark
+       upload upload.text map zip unzip delete);  file_fx/selection = view only
 RULES  .r  .r.save NAME [EXPR]  .r.run NAME  .r.edit  .r.rename  .r.del
 DISPLAY  .d <same expressions>   .d.off   .d.save   .d.run   (see .d)
 FAVOURITES  fa <numbers | sel | .s expression>   ns   (see: fa help)
@@ -273,7 +274,7 @@ handle_select_cmd() {
     sub)     _sel_summary out "➖ Removed matches → selection now" ;;
   esac
   _sel_preview out
-  [ ${#out[@]} -gt 0 ] && echo "➡️  fx → file_fx/selection to copy / move / delete / ..."
+  [ ${#out[@]} -gt 0 ] && echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }
 
 _sel_cmd_show() {
@@ -302,7 +303,7 @@ _sel_cmd_shown() {
   _sel_save out
   _sel_summary out "🎯 Selected what's displayed"
   _sel_preview out
-  echo "➡️  fx → file_fx/selection to copy / move / delete / ..."
+  echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════

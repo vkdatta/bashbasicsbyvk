@@ -153,7 +153,13 @@ source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_bookmark_csv.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_common.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_ext.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_date.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_zip_csv.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_unzip_csv.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_csv.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_text_csv.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_import_link.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selection.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selected.sh"
 
 # UDF tab extras: e-N (edit item), ux / ui (export / import all UDFs as a zip)
 source "${_FX_ADF_DIR}/bashbasicsbyvk_udf_io.sh"
