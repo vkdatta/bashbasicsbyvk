@@ -3,7 +3,28 @@
 WORKER_URL="https://fileapi.bashbasics.workers.dev"
 MAX_OSC52_BYTES=1024
 
+# Everything this script creates in /tmp is private to the current user.
+umask 077
+
 TEMP_MODE=false
+FILE=""
+ENC_FILE=""
+cleanup() {
+    [ -n "$ENC_FILE" ] && rm -f "$ENC_FILE"
+    [ "$TEMP_MODE" = true ] && [ -n "$FILE" ] && rm -f "$FILE"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+# HTTPS only, TLS>=1.2, never follow redirects. Secrets go to curl via stdin config,
+# never argv (argv is visible to every local user through `ps`).
+CURL_OPTS=(--proto '=https' --proto-redir '=https' --tlsv1.2 --max-redirs 0)
+_bb_cfg_escape() {
+    local v="$1"
+    v=${v//\\/\\\\}; v=${v//\"/\\\"}; v=${v//$'\n'/}; v=${v//$'\r'/}
+    printf '%s' "$v"
+}
+_bb_cfg_header() { printf 'header = "%s: %s"\n' "$1" "$(_bb_cfg_escape "$2")"; }
 
 _bb_get_credentials() {
     local email="${FILEAPI_BASHBASICS_EMAIL:-}"
@@ -149,7 +170,7 @@ else
 
     KEY=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+\$/,''))")
 
-    if [ -z "$KEY" ]; then
+    if [[ ! "$KEY" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
         echo "❌ Error: Local encryption key generation failed."
         [ "$TEMP_MODE" = true ] && rm -f "$FILE"
         exit 1
@@ -157,16 +178,17 @@ else
 
     ENC_FILE=$(mktemp)
 
-    node -e '
+    BB_KEY="$KEY" node -e '
         const fs = require("fs"), crypto = require("crypto");
-        const key = Buffer.from(process.argv[2].replace(/-/g,"+").replace(/_/g,"/"), "base64");
+        const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
         const data = fs.readFileSync(process.argv[1]);
         const iv = crypto.randomBytes(12);
         const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+        cipher.setAAD(Buffer.from("bbvk2|copy", "utf8"));   // binds this ciphertext to its role
         const ct = Buffer.concat([cipher.update(data), cipher.final()]);
         const tag = cipher.getAuthTag();
         process.stdout.write(Buffer.concat([iv, ct, tag]));
-    ' "$FILE" "$KEY" > "$ENC_FILE"
+    ' "$FILE" > "$ENC_FILE"
 
     echo "☁️ Uploading encrypted content..."
 
@@ -178,13 +200,13 @@ else
         ATTEMPT=$((ATTEMPT + 1))
 
         HDRFILE=$(mktemp)
-        RESPONSE=$(curl -s -D "$HDRFILE" -w "\n%{http_code}" \
+        CFG=$({ _bb_cfg_header X-User-Email "$FILEAPI_BASHBASICS_EMAIL"
+                _bb_cfg_header X-User-Key   "$FILEAPI_BASHBASICS_KEY"; })
+        RESPONSE=$(curl -s "${CURL_OPTS[@]}" -K - -D "$HDRFILE" -w "\n%{http_code}" \
             -H "Expect:" \
-            -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL" \
-            -H "X-User-Key: $FILEAPI_BASHBASICS_KEY" \
             -X PUT \
             --data-binary "@$ENC_FILE" \
-            "$WORKER_URL/copy")
+            "$WORKER_URL/copy" <<<"$CFG")
 
         HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
         BODY=$(echo "$RESPONSE" | sed '$d')
@@ -237,11 +259,16 @@ else
     [ -n "$CREDITS_DEDUCTED" ] && echo "💳 Credits deducted: $CREDITS_DEDUCTED   |   Balance: $CREDITS_BALANCE"
     echo "-------------------------------------------"
 
-    (
-        open "$FINAL_URL" \
-        || xdg-open "$FINAL_URL" \
-        || termux-open-url "$FINAL_URL"
-    ) &> /dev/null &
+    if [ "${FILEAPI_BASHBASICS_OPEN:-0}" = "1" ]; then
+        (
+            open "$FINAL_URL" \
+            || xdg-open "$FINAL_URL" \
+            || termux-open-url "$FINAL_URL"
+        ) &> /dev/null &
+    else
+        echo "ℹ️  Not auto-opened (the browser viewer runs server-delivered code that could read the key)."
+        echo "   Use 'do-' to decrypt locally, or export FILEAPI_BASHBASICS_OPEN=1 to auto-open."
+    fi
 fi
 
 if [ "$TEMP_MODE" = true ]; then
