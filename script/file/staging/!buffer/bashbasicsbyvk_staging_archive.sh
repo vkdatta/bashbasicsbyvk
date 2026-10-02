@@ -28,6 +28,27 @@ handle_compress_items() {
   fi
 
   _sp_resolve_itemlist "$itemlist" || return
+  _compress_paths "${sp_resolved[@]}"
+}
+
+# ---------------------------------------------------------------------------
+# _compress_paths <path...>
+# Core of z-. Also used by the fx zip.* functions (CSV / .s selection).
+# Items under $path are stored with their path relative to $path. If any item
+# lives outside $path (CSV absolute paths, .s selections from elsewhere) every
+# item is staged by name through a temp folder of symlinks, so the archive
+# never embeds absolute filesystem paths.
+# ---------------------------------------------------------------------------
+_compress_paths() {
+  local -a in_paths=("$@") paths=()
+  local p
+  for p in "${in_paths[@]}"; do
+    if [ -e "$p" ] || [ -L "$p" ]; then paths+=("$p"); else echo "  ⚠️  Skipping missing item: $p"; fi
+  done
+  if [ ${#paths[@]} -eq 0 ]; then
+    echo "❌ Nothing to compress"
+    return 1
+  fi
 
   # ── Determine format ────────────────────────────────────────────────────
   local fmt="${compress_format:-ask}"
@@ -88,35 +109,56 @@ handle_compress_items() {
     rm -f "$arc_path"
   fi
 
-  # ── Build relative item list ─────────────────────────────────────────────
-  local -a rel_items=()
-  local p
-  for p in "${sp_resolved[@]}"; do
-    rel_items+=("$(basename "$p")")
+  # ── Build the item list (relative to workdir) ────────────────────────────
+  local base="${path%/}/" outside=false
+  for p in "${paths[@]}"; do
+    [[ "$p" == "$base"* ]] || { outside=true; break; }
   done
+
+  local workdir="$path" stage_dir=""
+  local -a rel_items=()
+  if $outside; then
+    stage_dir=$(mktemp -d) || { echo "❌ Could not create a temp folder."; return 1; }
+    workdir="$stage_dir"
+    local bn cand n
+    for p in "${paths[@]}"; do
+      bn="${p##*/}"; cand="$bn"; n=1
+      while [ -e "$stage_dir/$cand" ] || [ -L "$stage_dir/$cand" ]; do n=$((n+1)); cand="${bn}_$n"; done
+      ln -s "$p" "$stage_dir/$cand"
+      rel_items+=("$cand")
+    done
+  else
+    for p in "${paths[@]}"; do rel_items+=("${p#"$base"}"); done
+  fi
 
   echo ""
 
   # ── Compress ─────────────────────────────────────────────────────────────
+  local rc
   if [ "$fmt" = "zip" ]; then
-    echo "🗜️  Zipping ${#sp_resolved[@]} item(s) → ${arc_name}.zip"
-    ( cd "$path" && zip -r "$arc_path" "${rel_items[@]}" )
-    local rc=$?
+    echo "🗜️  Zipping ${#paths[@]} item(s) → ${arc_name}.zip"
+    ( cd "$workdir" && zip -r "$arc_path" "${rel_items[@]}" )       # zip follows symlinks by default
+    rc=$?
     if [ $rc -eq 0 ]; then
       echo "✅ Created: ${arc_name}.zip"
     else
       echo "❌ zip exited with code $rc."
     fi
   else
-    echo "🗜️  Creating tar.gz of ${#sp_resolved[@]} item(s) → ${arc_name}.tar.gz"
-    ( cd "$path" && tar -czf "$arc_path" "${rel_items[@]}" )
-    local rc=$?
+    local -a tar_opts=(-czf)
+    $outside && tar_opts=(-czhf)                                      # -h: follow the staging symlinks
+    echo "🗜️  Creating tar.gz of ${#paths[@]} item(s) → ${arc_name}.tar.gz"
+    ( cd "$workdir" && tar "${tar_opts[@]}" "$arc_path" "${rel_items[@]}" )
+    rc=$?
     if [ $rc -eq 0 ]; then
       echo "✅ Created: ${arc_name}.tar.gz"
     else
       echo "❌ tar exited with code $rc."
     fi
   fi
+
+  [ -n "$stage_dir" ] && rm -rf "$stage_dir"     # removes only the symlinks, never their targets
+  return $rc
 }
 
 # ---------------------------------------------------------------------------
@@ -147,11 +189,25 @@ handle_decompress_items() {
   fi
 
   _sp_resolve_itemlist "$itemlist" || return
+  _decompress_paths "${sp_resolved[@]}"
+}
 
+# ---------------------------------------------------------------------------
+# _decompress_paths <archive...>
+# Core of uz-. Also used by the fx unzip.* functions (CSV / .s selection).
+# Each archive is extracted into its own folder inside $path.
+# ---------------------------------------------------------------------------
+_decompress_paths() {
+  local -a paths=("$@")
   echo ""
 
   local p succeeded=0 skipped=0
-  for p in "${sp_resolved[@]}"; do
+  for p in "${paths[@]}"; do
+    if [ ! -f "$p" ]; then
+      echo "  ⚠️  Skipping '${p##*/}' — not an existing file"
+      skipped=$((skipped + 1))
+      continue
+    fi
     local bn="${p##*/}"
     local bn_lower="${bn,,}"
 

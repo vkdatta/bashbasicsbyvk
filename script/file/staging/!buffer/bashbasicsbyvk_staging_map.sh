@@ -78,7 +78,16 @@ handle_staging_map() {
   local map_output
   map_output=$(_map_generate_for_paths "${target_paths[@]}")
 
-  # ── Output choice (same UX as the old mapper) ────────────────────────
+  _map_deliver "$map_output"
+}
+
+# ─────────────────────────────────────────────
+#  _map_deliver <map-text>
+#  Shared output step (p-, fx map.select.items.csv, fx map.selected.items):
+#    1) Copy to clipboard   2) Save to txt file
+# ─────────────────────────────────────────────
+_map_deliver() {
+  local map_output="$1"
   echo
   echo "1) Copy to clipboard"
   echo "2) Save to txt file"
@@ -95,8 +104,12 @@ handle_staging_map() {
     2)
       local filename
       read -p "Enter file name: " filename
-      printf "%s" "$map_output" > "$path/$filename"
-      echo "✅ Map saved as $path/$filename"
+      if [ -z "$filename" ]; then
+        echo "🚫 Cancelled — no file name entered."
+      else
+        printf "%s" "$map_output" > "$path/$filename"
+        echo "✅ Map saved as $path/$filename"
+      fi
       ;;
     *)
       echo "⚠️  Invalid option"

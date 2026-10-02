@@ -788,9 +788,16 @@ handle_ups_upload() {
   local raw="$1"
   local itemlist="${raw#ups-}"
   _sp_guard_and_resolve "$itemlist" "ups-" || return
+  _ups_upload_paths "${sp_resolved[@]}"
+}
 
+# Merge the given files into ONE encrypted text blob and upload it.
+# Shared by ups- (numbered items) and the fx *.upload.text.* functions
+# (CSV / .s selection), so every entry point behaves identically.
+_ups_upload_paths() {
+  local -a paths=("$@")
   local p
-  for p in "${sp_resolved[@]}"; do
+  for p in "${paths[@]}"; do
     if [ -d "$p" ]; then
       echo "❌ ups- doesn't support folder upload. Try up- instead."
       return 1
@@ -800,7 +807,7 @@ handle_ups_upload() {
   _crypto_check || return 1
 
   local nvalid=0
-  for p in "${sp_resolved[@]}"; do
+  for p in "${paths[@]}"; do
     if [ -f "$p" ]; then nvalid=$((nvalid + 1)); else echo "  ⚠️  Skipping missing item: $p"; fi
   done
   if [ "$nvalid" -eq 0 ]; then
@@ -819,7 +826,7 @@ handle_ups_upload() {
   # Merge -> encrypt in one pipe: the plaintext never touches the disk.
   local enc_tmp; enc_tmp=$(mktemp)
   {
-    for p in "${sp_resolved[@]}"; do
+    for p in "${paths[@]}"; do
       [ -f "$p" ] || continue
       echo "===== ${p##*/} ====="
       cat -- "$p"
@@ -832,7 +839,7 @@ handle_ups_upload() {
     return 1
   fi
 
-  echo "☁️  Uploading ${#sp_resolved[@]} encrypted file(s) merged into a single blob..."
+  echo "☁️  Uploading ${#paths[@]} encrypted file(s) merged into a single blob..."
   local result final_url deducted balance
   if ! result=$(_bb_authed_put "/copy" "" --data-binary "@$enc_tmp"); then
     rm -f "$enc_tmp"
