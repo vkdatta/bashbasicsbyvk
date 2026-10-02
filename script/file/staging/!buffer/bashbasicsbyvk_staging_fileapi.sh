@@ -36,6 +36,28 @@ _bb_get_credentials() {
   return 0
 }
 
+# ---- transport hardening ---------------------------------------------------
+# HTTPS only, TLS>=1.2, never follow redirects (a redirect could carry headers elsewhere).
+_BB_CURL_OPTS=(--proto '=https' --proto-redir '=https' --tlsv1.2 --max-redirs 0)
+
+# Secrets must never appear in argv (visible to every local user via `ps`).
+# They are fed to curl as a config file on stdin:  curl -K - ... <<< "$cfg"
+_bb_cfg_escape() {
+  local v="$1"
+  v=${v//\\/\\\\}; v=${v//\"/\\\"}; v=${v//$'\n'/}; v=${v//$'\r'/}
+  printf '%s' "$v"
+}
+_bb_cfg_header() { printf 'header = "%s: %s"\n' "$1" "$(_bb_cfg_escape "$2")"; }
+_bb_auth_cfg() {
+  _bb_cfg_header X-User-Email "$FILEAPI_BASHBASICS_EMAIL"
+  _bb_cfg_header X-User-Key   "$FILEAPI_BASHBASICS_KEY"
+}
+
+# Crypto format v2: AES-256-GCM, blob = [12B IV][ciphertext][16B tag], with Additional
+# Authenticated Data binding each ciphertext to its role/position:
+#   "bbvk2|copy"  "bbvk2|manifest"  "bbvk2|blob|<index>"
+# so a hostile server cannot swap, replay or substitute pieces undetected.
+
 _bb_json_get() {
   local json="$1" field="$2"
   node -e '
@@ -77,16 +99,14 @@ _bb_authed_put() {
   while :; do
     attempt=$((attempt + 1))
 
-    local -a hdrs=(
-      -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL"
-      -H "X-User-Key: $FILEAPI_BASHBASICS_KEY"
-    )
-    [ -n "$est_size" ] && hdrs+=(-H "X-Estimated-Size: $est_size")
-    $confirmed && hdrs+=(-H "X-Confirm-Oversized: yes")
-
+    local cfg
+    cfg=$({ _bb_auth_cfg
+            [ -n "$est_size" ] && _bb_cfg_header X-Estimated-Size "$est_size"
+            $confirmed && _bb_cfg_header X-Confirm-Oversized yes
+            true; })
     local hdrfile response http_status body
     hdrfile=$(mktemp)
-    response=$(curl -s -D "$hdrfile" -w "\n%{http_code}" -H "Expect:" -X PUT "${hdrs[@]}" "${extra_args[@]}" "$WORKER_URL$endpoint")
+    response=$(curl -s "${_BB_CURL_OPTS[@]}" -K - -D "$hdrfile" -w "\n%{http_code}" -H "Expect:" -X PUT "${extra_args[@]}" "$WORKER_URL$endpoint" <<<"$cfg")
     http_status=$(echo "$response" | tail -n 1)
     body=$(echo "$response" | sed '$d')
 
@@ -137,27 +157,32 @@ _crypto_check() {
   return 0
 }
 
+_crypto_new_key() {
+  node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+\$/,''))"
+}
+
+# usage: _crypto_encrypt_stdin <key-b64url> <aad-string>   (plaintext on stdin, v2 blob on stdout)
 _crypto_encrypt_stdin() {
-  local keyb64url="$1"
-  node -e '
+  BB_KEY="$1" BB_AAD="$2" node -e '
     const crypto = require("crypto");
     const chunks = [];
     process.stdin.on("data", c => chunks.push(c));
     process.stdin.on("end", () => {
       const data = Buffer.concat(chunks);
-      const key = Buffer.from(process.argv[1].replace(/-/g,"+").replace(/_/g,"/"), "base64");
+      const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
+      if (key.length !== 32) process.exit(2);
       const iv = crypto.randomBytes(12);
       const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+      cipher.setAAD(Buffer.from(process.env.BB_AAD, "utf8"));
       const ct = Buffer.concat([cipher.update(data), cipher.final()]);
       const tag = cipher.getAuthTag();
       process.stdout.write(Buffer.concat([iv, ct, tag]));
     });
-  ' "$keyb64url"
+  '
 }
 
 _crypto_decrypt_stdin() {
-  local keyb64url="$1"
-  node -e '
+  BB_KEY="$1" BB_AAD="$2" node -e '
     const crypto = require("crypto");
     const chunks = [];
     process.stdin.on("data", c => chunks.push(c));
@@ -167,17 +192,19 @@ _crypto_decrypt_stdin() {
       const iv = buf.subarray(0, 12);
       const tag = buf.subarray(buf.length - 16);
       const ct = buf.subarray(12, buf.length - 16);
-      const key = Buffer.from(process.argv[1].replace(/-/g,"+").replace(/_/g,"/"), "base64");
+      const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
+      if (key.length !== 32) process.exit(1);
       try {
         const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
         decipher.setAuthTag(tag);
+        decipher.setAAD(Buffer.from(process.env.BB_AAD, "utf8"));
         const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
         process.stdout.write(pt);
       } catch (e) {
         process.exit(1);
       }
     });
-  ' "$keyb64url"
+  '
 }
 
 _announce_link() {
@@ -196,7 +223,12 @@ _announce_link() {
   echo "Link: $final_url"
   echo "-------------------------------------------"
 
-  ( open "$final_url" || xdg-open "$final_url" || termux-open-url "$final_url" ) &> /dev/null &
+  if [ "${FILEAPI_BASHBASICS_OPEN:-0}" = "1" ]; then
+    ( open "$final_url" || xdg-open "$final_url" || termux-open-url "$final_url" ) &> /dev/null &
+  else
+    echo "ℹ️  Not auto-opened: the browser viewer runs code delivered by the server, which could in theory read the key."
+    echo "   Use 'do-' (decrypts on your machine) for the strongest protection, or export FILEAPI_BASHBASICS_OPEN=1 to auto-open."
+  fi
 }
 
 _crypto_pack_upload() {
@@ -210,9 +242,10 @@ _crypto_pack_upload() {
     const key = crypto.randomBytes(32);
     const keyB64url = key.toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 
-    function encrypt(buf) {
+    function encrypt(buf, aad) {
       const iv = crypto.randomBytes(12);
       const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+      cipher.setAAD(Buffer.from(aad, "utf8"));
       const ct = Buffer.concat([cipher.update(buf), cipher.final()]);
       const tag = cipher.getAuthTag();
       return Buffer.concat([iv, ct, tag]);
@@ -240,9 +273,14 @@ _crypto_pack_upload() {
       const tabIdx = line.indexOf("\t");
       const relpath = line.slice(0, tabIdx);
       const abspath = line.slice(tabIdx + 1);
+      if (fs.statSync(abspath).size > 2000000000) {
+        console.error("\n  \u274c " + relpath + " is larger than 2 GB; single-blob encryption holds a file in memory and cannot handle it.");
+        process.exit(2);
+      }
       const data = fs.readFileSync(abspath);
-      totalBytes += data.length;
-      fs.writeFileSync(path.join(outdir, "blob" + idx), encrypt(data));
+      const enc = encrypt(data, "bbvk2|blob|" + idx);
+      totalBytes += enc.length;   // billed/validated size = real ciphertext bytes stored
+      fs.writeFileSync(path.join(outdir, "blob" + idx), enc, { mode: 0o600 });
       entries.push({ path: relpath, size: data.length, blobIndex: idx });
       bar(idx + 1, totalFiles, "\uD83D\uDD10 Encrypting");
     });
@@ -268,8 +306,8 @@ _crypto_pack_upload() {
       children.push({ id: nextId(), name, type: "file", size: entry.size, blobIndex: entry.blobIndex });
     }
 
-    const manifest = { version: 1, fileCount: entries.length, tree: root };
-    fs.writeFileSync(path.join(outdir, "manifest.enc"), encrypt(Buffer.from(JSON.stringify(manifest), "utf8")));
+    const manifest = { version: 2, fileCount: entries.length, tree: root };
+    fs.writeFileSync(path.join(outdir, "manifest.enc"), encrypt(Buffer.from(JSON.stringify(manifest), "utf8"), "bbvk2|manifest"), { mode: 0o600 });
 
     process.stdout.write(keyB64url + "\n" + totalBytes);
   ' "$outdir" "$listfile"
@@ -277,41 +315,91 @@ _crypto_pack_upload() {
 
 _crypto_import_upload() {
   local link="$1" key="$2" dest="$3"
-  node -e '
+  BB_KEY="$key" node -e '
     const fs = require("fs"), path = require("path"), crypto = require("crypto");
     const link = process.argv[1];
-    const key = Buffer.from(process.argv[2].replace(/-/g,"+").replace(/_/g,"/"), "base64");
-    const dest = process.argv[3];
-    const CONC = Math.max(1, parseInt(process.argv[4], 10) || 16);
+    const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
+    const dest = path.resolve(process.argv[2]);
+    const CONC = Math.max(1, parseInt(process.argv[3], 10) || 16);
+    const MAX_FILES = 200000;
 
-    function decrypt(buf) {
+    function decrypt(buf, aad) {
+      if (buf.length < 28) throw new Error("short");
       const iv = buf.subarray(0, 12);
       const tag = buf.subarray(buf.length - 16);
       const ct = buf.subarray(12, buf.length - 16);
       const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
       decipher.setAuthTag(tag);
+      decipher.setAAD(Buffer.from(aad, "utf8"));
       return Buffer.concat([decipher.update(ct), decipher.final()]);
     }
 
+    // A malicious sender controls every filename. Never let one escape `dest`.
+    function safeParts(rel) {
+      if (typeof rel !== "string" || rel.length === 0 || rel.length > 4096) return null;
+      if (rel.indexOf("\0") !== -1 || rel.indexOf("\\") !== -1 || rel[0] === "/") return null;
+      const parts = rel.split("/");
+      for (const p of parts) { if (p === "" || p === "." || p === ".." || p.length > 255) return null; }
+      return parts;
+    }
+    // Create directories one level at a time and refuse to traverse symlinks.
+    function safeMkdirs(parts) {
+      let cur = dest;
+      for (const p of parts) {
+        cur = path.join(cur, p);
+        let st;
+        try { st = fs.lstatSync(cur); } catch (e) { fs.mkdirSync(cur); continue; }
+        if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("unsafe path component");
+      }
+      return cur;
+    }
+    // Never overwrite an existing file; "wx" also refuses to follow a planted symlink.
+    function writeNoClobber(dir, name, data) {
+      const ext = path.extname(name), stem = name.slice(0, name.length - ext.length);
+      for (let n = 0; n < 100; n++) {
+        const cand = path.join(dir, n === 0 ? name : stem + " (" + n + ")" + ext);
+        try { fs.writeFileSync(cand, data, { flag: "wx", mode: 0o644 }); return cand; }
+        catch (e) { if (e.code !== "EEXIST") throw e; }
+      }
+      throw new Error("too many name collisions");
+    }
+
     (async () => {
-      const manifestRes = await fetch(link + "/manifest");
+      fs.mkdirSync(dest, { recursive: true });
+      const manifestRes = await fetch(link + "/manifest", { redirect: "error", credentials: "omit" });
       if (!manifestRes.ok) { console.error("Manifest fetch failed (HTTP " + manifestRes.status + ")"); console.log(0); return; }
       let manifest;
       try {
-        manifest = JSON.parse(decrypt(Buffer.from(await manifestRes.arrayBuffer())).toString("utf8"));
+        manifest = JSON.parse(decrypt(Buffer.from(await manifestRes.arrayBuffer()), "bbvk2|manifest").toString("utf8"));
       } catch (e) {
-        console.error("Decryption failed — wrong key or corrupted link.");
+        console.error("Decryption failed \u2014 wrong key, corrupted link, or the data was tampered with.");
+        console.log(0);
+        return;
+      }
+      if (!manifest || manifest.version !== 2 || !Array.isArray(manifest.tree)) {
+        console.error("Unsupported or modified manifest (expected format v2).");
         console.log(0);
         return;
       }
 
       const files = [];
-      (function walk(nodes, prefix) {
-        for (const n of (nodes || [])) {
-          if (n.type === "file") files.push({ relpath: prefix + n.name, blobIndex: n.blobIndex });
-          if (n.children) walk(n.children, prefix + n.name + "/");
+      const seen = new Set();
+      let bad = 0;
+      (function walk(nodes, prefix, depth) {
+        if (depth > 64) { bad++; return; }
+        for (const n of nodes) {
+          if (!n || typeof n.name !== "string") { bad++; continue; }
+          if (n.type === "file") {
+            const bi = n.blobIndex;
+            if (!Number.isInteger(bi) || bi < 0 || bi >= MAX_FILES || seen.has(bi)) { bad++; continue; }
+            seen.add(bi);
+            files.push({ relpath: prefix + n.name, blobIndex: bi });
+          } else if (n.type === "folder" && Array.isArray(n.children)) {
+            walk(n.children, prefix + n.name + "/", depth + 1);
+          }
+          if (files.length > MAX_FILES) return;
         }
-      })(manifest.tree, "");
+      })(manifest.tree, "", 0);
 
       const COLS = 24, TTY = process.stderr.isTTY, TOTAL = files.length;
       let lastPct = -1;
@@ -328,33 +416,33 @@ _crypto_import_upload() {
         if (done >= TOTAL) process.stderr.write("\n");
       }
 
-      let ok = 0, done = 0, failed = 0, next = 0;
+      let ok = 0, done = 0, failed = bad, next = 0;
       async function worker() {
         while (true) {
           const i = next++;
           if (i >= files.length) return;
           const f = files[i];
           try {
-            const fileRes = await fetch(link + "/file/" + f.blobIndex);
+            const parts = safeParts(f.relpath);
+            if (!parts) { failed++; done++; bar(done); continue; }
+            const fileRes = await fetch(link + "/file/" + f.blobIndex, { redirect: "error", credentials: "omit" });
             if (!fileRes.ok) { failed++; done++; bar(done); continue; }
-            const plain = decrypt(Buffer.from(await fileRes.arrayBuffer()));
-            const outPath = path.join(dest, f.relpath);
-            fs.mkdirSync(path.dirname(outPath), { recursive: true });
-            fs.writeFileSync(outPath, plain);
+            const plain = decrypt(Buffer.from(await fileRes.arrayBuffer()), "bbvk2|blob|" + f.blobIndex);
+            const dir = safeMkdirs(parts.slice(0, -1));
+            writeNoClobber(dir, parts[parts.length - 1], plain);
             ok++; done++; bar(done);
           } catch (e) {
             failed++; done++; bar(done);
           }
         }
       }
-      // Fetch + decrypt + write up to CONC files at once instead of one-by-one.
       await Promise.all(Array.from({ length: Math.min(CONC, files.length || 1) }, worker));
 
       if (TTY && TOTAL === 0) process.stderr.write("\n");
-      if (failed > 0) process.stderr.write("  \u26a0\ufe0f  " + failed + " file(s) failed to download.\n");
+      if (failed > 0) process.stderr.write("  \u26a0\ufe0f  " + failed + " file(s) failed (download error, failed integrity check, or unsafe path rejected).\n");
       console.log(ok);
     })();
-  ' "$link" "$key" "$dest" "$_BB_MAX_PAR"
+  ' "$link" "$dest" "$_BB_MAX_PAR"
 }
 
 # Phase 1: authorize + credit precheck, get an upload id back. Echoes the id.
@@ -365,20 +453,25 @@ _bb_upload_init() {
   local attempt=0 confirmed=false
   while :; do
     attempt=$((attempt + 1))
-    local -a hdrs=(
-      -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL"
-      -H "X-User-Key: $FILEAPI_BASHBASICS_KEY"
-      -H "X-Estimated-Size: $est_size"
-    )
-    $confirmed && hdrs+=(-H "X-Confirm-Oversized: yes")
-
+    local cfg
+    cfg=$({ _bb_auth_cfg
+            _bb_cfg_header X-Estimated-Size "$est_size"
+            $confirmed && _bb_cfg_header X-Confirm-Oversized yes
+            true; })
     local response http_status body
-    response=$(curl -s -w "\n%{http_code}" -H "Expect:" -X PUT "${hdrs[@]}" "$WORKER_URL/upload/init")
+    local response http_status body
+    response=$(curl -s "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X PUT "$WORKER_URL/upload/init" <<<"$cfg")
     http_status=$(echo "$response" | tail -n 1)
     body=$(echo "$response" | sed '$d')
 
     if [ "$http_status" == "200" ]; then
-      _bb_json_get "$body" id
+      local up_id up_token
+      up_id=$(_bb_json_get "$body" id); up_token=$(_bb_json_get "$body" token)
+      if [ -z "$up_id" ] || [ -z "$up_token" ]; then
+        echo "❌ Server did not return an upload id/token" >&2
+        return 1
+      fi
+      printf '%s\n%s\n' "$up_id" "$up_token"
       return 0
     fi
 
@@ -420,8 +513,8 @@ _bb_upload_init() {
 # refills the pool the instant any slot frees, and streams byte ranges straight
 # off the original file. Same pool design the download path uses.
 _bb_upload_blobs() {
-  local id="$1" tmpdir="$2" nblobs="$3"
-  node -e '
+  local id="$1" tmpdir="$2" nblobs="$3" token="$4"
+  BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_UTOKEN="$token" node -e '
     const fs = require("fs");
     const path = require("path");
     const { Readable } = require("stream");
@@ -431,12 +524,13 @@ _bb_upload_blobs() {
     const dir    = process.argv[3];
     const N      = parseInt(process.argv[4], 10);
     const CONC   = Math.max(1, parseInt(process.argv[5], 10) || 16);
-    const email  = process.argv[6];
-    const ukey   = process.argv[7];
-    const CHUNK  = parseInt(process.argv[8], 10);
+    const email  = process.env.BB_EMAIL;
+    const utoken = process.env.BB_UTOKEN;
+    const CHUNK  = parseInt(process.argv[6], 10);
     const INLINE = 4 * 1024 * 1024;   // read small blobs into memory; stream bigger ones
 
-    const auth = { "X-User-Email": email, "X-User-Key": ukey };
+    // Only the per-upload token travels with blobs; the API key is never re-sent.
+    const auth = { "X-User-Email": email, "X-Upload-Token": utoken };
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
     // Fresh body each attempt: a stream can only be consumed once, so retries
@@ -456,6 +550,7 @@ _bb_upload_blobs() {
             method,
             headers: Object.assign({}, auth, extraHeaders || {}),
             body,
+            redirect: "error",
             duplex: "half"
           };
           const res = await fetch(url, init);
@@ -551,26 +646,21 @@ _bb_upload_blobs() {
       for (const m of errors) process.stderr.write("  \u26a0\uFE0F  " + m + "\n");
       console.log(failed === 0 ? "OK" : "FAIL");
     })();
-  ' "$WORKER_URL" "$id" "$tmpdir" "$nblobs" "$_BB_MAX_PAR" \
-    "$FILEAPI_BASHBASICS_EMAIL" "$FILEAPI_BASHBASICS_KEY" "$_BB_CHUNK_BYTES"
+  ' "$WORKER_URL" "$id" "$tmpdir" "$nblobs" "$_BB_MAX_PAR" "$_BB_CHUNK_BYTES"
 }
 
 # Phase 3: upload the manifest, settle credits, return the link + credit headers.
 _bb_upload_commit() {
-  local id="$1" est="$2" total="$3" fcount="$4" mpath="$5" oversized="$6"
-  local -a hdrs=(
-    -H "X-User-Email: $FILEAPI_BASHBASICS_EMAIL"
-    -H "X-User-Key: $FILEAPI_BASHBASICS_KEY"
-    -H "X-Estimated-Size: $est"
-    -H "X-Total-Size: $total"
-    -H "X-File-Count: $fcount"
-  )
-  [ "$oversized" == "1" ] && hdrs+=(-H "X-Confirm-Oversized: yes")
+  local id="$1" fcount="$2" mpath="$3" token="$4"
+  local cfg
+  cfg=$({ _bb_cfg_header X-User-Email "$FILEAPI_BASHBASICS_EMAIL"
+          _bb_cfg_header X-Upload-Token "$token"
+          _bb_cfg_header X-File-Count "$fcount"; })
 
   local hdrfile response http_status body
   hdrfile=$(mktemp)
-  response=$(curl -s -D "$hdrfile" -w "\n%{http_code}" -H "Expect:" -X PUT "${hdrs[@]}" \
-    --data-binary "@$mpath" "$WORKER_URL/upload/$id/commit")
+  response=$(curl -s "${_BB_CURL_OPTS[@]}" -K - -D "$hdrfile" -w "\n%{http_code}" -H "Expect:" -X PUT \
+    --data-binary "@$mpath" "$WORKER_URL/upload/$id/commit" <<<"$cfg")
   http_status=$(echo "$response" | tail -n 1)
   body=$(echo "$response" | sed '$d')
 
@@ -632,7 +722,7 @@ _up_do_multipart_upload() {
   key=$(printf '%s' "$packout" | sed -n '1p')
   total_size=$(printf '%s' "$packout" | sed -n '2p')
 
-  if [ -z "$key" ] || [ -z "$total_size" ]; then
+  if [[ ! "$key" =~ ^[A-Za-z0-9_-]{43}$ ]] || [[ ! "$total_size" =~ ^[0-9]+$ ]]; then
     echo "❌ Local encryption failed"
     rm -rf "$tmpdir"
     return 1
@@ -653,9 +743,10 @@ _up_do_multipart_upload() {
   while [ -f "$tmpdir/blob$nblobs" ]; do nblobs=$((nblobs + 1)); done
 
   # ---- Phase 1: init (auth + credit precheck) ----
-  local id
-  id=$(_bb_upload_init "$total_size") || { rm -rf "$tmpdir"; return 1; }
-  if [ -z "$id" ]; then
+  local init_out id token
+  init_out=$(_bb_upload_init "$total_size") || { rm -rf "$tmpdir"; return 1; }
+  id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
+  if [ -z "$id" ] || [ -z "$token" ]; then
     echo "❌ Upload init failed (no id returned)"
     rm -rf "$tmpdir"
     return 1
@@ -665,7 +756,7 @@ _up_do_multipart_upload() {
   [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted file entr(y/ies) — up to $_BB_MAX_PAR in parallel..."
 
   local upres
-  upres=$(_bb_upload_blobs "$id" "$tmpdir" "$nblobs")
+  upres=$(_bb_upload_blobs "$id" "$tmpdir" "$nblobs" "$token")
   if [ "$upres" != "OK" ]; then
     rm -rf "$tmpdir"
     echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects auto-expire in 30 min."
@@ -674,7 +765,7 @@ _up_do_multipart_upload() {
 
   # ---- Phase 3: commit (manifest + credit settlement) ----
   local result final_url deducted balance
-  result=$(_bb_upload_commit "$id" "$total_size" "$total_size" "$nblobs" "$tmpdir/manifest.enc" "$oversized") \
+  result=$(_bb_upload_commit "$id" "$nblobs" "$tmpdir/manifest.enc" "$token") \
     || { rm -rf "$tmpdir"; return 1; }
   rm -rf "$tmpdir"
 
@@ -708,36 +799,38 @@ handle_ups_upload() {
 
   _crypto_check || return 1
 
-  local tmp
-  tmp=$(mktemp)
+  local nvalid=0
   for p in "${sp_resolved[@]}"; do
-    if [ ! -f "$p" ]; then
-      echo "  ⚠️  Skipping missing item: $p"
-      continue
-    fi
-    echo "===== ${p##*/} =====" >> "$tmp"
-    cat -- "$p" >> "$tmp"
-    echo >> "$tmp"
+    if [ -f "$p" ]; then nvalid=$((nvalid + 1)); else echo "  ⚠️  Skipping missing item: $p"; fi
   done
-
-  if [ ! -s "$tmp" ]; then
+  if [ "$nvalid" -eq 0 ]; then
     echo "❌ No valid files found in selection"
-    rm -f "$tmp"
     return 1
   fi
 
   echo "🔐 Encrypting merged text locally (key never leaves this machine)..."
   local key
-  key=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+\$/,''))")
-  if [ -z "$key" ]; then
+  key=$(_crypto_new_key)
+  if [[ ! "$key" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
     echo "❌ Local encryption failed"
-    rm -f "$tmp"
     return 1
   fi
 
+  # Merge -> encrypt in one pipe: the plaintext never touches the disk.
   local enc_tmp; enc_tmp=$(mktemp)
-  _crypto_encrypt_stdin "$key" < "$tmp" > "$enc_tmp"
-  rm -f "$tmp"
+  {
+    for p in "${sp_resolved[@]}"; do
+      [ -f "$p" ] || continue
+      echo "===== ${p##*/} ====="
+      cat -- "$p"
+      echo
+    done
+  } | _crypto_encrypt_stdin "$key" "bbvk2|copy" > "$enc_tmp"
+  if [ ! -s "$enc_tmp" ]; then
+    echo "❌ Local encryption failed"
+    rm -f "$enc_tmp"
+    return 1
+  fi
 
   echo "☁️  Uploading ${#sp_resolved[@]} encrypted file(s) merged into a single blob..."
   local result final_url deducted balance
@@ -758,10 +851,10 @@ handle_ups_upload() {
 handle_do_import() {
   _crypto_check || return 1
 
-  read -p "🔗 Paste link to import (include the #k=... part): " link
+  read -r -p "🔗 Paste link to import (include the #k=... part): " link
   [ -z "$link" ] && echo "🚫 Cancelled" && return
 
-  if [[ "$link" != http*://* ]]; then
+  if [[ "$link" != *://* ]]; then
     link="$WORKER_URL/$link"
   fi
 
@@ -773,21 +866,39 @@ handle_do_import() {
   link="${link%/}"
 
   if [ -z "$key" ]; then
-    read -p "🔑 No key found in the pasted link — paste the decryption key separately: " key
+    read -r -s -p "🔑 No key found in the pasted link — paste the decryption key separately: " key
+    echo
     if [ -z "$key" ]; then
       echo "❌ No decryption key — cannot proceed."
       return 1
     fi
   fi
 
+  if [[ ! "$key" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
+    echo "❌ That doesn't look like a valid decryption key."
+    return 1
+  fi
+  # HTTPS only + strict shape: also prevents option/argument injection into curl/node.
+  if [[ ! "$link" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/[A-Za-z0-9_-]{16,256}$ ]]; then
+    echo "❌ Only well-formed https:// links are accepted."
+    return 1
+  fi
+  local lhost="${link#https://}"; lhost="${lhost%%/*}"
+  local whost="${WORKER_URL#https://}"
+  if [ "$lhost" != "$whost" ]; then
+    echo "⚠️  This link points to '$lhost', not your configured server ($whost)."
+    local ans; read -r -p "   Continue anyway? (y/n): " ans
+    [[ "$ans" == "y" || "$ans" == "Y" ]] || { echo "🚫 Cancelled."; return 1; }
+  fi
+
   local tmp_body raw_status
   tmp_body=$(mktemp)
-  raw_status=$(curl -s -o "$tmp_body" -w "%{http_code}" "$link/raw")
+  raw_status=$(curl -s "${_BB_CURL_OPTS[@]}" --max-filesize 2097152 -o "$tmp_body" -w "%{http_code}" "$link/raw")
 
   if [ "$raw_status" == "200" ]; then
     echo "📄 Text link detected. Decrypting locally..."
     local plain_tmp; plain_tmp=$(mktemp)
-    if ! _crypto_decrypt_stdin "$key" < "$tmp_body" > "$plain_tmp" 2>/dev/null; then
+    if ! _crypto_decrypt_stdin "$key" "bbvk2|copy" < "$tmp_body" > "$plain_tmp" 2>/dev/null; then
       echo "❌ Decryption failed — wrong key, or the link was already used/corrupted."
       rm -f "$tmp_body" "$plain_tmp"
       return 1
@@ -795,16 +906,27 @@ handle_do_import() {
     rm -f "$tmp_body"
 
     if [ -t 1 ] && [ -t 0 ]; then
-      read -p "💾 Save as filename in $path (blank = print to terminal): " fname
+      read -r -p "💾 Save as filename in $path (blank = print to terminal): " fname
     else
       fname=""
     fi
 
     if [ -n "$fname" ]; then
-      mv "$plain_tmp" "$path/$fname"
+      if [[ "$fname" == */* || "$fname" == "." || "$fname" == ".." ]]; then
+        echo "❌ Invalid file name."; rm -f "$plain_tmp"; return 1
+      fi
+      if [ -e "$path/$fname" ]; then
+        echo "❌ $path/$fname already exists — refusing to overwrite."; rm -f "$plain_tmp"; return 1
+      fi
+      mv -n -- "$plain_tmp" "$path/$fname"
       echo "✅ Imported as: $path/$fname"
     else
-      cat "$plain_tmp"
+      # Received text is untrusted: strip control characters / escape sequences before it
+      # reaches the terminal (they can retitle the window, rewrite the screen or set the clipboard).
+      LC_ALL=C tr -d '\000-\010\013-\037\177' < "$plain_tmp"
+      if [ "$(LC_ALL=C tr -d '\000-\010\013-\037\177' < "$plain_tmp" | wc -c)" != "$(wc -c < "$plain_tmp")" ]; then
+        echo; echo "ℹ️  Control characters were removed for display. Save to a file to keep the raw text."
+      fi
       rm -f "$plain_tmp"
     fi
     return 0
@@ -813,7 +935,7 @@ handle_do_import() {
   rm -f "$tmp_body"
 
   local manifest_status
-  manifest_status=$(curl -s -o /dev/null -w "%{http_code}" "$link/manifest")
+  manifest_status=$(curl -s "${_BB_CURL_OPTS[@]}" -o /dev/null -w "%{http_code}" "$link/manifest")
   if [ "$manifest_status" != "200" ]; then
     echo "❌ Link expired, invalid, or already nuked."
     return 1

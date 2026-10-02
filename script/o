@@ -13,10 +13,13 @@ source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_functions.sh"
 source "bashbasicsbyvk_infinity.sh"
+source "bashbasicsbyvk_telemetry.sh"
+source "bashbasicsbyvk_ai.sh"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _bvk_wake_recents_daemon
+_bvk_telemetry_start
 _disp_startup
 
 trap 'stty "$_orig_stty" 2>/dev/null; \
@@ -151,6 +154,7 @@ while true; do
     scr-sync)    handle_scr_sync ;;
     sast)        bashbasicsbyvk_sast ;;
     .s|.s.*|.s\ *|.r|.r.*|.r\ *)  handle_select_cmd "$choice" ;;
+    .ai|.ai\ *)  handle_ai_cmd "$choice" ;;
     .dm|.dm.*)   handle_daemon_cmd "$choice" ;;
     .d|.d.*|.d\ *)  handle_display_cmd "$choice" ;;
     sw)          switch_menu ;;
