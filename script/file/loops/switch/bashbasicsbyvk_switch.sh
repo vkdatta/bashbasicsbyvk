@@ -303,7 +303,7 @@ _sw_menu_header_imaginary() {
 }
 
 _sw_menu_footer_bookmarks() {
-  printf '\na) Add current path   b) Remove   sw) Exit\nu) Up   t) Transfer   d) Delete   c) Create   f) Find\nr) Rename   s) Settings   x) Organise\nr<N>) File actions on item N\n'
+  printf '\na) Add current path   b) Remove   sw) Exit\nu) Up   s) Settings\nr<N>) File actions on item N\n'
   [ -n "$group_prefix" ] && printf 'back) Remove last prefix (%s*)\n' "${group_prefix^^}"
 }
 
