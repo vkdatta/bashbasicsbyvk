@@ -23,45 +23,60 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ---------------------------------------------------------------------------
-# open_csv_menu [start_path]
+# _file_picker <ext> <outvar> [start_path]
+# The ONE picker behind open_csv_menu and open_zip_menu: navigate folders and
+# select a single file of type .<ext> (case-insensitive).
+#   success : sets the global named by <outvar> to the file → returns 0
+#   cancel  : sets that global to ""                       → returns 1
+#   quit    : exits the program
 # ---------------------------------------------------------------------------
-open_csv_menu() {
-    local start_path="${1:-${nav_last_browsed_path:-${path:-$(pwd)}}}"
-    csv_file=""
-    local _csv_nav_path="$start_path"
+_file_picker() {
+    local _fp_ext="$1" _fp_outname="$2"
+    local _fp_EXT="${_fp_ext^^}"
+    local -n _fp_out="$_fp_outname"
+    local start_path="${3:-${nav_last_browsed_path:-${path:-$(pwd)}}}"
+    _fp_out=""
+    local _fp_nav_path="$start_path"
+
+    # case-insensitive glob for the extension:  csv → [cC][sS][vV]
+    local _fp_pat="" _fp_i _fp_c
+    for (( _fp_i=0; _fp_i<${#_fp_ext}; _fp_i++ )); do
+        _fp_c="${_fp_ext:_fp_i:1}"
+        _fp_pat+="[${_fp_c,,}${_fp_c^^}]"
+    done
 
     echo ""
-    echo "📂 Navigate to select your CSV file (folders and .csv files only)"
+    echo "📂 Navigate to select your ${_fp_EXT} file (folders and .${_fp_ext} files only)"
 
     while true; do
         echo ""
-        echo "📂 CSV SELECT — Location: $_csv_nav_path"
+        echo "📂 ${_fp_EXT} SELECT — Location: $_fp_nav_path"
 
-        # ── Build item list: dirs + .csv files only ───────────────────────
+        # ── Build item list: dirs + matching files only ───────────────────
         # Pure-bash globbing: no find, no sort, no per-file loop, no forks.
-        #   "*/"         -> directories only (one readdir)
-        #   "*.[cC][sS][vV]" -> .csv files matched by the glob itself
-        local -a _csv_items=()
+        #   "*/"          -> directories only (one readdir)
+        #   "*.[cC]..."   -> matching files via the glob itself
+        local -a _fp_items=()
         local _e _sg
         _sg=$(shopt -p nullglob dotglob nocaseglob)
         shopt -s nullglob dotglob
         shopt -u nocaseglob
-        local _dir="${_csv_nav_path%/}"
+        local _dir="${_fp_nav_path%/}"
         for _e in "$_dir"/*/; do
-            _csv_items+=("${_e%/}")
+            _fp_items+=("${_e%/}")
         done
-        for _e in "$_dir"/*.[cC][sS][vV]; do
-            [ -d "$_e" ] || _csv_items+=("$_e")
+        for _e in "$_dir"/*.$_fp_pat; do
+            [ -d "$_e" ] || _fp_items+=("$_e")
         done
         eval "$_sg"
 
         # ── Render list (single rule at the bottom only — the fx menu above
         #    already ends with its own rule, so a top rule here doubled it) ──
-        if [ ${#_csv_items[@]} -eq 0 ]; then
-            echo "  🛑 No folders or CSV files here."
+        if [ ${#_fp_items[@]} -eq 0 ]; then
+            echo "  🛑 No folders or ${_fp_EXT} files here."
         else
             local _i=1
-            for _it in "${_csv_items[@]}"; do
+            for _it in "${_fp_items[@]}"; do
                 local _bn="${_it##*/}"
                 if [ -d "$_it" ]; then
                     printf "  %3d) 📁 %s\n" "$_i" "$_bn"
@@ -74,24 +89,24 @@ open_csv_menu() {
         echo ""
         echo "  u) Up parent   x) Cancel   q) Quit"
         echo "   ─────────────────────────────"
-        read -p "CSV Nav: " _csv_choice
+        read -p "${_fp_EXT} Nav: " _fp_choice
 
         # strip surrounding whitespace
-        _csv_choice="${_csv_choice#"${_csv_choice%%[![:space:]]*}"}"
-        _csv_choice="${_csv_choice%"${_csv_choice##*[![:space:]]}"}"
+        _fp_choice="${_fp_choice#"${_fp_choice%%[![:space:]]*}"}"
+        _fp_choice="${_fp_choice%"${_fp_choice##*[![:space:]]}"}"
 
-        case "$_csv_choice" in
+        case "$_fp_choice" in
             q|Q) exit 0 ;;
 
             x|X)
-                echo "🚫 CSV selection cancelled."
-                csv_file=""
+                echo "🚫 ${_fp_EXT} selection cancelled."
+                _fp_out=""
                 return 1
                 ;;
 
             u|U)
-                if [ "$_csv_nav_path" != "/" ]; then
-                    _csv_nav_path=$(dirname "$_csv_nav_path")
+                if [ "$_fp_nav_path" != "/" ]; then
+                    _fp_nav_path=$(dirname "$_fp_nav_path")
                 else
                     echo "  ⚠️  Already at filesystem root."
                 fi
@@ -102,24 +117,41 @@ open_csv_menu() {
                 ;;
 
             *)
-                if [[ "$_csv_choice" =~ ^[0-9]+$ ]] \
-                   && [ "$_csv_choice" -ge 1 ] \
-                   && [ "$_csv_choice" -le "${#_csv_items[@]}" ]; then
-                    local _sel="${_csv_items[$((_csv_choice - 1))]}"
+                if [[ "$_fp_choice" =~ ^[0-9]+$ ]] \
+                   && [ "$_fp_choice" -ge 1 ] \
+                   && [ "$_fp_choice" -le "${#_fp_items[@]}" ]; then
+                    local _sel="${_fp_items[$((_fp_choice - 1))]}"
                     if [ -d "$_sel" ]; then
-                        _csv_nav_path="$_sel"
+                        _fp_nav_path="$_sel"
                     else
-                        csv_file="$_sel"
-                        echo "✅ Selected: $(basename "$csv_file")"
+                        _fp_out="$_sel"
+                        echo "✅ Selected: $(basename "$_sel")"
                         return 0
                     fi
                 else
-                    echo "  ⚠️  Invalid — enter a number between 1 and ${#_csv_items[@]}."
+                    echo "  ⚠️  Invalid — enter a number between 1 and ${#_fp_items[@]}."
                 fi
                 ;;
         esac
     done
 }
+
+# ---------------------------------------------------------------------------
+# open_csv_menu [start_path]
+#   Navigate to and select a .csv file.
+#   On success : sets global $csv_file  → returns 0
+#   On cancel  : sets csv_file=""       → returns 1
+#   On quit    : exits the program
+# ---------------------------------------------------------------------------
+open_csv_menu() { _file_picker csv csv_file "$@"; }
+
+# ---------------------------------------------------------------------------
+# open_zip_menu [start_path]
+#   Same picker, for .zip files (used by UDF import).
+#   On success : sets global $zip_file  → returns 0
+#   On cancel  : sets zip_file=""       → returns 1
+# ---------------------------------------------------------------------------
+open_zip_menu() { _file_picker zip zip_file "$@"; }
 
 # ---------------------------------------------------------------------------
 # _csv_trim <nameref-var>

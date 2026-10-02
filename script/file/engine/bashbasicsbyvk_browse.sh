@@ -495,7 +495,7 @@ _menu_body_flat() {
 }
 
 _menu_footer_lines() {
-  builtin printf "\nu) Up/Back   cd) Change directory   t) Transfer\nd) Delete   c) Create   f) Find    r) Rename\nq/h) Quit/Home   s) Settings   x) Organise\n-h) Help   -u) Upgrade\n"
+  builtin printf "\nu) Up/Back   cd) Change directory\nq/h) Quit/Home   s) Settings\n-h) Help   -u) Upgrade\n"
   if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press fs to enable grouped display"
   fi

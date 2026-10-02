@@ -155,6 +155,9 @@ source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_ext.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_date.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selection.sh"
 
+# UDF tab extras: e-N (edit item), ux / ui (export / import all UDFs as a zip)
+source "${_FX_ADF_DIR}/bashbasicsbyvk_udf_io.sh"
+
 # ════════════════════════════════════════════════════════════════════════════
 #  Tab cycle
 # ════════════════════════════════════════════════════════════════════════════
@@ -218,8 +221,8 @@ _fx_menu_footer_adf() {
 
 _fx_menu_footer_udf() {
   printf '\n[UDF — User Defined]  Scripts in execute dir — run from current path\n'
-  printf 'u) Up   t) Transfer   d) Delete   c) Create   f) Find\n'
-  printf 'r) Rename   s) Settings   x) Organise   fx) Exit\n'
+  printf 'u) Up   s) Settings   fx) Exit\n'
+  printf 'e-N) Edit item   ux) Export all   ui) Import all\n'
   [ -n "$group_prefix" ] && printf 'back) Remove last prefix (%s*)\n' "${group_prefix^^}"
 }
 
@@ -590,6 +593,28 @@ functions_menu() {
           path="$_saved_path_rs"
         else
           _fx_do_fresh=false
+        fi
+        ;;
+
+      e-*)
+        # e-N : file actions for UDF item N (bare N still runs it)
+        _fx_udf_edit_item "$_fx_choice" || _fx_do_fresh=false
+        ;;
+
+      ux|udf.export)
+        if [ "$_fx_tab" = "udf" ]; then
+          _fx_udf_export
+          _fx_do_fresh=false
+        else
+          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+        fi
+        ;;
+
+      ui|udf.import)
+        if [ "$_fx_tab" = "udf" ]; then
+          _fx_udf_import          # list is rebuilt below (new UDFs appear)
+        else
+          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
