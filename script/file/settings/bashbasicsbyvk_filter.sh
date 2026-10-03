@@ -9,37 +9,125 @@
 #                          showing the actual matching files
 #   • Imaginary → groups — filter keeps result > threshold: rebuild groups
 
-# ── Core filter primitives (flat mode) ────────────────────────────────────────
+# ── Filter state ──────────────────────────────────────────────────────────────
+#   _all_items   what the loop was showing before "=" (restored on clear)
+#   _filter_src  what the filter searches (== _all_items, except in
+#                "include hidden" mode where hidden files are added)
+#   _filter_map  for each filtered row, its 0-based position in _filter_src.
+#                Loops that keep arrays parallel to items[] (fx ADF tab) use
+#                it so row N of the FILTERED list resolves to the right entry.
+declare -ga _filter_src=()
+declare -ga _filter_map=()
+declare -g  _filter_map_active=false
+
+# filter_hidden_mode: respect | include | exclude   (Settings → 11)
+#   respect  filter whatever the folder view currently shows
+#   include  filter also matches hidden files, even if they are not shown
+#   exclude  filter never shows hidden files, even if they are shown
+
+# true/false: should the imaginary (grouped) scan look at hidden files?
+_filter_effective_hidden() {
+  case "${filter_hidden_mode:-respect}" in
+    include) echo true ;;
+    exclude) echo false ;;
+    *)       echo "${show_hidden_files:-false}" ;;
+  esac
+}
+
+# Reset every piece of filter state (called whenever a loop rebuilds its list).
+_filter_reset_state() {
+  _filter_query=""
+  _all_items=()
+  _filter_src=()
+  _filter_map=()
+  _filter_map_active=false
+  _imag_filter_active=false
+  _imag_filter_query=""
+  _imag_filter_committed=false
+}
+
+# display row N (1-based) → 0-based index into the unfiltered list
+_filter_orig_slot() {
+  if $_filter_map_active; then
+    echo "${_filter_map[$(( $1 - 1 ))]:-0}"
+  else
+    echo $(( $1 - 1 ))
+  fi
+}
+
+# Only the plain folder view of the main loop can be re-scanned from disk.
+# Virtual lists (fx ADF, favourites, recents, bookmarks) keep what they show.
+_filter_can_rescan_hidden() {
+  [ "${_sw_in_mode:-0}" = "1" ] && return 1
+  [ "${_fx_in_mode:-0}" = "1" ] && return 1
+  ${_fav_on:-false} && return 1
+  ${imaginary_mode:-false} && return 1
+  [ -d "$path" ] || return 1
+  return 0
+}
 
 _filter_snapshot() {
   _all_items=("${items[@]}")
+  _filter_src=("${items[@]}")
+  [ "${filter_hidden_mode:-respect}" = "include" ] || return 0
+  [ "${show_hidden_files:-false}" = "true" ] && return 0
+  _filter_can_rescan_hidden || return 0
+  # Re-list the folder WITH hidden files (same sort, same group prefix) and use
+  # that as the search source. items[] is restored afterwards, so clearing the
+  # filter brings back exactly the view you had.
+  local -a _keep=("${items[@]}")
+  local _keep_hidden="$show_hidden_files"
+  show_hidden_files=true
+  build_items_with_meta "$path" "${group_prefix:-}"
+  apply_sort
+  _filter_src=("${items[@]}")
+  show_hidden_files="$_keep_hidden"
+  items=("${_keep[@]}")
+  _meta_loaded=false; _win_lo=0; _win_hi=0
 }
 
 _filter_apply() {
   local q="${_filter_query,,}"
+  local hm="${filter_hidden_mode:-respect}"
   items=()
-  local f bn
-  for f in "${_all_items[@]}"; do
+  _filter_map=()
+  _filter_map_active=true
+  local f bn bl i=0
+  for f in "${_filter_src[@]}"; do
     bn="${f##*/}"
-    local bn_lower="${bn,,}"
+    if [ "$hm" = "exclude" ] && [[ "$bn" == .* ]]; then i=$(( i + 1 )); continue; fi
+    bl="${bn,,}"
     if [ "${filter_mode:-partial}" = "exact" ]; then
-      [[ "$bn_lower" == "$q"* ]] && items+=("$f")
+      [[ "$bl" == "$q"* ]] && { items+=("$f"); _filter_map+=("$i"); }
     else
-      [[ "$bn_lower" == *"$q"* ]] && items+=("$f")
+      [[ "$bl" == *"$q"* ]] && { items+=("$f"); _filter_map+=("$i"); }
     fi
+    i=$(( i + 1 ))
   done
+  _meta_loaded=false; _win_lo=0; _win_hi=0
 }
 
 _filter_clear() {
   items=("${_all_items[@]}")
   _filter_query=""
   _all_items=()
+  _filter_src=()
+  _filter_map=()
+  _filter_map_active=false
+  _meta_loaded=false; _win_lo=0; _win_hi=0
+}
+
+# "(shown/total)" denominator for the header
+_filter_total_count() {
+  if [ "${#_filter_src[@]}" -gt 0 ]; then echo "${#_filter_src[@]}"
+  else echo "${#_all_items[@]}"; fi
 }
 
 # ── Imaginary-origin filter state ─────────────────────────────────────────────
 
 declare -g _imag_filter_active=false
 declare -g _imag_filter_query=""
+declare -g _imag_filter_committed=false   # an imaginary-origin filter result is on screen
 
 # Single Python scan returns groups AND matching file paths together.
 # Emits "G\t<char>\t<count>" lines, then "F\t<path>" lines.
@@ -58,7 +146,7 @@ _imag_filter_apply() {
       F) _paths+=("$a") ;;
     esac
   done < <(python3 - "$path" "$group_prefix" "$q" \
-                    "${filter_mode:-partial}" "${show_hidden_files:-false}" <<'PYEOF'
+                    "${filter_mode:-partial}" "$(_filter_effective_hidden)" <<'PYEOF'
 import os, sys
 path   = sys.argv[1]
 pfx    = sys.argv[2].lower()
@@ -109,6 +197,7 @@ PYEOF
 
   local tot="${#_paths[@]}"
   _filter_query="$_imag_filter_query"
+  _imag_filter_committed=true
 
   # ── Below threshold: drop out of imaginary, show the real files ────────
   if [ "$tot" -le "$threshold" ]; then
@@ -144,6 +233,7 @@ PYEOF
 # may return to imaginary, or drop to flat if the base is already small.
 _imag_filter_restore() {
   _filter_query=""
+  _imag_filter_committed=false
   _imag_banner=""
   local threshold="${index_mode_threshold:-200}"
   local total
@@ -252,7 +342,7 @@ _filter_on_char() {
   fi
 
   # ── Enter imaginary-origin filter (type = at empty buffer) ──────────────
-  if ${imaginary_mode:-false}; then
+  if ${imaginary_mode:-false} || ${_imag_filter_committed:-false}; then
     if [ -z "$_buf" ] && [ "$key" = "=" ]; then
       _imag_filter_active=true
       _imag_filter_query=""
@@ -266,7 +356,9 @@ _filter_on_char() {
   # ── Flat filter ─────────────────────────────────────────────────────────
   if [[ "$_buf" == =* ]] || { [ -z "$_buf" ] && [ "$key" = "=" ]; }; then
     if [ -z "$_buf" ] && [ "$key" = "=" ]; then
-      _filter_snapshot
+      # A committed filter (Enter on =text) already holds the original list in
+      # _filter_src — re-filter from that instead of from the filtered rows.
+      [ "${#_filter_src[@]}" -eq 0 ] && _filter_snapshot
     fi
     _buf="${_buf:0:_pos}${key}${_buf:_pos}"
     _pos=$(( _pos + 1 ))
@@ -283,18 +375,61 @@ _filter_on_char() {
   return 1
 }
 
+# ── Enter on "=text": keep the filter, redraw, ask again ────────────────────
+# The loops used to treat "=text"+Enter as an unknown command and rebuild the
+# full list, so the next number picked from the UNFILTERED list. Now the
+# filtered rows stay put and the next number resolves against what you see.
+#   =text + Enter   keep the filter (redraw clean, prompt again)
+#   =      + Enter   clear the filter
+_filter_commit() {
+  _imag_filter_active=false          # leave the typed query; result stays
+  if [ "$choice" = "=" ]; then
+    if ${_imag_filter_committed:-false}; then
+      _imag_filter_query=""
+      _imag_filter_restore           # redraws by itself
+      return 0
+    fi
+    if [ "${#_filter_src[@]}" -gt 0 ] || [ -n "$_filter_query" ]; then _filter_clear; fi
+  fi
+  _hl_index=0
+  _vp_start=1
+  _vp_cache_reset
+  _vp_prime_rows
+  _vp_render_fresh
+}
+
+# Drop-in replacement for _read_choice in every loop.
+_read_choice_filtered() {
+  while true; do
+    _read_choice
+    case "$choice" in
+      =*) _filter_commit ;;
+      *)  return 0 ;;
+    esac
+  done
+}
+
 filter_mode_settings() {
+  local cur_m="${filter_mode:-partial}" cur_h="${filter_hidden_mode:-respect}"
   echo ""
-  echo "Filter mode (used by = filter):"
-  echo "1) partial — match anywhere in name  (=config → longword_xdconfig ✔)"
-  echo "2) exact   — prefix match only       (=config → config_file ✔)"
-  read -r -p "Choice [1-2]: " fm_choice
+  echo "Filter mode (used by = filter):    now: $cur_m / hidden: $cur_h"
+  echo "1) partial — [respect hidden file settings]   (=config → longword_xdconfig ✔)"
+  echo "2) exact   — [respect hidden file settings]   (=config → config_file ✔)"
+  echo "3) partial — [always include hidden files]"
+  echo "4) exact   — [always include hidden files]"
+  echo "5) partial — [always exclude hidden files]"
+  echo "6) exact   — [always exclude hidden files]"
+  read -r -p "Choice [1-6]: " fm_choice
   fm_choice="${fm_choice%$'\r'}"
   case "$fm_choice" in
-    1) filter_mode="partial" ;;
-    2) filter_mode="exact"   ;;
+    1) filter_mode="partial"; filter_hidden_mode="respect" ;;
+    2) filter_mode="exact";   filter_hidden_mode="respect" ;;
+    3) filter_mode="partial"; filter_hidden_mode="include" ;;
+    4) filter_mode="exact";   filter_hidden_mode="include" ;;
+    5) filter_mode="partial"; filter_hidden_mode="exclude" ;;
+    6) filter_mode="exact";   filter_hidden_mode="exclude" ;;
     *) echo "Invalid choice — no changes made." ; return ;;
   esac
   save_settings
-  echo "✅ Filter mode set to: $filter_mode"
+  echo "✅ Filter mode set to: $filter_mode, hidden files: $filter_hidden_mode"
 }

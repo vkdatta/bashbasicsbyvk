@@ -293,7 +293,7 @@ _sw_menu_header() {
   esac
   printf '📂 %s\n' "$_loc"
   if [ -n "$_filter_query" ]; then
-    printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "${#_all_items[@]}"
+    printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "$(_filter_total_count)"
   fi
 }
 
@@ -340,8 +340,7 @@ _sw_set_viewport_for_tab() {
 _sw_build_items_for_tab() {
   _FAV_LABEL=()
   imaginary_mode=false
-  _filter_query=""
-  _all_items=()
+  _filter_reset_state
   items=()
   _hl_index=0
 
@@ -593,7 +592,7 @@ switch_menu() {
 
   while true; do
 
-    _read_choice
+    _read_choice_filtered
     _sw_choice="$choice"
 
     shopt -s nocasematch

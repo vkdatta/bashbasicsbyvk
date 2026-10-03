@@ -168,7 +168,7 @@ get_imaginary_groups_filtered() {
   group_chars=()
 
   local py_out
-  py_out=$(python3 - "$p" "$pfx" "$query" "${filter_mode:-partial}" "${show_hidden_files:-false}" <<'PYEOF'
+  py_out=$(python3 - "$p" "$pfx" "$query" "${filter_mode:-partial}" "$(_filter_effective_hidden)" <<'PYEOF'
 import os, sys
 path   = sys.argv[1]
 pfx    = sys.argv[2].lower()
@@ -457,7 +457,7 @@ _menu_header() {
       _hdr_loc+="  🔍 filter: ${_filter_query^^}*  (${_itot} matches)"
     else
       local _fcnt="${#items[@]}"
-      local _tcnt="${#_all_items[@]}"
+      local _tcnt; _tcnt="$(_filter_total_count)"
       if [ "$_tcnt" -gt 0 ]; then
         _hdr_loc+="  🔍 filter: ${_filter_query^^}*  (${_fcnt}/${_tcnt} items)"
       else
