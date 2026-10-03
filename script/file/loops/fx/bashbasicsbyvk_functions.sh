@@ -205,7 +205,7 @@ _fx_menu_header() {
       ;;
   esac
   if [ -n "$_filter_query" ]; then
-    printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "${#_all_items[@]}"
+    printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "$(_filter_total_count)"
   fi
 }
 
@@ -238,7 +238,7 @@ _fx_menu_footer_udf() {
 _fx_adf_rowtext() {
   local i="$1"
   local label="${items[$((i-1))]}"
-  local typ="${_fx_adf_item_type[$((i-1))]:-fn}"
+  local typ="${_fx_adf_item_type[$(_filter_orig_slot "$i")]:-fn}"
   if [ "$typ" = "folder" ]; then
     printf -v _vp_line " %2d) 📁 %s" "$i" "$label"
   else
@@ -273,8 +273,7 @@ _fx_set_viewport_for_tab() {
 
 _fx_build_items_for_tab() {
   imaginary_mode=false
-  _filter_query=""
-  _all_items=()
+  _filter_reset_state
   items=()
   _hl_index=0
 
@@ -341,7 +340,7 @@ _fx_adf_handle_selection() {
     echo "⚠️  Invalid selection"
     return 0
   fi
-  local slot=$(( choice - 1 ))
+  local slot; slot=$(_filter_orig_slot "$choice")   # filtered row → original slot
   local itype="${_fx_adf_item_type[$slot]}"
   local iidx="${_fx_adf_item_idx[$slot]}"
 
@@ -452,7 +451,7 @@ functions_menu() {
 
   while true; do
 
-    _read_choice
+    _read_choice_filtered
     _fx_choice="$choice"
 
     shopt -s nocasematch

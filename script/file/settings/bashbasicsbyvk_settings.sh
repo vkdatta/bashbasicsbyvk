@@ -14,6 +14,7 @@ DEFAULT_DISPLAY_TIME_FORMAT="full"
 DEFAULT_GROUP_VIEW_LEVELS=""
 DEFAULT_COMPRESS_FORMAT="ask"
 DEFAULT_FILTER_MODE="partial"
+DEFAULT_FILTER_HIDDEN_MODE="respect"
 DEFAULT_DISPLAY_FILTER_PERSIST=false
 
 unset show_hidden_files
@@ -26,6 +27,7 @@ unset display_time_format
 unset group_view_levels_str
 unset compress_format
 unset filter_mode
+unset filter_hidden_mode
 unset display_filter_persist
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
@@ -40,6 +42,7 @@ unset display_filter_persist
 : "${group_view_levels_str:=$DEFAULT_GROUP_VIEW_LEVELS}"
 : "${compress_format:=$DEFAULT_COMPRESS_FORMAT}"
 : "${filter_mode:=$DEFAULT_FILTER_MODE}"
+: "${filter_hidden_mode:=$DEFAULT_FILTER_HIDDEN_MODE}"
 : "${display_filter_persist:=$DEFAULT_DISPLAY_FILTER_PERSIST}"
 
 declare -ga group_view_levels=()
@@ -59,6 +62,7 @@ save_settings() {
     echo "group_view_levels_str=\"${group_view_levels[*]}\""
     echo "compress_format=$compress_format"
     echo "filter_mode=$filter_mode"
+    echo "filter_hidden_mode=$filter_hidden_mode"
     echo "display_filter_persist=$display_filter_persist"
   } > "$SETTINGS_FILE"
 }
@@ -116,7 +120,7 @@ settings_menu() {
   echo "8) Display suffix        (${sfx_label:-none})"
   echo "9) $gv_label"
   echo "10) Compress format      ($compress_format)"
-  echo "11) Filter mode          ($filter_mode)"
+  echo "11) Filter mode          ($filter_mode, hidden: $filter_hidden_mode)"
   echo "12) Display filter       (.d — presets, keep between sessions: $display_filter_persist)"
 
   read -r -p "Enter choice [1-12]: " main_choice

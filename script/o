@@ -49,12 +49,9 @@ while true; do
   total=$(count_items_in_path "$path")
 
   imaginary_mode=false
-  _filter_query=""
-  _all_items=()
+  _filter_reset_state
   items=()
   _hl_index=0
-  _imag_filter_active=false
-  _imag_filter_query=""
 
   _has_group_view=false
   [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
@@ -112,7 +109,7 @@ while true; do
   _vp_prime_rows
   _vp_render_fresh
 
-  _read_choice
+  _read_choice_filtered
 
   shopt -s nocasematch
   case "$choice" in
