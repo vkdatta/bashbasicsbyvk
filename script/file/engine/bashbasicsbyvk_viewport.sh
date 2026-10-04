@@ -291,13 +291,58 @@ _vp_ensure_visible() {
   [ "$_vp_start" -ne "$old" ]
 }
 
-_vp_el() { builtin printf '\r\033[2K%s\n' "$1"; }
+# Frame buffering: while _vp_buffering=1 every line is appended to _vp_frame and
+# the whole screen is written in ONE write at the end of _vp_emit, so a redraw
+# lands at once instead of rolling in row by row while rows are still computed.
+_vp_buffering=0
+_vp_frame=""
+_vp_force_pop=0         # 1 = never animate this draw (in-place refreshes, scrolling)
+
+# Which animation applies to a fresh screen: inner loops (fx/sw) use anim_inner,
+# everything else uses anim_outer.  Echoes pop|carpet.
+_vp_anim_mode() {
+  if [ "${_sw_in_mode:-0}" = "1" ] || [ "${_fx_in_mode:-0}" = "1" ]; then
+    echo "${anim_inner:-carpet}"
+  else
+    echo "${anim_outer:-pop}"
+  fi
+}
+
+# tiny nap without forking: read with a timeout on a descriptor that never has data
+_vp_nap_fd=""
+_vp_nap() {
+  if [ -z "$_vp_nap_fd" ]; then
+    exec {_vp_nap_fd}<> <(:) 2>/dev/null || { _vp_nap_fd=none; }
+  fi
+  [ "$_vp_nap_fd" = none ] && return 0
+  read -rt "${1:-0.004}" -u "$_vp_nap_fd" _ 2>/dev/null
+  return 0
+}
+
+_vp_carpet_now=0
+_vp_nap_on=0
+_vp_el() {
+  if [ "$_vp_buffering" = 1 ]; then
+    _vp_frame+=$'\r\033[2K'"$1"$'\n'
+  else
+    builtin printf '\r\033[2K%s\n' "$1"
+    [ "$_vp_nap_on" = 1 ] && _vp_nap 0.004
+  fi
+}
 
 _vp_emit() {
   local i line
   _vp_count
   _vp_end=$(( _vp_start + _vp_page - 1 ))
   (( _vp_end > _vp_n )) && _vp_end=$_vp_n
+
+  # carpet: write line by line with a tiny pause (only for a fresh screen);
+  # pop (default): build the frame in memory and write it once
+  local _carpet=$_vp_carpet_now
+  _vp_carpet_now=0
+  if [ "$_carpet" = 1 ]; then _vp_buffering=0; _vp_nap_on=1; else _vp_frame=""; _vp_buffering=1; _vp_nap_on=0; fi
+  # one grep for all visible rows instead of one per row (selection marks)
+  declare -F _sel_prewarm >/dev/null 2>&1 && _sel_prewarm "$_vp_start" "$_vp_end"
 
   for line in "${_vp_hdr_out[@]}"; do _vp_el "$line"; done
 
@@ -316,7 +361,7 @@ _vp_emit() {
       _vp_row_text "$i"
       line="$_vp_line"
       _vp_mark_sel "$i" && line="$_smk_out"
-      _vp_is_hl "$i" && line="$(_highlight "$line")"
+      if _vp_is_hl "$i"; then _highlight_v "$line"; line="$_hl_out"; fi
       _vp_el "$line"
     done
   fi
@@ -330,6 +375,13 @@ _vp_emit() {
   fi
 
   for line in "${_vp_ftr_out[@]}"; do _vp_el "$line"; done
+  if [ "$_vp_buffering" = 1 ]; then
+    _vp_buffering=0
+    # single write; ?2026 = synchronized output (terminals that lack it ignore it)
+    builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
+    _vp_frame=""
+  fi
+  _vp_nap_on=0
   _set_available_above "$_blk_h"
   return 0
 }
@@ -345,6 +397,10 @@ _vp_render_fresh() {
   _vp_build_chrome
   _vp_geometry
   _vp_ensure_visible "${_hl_index:-1}"
+  # a fresh screen follows the Settings → Animation choice (outer vs inner loop);
+  # in-place refreshes (resize, size poll) and scrolling never animate
+  _vp_carpet_now=0
+  if [ "$_vp_force_pop" != 1 ] && [ "$(_vp_anim_mode)" = "carpet" ]; then _vp_carpet_now=1; fi
   _vp_emit
   $_vp_input_fn
 }
@@ -357,7 +413,9 @@ _vp_redraw_in_place() {
   (( up < 0 )) && up=0
   (( up > 0 )) && builtin printf '\033[%dA' "$up"
   builtin printf '\r\033[J'
+  _vp_force_pop=1
   _vp_render_fresh
+  _vp_force_pop=0
 }
 
 _vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + 1 )); }

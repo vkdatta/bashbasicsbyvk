@@ -74,6 +74,23 @@ _sel_is_marked() {                  # _sel_is_marked <abs path>
   [ "${_SEL_MARKC[$f]}" = 1 ]
 }
 
+# Fill the mark cache for the visible rows with ONE grep (rows start..end of
+# $items), so drawing a screen never forks once per row.
+_sel_prewarm() {
+  [ -s "$_SEL_FILE" ] || return 0
+  [ "${_vp_mode:-}" == "items" ] && [ -z "${_vp_rowtext_fn:-}" ] || return 0
+  if [ "$_SEL_MARKC_GEN" != "$_SEL_GEN" ]; then _SEL_MARKC=(); _SEL_MARKC_GEN=$_SEL_GEN; fi
+  local i f hit
+  local -a want=()
+  for (( i=$1; i<=$2; i++ )); do
+    f="${items[$((i-1))]:-}"
+    [ -n "$f" ] && [ -z "${_SEL_MARKC[$f]+x}" ] && { want+=("$f"); _SEL_MARKC[$f]=0; }
+  done
+  [ ${#want[@]} -eq 0 ] && return 0
+  while IFS= read -r hit; do _SEL_MARKC[$hit]=1; done \
+    < <(printf '%s\n' "${want[@]}" | grep -xF -f - "$_SEL_FILE" 2>/dev/null)
+}
+
 # _sel_mark_v <path> <line> : sets _smk_out; returns 0 when the path is selected
 _smk_out=""
 _sel_mark_v() {

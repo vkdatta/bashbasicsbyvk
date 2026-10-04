@@ -16,6 +16,8 @@ DEFAULT_COMPRESS_FORMAT="ask"
 DEFAULT_FILTER_MODE="partial"
 DEFAULT_FILTER_HIDDEN_MODE="respect"
 DEFAULT_DISPLAY_FILTER_PERSIST=false
+DEFAULT_ANIM_OUTER="pop"       # outer loop: whole screen appears at once
+DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw): rows roll in top to bottom
 
 unset show_hidden_files
 unset index_mode_threshold
@@ -29,6 +31,8 @@ unset compress_format
 unset filter_mode
 unset filter_hidden_mode
 unset display_filter_persist
+unset anim_outer
+unset anim_inner
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
 
@@ -44,6 +48,10 @@ unset display_filter_persist
 : "${filter_mode:=$DEFAULT_FILTER_MODE}"
 : "${filter_hidden_mode:=$DEFAULT_FILTER_HIDDEN_MODE}"
 : "${display_filter_persist:=$DEFAULT_DISPLAY_FILTER_PERSIST}"
+: "${anim_outer:=$DEFAULT_ANIM_OUTER}"
+: "${anim_inner:=$DEFAULT_ANIM_INNER}"
+[[ "$anim_outer" == pop || "$anim_outer" == carpet ]] || anim_outer=$DEFAULT_ANIM_OUTER
+[[ "$anim_inner" == pop || "$anim_inner" == carpet ]] || anim_inner=$DEFAULT_ANIM_INNER
 
 declare -ga group_view_levels=()
 if [ -n "$group_view_levels_str" ]; then
@@ -64,6 +72,8 @@ save_settings() {
     echo "filter_mode=$filter_mode"
     echo "filter_hidden_mode=$filter_hidden_mode"
     echo "display_filter_persist=$display_filter_persist"
+    echo "anim_outer=$anim_outer"
+    echo "anim_inner=$anim_inner"
   } > "$SETTINGS_FILE"
 }
 
@@ -94,6 +104,8 @@ restore_all_defaults() {
   group_view_levels_str=""
   compress_format=$DEFAULT_COMPRESS_FORMAT
   display_filter_persist=$DEFAULT_DISPLAY_FILTER_PERSIST
+  anim_outer=$DEFAULT_ANIM_OUTER
+  anim_inner=$DEFAULT_ANIM_INNER
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "$mode_choice" in
     2) _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER" ;;
@@ -101,6 +113,43 @@ restore_all_defaults() {
   esac
   save_settings
   echo "✅ All settings restored to defaults"
+}
+
+# Screen animation: how a screen is drawn when it opens / changes folder.
+#   pop    — the whole screen appears at once
+#   carpet — rows roll in from top to bottom
+# Arrow-key scrolling inside a list is always instant.
+animation_settings() {
+  local ch v
+  echo
+  echo "Animation (how a screen is drawn):"
+  echo "1) Outer loop    now: $anim_outer     (default: $DEFAULT_ANIM_OUTER)"
+  echo "2) Inner loops   now: $anim_inner     (default: $DEFAULT_ANIM_INNER)   [fx / sw]"
+  echo "3) Restore animation defaults"
+  read -r -p "Choice [1-3]: " ch
+  ch="${ch%$'\r'}"
+  case "$ch" in
+    u|U) return ;;
+    q|Q) _bvk_quit ;;
+    1|2)
+      echo "1) pop     — whole screen appears at once"
+      echo "2) carpet  — rows roll in top to bottom"
+      read -r -p "Choice [1-2]: " v
+      v="${v%$'\r'}"
+      case "$v" in
+        u|U) return ;;
+        q|Q) _bvk_quit ;;
+        1) v=pop ;;
+        2) v=carpet ;;
+        *) echo "Invalid choice — no changes made."; return ;;
+      esac
+      if [ "$ch" = 1 ]; then anim_outer=$v; else anim_inner=$v; fi
+      save_settings
+      echo "✅ Animation — outer loop: $anim_outer, inner loops: $anim_inner" ;;
+    3) anim_outer=$DEFAULT_ANIM_OUTER; anim_inner=$DEFAULT_ANIM_INNER; save_settings
+       echo "✅ Animation restored — outer loop: $anim_outer, inner loops: $anim_inner" ;;
+    *) echo "Invalid choice" ;;
+  esac
 }
 
 settings_menu() {
@@ -126,8 +175,9 @@ settings_menu() {
   echo "10) Compress format      ($compress_format)"
   echo "11) Filter mode          ($filter_mode, hidden: $filter_hidden_mode)"
   echo "12) Display filter       (.d — presets, keep between sessions: $display_filter_persist)"
+  echo "13) Animation            (outer loop: $anim_outer, inner loops: $anim_inner)"
 
-  read -r -p "Enter choice [1-12]: " main_choice
+  read -r -p "Enter choice [1-13]: " main_choice
 
 case "$main_choice" in
 u|U) return ;;
@@ -144,6 +194,7 @@ q|Q) _bvk_quit ;;
     10) compress_format_settings ;; # Current
     11) filter_mode_settings ;;    # bashbasicsbyvk_filter.sh
     12) display_filter_settings ;; # bashbasicsbyvk_display_filter.sh
+    13) animation_settings ;;      # Current
     *) echo "Invalid choice" ;;
 esac
 }
