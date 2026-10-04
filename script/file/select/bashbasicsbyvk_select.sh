@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_select.sh — the  .s  select commands and  .r  rule commands
 # ════════════════════════════════════════════════════════════════════════════
-#  .s <expression>       select (replaces the current selection)
-#  .s.add <expression>   add matches to the selection
-#  .s.sub <expression>   remove matches from the selection
+#  .s <expression>       select (ADDS; persists across folders)
+#  .us <expression>      unselect matches
+#  .s.set <expression>   replace the whole selection
+#  .s.add / .s.sub       aliases of .s / .us
 #  .s.show [all]  .s.clr  .s.shown
 #  .r  .r.save  .r.run  .r.edit  .r.rename  .r.del
 #
@@ -54,9 +55,8 @@ _sel_save() {                       # _sel_save <array-name>
 }
 
 # ── selection marks (used by every screen that lists real files) ─────────────
-#  A selected item is drawn green with a leading "+" (width-neutral: it replaces
-#  the row's leading space).  Works together with the cursor highlight (reverse
-#  video) because it only touches the foreground colour.
+#  A selected item is drawn with a leading "+" (width-neutral: it replaces the
+#  row's leading space).  No colour is used - the "+" alone marks the row.
 #  Lookups are lazy + memoised per generation, so a 200k-item selection costs
 #  one grep per VISIBLE row, never a full load.
 _SEL_GEN=0
@@ -82,7 +82,7 @@ _sel_mark_v() {
   _sel_is_marked "$1" || return 1
   local l="$2"
   if [[ "$l" == " "* ]]; then l="+${l:1}"; else l="+$l"; fi
-  _smk_out=$'\033[32m'"$l"$'\033[39m'
+  _smk_out="$l"
   return 0
 }
 
@@ -160,7 +160,9 @@ _sel_help() {
    → opens the CSV picker per clause; add (and) for AND, default (or)
  .s.rule NAME               use a saved rule
  .s 1-5   .s 1,2,3-7,11   .s a-5      by displayed number (a-5 = all except 5)
-                                      also:  .s.add 1-5   .s.sub 3
+ .s ADDS to the selection and keeps it across folders (go anywhere, select more)
+ .us <same expressions>     UNSELECT   e.g. .us 3   .us.a   .us.ext png   (.us.clr = empty all)
+ .s.set EXPR                replace the whole selection  (.s.clr empties it)
 LOGIC  space or &  = AND      |  = OR      !  = NOT      ( )  groups
  -r  at the end = search subfolders
 AFTER  .s.add EXPR  .s.sub EXPR  .s.show  .s.clr  .s.shown
@@ -183,7 +185,7 @@ _sel_eval() {
 
   # 0) index selection by displayed number:  1-5   1,2,3-7,11   a-5 (all except 5)
   #    (optionally written with the .s prefix)
-  local _ix="${expr#.s}"
+  local _ix="${expr#.us}"; _ix="${_ix#.s}"
   _ix="${_ix//[[:space:]]/}"
   if [[ "$_ix" =~ ^(a-[0-9][0-9,-]*|[0-9][0-9,-]*)$ ]]; then
     if ${imaginary_mode:-false}; then
@@ -258,11 +260,18 @@ handle_select_cmd() {
     .s|.s\ help|.s.help|-h) _sel_help; return ;;
   esac
 
-  local mode="replace" expr="$raw"
+  # .s ADDS to the selection (it persists across folders until .s.clr / .us).
+  # .us removes.  .s.set replaces.  .s.add / .s.sub kept as aliases.
+  local mode="add" expr="$raw"
   case "$raw" in
+    .us|.us.help) echo "⚠️  Usage: .us <expression>   e.g. .us 3-5   .us .s.ext png   (.us.a = unselect everything here, .s.clr = empty the whole selection)"; return ;;
+    .us.clr) _sel_ensure_store; : > "$_SEL_FILE"; _sel_bump; echo "🧹 Selection cleared"; return ;;
+    .us\ *)  mode="sub"; expr="${raw#.us }" ;;
+    .us.*)   mode="sub"; expr=".s.${raw#.us.}" ;;
+    .s.set\ *) mode="replace"; expr="${raw#.s.set }" ;;
     .s.add\ *) mode="add"; expr="${raw#.s.add }" ;;
     .s.sub\ *) mode="sub"; expr="${raw#.s.sub }" ;;
-    .s.add|.s.sub) echo "⚠️  Usage: ${raw} <expression>   e.g. ${raw} .s.ext png"; return ;;
+    .s.add|.s.sub|.s.set) echo "⚠️  Usage: ${raw} <expression>   e.g. ${raw} .s.ext png"; return ;;
   esac
   expr="${expr#"${expr%%[![:space:]]*}"}"
 
@@ -295,7 +304,7 @@ handle_select_cmd() {
   case "$mode" in
     replace) _sel_summary out "🎯 Selected" ;;
     add)     _sel_summary out "➕ Added ${#found[@]} match(es) → selection now" ;;
-    sub)     _sel_summary out "➖ Removed matches → selection now" ;;
+    sub)     _sel_summary out "➖ Unselected ${#found[@]} match(es) → selection now" ;;
   esac
   _sel_preview out
   [ ${#out[@]} -gt 0 ] && echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"

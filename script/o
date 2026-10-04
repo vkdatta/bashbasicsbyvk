@@ -142,7 +142,7 @@ while true; do
     t)           transfer_menu ;;
     d)           delete_items ;;
     f)           find_menu ;;
-    x)           organise_menu ;;
+    z)           organise_menu ;;
     s)           settings_menu ;;
     r)           handle_rename ;;
     cd)          cd "$path" && exec "$SHELL" ;;
@@ -165,7 +165,7 @@ while true; do
     rf)          handle_refresh ;;
     scr-sync)    handle_scr_sync ;;
     sast)        bashbasicsbyvk_sast ;;
-    .s|.s.*|.s\ *|.r|.r.*|.r\ *)  handle_select_cmd "$choice" ;;
+    .s|.s.*|.s\ *|.us|.us.*|.us\ *|.r|.r.*|.r\ *)  handle_select_cmd "$choice" ;;
     .ai|.ai\ *)  handle_ai_cmd "$choice" ;;
     .dm|.dm.*)   handle_daemon_cmd "$choice" ;;
     .d|.d.*|.d\ *)  handle_display_cmd "$choice" ;;

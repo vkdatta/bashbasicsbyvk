@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_display_filter.sh — the  .d  display-filter commands
 # ════════════════════════════════════════════════════════════════════════════
-#  .d <expression>      only DISPLAY items matching the expression (any folder)
+#  .d <expression>      only DISPLAY items matching the expression (THIS folder only)
 #  .d                   show the active filter
 #  .d.clr               back to showing everything
 #  .d.save NAME [expr]  keep the filter (or expr) as a preset (SCOPE=display)
@@ -13,6 +13,7 @@
 #
 #  Active filter is one small file (edit it by hand if you like):
 #    ~/.bashbasicsbyvk/display/active
+#        DIR=/folder/it/was/set/in
 #        EXPR=.d.ext.csv & .d.size <3mb
 #        CSV=/path/to/exts.csv            ← one line per .csv clause, in order
 #  Presets live with the select rules:  ~/.bashbasicsbyvk/rules/NAME.rule
@@ -35,6 +36,7 @@ declare -gA _DISP_HIT=()
 _disp_banner=""
 _disp_on=false
 _disp_expr=""
+_disp_dir=""
 declare -ga _disp_csvs=()
 
 _disp_startup() {                  # call once when the app starts
@@ -45,11 +47,12 @@ _disp_cache_reset() { _disp_cache_key=""; _DISP_HIT=(); }
 
 # Read the active file into _disp_expr / _disp_csvs. Returns 1 if none.
 _disp_load() {
-  _disp_expr=""; _disp_csvs=()
+  _disp_expr=""; _disp_csvs=(); _disp_dir=""
   [ -f "$_DISP_ACTIVE" ] || return 1
   local line
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
+      DIR=*)  _disp_dir="${line#DIR=}" ;;
       EXPR=*) _disp_expr="${line#EXPR=}" ;;
       CSV=*)  _disp_csvs+=("${line#CSV=}") ;;
     esac
@@ -60,7 +63,7 @@ _disp_load() {
 _disp_store() {                    # _disp_store <expr> [csv ...]
   mkdir -p "$_DISP_DIR" 2>/dev/null
   local expr="$1"; shift
-  { printf 'EXPR=%s\n' "$expr"; local c; for c in "$@"; do printf 'CSV=%s\n' "$c"; done; } > "$_DISP_ACTIVE"
+  { printf 'DIR=%s\n' "$path"; printf 'EXPR=%s\n' "$expr"; local c; for c in "$@"; do printf 'CSV=%s\n' "$c"; done; } > "$_DISP_ACTIVE"
   _disp_cache_reset
 }
 
@@ -98,6 +101,9 @@ _disp_run() {
 _disp_begin() {
   _disp_on=false; _disp_banner=""
   _disp_load || return 0
+  # folder-specific: the filter belongs to the folder it was set in
+  # (it stays stored, and comes back when you return to that folder)
+  [ -n "$_disp_dir" ] && [ "$_disp_dir" != "$path" ] && return 0
   _disp_on=true
 }
 
@@ -133,13 +139,13 @@ _disp_help() {
  .d.clr                        show everything again
  .d.save NAME [expr]           keep as preset   .d.run NAME  applies it
  .d.refresh                    re-scan this folder
-Applies in every folder until cleared. Settings → 12 for presets/persistence.
+Applies only in the folder where it was set (other folders show everything). Settings → 12 for presets/persistence.
 HLP
 }
 
 _disp_status() {
   if _disp_load; then
-    echo "🔎 Display filter ON: $_disp_expr"
+    echo "🔎 Display filter ON: $_disp_expr   (folder: ${_disp_dir:-any})"
     local i; for i in "${!_disp_csvs[@]}"; do echo "   CSV $((i+1)): ${_disp_csvs[$i]}"; done
     echo "   .d.clr to clear   .d.save NAME to keep it"
   else
@@ -196,7 +202,17 @@ handle_display_cmd() {
   [[ "$raw" == *" "* ]] && rest="${raw#* }"
   rest="${rest#"${rest%%[![:space:]]*}"}"
   case "$cmd" in
-    .d)          if [ -z "$rest" ]; then _disp_status; _disp_help; else _disp_set "$raw"; fi ;;
+    .d)          if [ -z "$rest" ]; then _disp_status; _disp_help
+                 elif [[ "${rest//[[:space:]]/}" =~ ^[0-9][0-9,-]*$ ]]; then
+                   # bare numbers (.d 1,5,7-10): show just those displayed rows, in this folder
+                   if ${imaginary_mode:-false}; then echo "⚠️  This folder is grouped — numbers mean groups. Use fs first"; return; fi
+                   local -a _dn=($(parse_selection "${rest//[[:space:]]/}" "${#items[@]}")) _dx=()
+                   local _k
+                   for _k in "${_dn[@]}"; do _dx+=("\"${items[$((_k-1))]##*/}\""); done
+                   [ ${#_dx[@]} -eq 0 ] && { echo "❌ No valid item numbers (1-${#items[@]})"; return; }
+                   local _de; _de=$(IFS=,; echo "${_dx[*]}")
+                   _disp_set ".d $_de"
+                 else _disp_set "$raw"; fi ;;
     .d.clr) if _disp_load; then _disp_clear; echo "🔎 Display filter cleared — showing everything"; else echo "🔎 Display filter is already off"; fi ;;
     .d.refresh)  _disp_cache_reset; echo "🔄 Display filter will re-scan" ;;
     .d.help)     _disp_help ;;

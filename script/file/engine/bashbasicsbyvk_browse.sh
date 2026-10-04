@@ -557,7 +557,7 @@ _sync_highlight_from_buf() {
   $_can_nav || return
   _vp_count
   (( _vp_n == 0 )) && return
-  if [[ "$_buf" =~ ^([A-Za-z]+-{1,2})(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)$ ]]; then
+  if [[ "$_buf" =~ ^([A-Za-z]+-{1,2}|\.s[[:space:]]*|\.us[[:space:]]*|\.d[[:space:]]+)(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)$ ]]; then
     local body="${BASH_REMATCH[2]}"
     local -A _old=()
     local k
