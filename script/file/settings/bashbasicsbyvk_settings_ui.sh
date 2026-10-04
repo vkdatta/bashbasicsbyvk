@@ -232,8 +232,8 @@ _st_run() {
         ;;
       enter)
         case "${buf,,}" in
-          u) buf=""; break ;;
-          q) buf=""; _st_quit=1; break ;;
+          u) break ;;                       # buf keeps "u" so the prompt line can stay
+          q) _st_quit=1; break ;;
           "") (( cur >= 0 )) && _st_selectable "$cur" && _st_activate ;;
           *[!0-9]*) buf="" ;;                         # not a command: clear it
           *)
@@ -250,9 +250,9 @@ _st_run() {
   done
 
   # leave tidy: a sub screen erases itself so its parent redraws in the same
-  # place; the top screen leaves the block and just clears the prompt line.
+  # place; the top screen stays on screen with  Select: u  /  Select: q  as typed.
   if (( prev > 0 )); then
-    if (( _st_depth > 1 )); then _st_wipe; else builtin printf '\r\033[2K'; fi
+    if (( _st_depth > 1 )); then _st_wipe; else builtin printf '\r\033[2KSelect: %s' "$buf"; fi
   fi
   _st_depth=$(( _st_depth - 1 ))
   _st_title_now="$parent_title"
