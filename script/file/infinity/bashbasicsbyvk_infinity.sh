@@ -23,6 +23,8 @@ infinity_stones_menu() {
   read -p "Choice: " is_choice
 
   case "$is_choice" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1) python "$SCRIPT_DIR/_3bvk_xtract_core" "$path" ;;
     2) python "$SCRIPT_DIR/_3bvk_js_audit_core" "$path" ;;
     3) bash "$SCRIPT_DIR/_3bvk_py_audit_core" "$path" ;;

@@ -422,6 +422,8 @@ filter_mode_settings() {
   read -r -p "Choice [1-6]: " fm_choice
   fm_choice="${fm_choice%$'\r'}"
   case "$fm_choice" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1) filter_mode="partial"; filter_hidden_mode="respect" ;;
     2) filter_mode="exact";   filter_hidden_mode="respect" ;;
     3) filter_mode="partial"; filter_hidden_mode="include" ;;

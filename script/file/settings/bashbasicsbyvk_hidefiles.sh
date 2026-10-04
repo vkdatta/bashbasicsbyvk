@@ -12,6 +12,8 @@ hidden_file_settings() {
     read -r -p "Enter choice [0-3]: " s_choice
 
     case "$s_choice" in
+    u|U) return ;;
+    q|Q) _bvk_quit ;;
         1) show_hidden_files=false;                      save_settings ;;
         2) show_hidden_files=true;                       save_settings ;;
         3) show_hidden_files=$DEFAULT_SHOW_HIDDEN_FILES; save_settings ;;

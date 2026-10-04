@@ -9,7 +9,7 @@
 #  variant  <action>.select.items.csv  — e.g.
 #     file_fx/copy/copy.selected.items      file_fx/zip/zip.selected.items
 #     file_fx/upload/upload.selected.items  file_fx/delete/delete.selected.items
-#  (see bashbasicsbyvk_adf_selected.sh).  Clear the selection with  .s.clear
+#  (see bashbasicsbyvk_adf_selected.sh).  Clear the selection with  .s.clr
 #
 #  Also defines the helpers shared by the *.selected.items functions.
 # ════════════════════════════════════════════════════════════════════════════

@@ -44,6 +44,8 @@ handle_create() {
   read -r -p "Choice [1-2]: " cr
 
   case "$cr" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1) create_dirs ;;
     2) create_files ;;
     *) echo "Invalid choice" ;;

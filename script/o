@@ -16,6 +16,21 @@ source "bashbasicsbyvk_infinity.sh"
 source "bashbasicsbyvk_telemetry.sh"
 source "bashbasicsbyvk_ai.sh"
 
+# Inner-loop driver: sw and fx hand over to each other via _inner_next,
+# while the outer main loop stays untouched.
+_inner_next=""
+_inner_run() {
+  local _next="$1"
+  while [ -n "$_next" ]; do
+    _inner_next=""
+    case "$_next" in
+      sw) switch_menu ;;
+      fx) functions_menu ;;
+    esac
+    _next="$_inner_next"
+  done
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _bvk_wake_recents_daemon
@@ -154,8 +169,8 @@ while true; do
     .ai|.ai\ *)  handle_ai_cmd "$choice" ;;
     .dm|.dm.*)   handle_daemon_cmd "$choice" ;;
     .d|.d.*|.d\ *)  handle_display_cmd "$choice" ;;
-    sw)          switch_menu ;;
-    fx)          functions_menu ;;
+    sw)          _inner_run sw ;;
+    fx)          _inner_run fx ;;
     *)           handle_selection "$choice" ;;
   esac
 done

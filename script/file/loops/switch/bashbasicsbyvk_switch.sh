@@ -7,7 +7,7 @@
 #    📌 Bookmarks  ~/.bashbasicsbyvk/switch/   — .swlink bookmark files
 #    🕐 Recents    ~/.bashbasicsbyvk/recents.list — daemon-maintained, read-only
 #    ⭐ Favourites the favourites of the folder you came from (manage them:
-#                  N open/go · b remove · rn rename alias · e edit file).
+#                  N open/go · x remove · r rename alias · e edit file · e-N file actions).
 #                  Adding is done in the file view with  fa.
 #
 #  Execute / scripting has moved to bashbasicsbyvk_functions.sh (fx tab).
@@ -82,6 +82,8 @@ _sw_excl_add() {
   IFS= read -r t_choice
   local kind
   case "$t_choice" in
+    u|U) echo "↩️  Back"; return 0 ;;
+    q|Q) _bvk_quit ;;
     1) kind="filename"   ;;
     2) kind="foldername" ;;
     3) kind="filepath"   ;;
@@ -167,17 +169,18 @@ _sw_excl_menu() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     _sw_excl_list
     echo
-    echo "  a) Add rule    r) Remove rule"
-    echo "  e) Edit file   q) Back to recents"
+    echo "  a) Add rule    x) Remove rule"
+    echo "  e) Edit file   u) Back to recents   q) Quit"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     printf "Choice: "
     local xc
     IFS= read -r xc
     case "${xc,,}" in
       a)  _sw_excl_add    ;;
-      r)  _sw_excl_remove ;;
+      x)  _sw_excl_remove ;;
       e)  _sw_excl_edit   ;;
-      q|"") echo "↩️  Back to recents"; return 0 ;;
+      u|"") echo "↩️  Back to recents"; return 0 ;;
+      q)  _bvk_quit ;;
       *)  echo "⚠️  Invalid: $xc" ;;
     esac
   done
@@ -304,7 +307,7 @@ _sw_menu_header_imaginary() {
 
 _sw_menu_footer_bookmarks() {
   printf '\na) Add current path   b) Remove   sw) Exit\nu) Up   s) Settings\nr<N>) File actions on item N\n'
-  [ -n "$group_prefix" ] && printf 'back) Remove last prefix (%s*)\n' "${group_prefix^^}"
+  [ -n "$group_prefix" ] && printf 'u) Remove last prefix (%s*)\n' "${group_prefix^^}"
 }
 
 _sw_menu_footer_favourites() {
@@ -402,7 +405,7 @@ _sw_build_items_for_tab() {
 
 _sw_recents_blocked() {
   if [ "$_sw_tab" = "favourites" ]; then
-    printf '⚠️  Not available in Favourites — use b / rn / e here, or go to the Bookmarks tab\n'
+    printf '⚠️  Not available in Favourites — use x / r / e here, or go to the Bookmarks tab\n'
   else
     printf '⚠️  Read-only in Recents — use Bookmarks tab or fx (functions) for scripts\n'
   fi
@@ -416,10 +419,10 @@ _sw_result_path=""
 _sw_bookmarks_handle_selection() {
   local choice="$1"
 
-  # r<N> — bypass .swlink intercept, call handle_file directly
-  if [[ "$choice" =~ ^r([0-9]+)$ ]]; then
+  # e-N — bypass .swlink intercept, call handle_file directly (same as fx/udf)
+  if [[ "$choice" =~ ^[eE]-([0-9]+)$ ]]; then
     local n="${BASH_REMATCH[1]}"
-    $imaginary_mode && { echo "⚠️  Navigate into a group first, then use r<N>"; return 0; }
+    $imaginary_mode && { echo "⚠️  Navigate into a group first, then use e-N"; return 0; }
     if [ "$n" -ge 1 ] && [ "$n" -le "${#items[@]}" ]; then
       local t="${items[$((n-1))]}"
       [ -d "$t" ] && { path="$t"; group_prefix=""; force_show=false; return 0; }
@@ -499,7 +502,7 @@ _sw_favourites_handle_selection() {
       echo "📍 ${t##*/} moved — going to: $_sw_result_path"
       return 1
     fi
-    echo "⚠️  Missing: ${t##*/} — remove it with b"; return 0
+    echo "⚠️  Missing: ${t##*/} — remove it with x"; return 0
   fi
   if [ -d "$t" ]; then _sw_result_path="$t"; return 1; fi
   handle_file "$t"
@@ -621,6 +624,12 @@ switch_menu() {
         break
         ;;
 
+      fx|FX)
+        # Hand over to the fx inner loop (outer loop is unchanged)
+        _inner_next=fx
+        break
+        ;;
+
       xe|XE)
         # Exclude list — accessible from either tab, most useful in recents
         _sw_excl_menu
@@ -654,18 +663,12 @@ switch_menu() {
       u)
         if _sw_is_ro; then
           _sw_recents_blocked; _sw_do_fresh=false
+        elif [ -n "$group_prefix" ]; then
+          group_prefix="${group_prefix%?}"; force_show=false
         elif [ "$path" != "$_SW_DIR" ] && [ "$path" != "/" ]; then
           path=$(dirname "$path"); group_prefix=""; force_show=false
         else
           echo "↩️  At root — exiting switch mode"; break
-        fi
-        ;;
-
-      back)
-        if _sw_is_ro; then
-          _sw_recents_blocked; _sw_do_fresh=false
-        else
-          [ -n "$group_prefix" ] && group_prefix="${group_prefix%?}" && force_show=false
         fi
         ;;
 
@@ -681,15 +684,10 @@ switch_menu() {
         fi
         ;;
 
-      b|B)
+      x|X)
         if [ "$_sw_tab" = "favourites" ]; then _fav_sw_remove "$_sw_outer_path"
         else _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || _sw_remove_paths
         fi
-        ;;
-
-      rn|RN)
-        if [ "$_sw_tab" = "favourites" ]; then _fav_sw_rename "$_sw_outer_path"
-        else echo "ℹ️  rn renames favourites — use r for files here"; _sw_do_fresh=false; fi
         ;;
 
       e|E)
@@ -709,12 +707,14 @@ switch_menu() {
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || transfer_menu
         ;;
 
-      x)
+      z)
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || organise_menu
         ;;
 
       r)
-        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_rename
+        if [ "$_sw_tab" = "favourites" ]; then _fav_sw_rename "$_sw_outer_path"
+        else _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_rename
+        fi
         ;;
 
       f)            find_menu ;;

@@ -438,6 +438,12 @@ _key_name() {
   return 0
 }
 
+# _bvk_quit — the universal  q  : leave the whole app (same as q in the main
+# menu).  u (back / up one level) is handled by each menu itself.
+_bvk_quit() {
+  if ${_sw_did_switch:-false}; then cd "$path" && exec "$SHELL"; else exit 0; fi
+}
+
 _is_ctrl_char() {
   case "$1" in
     [[:cntrl:]]) return 0 ;;

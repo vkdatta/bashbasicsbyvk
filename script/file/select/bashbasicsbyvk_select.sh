@@ -4,7 +4,7 @@
 #  .s <expression>       select (replaces the current selection)
 #  .s.add <expression>   add matches to the selection
 #  .s.sub <expression>   remove matches from the selection
-#  .s.show [all]  .s.clear  .s.shown
+#  .s.show [all]  .s.clr  .s.shown
 #  .r  .r.save  .r.run  .r.edit  .r.rename  .r.del
 #
 #  Matching is done by _3bvk_select_core (python3).  This file only handles
@@ -98,7 +98,7 @@ _sel_begin() {
     _SEL_CNT_GEN=$_SEL_GEN
   fi
   _sel_banner=""
-  [ "${_SEL_CNT:-0}" -gt 0 ] && _sel_banner="🎯 ${_SEL_CNT} selected — marked +   (.s.show · .s.clear · fx → <action>/<action>.selected.items)"
+  [ "${_SEL_CNT:-0}" -gt 0 ] && _sel_banner="🎯 ${_SEL_CNT} selected — marked +   (.s.show · .s.clr · fx → <action>/<action>.selected.items)"
 }
 
 # Load only paths that still exist; reports how many vanished.
@@ -159,13 +159,15 @@ _sel_help() {
  .s.ext.csv .s.sw.csv .s.ew.csv .s.contains.csv .s.time.csv
    → opens the CSV picker per clause; add (and) for AND, default (or)
  .s.rule NAME               use a saved rule
+ .s 1-5   .s 1,2,3-7,11   .s a-5      by displayed number (a-5 = all except 5)
+                                      also:  .s.add 1-5   .s.sub 3
 LOGIC  space or &  = AND      |  = OR      !  = NOT      ( )  groups
  -r  at the end = search subfolders
-AFTER  .s.add EXPR  .s.sub EXPR  .s.show  .s.clear  .s.shown
+AFTER  .s.add EXPR  .s.sub EXPR  .s.show  .s.clr  .s.shown
        then fx → <action>/<action>.selected.items  (copy move shortcut bookmark
        upload upload.text map zip unzip delete);  file_fx/selection = view only
 RULES  .r  .r.save NAME [EXPR]  .r.run NAME  .r.edit  .r.rename  .r.del
-DISPLAY  .d <same expressions>   .d.off   .d.save   .d.run   (see .d)
+DISPLAY  .d <same expressions>   .d.clr   .d.save   .d.run   (see .d)
 FAVOURITES  fa <numbers | sel | .s expression>   ns   (see: fa help)
 HLP
 }
@@ -178,6 +180,28 @@ _sel_eval() {
   local expr="$1"
   _SEL_FOUND=()
   _sel_ensure_store
+
+  # 0) index selection by displayed number:  1-5   1,2,3-7,11   a-5 (all except 5)
+  #    (optionally written with the .s prefix)
+  local _ix="${expr#.s}"
+  _ix="${_ix//[[:space:]]/}"
+  if [[ "$_ix" =~ ^(a-[0-9][0-9,-]*|[0-9][0-9,-]*)$ ]]; then
+    if ${imaginary_mode:-false}; then
+      echo "⚠️  This folder is grouped — numbers mean groups. Use fs first, or a name/.s expression"
+      return 1
+    fi
+    local _n=${#items[@]} _i
+    if [ "$_n" -eq 0 ]; then echo "ℹ️  Nothing displayed to select"; return 1; fi
+    local -a _idx=()
+    if [[ "$_ix" == a-* ]]; then
+      _idx=($(_sp_parse_all_except "${_ix#a-}" "$_n"))
+    else
+      _idx=($(parse_selection "$_ix" "$_n"))
+    fi
+    for _i in "${_idx[@]}"; do _SEL_FOUND+=("${items[$((_i-1))]}"); done
+    if [ ${#_SEL_FOUND[@]} -eq 0 ]; then echo "❌ No valid item numbers (1-$_n)"; return 1; fi
+    return 0
+  fi
   local errf scanf
   errf=$(mktemp) || return 1
   scanf=$(mktemp) || { rm -f "$errf"; return 1; }
@@ -229,7 +253,7 @@ handle_select_cmd() {
   case "$raw" in
     .r|.r.*|.r\ *) handle_rule_cmd "$raw"; return ;;
     .s.show|.s.show\ *)  _sel_cmd_show "${raw#.s.show}"; return ;;
-    .s.clear)            _sel_ensure_store; : > "$_SEL_FILE"; _sel_bump; echo "🧹 Selection cleared"; return ;;
+    .s.clr) _sel_ensure_store; : > "$_SEL_FILE"; _sel_bump; echo "🧹 Selection cleared"; return ;;
     .s.shown)            _sel_cmd_shown; return ;;
     .s|.s\ help|.s.help|-h) _sel_help; return ;;
   esac

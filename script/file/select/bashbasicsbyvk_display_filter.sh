@@ -3,7 +3,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  .d <expression>      only DISPLAY items matching the expression (any folder)
 #  .d                   show the active filter
-#  .d.off               back to showing everything
+#  .d.clr               back to showing everything
 #  .d.save NAME [expr]  keep the filter (or expr) as a preset (SCOPE=display)
 #  .d.run NAME          apply a preset          (also:  .d .d.rule NAME)
 #  .d.refresh           re-scan (filters are cached per folder until it changes)
@@ -106,7 +106,7 @@ _disp_apply() {
   $_disp_on || return 0
   local before=${#items[@]}
   if ! _disp_run; then
-    _disp_banner="⚠️  Display filter error: ${_disp_err} — showing everything  (.d.off to clear)"
+    _disp_banner="⚠️  Display filter error: ${_disp_err} — showing everything  (.d.clr to clear)"
     return 0
   fi
   local -a kept=()
@@ -119,8 +119,8 @@ _disp_apply() {
   _meta_loaded=false
   local shown_expr="$_disp_expr"
   [ ${#shown_expr} -gt 60 ] && shown_expr="${shown_expr:0:57}..."
-  _disp_banner="🔎 Display filter: ${shown_expr}  — ${#items[@]} shown  (.d.off to clear)"
-  [ "${#items[@]}" -eq 0 ] && _disp_banner="🔎 Display filter: ${shown_expr}  — nothing matches here  (.d.off to clear)"
+  _disp_banner="🔎 Display filter: ${shown_expr}  — ${#items[@]} shown  (.d.clr to clear)"
+  [ "${#items[@]}" -eq 0 ] && _disp_banner="🔎 Display filter: ${shown_expr}  — nothing matches here  (.d.clr to clear)"
 }
 
 # ── commands ──────────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ _disp_help() {
  .d.ext csv & .d.size <3mb     show only small csv files
  .d.ext.csv                    extensions from a CSV (picker opens)
  .d.time 2024  .d.sw icon_ ...  everything from .s works with .d
- .d.off                        show everything again
+ .d.clr                        show everything again
  .d.save NAME [expr]           keep as preset   .d.run NAME  applies it
  .d.refresh                    re-scan this folder
 Applies in every folder until cleared. Settings → 12 for presets/persistence.
@@ -141,7 +141,7 @@ _disp_status() {
   if _disp_load; then
     echo "🔎 Display filter ON: $_disp_expr"
     local i; for i in "${!_disp_csvs[@]}"; do echo "   CSV $((i+1)): ${_disp_csvs[$i]}"; done
-    echo "   .d.off to clear   .d.save NAME to keep it"
+    echo "   .d.clr to clear   .d.save NAME to keep it"
   else
     echo "🔎 Display filter OFF"
   fi
@@ -185,7 +185,7 @@ _disp_set() {
   cnt=${#found[@]}
   _disp_store "$expr" "${csvs[@]}"
   echo "🔎 Display filter set — $cnt item(s) match here"
-  [ "$cnt" -eq 0 ] && echo "ℹ️  Nothing matches in this folder (filter stays on; .d.off to clear)"
+  [ "$cnt" -eq 0 ] && echo "ℹ️  Nothing matches in this folder (filter stays on; .d.clr to clear)"
   return 0
 }
 
@@ -197,7 +197,7 @@ handle_display_cmd() {
   rest="${rest#"${rest%%[![:space:]]*}"}"
   case "$cmd" in
     .d)          if [ -z "$rest" ]; then _disp_status; _disp_help; else _disp_set "$raw"; fi ;;
-    .d.off)      if _disp_load; then _disp_clear; echo "🔎 Display filter cleared — showing everything"; else echo "🔎 Display filter is already off"; fi ;;
+    .d.clr) if _disp_load; then _disp_clear; echo "🔎 Display filter cleared — showing everything"; else echo "🔎 Display filter is already off"; fi ;;
     .d.refresh)  _disp_cache_reset; echo "🔄 Display filter will re-scan" ;;
     .d.help)     _disp_help ;;
     .d.run)
@@ -215,7 +215,7 @@ handle_display_cmd() {
       _rule_save_as display "$name" "$expr" ;;
     .d.*)        # a clause like .d.ext csv  → treat the whole thing as an expression
                  _disp_set "$raw" ;;
-    *)           echo "⚠️  Display commands: .d  .d.off  .d.save  .d.run  .d.refresh" ;;
+    *)           echo "⚠️  Display commands: .d  .d.clr  .d.save  .d.run  .d.refresh" ;;
   esac
 }
 
@@ -234,9 +234,11 @@ display_filter_settings() {
   local ch; read -r -p "Choice [1-7]: " ch
   ch="${ch%$'\r'}"
   case "$ch" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1) local ex; read -r -p "Expression (e.g. .d.ext csv & .d.size <3mb): " ex
        [ -n "$ex" ] && handle_display_cmd "$ex" ;;
-    2) handle_display_cmd ".d.off" ;;
+    2) handle_display_cmd ".d.clr" ;;
     3) _rule_list; local nm; read -r -p "Preset name: " nm; [ -n "$nm" ] && handle_display_cmd ".d.run $nm" ;;
     4) local nm; read -r -p "Preset name: " nm; [ -n "$nm" ] && handle_display_cmd ".d.save $nm" ;;
     5) _rule_list; local nm; read -r -p "Preset to delete: " nm; [ -n "$nm" ] && handle_rule_cmd ".r.del $nm" ;;

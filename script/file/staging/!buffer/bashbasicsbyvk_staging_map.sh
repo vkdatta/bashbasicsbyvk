@@ -97,6 +97,8 @@ _map_deliver() {
   read -p "Choose option [1-2]: " choice
 
   case "$choice" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1)
       printf "%s" "$map_output" | bashbasicsbyvk_copy
       echo "✅ Map copied to clipboard"

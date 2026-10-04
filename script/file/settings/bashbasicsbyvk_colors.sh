@@ -125,6 +125,8 @@ terminal_bg_color_settings() {
     read -r -p "Enter choice [0-2]: " b_choice
 
     case "$b_choice" in
+    u|U) return ;;
+    q|Q) _bvk_quit ;;
         1)
             read -r -p "Color (e.g. #1e1e2e or 1e1e2e): " input_color
             if _valid_hex "$input_color"; then
@@ -155,6 +157,8 @@ terminal_text_color_settings() {
     read -r -p "Enter choice [0-2]: " c_choice
 
     case "$c_choice" in
+    u|U) return ;;
+    q|Q) _bvk_quit ;;
         1)
             read -r -p "Color (e.g. #cdd6f4 or cdd6f4): " input_color
             if _valid_hex "$input_color"; then
@@ -170,6 +174,8 @@ terminal_text_color_settings() {
             echo "2) Coder mode  (#00D000 - green)"
             read -r -p "Enter choice [1-2]: " mode_choice
             case "$mode_choice" in
+            u|U) return ;;
+            q|Q) _bvk_quit ;;
                 2)
                     _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER"
                     echo "Text color restored to Coder mode (#${DEFAULT_TERMINAL_TEXT_COLOR_CODER})"

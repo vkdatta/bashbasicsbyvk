@@ -147,10 +147,12 @@ _fx_udf_import() {
   if [ "$clash" -gt 0 ]; then
     echo "1) Keep existing   (skip the ${clash} file(s) that already exist)"
     echo "2) Overwrite       (replace the ${clash} file(s) that already exist)"
-    echo "x) Cancel"
-    read -r -p "Choice [1/2/x]: " ans
+    echo "z) Cancel   u) Back"
+    read -r -p "Choice [1/2/z]: " ans
     ans="${ans%$'\r'}"
     case "$ans" in
+    u|U) return ;;
+    q|Q) _bvk_quit ;;
       1) mode="-n" ;;
       2) mode="-o" ;;
       *) echo "🚫 Import cancelled"; return 1 ;;

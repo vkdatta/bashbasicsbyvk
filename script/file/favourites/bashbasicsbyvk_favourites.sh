@@ -14,7 +14,7 @@
 #     fa .s.ext svg & .s.sw icon_1        any .s expression — no need to list
 #                                         200k items first
 #  INSIDE sw → ⭐ Favourites tab  (manage this folder's favourites)
-#     N open/go   b remove   rn rename (alias)   e edit the file
+#     N open/go   x remove   r rename (alias)   e edit the file
 #
 #  STORAGE   ~/.bashbasicsbyvk/favourites/<hash>.fav   (plain text, one per folder)
 #        PATH=/home/me/icons
@@ -266,7 +266,7 @@ _fav_help() {
  fa .s.ext svg & .s.sw icon_1     add whatever a .s expression matches
  ns                 leave favourite mode for this visit (ns again = back)
  fs                 leave the grouped (imaginary) view, as before
- sw → ⭐ tab         N open   b remove   rn rename (alias)   e edit file
+ sw → ⭐ tab         N open   x remove   r rename (alias)   e edit file
 Files: ~/.bashbasicsbyvk/favourites/   (plain text, safe to edit)
 HLP
 }

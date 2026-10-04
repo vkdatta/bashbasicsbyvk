@@ -1013,7 +1013,8 @@ sort_order_settings() {
       printf " %d) %s\n" "$num" "${labels[$i]}"
     fi
   done
-  read -r -p "Choice [1-6] (blank = no change): " c
+  read -r -p "Choice [1-6] (blank = no change, u = back): " c
+  case "${c,,}" in u) return ;; q) _bvk_quit ;; esac
   if [[ "$c" =~ ^[1-6]$ ]]; then
     sort_mode="${modes[$((c-1))]}"
     _items_presorted=false
@@ -1064,14 +1065,15 @@ display_suffix_settings() {
   while true; do
     _show_suffix_state
     echo
-    echo "a) Add components   r) Remove components   t) Set time format"
-    echo "n) Clear all (none)   q) Done"
+    echo "a) Add components   x) Remove components   t) Set time format"
+    echo "clr) Clear all (none)   u) Back   q) Quit"
     read -r -p "Action: " action
     action="${action,,}"
 
     case "$action" in
-      q) break ;;
-      n)
+      u) break ;;
+      q) _bvk_quit ;;
+      clr)
         display_suffix_set=""
         save_settings
         echo "✅ All suffixes cleared"
@@ -1093,7 +1095,7 @@ display_suffix_settings() {
         display_suffix_set="${display_suffix_set%% }"
         $changed && save_settings && echo "✅ Added" || echo "Already set — no change"
         ;;
-      r)
+      x)
         if [ -z "$display_suffix_set" ]; then echo "Nothing to remove"; continue; fi
         echo "Remove by number (comma/range):"
         read -r -p "Numbers: " inp
@@ -1115,6 +1117,7 @@ display_suffix_settings() {
         _show_time_format_state
         echo "Set time format [1-6] (blank = no change):"
         read -r -p "Choice: " tc
+        case "${tc,,}" in u) continue ;; q) _bvk_quit ;; esac
         if [[ "$tc" =~ ^[1-6]$ ]]; then
           display_time_format="${tfmts[$((tc-1))]}"
           save_settings
@@ -1123,7 +1126,7 @@ display_suffix_settings() {
           echo "No change"
         fi
         ;;
-      *) echo "⚠️  Invalid action. Use a/r/t/n/q" ;;
+      *) echo "⚠️  Invalid action. Use a/x/t/clr/u/q" ;;
     esac
   done
 }
@@ -1163,14 +1166,15 @@ group_view_settings() {
 
   while true; do
     _show_group_state
-    [ ${#group_view_levels[@]} -gt 0 ] && echo && echo "u) Ungroup (turn off all grouping)"
-    echo "a) Add level to chain   r) Remove level from chain"
-    echo "o) Reorder chain   q) Done"
+    [ ${#group_view_levels[@]} -gt 0 ] && echo && echo "clr) Ungroup (turn off all grouping)"
+    echo "a) Add level to chain   x) Remove level from chain"
+    echo "o) Reorder chain   u) Back   q) Quit"
     read -r -p "Action: " action; action="${action,,}"
 
     case "$action" in
-      q) break ;;
-      u)
+      u) break ;;
+      q) _bvk_quit ;;
+      clr)
         group_view_levels=(); group_view_levels_str=""
         save_settings; echo "✅ Grouping turned off"
         ;;
@@ -1188,7 +1192,7 @@ group_view_settings() {
         $changed || echo "All already in chain — no change"
         $changed && group_view_levels_str="${group_view_levels[*]}" && save_settings && echo "✅ Level(s) added"
         ;;
-      r)
+      x)
         [ ${#group_view_levels[@]} -eq 0 ] && { echo "Chain is empty"; continue; }
         echo "Remove level(s) by number (comma/range):"
         read -r -p "Numbers [1-4]: " inp

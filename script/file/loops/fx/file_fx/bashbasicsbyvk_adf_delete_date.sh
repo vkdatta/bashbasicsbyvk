@@ -20,6 +20,7 @@ _fx_adf_delete_by_date() {
   echo "4) Decade  (e.g. 2020s)"
   local lvl
   read -p "Choice [1-4]: " lvl
+  case "${lvl,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit ;; esac
   case "$lvl" in 1|2|3|4) ;; *) echo "❌ Invalid choice"; return ;; esac
 
   _batch_stat "$path"
@@ -48,6 +49,7 @@ _fx_adf_delete_by_date() {
   local reply
   read -p "Choice: " reply
   [ -z "$reply" ] && { echo "🚫 Cancelled"; return; }
+  case "${reply,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit ;; esac
 
   local -A chosen=()
   local idx

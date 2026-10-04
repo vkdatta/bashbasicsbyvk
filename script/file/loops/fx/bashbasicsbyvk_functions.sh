@@ -229,7 +229,7 @@ _fx_menu_footer_udf() {
   printf '\n[UDF — User Defined]  Scripts in execute dir — run from current path\n'
   printf 'u) Up   s) Settings   fx) Exit\n'
   printf 'e-N) Edit item   ux) Export all   ui) Import all\n'
-  [ -n "$group_prefix" ] && printf 'back) Remove last prefix (%s*)\n' "${group_prefix^^}"
+  [ -n "$group_prefix" ] && printf 'u) Remove last prefix (%s*)\n' "${group_prefix^^}"
 }
 
 # Custom row renderer for the ADF tab.
@@ -480,6 +480,12 @@ functions_menu() {
         break
         ;;
 
+      sw|SW)
+        # Hand over to the sw inner loop (outer loop is unchanged)
+        _inner_next=sw
+        break
+        ;;
+
       q)
         _fx_in_mode=0
         _sw_in_mode=0
@@ -500,20 +506,14 @@ functions_menu() {
             echo "↩️  Already at ADF root"
             _fx_do_fresh=false
           fi
+        elif [ "$_fx_tab" = "udf" ] && [ -n "$group_prefix" ]; then
+          group_prefix="${group_prefix%?}"; force_show=false
         elif [ "$_fx_tab" = "udf" ]; then
           if [ "$path" != "$_FX_EXEC_DIR" ] && [ "$path" != "/" ]; then
             path=$(dirname "$path"); group_prefix=""; force_show=false
           else
             echo "↩️  At execute root — exiting functions mode"; break
           fi
-        fi
-        ;;
-
-      back)
-        if [ "$_fx_tab" = "udf" ]; then
-          [ -n "$group_prefix" ] && group_prefix="${group_prefix%?}" && force_show=false
-        else
-          _fx_do_fresh=false
         fi
         ;;
 
@@ -552,7 +552,7 @@ functions_menu() {
         fi
         ;;
 
-      x)
+      z)
         if [ "$_fx_tab" = "udf" ]; then
           local _saved_path_x="$path"; path="$_FX_EXEC_DIR"
           organise_menu

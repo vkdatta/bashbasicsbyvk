@@ -87,7 +87,7 @@ _file_picker() {
             done
         fi
         echo ""
-        echo "  u) Up parent   x) Cancel   q) Quit"
+        echo "  u) Up parent   z) Cancel   q) Quit"
         echo "   ─────────────────────────────"
         read -p "${_fp_EXT} Nav: " _fp_choice
 
@@ -98,7 +98,7 @@ _file_picker() {
         case "$_fp_choice" in
             q|Q) exit 0 ;;
 
-            x|X)
+            z|Z)
                 echo "🚫 ${_fp_EXT} selection cancelled."
                 _fp_out=""
                 return 1
@@ -113,7 +113,7 @@ _file_picker() {
                 ;;
 
             "")
-                echo "  ⚠️  No input — enter a number, u, x, or q."
+                echo "  ⚠️  No input — enter a number, u, z, or q."
                 ;;
 
             *)

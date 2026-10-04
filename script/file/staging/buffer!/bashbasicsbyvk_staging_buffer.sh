@@ -109,11 +109,11 @@ _sp_view_one_buffer() {
     fi
 
     echo
-    echo "r) Remove item(s)   x) Clear entire $label buffer   q) Back"
+    echo "x) Remove item(s)   clr) Clear entire $label buffer   u) Back   q) Quit"
     read -p "$label buffer: " bv_choice
 
     case "$bv_choice" in
-      r|R)
+      x|X)
         if [ ${#list[@]} -eq 0 ]; then
           echo "⚠️  Nothing to remove"
           continue
@@ -140,7 +140,7 @@ _sp_view_one_buffer() {
         _sp_save kept "$file"
         echo "✅ Removed ${#rm_indices[@]} item(s) from $label buffer"
         ;;
-      x|X)
+      clr|CLR)
         read -p "Clear the entire $label buffer? (y/n): " confirm
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
           : > "$file"
@@ -149,8 +149,11 @@ _sp_view_one_buffer() {
           echo "🚫 Cancelled"
         fi
         ;;
-      q|Q|"")
+      u|U|"")
         return 0
+        ;;
+      q|Q)
+        _bvk_quit
         ;;
       *)
         echo "⚠️  Invalid choice"
@@ -183,8 +186,8 @@ handle_staging_view() {
     echo "  6) Move      once (-)         (${#mv_once[@]} item(s))"
     echo "  7) Shortcut  once (-)         (${#sc_once[@]} item(s))"
     echo "  8) Bookmark  once (-)         (${#bm_once[@]} item(s))"
-    echo "  a) Clear ALL buffers"
-    echo "  q) Back"
+    echo "  clr) Clear ALL buffers"
+    echo "  u) Back   q) Quit"
     read -p "View buffer: " v_choice
 
     case "$v_choice" in
@@ -196,7 +199,7 @@ handle_staging_view() {
       6) _sp_view_one_buffer "Move (once)"           "$_SP_MV_ONCE_FILE" ;;
       7) _sp_view_one_buffer "Shortcut (once)"       "$_SP_SC_ONCE_FILE" ;;
       8) _sp_view_one_buffer "Bookmark (once)"       "$_SP_BM_ONCE_FILE" ;;
-      a|A)
+      clr|CLR)
         read -p "Clear ALL eight buffers? This can't be undone. (y/n): " confirm
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
           : > "$_SP_CP_FILE"
@@ -212,8 +215,11 @@ handle_staging_view() {
           echo "🚫 Cancelled"
         fi
         ;;
-      q|Q|"")
+      u|U|"")
         return 0
+        ;;
+      q|Q)
+        _bvk_quit
         ;;
       *)
         echo "⚠️  Invalid choice"

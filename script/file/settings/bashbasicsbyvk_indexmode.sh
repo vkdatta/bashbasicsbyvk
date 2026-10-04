@@ -11,6 +11,8 @@ index_mode_threshold_settings() {
     read -r -p "Enter choice [0-2]: " t_choice
 
     case "$t_choice" in
+    u|U) return ;;
+    q|Q) _bvk_quit ;;
         1)
             read -r -p "Enter new threshold: " new_threshold
             if [[ "$new_threshold" =~ ^[0-9]+$ ]] && [ "$new_threshold" -gt 0 ]; then

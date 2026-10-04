@@ -80,7 +80,11 @@ restore_all_defaults() {
   echo "Choose default text color mode:"
   echo "1) Normal (#FFFFFF)"
   echo "2) Coder  (#00D000)"
-  read -r -p "Choice [1-2]: " mode_choice
+  read -r -p "Choice [1-2] (u = back): " mode_choice
+  case "$mode_choice" in
+    u|U) echo "↩️  Back"; return ;;
+    q|Q) _bvk_quit ;;
+  esac
   show_hidden_files=$DEFAULT_SHOW_HIDDEN_FILES
   index_mode_threshold=$DEFAULT_INDEX_MODE_THRESHOLD
   sort_mode=$DEFAULT_SORT_MODE
@@ -126,6 +130,8 @@ settings_menu() {
   read -r -p "Enter choice [1-12]: " main_choice
 
 case "$main_choice" in
+u|U) return ;;
+q|Q) _bvk_quit ;;
     1) hidden_file_settings ;; # bashbasicsbyvk_hidefiles.sh
     2) index_mode_threshold_settings ;; # bashbasicsbyvk_indexmode.sh
     3) terminal_bg_color_settings ;; # bashbasicsbyvk_colors.sh

@@ -117,7 +117,7 @@ _view_selections_menu() {
       done
     fi
     echo
-    echo "c) Confirm   r) Remove   b) Back   q) Quit"
+    echo "c) Confirm   x) Remove   u) Back   q) Quit"
     read -p "Selection view: " sv_choice
 
     case "$sv_choice" in
@@ -129,7 +129,7 @@ _view_selections_menu() {
           return 0
         fi
         ;;
-      r|R)
+      x|X)
         if [ ${#_sel_ref[@]} -eq 0 ]; then
           echo "⚠️  Nothing to remove."
           continue
@@ -155,7 +155,7 @@ _view_selections_menu() {
         _sel_ref=("${new_sel[@]}")
         echo "✅ Removed ${#rm_indices[@]} item(s). Remaining: ${#_sel_ref[@]}"
         ;;
-      b|B)
+      u|U)
         echo "↩️  Back to navigation"
         return 1
         ;;
@@ -254,17 +254,17 @@ local_navigator() {
 
     echo
     if [ "$mode" == "source" ]; then
-      echo "u) Up   v) View selections   x) Cancel   q) Quit"
+      echo "u) Up   v) View selections   z) Cancel   q) Quit"
       echo "tip: use prefix 's' to select a folder"
     else
-      echo "u) Up   n) New folder   c) Confirm destination   x) Cancel   q) Quit"
+      echo "u) Up   n) New folder   c) Confirm destination   z) Cancel   q) Quit"
     fi
 
     read -p "Nav: " nav_choice
 
     case "$nav_choice" in
       q|Q) exit 0 ;;
-      x|X)
+      z|Z)
         echo "🚫 Navigation cancelled"
         return 1
         ;;
@@ -446,10 +446,10 @@ gcloud_navigator() {
 
     echo
     if [ "$mode" == "source" ]; then
-      echo "u) Up   v) View selections   x) Cancel   q) Quit"
+      echo "u) Up   v) View selections   z) Cancel   q) Quit"
       echo "tip: use prefix 's' to select a folder"
     else
-      echo "u) Up   n) New folder   c) Confirm destination   x) Cancel   q) Quit"
+      echo "u) Up   n) New folder   c) Confirm destination   z) Cancel   q) Quit"
     fi
 
     read -p "GCloud Nav: " gnav_choice
@@ -460,7 +460,7 @@ gcloud_navigator() {
         echo "🗑️  All selections cleared. Exiting."
         exit 0
         ;;
-      x|X)
+      z|Z)
         echo "🚫 GCloud navigation cancelled"
         return 1
         ;;
@@ -827,6 +827,8 @@ transfer_menu() {
   read -p "Mode [1-5]: " t_mode
 
   case "$t_mode" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1|2|3|4|5) ;;
     *)
       echo "❌ Invalid mode"
@@ -874,6 +876,8 @@ transfer_menu() {
   local final_dest=""
 
   case "$t_mode" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1)
       local_navigator "dest" "$HOME"
       if [ $? -eq 0 ]; then
@@ -933,6 +937,8 @@ transfer_menu() {
 
   local t_op
   case "$t_action" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     c|C) t_op="copy" ;;
     m|M) t_op="move" ;;
     s|S)
@@ -953,6 +959,8 @@ transfer_menu() {
   echo "⚙️  Executing $t_op..."
 
   case "$t_mode" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1|2)
       if [ "$t_op" == "copy" ]; then
         perform_copy "$final_dest" "${selected_items[@]}"

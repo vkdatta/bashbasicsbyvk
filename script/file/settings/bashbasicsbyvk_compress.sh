@@ -7,6 +7,8 @@ compress_format_settings() {
   read -r -p "Choice [1-3]: " cf_choice
   cf_choice="${cf_choice%$'\r'}"
   case "$cf_choice" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1) compress_format="zip" ;;
     2) compress_format="targz" ;;
     3) compress_format="ask" ;;

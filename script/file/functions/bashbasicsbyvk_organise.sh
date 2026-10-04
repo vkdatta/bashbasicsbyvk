@@ -44,6 +44,8 @@ local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
 case "$ech" in
+u|U) return ;;
+q|Q) _bvk_quit ;;
 1)
 declare -A ext_buckets=()
 for f in "${files[@]}"; do
@@ -221,6 +223,10 @@ echo "🔄 Unorganise and bring to current location:"
 echo "1) Unorganise all"
 echo "2) Unorganise selected folders"
 read -p "Choice: " uch
+case "$uch" in
+u|U) return ;;
+q|Q) _bvk_quit ;;
+esac
 if [ "$uch" = "1" ]; then
 find "$path" -mindepth 2 -type f -exec mv -t "$path/" {} +
 find "$path" -mindepth 1 -type d -empty -delete
@@ -285,6 +291,8 @@ echo "5) Unorganise and bring it to current location"
 echo "6) Organise A-Z"
 read -p "Enter choice [1-6]: " och
 case "$och" in
+u|U) return ;;
+q|Q) _bvk_quit ;;
 1) organise_by_ext ;;
 2) organise_by_year ;;
 3) organise_by_year_month ;;

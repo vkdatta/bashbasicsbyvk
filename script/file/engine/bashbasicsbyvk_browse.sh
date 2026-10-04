@@ -599,7 +599,7 @@ _sync_highlight_from_buf() {
   [[ "$_buf" =~ ^[0-9]+$ ]] || return
   local n=$((10#$_buf))
   (( n < 1 )) && n=1
-  (( n > _vp_n )) && n=_vp_n
+  (( n > _vp_n )) && n=$_vp_n
   if [ "$n" -ne "${_hl_index:-0}" ]; then
     local old="${_hl_index:-0}"
     _hl_index=$n

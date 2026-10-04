@@ -232,6 +232,8 @@ handle_scr_sync() {
   read -p "Choice: " _scr_choice
 
   case "$_scr_choice" in
+  u|U) return ;;
+  q|Q) _bvk_quit ;;
     1)
       _scr_ensure
       local -a entries=()
