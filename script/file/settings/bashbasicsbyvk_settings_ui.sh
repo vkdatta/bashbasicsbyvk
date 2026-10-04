@@ -9,16 +9,18 @@
 #      2) Sort order          A → Z ›
 #      3) Animation           pop / carpet ›
 #        ─────────────────────────────
-#     u/q) Back to main menu   ↑↓) Move
-#     Type 1-3 to choose   enter) Select
+#     u) Back to main menu   q) Close   ↑↓) Move
+#     Type 1-3, then enter to choose
 #     Select:
 #
-#  Keys   1-9…          type a row number to choose it (Enter if it has 2 digits)
-#         ↑ ↓ (or k j)  move (wraps top ↔ bottom). Nothing is highlighted
-#                       until you choose or move.
-#         space / enter change the highlighted row
-#         u (or Esc)    back ONE level (settings → main menu from the top)
-#         q             close Settings completely, straight to the main menu
+#  Keys   Typing works like the main menu's "Select:" prompt: type a row
+#         number, u or q, then press ENTER.
+#         ↑ ↓            move (wraps top ↔ bottom) and put that number in the
+#                        prompt; Enter then chooses it. Nothing is highlighted
+#                        until you move or type a number.
+#         space          change the highlighted row (same as Enter on it)
+#         u + Enter      back ONE level (settings → main menu from the top)
+#         q + Enter      close Settings completely, straight to the main menu
 #
 #  A screen is just two functions:
 #     build_fn            fills the rows from the current settings  (_st_add …)
@@ -81,16 +83,15 @@ _st_move() {
 }
 
 # read one key → _st_k = up down left right home end pgup pgdn space enter bksp
-#                        digit (digit in _st_d) u q other
+#                        char (the character is in _st_d) other
 _st_readkey() {
   local c
   _st_k="other"; _st_d=""
-  IFS= read -rsn1 c || { _st_k="q"; return; }
+  IFS= read -rsn1 c || { _st_k="q"; _st_d="q"; _st_k=char; return; }
   case "$c" in
     "")            _st_k=enter ;;
     " ")           _st_k=space ;;
     $'\177'|$'\b') _st_k=bksp ;;
-    [0-9])         _st_k=digit; _st_d="$c" ;;
     $'\033')
       if _read_key_seq; then
         _key_name "$_esc"
@@ -98,13 +99,8 @@ _st_readkey() {
           up|down|left|right|home|end|pgup|pgdn) _st_k="$_kname" ;;
           *) _st_k=other ;;
         esac
-      else
-        _st_k=u                       # bare Esc = back
-      fi ;;
-    k|K) _st_k=up ;;
-    j|J) _st_k=down ;;
-    u|U) _st_k=u ;;
-    q|Q) _st_k=q ;;
+      fi ;;                           # bare Esc does nothing (like the main menu)
+    [[:print:]])   _st_k=char; _st_d="$c" ;;
   esac
 }
 
@@ -126,16 +122,15 @@ _st_draw() {
     case "${_st_kind[$i]}" in t|r) marks=1; break ;; esac
   done
 
-  # footer = suggested commands
-  if (( _st_depth > 1 )); then f1="u) Back   q) Close settings"; else f1="u/q) Back to main menu"; fi
-  f1+="   ↑↓) Move"
+  # footer = suggested commands (same two-step style as the main menu)
+  if (( _st_depth > 1 )); then f1="u) Back   q) Close settings   ↑↓) Move"; else f1="u) Back to main menu   q) Close   ↑↓) Move"; fi
   case "$_st_cnt" in
     0) f2="Nothing to choose here" ;;
-    1) f2="Type 1 to choose   enter) Select" ;;
-    *) f2="Type 1-$_st_cnt to choose   enter) Select" ;;
+    1) f2="Type 1, then enter to choose" ;;
+    *) f2="Type 1-$_st_cnt, then enter to choose" ;;
   esac
   if [[ "$hint" == *"←/→"* ]]; then
-    case "$_st_cnt" in 0|1) ;; *) f2="Type 1-$_st_cnt to choose   ←/→) Reorder" ;; esac
+    case "$_st_cnt" in 0|1) ;; *) f2="Type 1-$_st_cnt + enter   ←/→) Reorder" ;; esac
   fi
 
   # move back to the first line of the previous block
@@ -196,6 +191,14 @@ _st_activate() {
   esac
 }
 
+# while a row number is being typed, highlight that row (live feedback)
+_st_follow() {
+  [[ "$buf" =~ ^[0-9]+$ ]] || return 0
+  local k=$(( 10#$buf ))
+  (( k >= 1 && k <= _st_cnt )) && cur=${_st_nrow[$k]}
+  return 0
+}
+
 # _st_run "Title" build_fn act_fn ["legacy hint"]
 _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}"
@@ -215,37 +218,31 @@ _st_run() {
     _st_draw
     _st_readkey
     case "$_st_k" in
-      up)    buf=""; _st_move -1 ;;
-      down)  buf=""; _st_move 1 ;;
-      home|pgup) buf=""; cur=-1; _st_move 1 ;;
-      end|pgdn)  buf=""; cur=-1; _st_move -1 ;;
-      bksp)  buf="${buf%?}" ;;
-      digit)
-        buf+="$_st_d"
-        (( 10#$buf > _st_cnt )) && buf="$_st_d"       # not a valid row: start over
-        if (( 10#$buf < 1 || 10#$buf > _st_cnt )); then
-          buf=""
-        elif (( 10#$buf * 10 > _st_cnt )); then       # can't grow into a longer number
-          num=$(( 10#$buf )); buf=""
-          cur=${_st_nrow[$num]}
-          _st_activate
-        fi
-        ;;
-      u)     buf=""; break ;;
-      q)     buf=""; _st_quit=1; break ;;
+      up)    _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      down)  _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      home|pgup) cur=-1; _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      end|pgdn)  cur=-1; _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      bksp)  buf="${buf%?}"; _st_follow ;;
+      char)  buf+="$_st_d"; _st_follow ;;
       left|right)
         (( cur >= 0 )) && _st_selectable "$cur" && "$act" "$cur" "$_st_k"
         ;;
-      space|enter)
-        if [ -n "$buf" ]; then
-          num=$(( 10#$buf )); buf=""
-          if (( num >= 1 && num <= _st_cnt )); then
-            cur=${_st_nrow[$num]}
-            _st_activate
-          fi
-        elif (( cur >= 0 )) && _st_selectable "$cur"; then
-          _st_activate
-        fi
+      space)
+        if (( cur >= 0 )) && _st_selectable "$cur"; then buf=""; _st_activate; fi
+        ;;
+      enter)
+        case "${buf,,}" in
+          u) buf=""; break ;;
+          q) buf=""; _st_quit=1; break ;;
+          "") (( cur >= 0 )) && _st_selectable "$cur" && _st_activate ;;
+          *[!0-9]*) buf="" ;;                         # not a command: clear it
+          *)
+            num=$(( 10#$buf )); buf=""
+            if (( num >= 1 && num <= _st_cnt )); then
+              cur=${_st_nrow[$num]}
+              _st_activate
+            fi ;;
+        esac
         ;;
     esac
     (( _st_quit )) && break
