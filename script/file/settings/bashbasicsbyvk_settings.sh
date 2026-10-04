@@ -86,7 +86,7 @@ _bold()   { printf "${_BOLD}%s${_RESET}" "$1"; }
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Settings menu  (s)
-#     ↑↓ move · space/enter change · u back · q close settings
+#     type a number to choose · ↑↓ move · space/enter change · u back · q close
 #  Every screen below is a  build  function (rows) + an  act  function (what a
 #  row does) run by _st_run in bashbasicsbyvk_settings_ui.sh.
 # ════════════════════════════════════════════════════════════════════════════
@@ -103,8 +103,8 @@ _st_top_build() {
   (( ${#group_view_levels[@]} > 0 )) && gv="${group_view_levels[*]}"
   if declare -F _disp_load >/dev/null 2>&1 && _disp_load; then dv="on"; fi
   _st_reset
-  _st_eq "$show_hidden_files" true
-  _st_add t "Show hidden files"   "$_o" ""                              hidden
+  local hf="hide"; [ "$show_hidden_files" = true ] && hf="show"
+  _st_add a "Hidden files"        0 "$hf"                               hidden
   _st_add a "Sort order"          0 "$sl"                               sort
   _st_add a "File details"        0 "$sx"                               details
   _st_add a "Group by"            0 "$gv"                               group
@@ -121,9 +121,7 @@ _st_top_build() {
 
 _st_top_act() {
   case "${_st_tag[$1]}" in
-    hidden)
-      if [ "$show_hidden_files" = true ]; then show_hidden_files=false; else show_hidden_files=true; fi
-      save_settings ;;
+    hidden)   hidden_file_settings ;;
     sort)     sort_order_settings ;;
     details)  display_suffix_settings ;;
     group)    group_view_settings ;;
@@ -140,8 +138,8 @@ _st_top_act() {
 }
 
 settings_menu() {
-  _st_run "Settings" _st_top_build _st_top_act \
-    "↑↓ move · space/enter change · u/q back to main menu"
+  builtin printf '\n'          # breathing space between the main menu and Settings
+  _st_run "Settings" _st_top_build _st_top_act
   _st_quit=0
   builtin printf '\n'
 }
@@ -243,8 +241,7 @@ _st_gv_act() {
   save_settings
 }
 group_view_settings() {
-  _st_run "Group by" _st_gv_build _st_gv_act \
-    "↑↓ move · space on/off · ←/→ change order · u back · q close"
+  _st_run "Group by" _st_gv_build _st_gv_act "←/→ change order"
 }
 
 # ── animation ────────────────────────────────────────────────────────────────
