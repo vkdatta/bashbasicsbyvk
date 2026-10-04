@@ -112,46 +112,85 @@ _remove_colors_from_rc() {
 }
 
 
-# ── Settings screens: pick a preset, or choose Custom… and type a hex ────────
-_st_bg_build() {
-  _st_reset
-  _st_eq "$terminal_bg_color" "$DEFAULT_TERMINAL_BG_COLOR"
-  _st_add r "Black (default)" "$_o" "#$DEFAULT_TERMINAL_BG_COLOR" default
-  (( _o )) && _o=0 || _o=1
-  _st_add r "Custom…" "$_o" "$( (( _o )) && echo "#$terminal_bg_color" )" custom
-}
-_st_bg_act() {
-  case "${_st_tag[$1]}" in
-    default) _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR" ;;
-    custom)
-      builtin printf '\033[2K'
-      if _st_ask "Hex color (e.g. 1e1e2e)"; then
-        if _valid_hex "$_st_in"; then _apply_bg_color "$_st_in"; else _st_note "⚠️  Needs 6 hex digits"; fi
-      fi ;;
-  esac
-}
-terminal_bg_color_settings() { _st_run "Background color" _st_bg_build _st_bg_act; }
+terminal_bg_color_settings() {
+    echo
+    echo "Terminal background color"
+    echo "Current: #${terminal_bg_color}"
+    echo "Default: #${DEFAULT_TERMINAL_BG_COLOR}"
+    echo
+    echo "1) Set new color"
+    echo "2) Restore default (#${DEFAULT_TERMINAL_BG_COLOR})"
 
-_st_fg_build() {
-  _st_reset
-  local n=0 c=0
-  _st_eq "$terminal_text_color" "$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL"; n=$_o
-  _st_eq "$terminal_text_color" "$DEFAULT_TERMINAL_TEXT_COLOR_CODER";  c=$_o
-  _st_add r "White (normal)" "$n" "#$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL" normal
-  _st_add r "Green (coder)"  "$c" "#$DEFAULT_TERMINAL_TEXT_COLOR_CODER"  coder
-  local cu=0; (( n || c )) || cu=1
-  _st_add r "Custom…" "$cu" "$( (( cu )) && echo "#$terminal_text_color" )" custom
+    echo
+    echo "u) Back   q) Close settings"
+    read -r -p "Select: " b_choice
+
+    case "$b_choice" in
+    u|U) return ;;
+    q|Q) _st_quit=1; return ;;
+        1)
+            read -r -p "Color (e.g. #1e1e2e or 1e1e2e): " input_color
+            if _valid_hex "$input_color"; then
+                _apply_bg_color "$input_color"
+                echo "Background set to #$(_normalize_hex "$input_color")"
+            else
+                echo "Invalid hex — must be 6 digits"
+            fi
+            ;;
+        2)
+            _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
+            echo "Background restored to default (#${DEFAULT_TERMINAL_BG_COLOR})"
+            ;;
+        *) echo "Invalid choice" ;;
+    esac
 }
-_st_fg_act() {
-  case "${_st_tag[$1]}" in
-    normal) _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL" ;;
-    coder)  _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER" ;;
-    custom)
-      if _st_ask "Hex color (e.g. cdd6f4)"; then
-        if _valid_hex "$_st_in"; then _apply_text_color "$_st_in"; else _st_note "⚠️  Needs 6 hex digits"; fi
-      fi ;;
-  esac
+
+terminal_text_color_settings() {
+    echo
+    echo "Terminal text color"
+    echo "Current: #${terminal_text_color}"
+    echo
+    echo "1) Set new color"
+    echo "2) Restore default"
+
+    echo
+    echo "u) Back   q) Close settings"
+    read -r -p "Select: " c_choice
+
+    case "$c_choice" in
+    u|U) return ;;
+    q|Q) _st_quit=1; return ;;
+        1)
+            read -r -p "Color (e.g. #cdd6f4 or cdd6f4): " input_color
+            if _valid_hex "$input_color"; then
+                _apply_text_color "$input_color"
+                echo "Text color set to #$(_normalize_hex "$input_color")"
+            else
+                echo "Invalid hex — must be 6 digits"
+            fi
+            ;;
+        2)
+            echo "Choose default:"
+            echo "1) Normal mode (#FFFFFF - white)"
+            echo "2) Coder mode  (#00D000 - green)"
+            echo
+            echo "u) Back   q) Close settings"
+            read -r -p "Select: " mode_choice
+            case "$mode_choice" in
+            u|U) return ;;
+            q|Q) _st_quit=1; return ;;
+                2)
+                    _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER"
+                    echo "Text color restored to Coder mode (#${DEFAULT_TERMINAL_TEXT_COLOR_CODER})"
+                    ;;
+                *)
+                    _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL"
+                    echo "Text color restored to Normal mode (#${DEFAULT_TERMINAL_TEXT_COLOR_NORMAL})"
+                    ;;
+            esac
+            ;;
+        *) echo "Invalid choice" ;;
+    esac
 }
-terminal_text_color_settings() { _st_run "Text color" _st_fg_build _st_fg_act; }
 
 apply_colors

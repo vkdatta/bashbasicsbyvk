@@ -357,14 +357,14 @@ sudo pip uninstall bashbasicsbyvk
 
 ## Settings (`s`)
 
-Same feel as the main menu — no numbers to type:
+Same look as the main menu: numbered rows, a `Select:` prompt, arrow-key highlight.
 
 | Key | Does |
 |---|---|
-| `↑` `↓` | move |
-| `space` / `enter` | switch a `[x]` on/off, pick an option, or open a sub-screen |
-| `←` `→` | (Group by) move a level earlier/later in the chain |
-| `u` | back one level (sub-screen → Settings → main menu) |
-| `q` | close Settings completely and return to the main menu |
+| number + `Enter` | open that setting (or flip it, for `[x]` rows) |
+| `↑` `↓` | move the highlight (`↑` from nothing = last item) |
+| `Space` | flip the highlighted `[x]` / `[ ]` row (Hidden files, File details, Group by) |
+| `u` | back **one level** (sub-screen → Settings → main menu) |
+| `q` | close Settings from anywhere and return to the main menu |
 
-Screens: Show hidden files · Sort order · File details · Group by · Display filter · Search filter · Compress format · Animation · Big-folder limit · Background color · Text color · Import nano settings · Reset all settings.
+`[x]` appears only on real on/off switches. Group by nests levels in the order you tick them.

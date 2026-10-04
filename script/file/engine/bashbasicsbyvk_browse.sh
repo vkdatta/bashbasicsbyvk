@@ -475,7 +475,7 @@ _menu_header_flat() {
   [ -n "${_disp_banner:-}" ] && echo "$_disp_banner"
   if $_has_group_view; then
     _gv_chain="${group_view_levels[*]}"
-    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → Group by)"
+    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
   fi
 }
 
@@ -489,7 +489,7 @@ _menu_header_imaginary() {
 _menu_body_flat() {
   if $_has_group_view; then
     _gv_chain="${group_view_levels[*]}"
-    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → Group by)"
+    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → 9)"
   fi
   display_items
 }

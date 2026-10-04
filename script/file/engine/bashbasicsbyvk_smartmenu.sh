@@ -642,6 +642,17 @@ _sm_run() {
     _sm_input_fn
   fi
 
+  # optional: draw with a row already highlighted (settings keep the cursor on
+  # the row you just changed) and let Space pick it like Enter (switch rows)
+  local __sp="${_sm_space_pick:-0}" __sr="${_sm_start_row:-0}"
+  _sm_space_pick=0; _sm_start_row=0
+  if ! $multi && [[ "$__sr" =~ ^[0-9]+$ ]] && (( __sr >= 1 && n >= 1 )); then
+    (( __sr > n )) && __sr=$n
+    __sr="$(_sm_next_selectable "$__sr" 1)"
+    _hl_index="$__sr"
+    _vp_goto 0 "$__sr"
+  fi
+
   stty -icanon -echo min 1 time 0 2>/dev/null
   while true; do
     IFS= builtin read -rsn1 -t "${_vp_poll_cur:-0.5}" key
@@ -698,6 +709,10 @@ _sm_run() {
       "") break ;;                                 # Enter — accept
       ' ')
         if $multi; then _sm_toggle_cursor          # Space toggles cursor row
+        elif [ "$__sp" = 1 ]; then
+          # switch screens: Space = pick the highlighted row; with nothing
+          # highlighted and nothing typed it is simply ignored (no stray spaces)
+          if [ -n "$_buf" ] || [ "${_hl_index:-0}" -ge 1 ]; then break; fi
         else
           _is_ctrl_char " " && continue
           _buf="${_buf:0:_pos} ${_buf:_pos}"; _pos=$(( _pos + 1 )); _sm_after_edit

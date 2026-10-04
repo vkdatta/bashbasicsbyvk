@@ -998,7 +998,137 @@ _parse_multi_select() {
   printf '%s\n' "${out[@]}" | sort -n | tr '\n' ' '
 }
 
-# (Sort / file-details / group-by settings screens live in settings/bashbasicsbyvk_settings.sh)
+# ── Settings screens: sort order · file details · group by ────────────────────
+# Same look as every other menu: numbered rows, "Select:" prompt, footer line.
+#   u = back to the Settings menu     q = close Settings (back to the main menu)
+# [x] / [ ] rows are on/off switches: ↑↓ move, Space (or Enter / the number) flips one.
+
+sort_order_settings() {
+  local modes=("az" "za" "new" "old" "big" "small")
+  local labels=("A → Z" "Z → A" "Newest first" "Oldest first" "Largest first" "Smallest first")
+  local i c
+  echo
+  echo "Sort order"
+  for i in "${!modes[@]}"; do
+    if [ "${modes[$i]}" = "$sort_mode" ]; then
+      printf " %d) %s\n" "$((i+1))" "$(_green "${labels[$i]} ✓")"
+    else
+      printf " %d) %s\n" "$((i+1))" "${labels[$i]}"
+    fi
+  done
+  echo
+  echo "u) Back   q) Close settings"
+  _st_read c
+  case "${c,,}" in u) return ;; q) _st_quit=1; return ;; esac
+  if [[ "$c" =~ ^[1-6]$ ]]; then
+    sort_mode="${modes[$((c-1))]}"
+    _items_presorted=false
+    save_settings
+    echo "✅ Sort order: ${labels[$((c-1))]}"
+  else
+    echo "No change"
+  fi
+}
+
+_time_format_menu() {
+  local tfmts=("year" "month" "date" "datetime" "monthdate" "full")
+  local tlabels=("Year (2023)" "Month (Mar)" "Day (15)" "Day + time (15 14:32)" "Month-day + time (Mar-15 14:32)" "Full date + time (2023-Mar-15 14:32)")
+  local i c
+  echo
+  echo "Time format"
+  for i in "${!tfmts[@]}"; do
+    if [ "${tfmts[$i]}" = "$display_time_format" ]; then
+      printf " %d) %s\n" "$((i+1))" "$(_green "${tlabels[$i]} ✓")"
+    else
+      printf " %d) %s\n" "$((i+1))" "${tlabels[$i]}"
+    fi
+  done
+  echo
+  echo "u) Back   q) Close settings"
+  _st_read c
+  case "${c,,}" in u) return ;; q) _st_quit=1; return ;; esac
+  if [[ "$c" =~ ^[1-6]$ ]]; then
+    display_time_format="${tfmts[$((c-1))]}"
+    save_settings
+  fi
+}
+
+display_suffix_settings() {
+  local tokens=("ext" "size" "time" "children")
+  local labels=("Extension" "Size" "Modified time" "Item count (folders)")
+  local tfmts=("year" "month" "date" "datetime" "monthdate" "full")
+  local i c mark last=0 tok new t
+  while :; do
+    echo
+    echo "File details (shown after each name)"
+    for i in "${!tokens[@]}"; do
+      mark="[ ]"; [[ " $display_suffix_set " == *" ${tokens[$i]} "* ]] && mark="[x]"
+      echo " $((i+1))) $mark ${labels[$i]}"
+    done
+    echo " 5) Time format: $display_time_format"
+    echo
+    echo "u) Back   q) Close settings   (↑↓ move, Space toggle)"
+    _st_read c "$last" 1
+    case "${c,,}" in
+      u) return ;;
+      q) _st_quit=1; return ;;
+      [1-4])
+        tok="${tokens[$((c-1))]}"; new=""
+        if [[ " $display_suffix_set " == *" $tok "* ]]; then
+          for t in $display_suffix_set; do [ "$t" = "$tok" ] || new+="${new:+ }$t"; done
+        else
+          new="${display_suffix_set:+$display_suffix_set }$tok"
+        fi
+        display_suffix_set="$new"
+        save_settings
+        last=$c ;;
+      5) _time_format_menu; (( _st_quit )) && return; last=5 ;;
+      "") ;;
+      *) echo "⚠️  Pick 1-5, u or q" ;;
+    esac
+  done
+}
+
+_valid_level() { case "$1" in ext|year|month|date) return 0 ;; *) return 1 ;; esac }
+
+group_view_settings() {
+  local levels=("ext" "year" "month" "date")
+  local labels=("Extension" "Year" "Month" "Date")
+  local ord=("1st" "2nd" "3rd" "4th")
+  local i j c pos last=0 lvl
+  local -a new
+  while :; do
+    echo
+    echo "Group by (levels nest in the order you tick them)"
+    for i in "${!levels[@]}"; do
+      pos=""
+      for j in "${!group_view_levels[@]}"; do
+        [ "${group_view_levels[$j]}" = "${levels[$i]}" ] && pos="${ord[$j]}"
+      done
+      if [ -n "$pos" ]; then echo " $((i+1))) [x] ${labels[$i]}   ($pos)"
+      else echo " $((i+1))) [ ] ${labels[$i]}"; fi
+    done
+    echo
+    echo "u) Back   q) Close settings   (↑↓ move, Space toggle)"
+    _st_read c "$last" 1
+    case "${c,,}" in
+      u) return ;;
+      q) _st_quit=1; return ;;
+      [1-4])
+        lvl="${levels[$((c-1))]}"; new=()
+        pos=0
+        for j in "${!group_view_levels[@]}"; do
+          if [ "${group_view_levels[$j]}" = "$lvl" ]; then pos=1; else new+=("${group_view_levels[$j]}"); fi
+        done
+        if (( pos )); then group_view_levels=("${new[@]}"); else group_view_levels+=("$lvl"); fi
+        group_view_levels_str="${group_view_levels[*]}"
+        save_settings
+        last=$c ;;
+      "") ;;
+      *) echo "⚠️  Pick 1-4, u or q" ;;
+    esac
+  done
+}
 
 # ── Filter feature ────────────────────────────────────────────────────────────
 
