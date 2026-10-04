@@ -411,7 +411,6 @@ _read_choice_filtered() {
 
 _st_fm_build() {
   _st_reset
-  _st_head="Match: $filter_mode   ·   hidden: $filter_hidden_mode"
   _st_add h "Match"
   _st_eq "$filter_mode" partial; _st_add r "Partial" "$_o" "=config → longword_xdconfig" m:partial
   _st_eq "$filter_mode" exact;   _st_add r "Exact"   "$_o" "=config → config_file"       m:exact

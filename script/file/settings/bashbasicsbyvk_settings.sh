@@ -86,9 +86,7 @@ _bold()   { printf "${_BOLD}%s${_RESET}" "$1"; }
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Settings menu  (s)
-#     numbered like the main menu · type a number + Enter, or ↑↓ + Enter
-#     [x] rows: ↑↓ + space (or number + Enter) to check / uncheck
-#     u + Enter = back one level · q + Enter = close settings (main menu)
+#     ↑↓ move · space/enter change · u back · q close settings
 #  Every screen below is a  build  function (rows) + an  act  function (what a
 #  row does) run by _st_run in bashbasicsbyvk_settings_ui.sh.
 # ════════════════════════════════════════════════════════════════════════════
@@ -98,15 +96,15 @@ _ST_SORT_MODES=(az za new old big small)
 _ST_SORT_LABELS=("A → Z" "Z → A" "Newest first" "Oldest first" "Largest first" "Smallest first")
 
 _st_top_build() {
-  local i sl="$sort_mode" gv="off" dv="off" sx="${display_suffix_set:-none}" hv="off"
+  local i sl="$sort_mode" gv="off" dv="off" sx="${display_suffix_set:-none}"
   for i in "${!_ST_SORT_MODES[@]}"; do
     [ "${_ST_SORT_MODES[$i]}" = "$sort_mode" ] && sl="${_ST_SORT_LABELS[$i]}"
   done
   (( ${#group_view_levels[@]} > 0 )) && gv="${group_view_levels[*]}"
-  [ "$show_hidden_files" = true ] && hv="shown"  || hv="hidden"
   if declare -F _disp_load >/dev/null 2>&1 && _disp_load; then dv="on"; fi
   _st_reset
-  _st_add a "Hidden files"        0 "$hv"                               hidden
+  _st_eq "$show_hidden_files" true
+  _st_add t "Show hidden files"   "$_o" ""                              hidden
   _st_add a "Sort order"          0 "$sl"                               sort
   _st_add a "File details"        0 "$sx"                               details
   _st_add a "Group by"            0 "$gv"                               group
@@ -123,7 +121,9 @@ _st_top_build() {
 
 _st_top_act() {
   case "${_st_tag[$1]}" in
-    hidden)   hidden_file_settings ;;
+    hidden)
+      if [ "$show_hidden_files" = true ]; then show_hidden_files=false; else show_hidden_files=true; fi
+      save_settings ;;
     sort)     sort_order_settings ;;
     details)  display_suffix_settings ;;
     group)    group_view_settings ;;
@@ -141,7 +141,7 @@ _st_top_act() {
 
 settings_menu() {
   _st_run "Settings" _st_top_build _st_top_act \
-    "↑↓ or number · Enter open"
+    "↑↓ move · space/enter change · u/q back to main menu"
   _st_quit=0
   builtin printf '\n'
 }
@@ -153,7 +153,6 @@ _st_sort_build() {
   for i in "${!_ST_SORT_MODES[@]}"; do
     _st_eq "${_ST_SORT_MODES[$i]}" "$sort_mode"
     _st_add r "${_ST_SORT_LABELS[$i]}" "$_o" "" "${_ST_SORT_MODES[$i]}"
-    (( _o )) && _st_head="Current: ${_ST_SORT_LABELS[$i]}"
   done
 }
 _st_sort_act() {
@@ -173,7 +172,6 @@ _ST_TF_EXAMPLES=("2023" "Mar" "15" "15 14:32" "Mar-15 14:32" "2023-Mar-15 14:32"
 _st_sfx_build() {
   local i
   _st_reset
-  _st_head="Showing: ${display_suffix_set:-nothing}   ·   time format: $display_time_format"
   _st_add h "Show after each name"
   for i in "${!_ST_SFX_TOKENS[@]}"; do
     [[ " $display_suffix_set " == *" ${_ST_SFX_TOKENS[$i]} "* ]] && _o=1 || _o=0
@@ -210,7 +208,6 @@ _ST_ORD=(1st 2nd 3rd 4th)
 _st_gv_build() {
   local i j pos
   _st_reset
-  if (( ${#group_view_levels[@]} )); then _st_head="Chain: ${group_view_levels[*]// / → }"; else _st_head="Grouping is off"; fi
   for i in "${!_ST_GV_LEVELS[@]}"; do
     pos=""
     for j in "${!group_view_levels[@]}"; do
@@ -246,15 +243,13 @@ _st_gv_act() {
   save_settings
 }
 group_view_settings() {
-  _st_want_lr=1
   _st_run "Group by" _st_gv_build _st_gv_act \
-    "↑↓ move · space on/off · ←/→ change order"
+    "↑↓ move · space on/off · ←/→ change order · u back · q close"
 }
 
 # ── animation ────────────────────────────────────────────────────────────────
 _st_anim_build() {
   _st_reset
-  _st_head="Main screens: $anim_outer   ·   inner loops: $anim_inner"
   _st_add h "Main screens"
   _st_eq "$anim_outer" pop;    _st_add r "pop      (appears at once)"   "$_o" "" o:pop
   _st_eq "$anim_outer" carpet; _st_add r "carpet   (rows roll in)"      "$_o" "" o:carpet
@@ -275,7 +270,6 @@ animation_settings() { _st_run "Animation" _st_anim_build _st_anim_act; }
 # ── reset ────────────────────────────────────────────────────────────────────
 _st_reset_build() {
   _st_reset
-  _st_head="Pick the text color to go back to"
   _st_add h "Reset every setting to its default"
   _st_add a "Reset  ·  white text"         0 "" normal
   _st_add a "Reset  ·  green (coder) text" 0 "" coder
@@ -304,12 +298,6 @@ _st_reset_act() {
   _st_back=1
 }
 restore_all_defaults() { _st_run "Reset all settings" _st_reset_build _st_reset_act; }
-
-# header line for the Display filter screen (that screen is built in select/)
-_dfs_build_head() {
-  if declare -F _disp_load >/dev/null 2>&1 && _disp_load; then _st_head="Active filter: $_disp_expr"
-  else _st_head="Active filter: none"; fi
-}
 
 # warm up the carpet writer in the background (no cost when both loops use pop)
 declare -F _vp_anim_start >/dev/null 2>&1 && _vp_anim_start

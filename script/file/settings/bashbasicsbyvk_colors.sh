@@ -115,7 +115,6 @@ _remove_colors_from_rc() {
 # ── Settings screens: pick a preset, or choose Custom… and type a hex ────────
 _st_bg_build() {
   _st_reset
-  _st_head="Now: #$terminal_bg_color"
   _st_eq "$terminal_bg_color" "$DEFAULT_TERMINAL_BG_COLOR"
   _st_add r "Black (default)" "$_o" "#$DEFAULT_TERMINAL_BG_COLOR" default
   (( _o )) && _o=0 || _o=1
@@ -135,7 +134,6 @@ terminal_bg_color_settings() { _st_run "Background color" _st_bg_build _st_bg_ac
 
 _st_fg_build() {
   _st_reset
-  _st_head="Now: #$terminal_text_color"
   local n=0 c=0
   _st_eq "$terminal_text_color" "$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL"; n=$_o
   _st_eq "$terminal_text_color" "$DEFAULT_TERMINAL_TEXT_COLOR_CODER";  c=$_o

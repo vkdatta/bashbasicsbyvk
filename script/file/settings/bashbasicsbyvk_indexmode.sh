@@ -1,6 +1,5 @@
 _st_im_build() {
   _st_reset
-  _st_head="Folders with more than $index_mode_threshold items use big-folder mode"
   _st_add a "Change limit"      0 "$index_mode_threshold"          set
   _st_add a "Reset to default"  0 "$DEFAULT_INDEX_MODE_THRESHOLD"  reset
 }

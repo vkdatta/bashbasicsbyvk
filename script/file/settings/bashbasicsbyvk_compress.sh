@@ -1,6 +1,5 @@
 _st_cf_build() {
   _st_reset
-  _st_head="Used by the z- command"
   _st_eq "$compress_format" zip;   _st_add r ".zip"            "$_o" "always"       zip
   _st_eq "$compress_format" targz; _st_add r ".tar.gz"         "$_o" "always"       targz
   _st_eq "$compress_format" ask;   _st_add r "Ask each time"   "$_o" "(default)"     ask
