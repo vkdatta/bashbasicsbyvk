@@ -1,2 +1,3 @@
 recursive-include script *.xlsx
 recursive-include script *.txt
+global-exclude __pycache__ *.pyc *.pyo

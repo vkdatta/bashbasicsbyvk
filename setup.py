@@ -2,7 +2,10 @@ import os
 import glob
 from setuptools import setup
 
-all_paths = glob.glob("script/**/*", recursive=True)
+all_paths = [
+    p for p in glob.glob("script/**/*", recursive=True)
+    if "__pycache__" not in p.split(os.sep) and not p.endswith((".pyc", ".pyo"))
+]
 
 script_files = [
     f for f in all_paths
