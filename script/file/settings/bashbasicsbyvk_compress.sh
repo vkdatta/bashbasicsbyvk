@@ -1,21 +1,9 @@
-compress_format_settings() {
-  echo ""
-  echo "Compress format (used by z-):"
-  echo "1) zip    — always create .zip"
-  echo "2) tar.gz — always create .tar.gz"
-  echo "3) ask    — prompt each time (default)"
-  echo
-  echo "u) Back   q) Close settings"
-  read -r -p "Select: " cf_choice
-  cf_choice="${cf_choice%$'\r'}"
-  case "$cf_choice" in
-  u|U) return ;;
-  q|Q) _st_quit=1; return ;;
-    1) compress_format="zip" ;;
-    2) compress_format="targz" ;;
-    3) compress_format="ask" ;;
-    *) echo "Invalid choice — no changes made." ; return ;;
-  esac
-  save_settings
-  echo "✅ Compress format set to: $compress_format"
+_st_cf_build() {
+  _st_reset
+  _st_head="Used by the z- command"
+  _st_eq "$compress_format" zip;   _st_add r ".zip"            "$_o" "always"       zip
+  _st_eq "$compress_format" targz; _st_add r ".tar.gz"         "$_o" "always"       targz
+  _st_eq "$compress_format" ask;   _st_add r "Ask each time"   "$_o" "(default)"     ask
 }
+_st_cf_act() { compress_format="${_st_tag[$1]}"; save_settings; }
+compress_format_settings() { _st_run "Compress format  (z-)" _st_cf_build _st_cf_act; }

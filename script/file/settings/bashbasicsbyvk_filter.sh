@@ -20,7 +20,7 @@ declare -ga _filter_src=()
 declare -ga _filter_map=()
 declare -g  _filter_map_active=false
 
-# filter_hidden_mode: respect | include | exclude   (Settings → 11)
+# filter_hidden_mode: respect | include | exclude   (Settings → Search filter)
 #   respect  filter whatever the folder view currently shows
 #   include  filter also matches hidden files, even if they are not shown
 #   exclude  filter never shows hidden files, even if they are shown
@@ -409,33 +409,22 @@ _read_choice_filtered() {
   done
 }
 
-filter_mode_settings() {
-  local -a fm=(partial exact partial exact partial exact)
-  local -a fh=(respect respect include include exclude exclude)
-  local -a fl=("Partial match" "Exact match" "Partial match" "Exact match" "Partial match" "Exact match")
-  local -a fn=("hidden files: as shown" "hidden files: as shown" "hidden files: always included" "hidden files: always included" "hidden files: always excluded" "hidden files: always excluded")
-  local i fm_choice
-  echo ""
-  echo "Search filter (the = filter)"
-  echo "partial: =config finds longword_xdconfig    exact: =config finds config_file"
-  echo ""
-  for i in "${!fm[@]}"; do
-    if [ "${fm[$i]}" = "${filter_mode:-partial}" ] && [ "${fh[$i]}" = "${filter_hidden_mode:-respect}" ]; then
-      printf " %d) %s\n" "$((i+1))" "$(_green "${fl[$i]}, ${fn[$i]} ✓")"
-    else
-      printf " %d) %s, %s\n" "$((i+1))" "${fl[$i]}" "${fn[$i]}"
-    fi
-  done
-  echo
-  echo "u) Back   q) Close settings"
-  read -r -p "Select: " fm_choice
-  fm_choice="${fm_choice%$'\r'}"
-  case "$fm_choice" in
-    u|U) return ;;
-    q|Q) _st_quit=1; return ;;
-    [1-6]) filter_mode="${fm[$((fm_choice-1))]}"; filter_hidden_mode="${fh[$((fm_choice-1))]}" ;;
-    *) echo "Invalid choice — no changes made."; return ;;
+_st_fm_build() {
+  _st_reset
+  _st_head="Match: $filter_mode   ·   hidden: $filter_hidden_mode"
+  _st_add h "Match"
+  _st_eq "$filter_mode" partial; _st_add r "Partial" "$_o" "=config → longword_xdconfig" m:partial
+  _st_eq "$filter_mode" exact;   _st_add r "Exact"   "$_o" "=config → config_file"       m:exact
+  _st_add h "Hidden files"
+  _st_eq "$filter_hidden_mode" respect; _st_add r "Follow the hidden-files setting" "$_o" "" h:respect
+  _st_eq "$filter_hidden_mode" include; _st_add r "Always include"                  "$_o" "" h:include
+  _st_eq "$filter_hidden_mode" exclude; _st_add r "Always exclude"                  "$_o" "" h:exclude
+}
+_st_fm_act() {
+  case "${_st_tag[$1]}" in
+    m:*) filter_mode="${_st_tag[$1]#m:}" ;;
+    h:*) filter_hidden_mode="${_st_tag[$1]#h:}" ;;
   esac
   save_settings
-  echo "✅ Search filter: $filter_mode match, hidden files $filter_hidden_mode"
 }
+filter_mode_settings() { _st_run "Search filter  (=)" _st_fm_build _st_fm_act; }
