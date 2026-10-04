@@ -9,6 +9,13 @@ Modes
           CSV<TAB><clause label>        (one line per .csv clause, left→right)
       Exit 2 + "ERR: ..." on stderr for a bad expression.
 
+  expand N SHOW_HIDDEN(0|1) ROOT [ROOT ...]
+      Recursive expansion for  .s.rec N : every file and folder under each ROOT,
+      but a folder holding MORE than N files (direct children) is skipped
+      together with everything inside it.  Prints absolute paths, NUL-separated.
+      BVK_SKIPFILE=path  → skipped folders are written there (one per line,
+      "<count>\t<path>").
+
   run EXPR PATH SHOW_HIDDEN(0|1) [CSVFILE ...]
       Evaluate EXPR against PATH.  CSVFILE args map, in order, to the .csv
       clauses reported by `scan`.  Prints matching absolute paths,
@@ -281,6 +288,10 @@ class Parser:
         for t in toks:
             if t[0] == 'word' and t[1] == '-r' and not t[2]:
                 self.state['recursive'] = True
+            elif t[0] == 'word' and not t[2] and re.match(r'^count(<=|<)\d+$', t[1]):
+                m = re.match(r'^count(<=|<)(\d+)$', t[1])
+                self.state['recursive'] = True
+                self.state['count'] = int(m.group(2)) - (1 if m.group(1) == '<' else 0)
             else:
                 clean.append(t)
         self.toks = clean
@@ -556,7 +567,7 @@ class Entry:
         return self._lname.rpartition('.')[2] if '.' in self._lname else ''
 
 
-def build_universe(root, recursive, show_hidden):
+def build_universe(root, recursive, show_hidden, limit=None):
     out = []
     if not os.path.isdir(root):
         raise SelError("not a folder: %s" % root)
@@ -577,6 +588,18 @@ def build_universe(root, recursive, show_hidden):
         for r, dirs, files in os.walk(root):
             if not show_hidden:
                 dirs[:] = [d for d in dirs if not d.startswith('.')]
+            if limit is not None:                  # count<N : drop folders with too many files
+                keep = []
+                for d in dirs:
+                    try:
+                        with os.scandir(os.path.join(r, d)) as it:
+                            nf = sum(1 for x in it if (show_hidden or not x.name.startswith('.'))
+                                     and not x.is_dir(follow_symlinks=False))
+                    except OSError:
+                        nf = 0
+                    if nf <= limit:
+                        keep.append(d)
+                dirs[:] = keep
             for d in dirs:
                 out.append(Entry(os.path.join(r, d), d, True))
             for f in files:
@@ -762,8 +785,72 @@ def test(node, e):
     raise SelError('internal: unknown predicate %s' % k)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  .s.rec N  — recursive select that skips big folders
+# ══════════════════════════════════════════════════════════════════════════════
+def expand(limit, show_hidden, roots):
+    """Yield ('keep', path) or ('skip', folder, file_count)."""
+    done = set()
+
+    def rec(d):
+        try:
+            with os.scandir(d) as it:
+                ents = [e for e in it if show_hidden or not e.name.startswith('.')]
+        except OSError:
+            return
+        dirs, files = [], []
+        for e in ents:
+            try:
+                isdir = e.is_dir(follow_symlinks=False)
+            except OSError:
+                isdir = False
+            (dirs if isdir else files).append(e.path)
+        if len(files) > limit:
+            yield ('skip', d, len(files))          # folder AND everything inside it
+            return
+        yield ('keep', d)
+        for f in sorted(files, key=str.lower):
+            yield ('keep', f)
+        for sub in sorted(dirs, key=str.lower):
+            yield from rec(sub)
+
+    for r in roots:
+        r = os.path.abspath(r)
+        if os.path.isdir(r) and not os.path.islink(r):
+            gen = rec(r)
+        else:
+            gen = iter([('keep', r)])
+        for it in gen:
+            if it[0] == 'keep':
+                if it[1] in done:
+                    continue
+                done.add(it[1])
+            yield it
+
+
 def main(argv):
     rules_dir = os.environ.get('BVK_RULES_DIR') or os.path.expanduser('~/.bashbasicsbyvk/rules')
+    if len(argv) >= 5 and argv[1] == 'expand':
+        try:
+            limit = int(argv[2])
+        except ValueError:
+            print('ERR: .s.rec needs a number, e.g. .s.rec 20', file=sys.stderr)
+            return 2
+        hidden = argv[3] in ('1', 'true')
+        skipf = os.environ.get('BVK_SKIPFILE')
+        out = sys.stdout.buffer
+        sk = open(skipf, 'w', encoding='utf-8', errors='surrogateescape') if skipf else None
+        try:
+            for it in expand(limit, hidden, argv[4:]):
+                if it[0] == 'keep':
+                    out.write(it[1].encode('utf-8', 'surrogateescape') + b'\0')
+                elif it[0] == 'skip' and sk:
+                    sk.write('%d\t%s\n' % (it[2], it[1]))
+            out.flush()
+        finally:
+            if sk:
+                sk.close()
+        return 0
     if len(argv) < 3 or argv[1] not in ('scan', 'run'):
         print('ERR: usage: scan EXPR | run EXPR PATH HIDDEN [CSV...]', file=sys.stderr)
         return 2
@@ -780,7 +867,8 @@ def main(argv):
         show_hidden = argv[4] in ('1', 'true')
         bind_csv(ast, argv[5:])
         recursive = parser.state['recursive'] and os.environ.get('BVK_NO_RECURSIVE') != '1'
-        entries = build_universe(root, recursive, show_hidden)
+        entries = build_universe(root, recursive, show_hidden,
+                                 parser.state.get('count') if recursive else None)
         global IDX, ROOT
         ROOT = root
         IDX = IDXLIB.open_index() if IDXLIB is not None else None

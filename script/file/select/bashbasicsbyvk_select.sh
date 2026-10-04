@@ -180,6 +180,9 @@ _sel_help() {
  .s ADDS to the selection and keeps it across folders (go anywhere, select more)
  .us <same expressions>     UNSELECT   e.g. .us 3   .us.a   .us.ext png   (.us.clr = empty all)
  .s.set EXPR                replace the whole selection  (.s.clr empties it)
+ .s 5-8 -r count<20        select items 5-8 recursively, skipping folders with 20+ files
+                            (count<=20 = skip only folders with MORE than 20; works with .us too)
+ .s.rec [N]                 same on the current selection (skips folders with more than N)
 LOGIC  space or &  = AND      |  = OR      !  = NOT      ( )  groups
  -r  at the end = search subfolders
 AFTER  .s.add EXPR  .s.sub EXPR  .s.show  .s.clr  .s.shown
@@ -201,8 +204,22 @@ _sel_eval() {
   _sel_ensure_store
 
   # 0) index selection by displayed number:  1-5   1,2,3-7,11   a-5 (all except 5)
-  #    (optionally written with the .s prefix)
-  local _ix="${expr#.us}"; _ix="${_ix#.s}"
+  #    (optionally written with the .s prefix), optionally followed by
+  #       -r            expand folders recursively
+  #       count<N       …but skip any folder holding N or more files (count<=N: more than N)
+  #    e.g.  .s 5-8 -r count<20
+  local _w _rest="" _rflag=0 _cnt="" _lim=""
+  local -a _words=()
+  set -f; read -r -a _words <<< "$expr"; set +f
+  for _w in "${_words[@]}"; do
+    if [ "$_w" = "-r" ]; then _rflag=1
+    elif [[ "$_w" =~ ^count(\<=|\<)([0-9]+)$ ]]; then
+      _cnt="${BASH_REMATCH[2]}"; _lim=$(( 10#$_cnt ))
+      [ "${BASH_REMATCH[1]}" = "<" ] && _lim=$(( _lim - 1 ))
+    else _rest+="$_w "
+    fi
+  done
+  local _ix="${_rest#.us}"; _ix="${_ix#.s}"
   _ix="${_ix//[[:space:]]/}"
   if [[ "$_ix" =~ ^(a-[0-9][0-9,-]*|[0-9][0-9,-]*)$ ]]; then
     if ${imaginary_mode:-false}; then
@@ -219,6 +236,20 @@ _sel_eval() {
     fi
     for _i in "${_idx[@]}"; do _SEL_FOUND+=("${items[$((_i-1))]}"); done
     if [ ${#_SEL_FOUND[@]} -eq 0 ]; then echo "❌ No valid item numbers (1-$_n)"; return 1; fi
+    if (( _rflag )) || [ -n "$_cnt" ]; then
+      local _hid=0 _skf _roots=("${_SEL_FOUND[@]}") _sk
+      [ "${show_hidden_files:-false}" = "true" ] && _hid=1
+      [ -z "$_lim" ] && _lim=1000000000
+      _skf=$(mktemp) || return 1
+      mapfile -d '' -t _SEL_FOUND < <(BVK_SKIPFILE="$_skf" _sel_core expand "$_lim" "$_hid" "${_roots[@]}" 2>/dev/null)
+      _sk=$(grep -c '' "$_skf" 2>/dev/null)
+      if [ "${_sk:-0}" -gt 0 ]; then
+        echo "⏭️  Skipped $_sk folder(s) over the count limit:"
+        head -5 "$_skf" | while IFS=$'\t' read -r c d; do printf '   • %s  (%s files)\n' "$(_sel_short "$d")" "$c"; done
+        [ "$_sk" -gt 5 ] && echo "   … and $((_sk-5)) more"
+      fi
+      rm -f "$_skf"
+    fi
     return 0
   fi
   local errf scanf
@@ -275,6 +306,7 @@ handle_select_cmd() {
     .s.clr) _sel_ensure_store; : > "$_SEL_FILE"; _sel_bump; echo "🧹 Selection cleared"; return ;;
     .s.shown)            _sel_cmd_shown; return ;;
     .s|.s\ help|.s.help|-h) _sel_help; return ;;
+    .s.rec|.s.rec\ *)   _sel_cmd_rec "${raw#.s.rec}"; return ;;
   esac
 
   # .s ADDS to the selection (it persists across folders until .s.clr / .us).
@@ -325,6 +357,34 @@ handle_select_cmd() {
   esac
   _sel_preview out
   [ ${#out[@]} -gt 0 ] && echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
+}
+
+# .s.rec [N]  — take the CURRENT selection and expand it recursively (every
+# file and folder inside), skipping any folder that holds more than N files
+# (default 20) together with everything under it.  The result replaces the
+# selection.   e.g.  .s 5-8   then   .s.rec 20
+_sel_cmd_rec() {
+  local n="${1//[[:space:]]/}" hidden=0 skipf errf
+  [ -z "$n" ] && n=20
+  if [[ ! "$n" =~ ^[0-9]+$ ]]; then echo "⚠️  Usage: .s.rec [N]   e.g. .s.rec 20  (skips folders with more than N files)"; return; fi
+  [ "${show_hidden_files:-false}" = "true" ] && hidden=1
+  local -a roots=() found=()
+  _sel_load_live roots
+  if [ ${#roots[@]} -eq 0 ]; then echo "ℹ️  Nothing selected — select items first (e.g. .s 5-8 or .s.a), then .s.rec $n"; return; fi
+  skipf=$(mktemp) || return; errf=$(mktemp) || { rm -f "$skipf"; return; }
+  mapfile -d '' -t found < <(BVK_SKIPFILE="$skipf" _sel_core expand "$n" "$hidden" "${roots[@]}" 2>"$errf")
+  if [ -s "$errf" ]; then echo "❌ $(sed 's/^ERR: //' "$errf")"; rm -f "$skipf" "$errf"; return; fi
+  _sel_save found
+  _sel_summary found "🎯 Selected recursively (folders with more than $n files skipped) →"
+  _sel_preview found
+  local sk; sk=$(grep -c '' "$skipf" 2>/dev/null)
+  if [ "${sk:-0}" -gt 0 ]; then
+    echo "⏭️  Skipped $sk folder(s):"
+    head -5 "$skipf" | while IFS=$'\t' read -r c d; do printf '   • %s  (%s files)\n' "$(_sel_short "$d")" "$c"; done
+    [ "$sk" -gt 5 ] && echo "   … and $((sk-5)) more"
+  fi
+  rm -f "$skipf" "$errf"
+  [ ${#found[@]} -gt 0 ] && echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }
 
 _sel_cmd_show() {
