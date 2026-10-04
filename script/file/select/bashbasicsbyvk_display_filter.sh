@@ -18,7 +18,7 @@
 #        CSV=/path/to/exts.csv            ← one line per .csv clause, in order
 #  Presets live with the select rules:  ~/.bashbasicsbyvk/rules/NAME.rule
 #
-#  Setting (Settings → 12):  display_filter_persist  true|false
+#  Setting (Settings → Display filter):  display_filter_persist  true|false
 #     false (default) = the filter is cleared when the app starts.
 #
 #  Precedence: the filter applies on top of whatever the folder would show,
@@ -139,7 +139,7 @@ _disp_help() {
  .d.clr                        show everything again
  .d.save NAME [expr]           keep as preset   .d.run NAME  applies it
  .d.refresh                    re-scan this folder
-Applies only in the folder where it was set (other folders show everything). Settings → 12 for presets/persistence.
+Applies only in the folder where it was set (other folders show everything). Settings → Display filter for presets/persistence.
 HLP
 }
 
@@ -235,33 +235,58 @@ handle_display_cmd() {
   esac
 }
 
-# ── Settings → 12 ─────────────────────────────────────────────────────────────
-display_filter_settings() {
-  echo ""
-  if _disp_load; then echo "Active filter: $_disp_expr"; else echo "Active filter: none"; fi
-  echo "Display filter:"
-  echo "1) Set filter (type an expression)"
-  echo "2) Clear filter"
-  echo "3) Apply a preset"
-  echo "4) Save the active filter as a preset"
-  echo "5) Delete a preset"
-  echo "6) Keep filter between sessions   ($display_filter_persist)"
-  echo "7) Show help"
-  local ch; read -r -p "Choice [1-7]: " ch
-  ch="${ch%$'\r'}"
-  case "$ch" in
-  u|U) return ;;
-  q|Q) _bvk_quit ;;
-    1) local ex; read -r -p "Expression (e.g. .d.ext csv & .d.size <3mb): " ex
-       [ -n "$ex" ] && handle_display_cmd "$ex" ;;
-    2) handle_display_cmd ".d.clr" ;;
-    3) _rule_list; local nm; read -r -p "Preset name: " nm; [ -n "$nm" ] && handle_display_cmd ".d.run $nm" ;;
-    4) local nm; read -r -p "Preset name: " nm; [ -n "$nm" ] && handle_display_cmd ".d.save $nm" ;;
-    5) _rule_list; local nm; read -r -p "Preset to delete: " nm; [ -n "$nm" ] && handle_rule_cmd ".r.del $nm" ;;
-    6) if [ "$display_filter_persist" = "true" ]; then display_filter_persist=false; else display_filter_persist=true; fi
-       save_settings
-       echo "✅ Keep filter between sessions: $display_filter_persist" ;;
-    7) _disp_help ;;
-    *) echo "Invalid choice" ;;
+# ── Settings → Display filter ─────────────────────────────────────────────────
+declare -ga _dfs_presets=()
+_dfs_pick_mode=""          # run | delete
+
+_dfs_pre_build() {
+  local f nm ex
+  _st_reset
+  _dfs_presets=()
+  _sel_ensure_store 2>/dev/null
+  for f in "$_SEL_RULES_DIR"/*.rule; do
+    [ -f "$f" ] || continue
+    nm="${f##*/}"; nm="${nm%.rule}"
+    ex=$(_rule_field "$f" EXPR)
+    _st_add a "$nm" 0 "$ex" "$nm"
+  done
+  (( ${#_st_lbl[@]} )) || _st_add h "No presets yet — set a filter, then Save as preset"
+}
+_dfs_pre_act() {
+  local nm="${_st_tag[$1]}"
+  [ -n "$nm" ] || return
+  if [ "$_dfs_pick_mode" = delete ]; then handle_rule_cmd ".r.del $nm"
+  else handle_display_cmd ".d.run $nm"; fi
+  _st_back=1
+}
+
+_dfs_build() {
+  local v="off"
+  _disp_load && v="$_disp_expr"
+  _st_reset
+  _st_add a "Set filter…"         0 "$v"  set
+  _st_add a "Clear filter"        0 ""    clear
+  _st_add a "Apply a preset"      0 ""    run
+  _st_add a "Save as preset…"     0 ""    save
+  _st_add a "Delete a preset"     0 ""    del
+  [ "$display_filter_persist" = true ] && _o=1 || _o=0
+  _st_add t "Keep between sessions" "$_o" "" persist
+  _st_add a "Help"                0 ""    help
+}
+_dfs_act() {
+  local ex nm
+  case "${_st_tag[$1]}" in
+    set)
+      if _st_ask "Expression (e.g. .d.ext csv & .d.size <3mb)"; then handle_display_cmd "$_st_in"; fi ;;
+    clear) handle_display_cmd ".d.clr" ;;
+    run)   _dfs_pick_mode=run;    _st_run "Apply a preset"  _dfs_pre_build _dfs_pre_act "↑↓ move · enter apply · u back · q close" ;;
+    del)   _dfs_pick_mode=delete; _st_run "Delete a preset" _dfs_pre_build _dfs_pre_act "↑↓ move · enter delete · u back · q close" ;;
+    save)
+      if _st_ask "Preset name (letters, digits, _ -)"; then handle_display_cmd ".d.save $_st_in"; fi ;;
+    persist)
+      if [ "$display_filter_persist" = true ]; then display_filter_persist=false; else display_filter_persist=true; fi
+      save_settings ;;
+    help) _disp_help ;;
   esac
 }
+display_filter_settings() { _st_run "Display filter  (.d)" _dfs_build _dfs_act; }

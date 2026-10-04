@@ -353,3 +353,18 @@ sudo pip uninstall bashbasicsbyvk
 </details>
 
 </details>
+
+
+## Settings (`s`)
+
+Same feel as the main menu — no numbers to type:
+
+| Key | Does |
+|---|---|
+| `↑` `↓` | move |
+| `space` / `enter` | switch a `[x]` on/off, pick an option, or open a sub-screen |
+| `←` `→` | (Group by) move a level earlier/later in the chain |
+| `u` | back one level (sub-screen → Settings → main menu) |
+| `q` | close Settings completely and return to the main menu |
+
+Screens: Show hidden files · Sort order · File details · Group by · Display filter · Search filter · Compress format · Animation · Big-folder limit · Background color · Text color · Import nano settings · Reset all settings.

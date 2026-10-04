@@ -146,7 +146,7 @@ _vp_row_text() {
   elif [ "$_vp_mode" == "imaginary" ]; then
     t="${imaginary_lines[$((i-1))]}"
   else
-    t="$(_item_line_text "$i")"
+    if declare -F _item_line_text_v >/dev/null 2>&1; then _item_line_text_v "$i"; t="$_ilt_out"; else t="$(_item_line_text "$i")"; fi
   fi
   _vp_fit "$t"
   _vp_rowcache[$i]="$_vp_line"
@@ -291,44 +291,88 @@ _vp_ensure_visible() {
   [ "$_vp_start" -ne "$old" ]
 }
 
-# Frame buffering: while _vp_buffering=1 every line is appended to _vp_frame and
-# the whole screen is written in ONE write at the end of _vp_emit, so a redraw
-# lands at once instead of rolling in row by row while rows are still computed.
-_vp_buffering=0
+# Frame buffering: every line of a screen is appended to _vp_frame and the whole
+# screen is written in ONE write at the end of _vp_emit.  Computing the rows is
+# never slowed down by the animation — the animation only decides how the
+# finished frame is PLAYED:
+#   pop    — one write, the screen appears at once
+#   carpet — a small Python writer (started once, in the background) plays the
+#            finished frame row by row with exact timing and a fixed total
+#            time (~_VP_CARPET_MS), however tall the terminal is.
 _vp_frame=""
 _vp_force_pop=0         # 1 = never animate this draw (in-place refreshes, scrolling)
+_vp_carpet_now=0
+_VP_CARPET_MS=110       # whole carpet roll-in takes at most this long
+_VP_CARPET_ROW_MS=4     # …and no row waits longer than this
 
 # Which animation applies to a fresh screen: inner loops (fx/sw) use anim_inner,
-# everything else uses anim_outer.  Echoes pop|carpet.
-_vp_anim_mode() {
+# everything else uses anim_outer.  Sets _vp_am to pop|carpet (no subshell).
+_vp_anim_pick() {
   if [ "${_sw_in_mode:-0}" = "1" ] || [ "${_fx_in_mode:-0}" = "1" ]; then
-    echo "${anim_inner:-carpet}"
+    _vp_am="${anim_inner:-carpet}"
   else
-    echo "${anim_outer:-pop}"
+    _vp_am="${anim_outer:-pop}"
   fi
+}
+_vp_anim_mode() { _vp_anim_pick; echo "$_vp_am"; }   # kept for old callers
+
+_VP_CARPET_PY='
+import os, sys, time
+tty = None
+try:
+    tty = os.open("/dev/tty", os.O_WRONLY)
+except OSError:
+    pass
+total = float(sys.argv[1]) / 1000.0
+cap = float(sys.argv[2]) / 1000.0
+inp = sys.stdin.buffer
+out = sys.stdout.buffer
+buf = b""
+while True:
+    chunk = inp.read1(65536)
+    if not chunk:
+        break
+    buf += chunk
+    while b"\x1e" in buf:
+        frame, buf = buf.split(b"\x1e", 1)
+        if tty is None:
+            out.write(b"!\n"); out.flush(); continue
+        lines = [l + b"\n" for l in frame.split(b"\n")]
+        if lines and lines[-1] == b"\n":
+            lines.pop()
+        n = max(len(lines), 1)
+        d = min(cap, total / n)
+        t = time.perf_counter()
+        for ln in lines:
+            os.write(tty, ln)
+            t += d
+            w = t - time.perf_counter()
+            if w > 0:
+                time.sleep(w)
+        out.write(b"k\n"); out.flush()
+'
+
+# Start the carpet writer in the background (once).  Called when a menu opens
+# or the animation setting changes; costs nothing when both loops use pop.
+_vp_anim_start() {
+  [ "${anim_outer:-pop}" = carpet ] || [ "${anim_inner:-carpet}" = carpet ] || return 0
+  [ -n "${_VPW_PID:-}" ] && kill -0 "$_VPW_PID" 2>/dev/null && return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  [ -t 1 ] || return 0
+  coproc _VPW { exec python3 -u -c "$_VP_CARPET_PY" "$_VP_CARPET_MS" "$_VP_CARPET_ROW_MS"; } 2>/dev/null
 }
 
-# tiny nap without forking: read with a timeout on a descriptor that never has data
-_vp_nap_fd=""
-_vp_nap() {
-  if [ -z "$_vp_nap_fd" ]; then
-    exec {_vp_nap_fd}<> <(:) 2>/dev/null || { _vp_nap_fd=none; }
-  fi
-  [ "$_vp_nap_fd" = none ] && return 0
-  read -rt "${1:-0.004}" -u "$_vp_nap_fd" _ 2>/dev/null
-  return 0
+# Play _vp_frame as a carpet.  Returns 1 if the writer is not available
+# (caller then writes the frame in one go).
+_vp_play_carpet() {
+  local ack=""
+  [ -n "${_VPW_PID:-}" ] && kill -0 "$_VPW_PID" 2>/dev/null || return 1
+  builtin printf '%s\x1e' "$_vp_frame" >&"${_VPW[1]}" 2>/dev/null || return 1
+  read -r -t 1 -u "${_VPW[0]}" ack 2>/dev/null
+  [ "$ack" = "k" ]
 }
 
-_vp_carpet_now=0
-_vp_nap_on=0
-_vp_el() {
-  if [ "$_vp_buffering" = 1 ]; then
-    _vp_frame+=$'\r\033[2K'"$1"$'\n'
-  else
-    builtin printf '\r\033[2K%s\n' "$1"
-    [ "$_vp_nap_on" = 1 ] && _vp_nap 0.004
-  fi
-}
+_vp_el() { _vp_frame+=$'\r\033[2K'"$1"$'\n'; }
 
 _vp_emit() {
   local i line
@@ -336,11 +380,9 @@ _vp_emit() {
   _vp_end=$(( _vp_start + _vp_page - 1 ))
   (( _vp_end > _vp_n )) && _vp_end=$_vp_n
 
-  # carpet: write line by line with a tiny pause (only for a fresh screen);
-  # pop (default): build the frame in memory and write it once
   local _carpet=$_vp_carpet_now
   _vp_carpet_now=0
-  if [ "$_carpet" = 1 ]; then _vp_buffering=0; _vp_nap_on=1; else _vp_frame=""; _vp_buffering=1; _vp_nap_on=0; fi
+  _vp_frame=""
   # one grep for all visible rows instead of one per row (selection marks)
   declare -F _sel_prewarm >/dev/null 2>&1 && _sel_prewarm "$_vp_start" "$_vp_end"
 
@@ -375,13 +417,15 @@ _vp_emit() {
   fi
 
   for line in "${_vp_ftr_out[@]}"; do _vp_el "$line"; done
-  if [ "$_vp_buffering" = 1 ]; then
-    _vp_buffering=0
+
+  # frame is complete — now just play it
+  if [ "$_carpet" = 1 ] && _vp_play_carpet; then
+    :
+  else
     # single write; ?2026 = synchronized output (terminals that lack it ignore it)
     builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
-    _vp_frame=""
   fi
-  _vp_nap_on=0
+  _vp_frame=""
   _set_available_above "$_blk_h"
   return 0
 }
@@ -400,7 +444,13 @@ _vp_render_fresh() {
   # a fresh screen follows the Settings → Animation choice (outer vs inner loop);
   # in-place refreshes (resize, size poll) and scrolling never animate
   _vp_carpet_now=0
-  if [ "$_vp_force_pop" != 1 ] && [ "$(_vp_anim_mode)" = "carpet" ]; then _vp_carpet_now=1; fi
+  if [ "$_vp_force_pop" != 1 ]; then
+    _vp_anim_pick
+    if [ "$_vp_am" = carpet ]; then
+      _vp_carpet_now=1
+      [ -n "${_VPW_PID:-}" ] || _vp_anim_start
+    fi
+  fi
   _vp_emit
   $_vp_input_fn
 }

@@ -1,3 +1,4 @@
+source "bashbasicsbyvk_settings_ui.sh"
 source "bashbasicsbyvk_settings.sh"
 source "bashbasicsbyvk_colors.sh"
 source "bashbasicsbyvk_hidefiles.sh"

@@ -84,117 +84,220 @@ _BOLD='\033[1m'
 _green()  { printf "${_GREEN}%s${_RESET}" "$1"; }
 _bold()   { printf "${_BOLD}%s${_RESET}" "$1"; }
 
+# ════════════════════════════════════════════════════════════════════════════
+#  Settings menu  (s)
+#     ↑↓ move · space/enter change · u back · q close settings
+#  Every screen below is a  build  function (rows) + an  act  function (what a
+#  row does) run by _st_run in bashbasicsbyvk_settings_ui.sh.
+# ════════════════════════════════════════════════════════════════════════════
 
-restore_all_defaults() {
-  echo
-  echo "Choose default text color mode:"
-  echo "1) Normal (#FFFFFF)"
-  echo "2) Coder  (#00D000)"
-  read -r -p "Choice [1-2] (u = back): " mode_choice
-  case "$mode_choice" in
-    u|U) echo "↩️  Back"; return ;;
-    q|Q) _bvk_quit ;;
+# ── top level ────────────────────────────────────────────────────────────────
+_ST_SORT_MODES=(az za new old big small)
+_ST_SORT_LABELS=("A → Z" "Z → A" "Newest first" "Oldest first" "Largest first" "Smallest first")
+
+_st_top_build() {
+  local i sl="$sort_mode" gv="off" dv="off" sx="${display_suffix_set:-none}"
+  for i in "${!_ST_SORT_MODES[@]}"; do
+    [ "${_ST_SORT_MODES[$i]}" = "$sort_mode" ] && sl="${_ST_SORT_LABELS[$i]}"
+  done
+  (( ${#group_view_levels[@]} > 0 )) && gv="${group_view_levels[*]}"
+  if declare -F _disp_load >/dev/null 2>&1 && _disp_load; then dv="on"; fi
+  _st_reset
+  _st_eq "$show_hidden_files" true
+  _st_add t "Show hidden files"   "$_o" ""                              hidden
+  _st_add a "Sort order"          0 "$sl"                               sort
+  _st_add a "File details"        0 "$sx"                               details
+  _st_add a "Group by"            0 "$gv"                               group
+  _st_add a "Display filter (.d)" 0 "$dv"                               dfilter
+  _st_add a "Search filter (=)"   0 "$filter_mode"                      filter
+  _st_add a "Compress format"     0 "$compress_format"                  compress
+  _st_add a "Animation"           0 "$anim_outer / $anim_inner"         anim
+  _st_add a "Big-folder limit"    0 "$index_mode_threshold"             index
+  _st_add a "Background color"    0 "#$terminal_bg_color"               bg
+  _st_add a "Text color"          0 "#$terminal_text_color"             fg
+  _st_add a "Import nano settings" 0 ""                                 nano
+  _st_add a "Reset all settings"  0 ""                                  reset
+}
+
+_st_top_act() {
+  case "${_st_tag[$1]}" in
+    hidden)
+      if [ "$show_hidden_files" = true ]; then show_hidden_files=false; else show_hidden_files=true; fi
+      save_settings ;;
+    sort)     sort_order_settings ;;
+    details)  display_suffix_settings ;;
+    group)    group_view_settings ;;
+    dfilter)  display_filter_settings ;;
+    filter)   filter_mode_settings ;;
+    compress) compress_format_settings ;;
+    anim)     animation_settings ;;
+    index)    index_mode_threshold_settings ;;
+    bg)       terminal_bg_color_settings ;;
+    fg)       terminal_text_color_settings ;;
+    nano)     import_nanorc_settings; _st_note "✅ nano settings added" ;;
+    reset)    restore_all_defaults ;;
   esac
+}
+
+settings_menu() {
+  _st_run "Settings" _st_top_build _st_top_act \
+    "↑↓ move · space/enter change · u/q back to main menu"
+  _st_quit=0
+  builtin printf '\n'
+}
+
+# ── sort order ───────────────────────────────────────────────────────────────
+_st_sort_build() {
+  local i
+  _st_reset
+  for i in "${!_ST_SORT_MODES[@]}"; do
+    _st_eq "${_ST_SORT_MODES[$i]}" "$sort_mode"
+    _st_add r "${_ST_SORT_LABELS[$i]}" "$_o" "" "${_ST_SORT_MODES[$i]}"
+  done
+}
+_st_sort_act() {
+  sort_mode="${_st_tag[$1]}"
+  _items_presorted=false
+  save_settings
+}
+sort_order_settings() { _st_run "Sort order" _st_sort_build _st_sort_act; }
+
+# ── file details (what is shown after each name) + time format ───────────────
+_ST_SFX_TOKENS=(ext size time children)
+_ST_SFX_LABELS=("Extension" "Size" "Modified time" "Item count (folders)")
+_ST_TF_KEYS=(year month date datetime monthdate full)
+_ST_TF_LABELS=("Year" "Month" "Day" "Day + time" "Month-day + time" "Full date + time")
+_ST_TF_EXAMPLES=("2023" "Mar" "15" "15 14:32" "Mar-15 14:32" "2023-Mar-15 14:32")
+
+_st_sfx_build() {
+  local i
+  _st_reset
+  _st_add h "Show after each name"
+  for i in "${!_ST_SFX_TOKENS[@]}"; do
+    [[ " $display_suffix_set " == *" ${_ST_SFX_TOKENS[$i]} "* ]] && _o=1 || _o=0
+    _st_add t "${_ST_SFX_LABELS[$i]}" "$_o" "" "sfx:${_ST_SFX_TOKENS[$i]}"
+  done
+  _st_add h "Time format"
+  for i in "${!_ST_TF_KEYS[@]}"; do
+    _st_eq "${_ST_TF_KEYS[$i]}" "$display_time_format"
+    _st_add r "${_ST_TF_LABELS[$i]}" "$_o" "${_ST_TF_EXAMPLES[$i]}" "tf:${_ST_TF_KEYS[$i]}"
+  done
+}
+_st_sfx_act() {
+  local tag="${_st_tag[$1]}" tok new="" t
+  case "$tag" in
+    tf:*) display_time_format="${tag#tf:}" ;;
+    sfx:*)
+      tok="${tag#sfx:}"
+      if [[ " $display_suffix_set " == *" $tok "* ]]; then
+        for t in $display_suffix_set; do [ "$t" = "$tok" ] || new+="${new:+ }$t"; done
+      else
+        new="${display_suffix_set:+$display_suffix_set }$tok"
+      fi
+      display_suffix_set="$new" ;;
+  esac
+  save_settings
+}
+display_suffix_settings() { _st_run "File details" _st_sfx_build _st_sfx_act; }
+
+# ── group view (check = level is used; ←/→ changes its position) ─────────────
+_ST_GV_LEVELS=(ext year month date)
+_ST_GV_LABELS=("Extension" "Year" "Month" "Date")
+_ST_ORD=(1st 2nd 3rd 4th)
+
+_st_gv_build() {
+  local i j pos
+  _st_reset
+  for i in "${!_ST_GV_LEVELS[@]}"; do
+    pos=""
+    for j in "${!group_view_levels[@]}"; do
+      [ "${group_view_levels[$j]}" = "${_ST_GV_LEVELS[$i]}" ] && pos="${_ST_ORD[$j]}"
+    done
+    [ -n "$pos" ] && _o=1 || _o=0
+    _st_add t "${_ST_GV_LABELS[$i]}" "$_o" "$pos" "${_ST_GV_LEVELS[$i]}"
+  done
+}
+_st_gv_act() {
+  local lvl="${_st_tag[$1]}" key="$2" j pos=-1 other
+  local -a new=()
+  for j in "${!group_view_levels[@]}"; do
+    [ "${group_view_levels[$j]}" = "$lvl" ] && pos=$j
+  done
+  case "$key" in
+    toggle)
+      if (( pos >= 0 )); then
+        for j in "${!group_view_levels[@]}"; do (( j == pos )) || new+=("${group_view_levels[$j]}"); done
+        group_view_levels=("${new[@]}")
+      else
+        group_view_levels+=("$lvl")
+      fi ;;
+    left|right)
+      (( pos < 0 )) && return
+      [ "$key" = left ] && other=$(( pos - 1 )) || other=$(( pos + 1 ))
+      (( other < 0 || other >= ${#group_view_levels[@]} )) && return
+      new=("${group_view_levels[@]}")
+      new[$pos]="${group_view_levels[$other]}"; new[$other]="$lvl"
+      group_view_levels=("${new[@]}") ;;
+  esac
+  group_view_levels_str="${group_view_levels[*]}"
+  save_settings
+}
+group_view_settings() {
+  _st_run "Group by" _st_gv_build _st_gv_act \
+    "↑↓ move · space on/off · ←/→ change order · u back · q close"
+}
+
+# ── animation ────────────────────────────────────────────────────────────────
+_st_anim_build() {
+  _st_reset
+  _st_add h "Main screens"
+  _st_eq "$anim_outer" pop;    _st_add r "pop      (appears at once)"   "$_o" "" o:pop
+  _st_eq "$anim_outer" carpet; _st_add r "carpet   (rows roll in)"      "$_o" "" o:carpet
+  _st_add h "Inner loops  (fx / sw)"
+  _st_eq "$anim_inner" pop;    _st_add r "pop      (appears at once)"   "$_o" "" i:pop
+  _st_eq "$anim_inner" carpet; _st_add r "carpet   (rows roll in)"      "$_o" "" i:carpet
+}
+_st_anim_act() {
+  case "${_st_tag[$1]}" in
+    o:*) anim_outer="${_st_tag[$1]#o:}" ;;
+    i:*) anim_inner="${_st_tag[$1]#i:}" ;;
+  esac
+  save_settings
+  declare -F _vp_anim_start >/dev/null 2>&1 && _vp_anim_start
+}
+animation_settings() { _st_run "Animation" _st_anim_build _st_anim_act; }
+
+# ── reset ────────────────────────────────────────────────────────────────────
+_st_reset_build() {
+  _st_reset
+  _st_add h "Reset every setting to its default"
+  _st_add a "Reset  ·  white text"         0 "" normal
+  _st_add a "Reset  ·  green (coder) text" 0 "" coder
+}
+_st_reset_act() {
   show_hidden_files=$DEFAULT_SHOW_HIDDEN_FILES
   index_mode_threshold=$DEFAULT_INDEX_MODE_THRESHOLD
   sort_mode=$DEFAULT_SORT_MODE
   display_suffix_set=$DEFAULT_DISPLAY_SUFFIX_SET
   display_time_format=$DEFAULT_DISPLAY_TIME_FORMAT
-  group_view_levels=()
-  group_view_levels_str=""
+  group_view_levels=(); group_view_levels_str=""
   compress_format=$DEFAULT_COMPRESS_FORMAT
+  filter_mode=$DEFAULT_FILTER_MODE
+  filter_hidden_mode=$DEFAULT_FILTER_HIDDEN_MODE
   display_filter_persist=$DEFAULT_DISPLAY_FILTER_PERSIST
   anim_outer=$DEFAULT_ANIM_OUTER
   anim_inner=$DEFAULT_ANIM_INNER
+  _items_presorted=false
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
-  case "$mode_choice" in
-    2) _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER" ;;
-    *) _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL" ;;
+  case "${_st_tag[$1]}" in
+    coder) _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER" ;;
+    *)     _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL" ;;
   esac
   save_settings
-  echo "✅ All settings restored to defaults"
+  _st_note "✅ All settings reset"
+  _st_back=1
 }
+restore_all_defaults() { _st_run "Reset all settings" _st_reset_build _st_reset_act; }
 
-# Screen animation: how a screen is drawn when it opens / changes folder.
-#   pop    — the whole screen appears at once
-#   carpet — rows roll in from top to bottom
-# Arrow-key scrolling inside a list is always instant.
-animation_settings() {
-  local ch v
-  echo
-  echo "Animation (how a screen is drawn):"
-  echo "1) Outer loop    now: $anim_outer     (default: $DEFAULT_ANIM_OUTER)"
-  echo "2) Inner loops   now: $anim_inner     (default: $DEFAULT_ANIM_INNER)   [fx / sw]"
-  echo "3) Restore animation defaults"
-  read -r -p "Choice [1-3]: " ch
-  ch="${ch%$'\r'}"
-  case "$ch" in
-    u|U) return ;;
-    q|Q) _bvk_quit ;;
-    1|2)
-      echo "1) pop     — whole screen appears at once"
-      echo "2) carpet  — rows roll in top to bottom"
-      read -r -p "Choice [1-2]: " v
-      v="${v%$'\r'}"
-      case "$v" in
-        u|U) return ;;
-        q|Q) _bvk_quit ;;
-        1) v=pop ;;
-        2) v=carpet ;;
-        *) echo "Invalid choice — no changes made."; return ;;
-      esac
-      if [ "$ch" = 1 ]; then anim_outer=$v; else anim_inner=$v; fi
-      save_settings
-      echo "✅ Animation — outer loop: $anim_outer, inner loops: $anim_inner" ;;
-    3) anim_outer=$DEFAULT_ANIM_OUTER; anim_inner=$DEFAULT_ANIM_INNER; save_settings
-       echo "✅ Animation restored — outer loop: $anim_outer, inner loops: $anim_inner" ;;
-    *) echo "Invalid choice" ;;
-  esac
-}
-
-settings_menu() {
- local gv_label
-  if [ ${#group_view_levels[@]} -gt 0 ]; then
-    gv_label="Group view [${group_view_levels[*]}] (tap to Ungroup/edit)"
-  else
-    gv_label="Group view: OFF"
-  fi
- local sfx_label="${display_suffix_set:-none}"
-
-  echo
-  echo "Settings:"
-  echo "1) Hidden files          ($show_hidden_files)"
-  echo "2) Index mode threshold  ($index_mode_threshold)"
-  echo "3) Terminal BG color     (#${terminal_bg_color})"
-  echo "4) Terminal text color   (#${terminal_text_color})"
-  echo "5) Restore ALL defaults"
-  echo "6) Import nano settings"
-  echo "7) Sort order            ($sort_mode)"
-  echo "8) Display suffix        (${sfx_label:-none})"
-  echo "9) $gv_label"
-  echo "10) Compress format      ($compress_format)"
-  echo "11) Filter mode          ($filter_mode, hidden: $filter_hidden_mode)"
-  echo "12) Display filter       (.d — presets, keep between sessions: $display_filter_persist)"
-  echo "13) Animation            (outer loop: $anim_outer, inner loops: $anim_inner)"
-
-  read -r -p "Enter choice [1-13]: " main_choice
-
-case "$main_choice" in
-u|U) return ;;
-q|Q) _bvk_quit ;;
-    1) hidden_file_settings ;; # bashbasicsbyvk_hidefiles.sh
-    2) index_mode_threshold_settings ;; # bashbasicsbyvk_indexmode.sh
-    3) terminal_bg_color_settings ;; # bashbasicsbyvk_colors.sh
-    4) terminal_text_color_settings ;; # bashbasicsbyvk_colors.sh
-    5) restore_all_defaults ;; # Current
-    6) import_nanorc_settings ;; # bashbasicsbyvk_importnano.sh
-    7) sort_order_settings ;; # bashbasicsbyvk_displayer.sh
-    8) display_suffix_settings ;; # bashbasicsbyvk_displayer.sh
-    9) group_view_settings ;; # bashbasicsbyvk_displayer.sh
-    10) compress_format_settings ;; # Current
-    11) filter_mode_settings ;;    # bashbasicsbyvk_filter.sh
-    12) display_filter_settings ;; # bashbasicsbyvk_display_filter.sh
-    13) animation_settings ;;      # Current
-    *) echo "Invalid choice" ;;
-esac
-}
+# warm up the carpet writer in the background (no cost when both loops use pop)
+declare -F _vp_anim_start >/dev/null 2>&1 && _vp_anim_start
