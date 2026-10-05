@@ -43,9 +43,10 @@ jobs:
           git config user.name "BashBasics Builder"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add script/file/engine/bvk-ls/bvk-ls-linux-arm64
-          git add script/file/engine/bvk-ls/bvk-ls-linux-amd64
-          git add script/file/engine/bvk-ls/bvk-ls-linux-arm
+          git add \
+            script/file/engine/bvk-ls/bvk-ls-linux-arm64 \
+            script/file/engine/bvk-ls/bvk-ls-linux-amd64 \
+            script/file/engine/bvk-ls/bvk-ls-linux-arm
 
           git diff --cached --quiet || git commit \
             -m "build: update bvk-ls binaries [skip ci]"
