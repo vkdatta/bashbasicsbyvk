@@ -21,8 +21,22 @@ Modes
       clauses reported by `scan`.  Prints matching absolute paths,
       NUL-separated.  Exit 2 + "ERR: ..." on stderr for a bad expression.
 
+  rules KIND            (KIND = select | display)
+      Audit every rule bundle in <rules>/KIND.  One line per bundle:
+          NAME<US>ok|broken<US>EXPR<US>DESC<US>REASON   (<US> = ASCII 0x1F)
+      A rule is "broken" when its .rule file is missing / empty / does not
+      parse, or when it uses the other kind's clauses (.d inside select, .s
+      inside display).
+
+Rule store (BVK_RULES_DIR)
+      select/NAME/NAME.rule   the expression (nothing else; # lines = comments)
+      select/NAME/NAME.meta   free-text description
+      display/NAME/...        same, for .d rules
+  .s.rule NAME reads from select/, .d.rule NAME reads from display/.  The -r
+  flag is simply part of the expression, so a recursive rule stays recursive.
+
 Environment
-  BVK_RULES_DIR      folder holding *.rule files (for  .s.rule NAME)
+  BVK_RULES_DIR      root holding the select/ and display/ rule folders
   BVK_NO_RECURSIVE   1 = ignore -r (display filters only ever look at one folder)
 
 Headers may start with .s (select) or .d (display) — identical grammar.
@@ -296,6 +310,7 @@ class Parser:
                 clean.append(t)
         self.toks = clean
         self.i = 0
+        self.heads = set()          # 's' / 'd' of every clause written in THIS expression
 
     # -- token helpers
     def peek(self):
@@ -359,6 +374,7 @@ class Parser:
         head = self.toks[self.i][1]
         self.i += 1
         m = HEADER_RE.match(head)
+        self.heads.add(head[1].lower())
         segs = [s.lower() for s in m.group(1).split('.') if s]
         logic = (m.group(2) or 'or').lower()
         args = []                                   # [(text, quoted)]
@@ -420,7 +436,7 @@ class Parser:
         if kind == 'rule':
             if rest or len(args) != 1:
                 raise SelError('usage: .s.rule NAME')
-            return self.load_rule(args[0][0])
+            return self.load_rule(args[0][0], head[1].lower())
 
         # ---- ".s.csv" = names listed in a CSV
         if kind == 'csv':
@@ -473,32 +489,91 @@ class Parser:
                 vals.extend(x for x in text.split(',') if x)
         return vals
 
-    def load_rule(self, name):
+    def load_rule(self, name, letter='s'):
         if self.depth >= MAX_RULE_DEPTH:
             raise SelError('rules nested too deeply (loop?)')
         if not re.match(r'^[A-Za-z0-9_-]+$', name):
             raise SelError("bad rule name '%s'" % name)
-        path = os.path.join(self.rules_dir, name + '.rule')
+        kind = KIND_OF[letter]
+        path = rule_file(self.rules_dir, kind, name)
         if not os.path.isfile(path):
-            raise SelError("rule '%s' not found" % name)
-        expr, rec = '', False
-        with open(path, encoding='utf-8', errors='replace') as fh:
-            for line in fh:
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-                k, _, v = line.partition('=')
-                k = k.strip().upper()
-                if k == 'EXPR':
-                    expr = v.split('  #')[0].strip()
-                elif k == 'RECURSIVE' and v.strip().lower() in ('true', '1', 'yes'):
-                    rec = True
+            other = 'display' if kind == 'select' else 'select'
+            if os.path.isfile(rule_file(self.rules_dir, other, name)):
+                raise SelError("rule '%s' lives in %s/, not %s/ — use .%s.rule %s"
+                               % (name, other, kind, 's' if other == 'select' else 'd', name))
+            raise SelError("rule '%s' not found in %s/" % (name, kind))
+        expr = read_rule_expr(path)
         if not expr:
-            raise SelError("rule '%s' has no EXPR" % name)
-        if rec:
-            self.state['recursive'] = True
+            raise SelError("rule '%s' is empty [broken rule]" % name)
         sub = Parser(expr, self.rules_dir, self.depth + 1, self.state)
-        return sub.parse()
+        node = sub.parse()
+        wrong = sub.heads - {letter}
+        if wrong:
+            raise SelError("rule '%s' is a [broken rule]: it uses .%s clauses but is saved in %s/"
+                           % (name, ''.join(sorted(wrong)), kind))
+        return node
+
+
+KIND_OF = {'s': 'select', 'd': 'display'}
+
+
+def rule_file(rules_dir, kind, name):
+    return os.path.join(rules_dir, kind, name, name + '.rule')
+
+
+def read_rule_expr(path):
+    """The .rule file IS the expression: blank lines and # comment lines are
+    ignored, remaining lines are joined with a space."""
+    parts = []
+    with open(path, encoding='utf-8', errors='replace') as fh:
+        for line in fh:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                parts.append(line)
+    return ' '.join(parts)
+
+
+def read_rule_desc(path):
+    try:
+        with open(path, encoding='utf-8', errors='replace') as fh:
+            return ' '.join(fh.read().split())
+    except OSError:
+        return ''
+
+
+def audit_rules(rules_dir, kind):
+    """Yield (name, status, expr, desc, reason) for every bundle in <rules>/kind."""
+    letter = 's' if kind == 'select' else 'd'
+    base = os.path.join(rules_dir, kind)
+    try:
+        names = sorted(n for n in os.listdir(base)
+                       if os.path.isdir(os.path.join(base, n)) and not n.startswith('.'))
+    except OSError:
+        return
+    for name in names:
+        rf = rule_file(rules_dir, kind, name)
+        desc = read_rule_desc(os.path.join(base, name, name + '.meta'))
+        if not re.match(r'^[A-Za-z0-9_-]+$', name):
+            yield name, 'broken', '', desc, "folder name has characters other than letters, digits, _ and -"
+            continue
+        if not os.path.isfile(rf):
+            yield name, 'broken', '', desc, "%s.rule is missing" % name
+            continue
+        expr = read_rule_expr(rf)
+        if not expr:
+            yield name, 'broken', '', desc, "%s.rule is empty" % name
+            continue
+        try:
+            p = Parser(expr, rules_dir, 1)      # depth 1: the rule itself counts as a level
+            p.parse()
+        except SelError as ex:
+            yield name, 'broken', expr, desc, str(ex)
+            continue
+        wrong = p.heads - {letter}
+        if wrong:
+            yield name, 'broken', expr, desc, "uses .%s clauses but is saved in %s/" % (''.join(sorted(wrong)), kind)
+            continue
+        yield name, 'ok', expr, desc, ''
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -851,6 +926,14 @@ def main(argv):
             if sk:
                 sk.close()
         return 0
+    if len(argv) == 3 and argv[1] == 'rules':
+        if argv[2] not in ('select', 'display'):
+            print('ERR: usage: rules select|display', file=sys.stderr)
+            return 2
+        out = sys.stdout
+        for row in audit_rules(rules_dir, argv[2]):
+            out.write('\x1f'.join(x.replace('\x1f', ' ').replace('\t', ' ').replace('\n', ' ') for x in row) + '\n')
+        return 0
     if len(argv) < 3 or argv[1] not in ('scan', 'run'):
         print('ERR: usage: scan EXPR | run EXPR PATH HIDDEN [CSV...]', file=sys.stderr)
         return 2
@@ -860,6 +943,7 @@ def main(argv):
         ast = parser.parse()
         if mode == 'scan':
             print('RECURSIVE=%d' % (1 if parser.state['recursive'] else 0))
+            print('HEADS=' + ''.join(sorted(parser.heads)))
             for label in parser.state['csv']:
                 print('CSV\t' + label)
             return 0

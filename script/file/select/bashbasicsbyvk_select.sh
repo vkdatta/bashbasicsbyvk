@@ -6,20 +6,19 @@
 #  .s.set <expression>   replace the whole selection
 #  .s.add / .s.sub       aliases of .s / .us
 #  .s.show [all]  .s.clr  .s.shown
-#  .r  .r.save  .r.run  .r.edit  .r.rename  .r.del
+#  .r                    open the rule book (create / edit / delete / rename inside it)
 #
 #  Matching is done by _3bvk_select_core (python3).  This file only handles
 #  the prompts, the CSV pickers (existing open_csv_menu), storage and output.
 #
 #  Storage (plain text, user-editable, same style as buffers / swlinks):
 #    ~/.bashbasicsbyvk/selection.list        one absolute path per line
-#    ~/.bashbasicsbyvk/rules/NAME.rule       KEY=VALUE lines
-#    ~/.bashbasicsbyvk/rules/.last           last select expression (for .r.save)
+#    ~/.bashbasicsbyvk/rules/select/NAME/NAME.rule + NAME.meta   (see bashbasicsbyvk_rules.sh)
+#    ~/.bashbasicsbyvk/rules/.history        last used expressions not yet in the rule book
 # ════════════════════════════════════════════════════════════════════════════
 
 _SEL_FILE="${HOME}/.bashbasicsbyvk/selection.list"
 _SEL_RULES_DIR="${HOME}/.bashbasicsbyvk/rules"
-_SEL_LAST_FILE="${_SEL_RULES_DIR}/.last"
 
 _SEL_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
@@ -188,7 +187,8 @@ LOGIC  space or &  = AND      |  = OR      !  = NOT      ( )  groups
 AFTER  .s.add EXPR  .s.sub EXPR  .s.show  .s.clr  .s.shown
        then fx → <action>/<action>.selected.items  (copy move shortcut bookmark
        upload upload.text map zip unzip delete);  file_fx/selection = view only
-RULES  .r  .r.save NAME [EXPR]  .r.run NAME  .r.edit  .r.rename  .r.del
+RULES  .r  opens the rule book:  c create · d delete · r rename · e-N edit · ←/→ tab "last used"
+       .s.rule NAME runs a select rule (rules/select)
 DISPLAY  .d <same expressions>   .d.clr   .d.save   .d.run   (see .d)
 FAVOURITES  fa <numbers | sel | .s expression>   ns   (see: fa help)
 HLP
@@ -198,9 +198,12 @@ HLP
 # Runs one existing CSV picker per .csv clause. Returns 1 on error / cancel
 # (message already printed).
 declare -ga _SEL_FOUND=()
+_SEL_EVAL_KIND=""      # index | expr   (what the last _sel_eval was given)
+_SEL_EVAL_OK=0         # 1 once the last handle_select_cmd evaluated successfully
 _sel_eval() {
   local expr="$1"
   _SEL_FOUND=()
+  _SEL_EVAL_KIND=expr
   _sel_ensure_store
 
   # 0) index selection by displayed number:  1-5   1,2,3-7,11   a-5 (all except 5)
@@ -222,6 +225,7 @@ _sel_eval() {
   local _ix="${_rest#.us}"; _ix="${_ix#.s}"
   _ix="${_ix//[[:space:]]/}"
   if [[ "$_ix" =~ ^(a-[0-9][0-9,-]*|[0-9][0-9,-]*)$ ]]; then
+    _SEL_EVAL_KIND=index
     if ${imaginary_mode:-false}; then
       echo "⚠️  This folder is grouped — numbers mean groups. Use fs first, or a name/.s expression"
       return 1
@@ -301,7 +305,7 @@ handle_select_cmd() {
   raw="${raw#"${raw%%[![:space:]]*}"}"; raw="${raw%"${raw##*[![:space:]]}"}"
 
   case "$raw" in
-    .r|.r.*|.r\ *) handle_rule_cmd "$raw"; return ;;
+    .r|.r.*|.r\ *) handle_rule_cmd "$raw"; return ;;      # → bashbasicsbyvk_rules.sh
     .s.show|.s.show\ *)  _sel_cmd_show "${raw#.s.show}"; return ;;
     .s.clr) _sel_ensure_store; : > "$_SEL_FILE"; _sel_bump; echo "🧹 Selection cleared"; return ;;
     .s.shown)            _sel_cmd_shown; return ;;
@@ -325,8 +329,9 @@ handle_select_cmd() {
   expr="${expr#"${expr%%[![:space:]]*}"}"
 
   _sel_eval "$expr" || return
+  _SEL_EVAL_OK=1
   local -a found=("${_SEL_FOUND[@]}")
-  printf '%s' "$expr" > "$_SEL_LAST_FILE" 2>/dev/null
+  [ "$_SEL_EVAL_KIND" = expr ] && _rule_hist_add "$expr"      # → .r › Last used
 
   # 4) combine with the existing selection
   local -a cur=() out=()
@@ -414,123 +419,4 @@ _sel_cmd_shown() {
   _sel_summary out "🎯 Selected what's displayed"
   _sel_preview out
   echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
-}
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  Rules  (.r)
-# ══════════════════════════════════════════════════════════════════════════════
-_rule_field() {                     # _rule_field <file> <KEY>
-  local v
-  v=$(grep -m1 -i "^$2=" "$1" 2>/dev/null)
-  printf '%s' "${v#*=}"
-}
-
-_rule_valid_name() { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }
-
-_rule_list() {
-  _sel_ensure_store
-  local f n=0
-  for f in "$_SEL_RULES_DIR"/*.rule; do
-    [ -f "$f" ] || continue
-    n=$((n+1))
-    local nm; nm=$(basename "$f" .rule)
-    local d; d=$(_rule_field "$f" DESC)
-    printf '%3d) %s   [%s]\n      %s%s\n' "$n" "$nm" "$(_rule_field "$f" SCOPE)" "$(_rule_field "$f" EXPR)" "${d:+   — $d}"
-  done
-  if [ "$n" -eq 0 ]; then
-    echo "ℹ️  No rules yet.  Run a .s command, then:  .r.save NAME"
-  else
-    echo "Files: $_SEL_RULES_DIR/NAME.rule  (edit with .r.edit NAME)"
-  fi
-}
-
-_rule_save() {
-  local args="$1" name expr
-  name="${args%% *}"
-  expr=""; [[ "$args" == *" "* ]] && expr="${args#* }"
-  if [ -z "$name" ]; then echo "⚠️  Usage: .r.save NAME [expression]   (no expression = last .s command)"; return; fi
-  if [ -z "$expr" ]; then
-    [ -f "$_SEL_LAST_FILE" ] && expr=$(cat "$_SEL_LAST_FILE")
-    [ -z "$expr" ] && { echo "ℹ️  No previous .s command to save — give an expression"; return; }
-  fi
-  _rule_save_as select "$name" "$expr"
-}
-
-# _rule_save_as <scope: select|display> <name> <expr>
-_rule_save_as() {
-  local scope="$1" name="$2" expr="$3"
-  if ! _rule_valid_name "$name"; then echo "❌ Rule names: letters, digits, _ and - only"; return; fi
-  local errf; errf=$(mktemp)
-  local scan
-  if ! scan=$(_sel_core scan "$expr" 2>"$errf"); then
-    echo "❌ $(sed 's/^ERR: //' "$errf")"; rm -f "$errf"; return
-  fi
-  rm -f "$errf"
-  local rec=false
-  [[ "$scan" == *"RECURSIVE=1"* ]] && rec=true
-  local file="$_SEL_RULES_DIR/$name.rule" ans desc
-  if [ -f "$file" ]; then
-    read -p "Rule '$name' exists — overwrite? (y/n): " ans
-    [[ "$ans" == [yY] ]] || { echo "🚫 Cancelled"; return; }
-  fi
-  read -p "Description (optional): " desc
-  _sel_ensure_store
-  {
-    echo "NAME=$name"
-    echo "SCOPE=$scope"
-    echo "EXPR=$expr"
-    echo "RECURSIVE=$rec"
-    echo "DESC=$desc"
-  } > "$file"
-  if [ "$scope" = "display" ]; then
-    echo "💾 Saved display preset '$name'  →  .d.run $name"
-  else
-    echo "💾 Saved rule '$name'  →  .r.run $name   or   .s.rule $name"
-  fi
-}
-
-_rule_editor() {
-  local ed="${EDITOR:-}"
-  [ -z "$ed" ] && { command -v nano >/dev/null 2>&1 && ed=nano || ed=vi; }
-  "$ed" "$1"
-}
-
-handle_rule_cmd() {
-  local raw="$1" cmd rest=""
-  cmd="${raw%% *}"
-  [[ "$raw" == *" "* ]] && rest="${raw#* }"
-  local name="${rest%% *}"
-  case "$cmd" in
-    .r)        _rule_list ;;
-    .r.save)   _rule_save "$rest" ;;
-    .r.run)
-      [ -z "$name" ] && { echo "⚠️  Usage: .r.run NAME"; return; }
-      handle_select_cmd ".s.rule $name" ;;
-    .r.edit)
-      [ -z "$name" ] && { echo "⚠️  Usage: .r.edit NAME"; return; }
-      [ -f "$_SEL_RULES_DIR/$name.rule" ] || { echo "❌ Rule '$name' not found"; return; }
-      _rule_editor "$_SEL_RULES_DIR/$name.rule"
-      local ex; ex=$(_rule_field "$_SEL_RULES_DIR/$name.rule" EXPR)
-      local msg
-      if ! msg=$(_sel_core scan "$ex" 2>&1 >/dev/null); then
-        echo "⚠️  Rule saved but its expression has a problem: ${msg#ERR: }"
-      else
-        echo "✅ Rule '$name' updated"
-      fi ;;
-    .r.rename)
-      local new="${rest#* }"
-      if [ -z "$name" ] || [ "$new" = "$rest" ] || [ -z "$new" ]; then echo "⚠️  Usage: .r.rename OLD NEW"; return; fi
-      _rule_valid_name "$new" || { echo "❌ Rule names: letters, digits, _ and - only"; return; }
-      [ -f "$_SEL_RULES_DIR/$name.rule" ] || { echo "❌ Rule '$name' not found"; return; }
-      [ -e "$_SEL_RULES_DIR/$new.rule" ] && { echo "❌ '$new' already exists"; return; }
-      mv -- "$_SEL_RULES_DIR/$name.rule" "$_SEL_RULES_DIR/$new.rule"
-      sed -i "s/^NAME=.*/NAME=$new/" "$_SEL_RULES_DIR/$new.rule"
-      echo "✅ Renamed '$name' → '$new'" ;;
-    .r.del)
-      [ -z "$name" ] && { echo "⚠️  Usage: .r.del NAME"; return; }
-      [ -f "$_SEL_RULES_DIR/$name.rule" ] || { echo "❌ Rule '$name' not found"; return; }
-      local ans; read -p "Delete rule '$name'? (y/n): " ans
-      if [[ "$ans" == [yY] ]]; then rm -f -- "$_SEL_RULES_DIR/$name.rule"; echo "🗑️  Deleted rule '$name'"; else echo "🚫 Cancelled"; fi ;;
-    *) echo "⚠️  Rule commands: .r  .r.save  .r.run  .r.edit  .r.rename  .r.del" ;;
-  esac
 }

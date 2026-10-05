@@ -4,7 +4,7 @@
 #  .d <expression>      only DISPLAY items matching the expression (THIS folder only)
 #  .d                   show the active filter
 #  .d.clr               back to showing everything
-#  .d.save NAME [expr]  keep the filter (or expr) as a preset (SCOPE=display)
+#  .d.save NAME [expr]  keep the filter (or expr) as a display rule
 #  .d.run NAME          apply a preset          (also:  .d .d.rule NAME)
 #  .d.refresh           re-scan (filters are cached per folder until it changes)
 #
@@ -16,7 +16,7 @@
 #        DIR=/folder/it/was/set/in
 #        EXPR=.d.ext.csv & .d.size <3mb
 #        CSV=/path/to/exts.csv            ← one line per .csv clause, in order
-#  Presets live with the select rules:  ~/.bashbasicsbyvk/rules/NAME.rule
+#  Presets are display rules:  ~/.bashbasicsbyvk/rules/display/NAME/NAME.rule  (manage them in  .r)
 #
 #  Setting (Settings → Display filter):  display_filter_persist  true|false
 #     false (default) = the filter is cleared when the app starts.
@@ -190,6 +190,7 @@ _disp_set() {
   rm -f "$errf"
   cnt=${#found[@]}
   _disp_store "$expr" "${csvs[@]}"
+  [ -z "${_DISP_NOHIST:-}" ] && _rule_hist_add "$expr"        # → .r › Last used
   echo "🔎 Display filter set — $cnt item(s) match here"
   [ "$cnt" -eq 0 ] && echo "ℹ️  Nothing matches in this folder (filter stays on; .d.clr to clear)"
   return 0
@@ -211,7 +212,7 @@ handle_display_cmd() {
                    for _k in "${_dn[@]}"; do _dx+=("\"${items[$((_k-1))]##*/}\""); done
                    [ ${#_dx[@]} -eq 0 ] && { echo "❌ No valid item numbers (1-${#items[@]})"; return; }
                    local _de; _de=$(IFS=,; echo "${_dx[*]}")
-                   _disp_set ".d $_de"
+                   _DISP_NOHIST=1 _disp_set ".d $_de"
                  else _disp_set "$raw"; fi ;;
     .d.clr) if _disp_load; then _disp_clear; echo "🔎 Display filter cleared — showing everything"; else echo "🔎 Display filter is already off"; fi ;;
     .d.refresh)  _disp_cache_reset; echo "🔄 Display filter will re-scan" ;;
@@ -219,7 +220,7 @@ handle_display_cmd() {
     .d.run)
       [ -z "$rest" ] && { echo "⚠️  Usage: .d.run NAME"; return; }
       _rule_valid_name "${rest%% *}" || { echo "❌ Rule names: letters, digits, _ and - only"; return; }
-      _disp_set ".d.rule ${rest%% *}" ;;
+      _DISP_NOHIST=1 _disp_set ".d.rule ${rest%% *}" ;;
     .d.save)
       local name="${rest%% *}" expr=""
       [[ "$rest" == *" "* ]] && expr="${rest#* }"
@@ -240,22 +241,21 @@ declare -ga _dfs_presets=()
 _dfs_pick_mode=""          # run | delete
 
 _dfs_pre_build() {
-  local f nm ex
+  local nm
   _st_reset
   _dfs_presets=()
-  _sel_ensure_store 2>/dev/null
-  for f in "$_SEL_RULES_DIR"/*.rule; do
-    [ -f "$f" ] || continue
-    nm="${f##*/}"; nm="${nm%.rule}"
-    ex=$(_rule_field "$f" EXPR)
-    _st_add a "$nm" 0 "$ex" "$nm"
+  _rl_ensure_store 2>/dev/null
+  _rl_audit_all
+  for nm in "${_RL_NAMES_display[@]}"; do
+    [ "${_RL_ST[display/$nm]}" = ok ] || continue
+    _st_add a "$nm" 0 "${_RL_EX[display/$nm]}" "$nm"
   done
   (( ${#_st_lbl[@]} )) || _st_add h "No presets yet — set a filter, then Save as preset"
 }
 _dfs_pre_act() {
   local nm="${_st_tag[$1]}"
   [ -n "$nm" ] || return
-  if [ "$_dfs_pick_mode" = delete ]; then handle_rule_cmd ".r.del $nm"
+  if [ "$_dfs_pick_mode" = delete ]; then _rule_delete_bundle display "$nm"
   else handle_display_cmd ".d.run $nm"; fi
   _st_back=1
 }

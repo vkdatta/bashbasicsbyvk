@@ -16,7 +16,7 @@ source "bashbasicsbyvk_infinity.sh"
 source "bashbasicsbyvk_telemetry.sh"
 source "bashbasicsbyvk_ai.sh"
 
-# Inner-loop driver: sw and fx hand over to each other via _inner_next,
+# Inner-loop driver: sw, fx and r (the .r rule book) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
 _inner_next=""
 _inner_run() {
@@ -26,6 +26,7 @@ _inner_run() {
     case "$_next" in
       sw) switch_menu ;;
       fx) functions_menu ;;
+      r)  rules_menu ;;
     esac
     _next="$_inner_next"
   done
