@@ -1,0 +1,52 @@
+name: BashBasics Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install cross-compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            gcc-x86-64-linux-gnu \
+            gcc-arm-linux-gnueabihf
+
+      - name: Build bvk-ls
+        working-directory: script/file/engine/bvk-ls
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Verify binaries
+        working-directory: script/file/engine/bvk-ls
+        run: |
+          file bvk-ls-linux-arm64
+          file bvk-ls-linux-amd64
+          file bvk-ls-linux-arm
+
+      - name: Commit generated binaries
+        run: |
+          git config user.name "BashBasics Builder"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add script/file/engine/bvk-ls/bvk-ls-linux-arm64
+          git add script/file/engine/bvk-ls/bvk-ls-linux-amd64
+          git add script/file/engine/bvk-ls/bvk-ls-linux-arm
+
+          git diff --cached --quiet || git commit \
+            -m "build: update bvk-ls binaries [skip ci]"
+
+          git push

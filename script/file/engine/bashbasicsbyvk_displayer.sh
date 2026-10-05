@@ -10,7 +10,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 
 
-# ── Go fast path: use bvk-ls when installed, else fall back to Python ─────────
+# ── Native (C) fast path: use bvk-ls when installed, else fall back to Python ─────────
 _bvk_go_bin() {
   if [ -z "${_BVK_GO_BIN+x}" ]; then
     _BVK_GO_BIN=""
@@ -29,7 +29,10 @@ _bvk_go_bin() {
                 ${_m:+"$(command -v "bvk-ls-linux-$_m" 2>/dev/null)"}; do
         [ -n "$_b" ] && [ -f "$_b" ] || continue
         [ -x "$_b" ] || chmod +x "$_b" 2>/dev/null
-        [ -x "$_b" ] && { _BVK_GO_BIN="$_b"; break; }
+        [ -x "$_b" ] || continue
+        # self-test: skip binaries the OS refuses to run (e.g. non-PIE on Android)
+        "$_b" count / 0 >/dev/null 2>&1 || continue
+        _BVK_GO_BIN="$_b"; break
       done
     fi
   fi

@@ -1,1 +1,1 @@
-recursive-include script *.go go.mod build.sh bvk-ls-linux-*
+recursive-include script *.c *.h Makefile build.sh .gitignore bvk-ls-linux-*

@@ -1,20 +1,25 @@
 name: Universal Auto Tag
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["BashBasics Build"]
+    types:
+      - completed
 
 permissions:
   contents: write
 
 jobs:
   tag:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
 
       - name: Create and Push SemVer Tag
