@@ -39,7 +39,6 @@ fi
 
 # ── Rendering helpers ─────────────────────────────────────────────────────────
 
-_bold()        { printf '\033[1m%s\033[0m'   "$1"; }
 _highlight()   { printf '\033[1;7m%s\033[0m' "$1"; }
 _highlight_v() { _hl_out=$'\033[1;7m'"$1"$'\033[0m'; }
 
@@ -1000,45 +999,5 @@ _parse_multi_select() {
 
 # (Sort / file-details / group-by settings screens live in settings/bashbasicsbyvk_settings.sh)
 
-# ── Filter feature ────────────────────────────────────────────────────────────
-
-_filter_query=""
-declare -ga _all_items=()
-
-_filter_snapshot() { _all_items=("${items[@]}"); }
-
-_filter_apply() {
-  local q="${_filter_query,,}"
-  items=()
-  if [ -z "$q" ]; then
-    items=("${_all_items[@]}")
-  else
-    local f bn
-    for f in "${_all_items[@]}"; do
-      bn="${f##*/}"
-      [[ "${bn,,}" == "$q"* ]] && items+=("$f")
-    done
-  fi
-  _win_lo=0; _win_hi=0
-  _meta_loaded=false
-  _vp_cache_reset
-}
-
-_filter_backspace() {
-  if [ -n "$_filter_query" ]; then
-    _filter_query="${_filter_query%?}"
-    _filter_apply
-    return 0
-  fi
-  return 1
-}
-
-_filter_append() { _filter_query+="${1,,}"; _filter_apply; }
-
-_filter_clear() {
-  _filter_query=""
-  items=("${_all_items[@]}")
-  _win_lo=0; _win_hi=0
-  _meta_loaded=false
-  _vp_cache_reset
-}
+# (Live name filter — _filter_snapshot/_filter_apply/_filter_clear and friends — lives in
+#  settings/bashbasicsbyvk_filter.sh)

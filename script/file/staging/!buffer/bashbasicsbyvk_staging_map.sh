@@ -1,7 +1,7 @@
 source "bashbasicsbyvk_staging_helpers.sh"
 
 # ─────────────────────────────────────────────
-#  map_directory  —  p- prefix entry point
+#  handle_staging_map  —  p- prefix entry point
 #
 #  Syntax (mirrors c- / m- / s- conventions):
 #

@@ -16,6 +16,8 @@
 #    e-N    edit rule N's expression (.rule)       Both
 #    em-N   edit rule N's description (.meta)        u     up / exit at the top
 #    i-N    show rule N (status, why it is broken)   .r    close      fx / sw  switch loop
+#    ux     export ALL rules to one zip              p-…   path map of the listed items
+#    ui     import ALL rules from a zip              (same p- as every other loop)
 #
 #  Storage  (plain text, hand-editable)
 #    ~/.bashbasicsbyvk/rules/select/NAME/NAME.rule   the expression — the file IS the rule
@@ -56,6 +58,27 @@ _rl_editor() {
 }
 
 _rule_editor() { _rl_editor "$@"; }         # kept: favourites / daemon settings use this name
+
+# ── ux / ui : export / import ALL rules (same engine as the fx UDF tab) ───────
+# Only select/ and display/ travel (not .history). Layout is enforced on import:
+# select|display / NAME / file — nothing may land anywhere else in the rule store.
+_RL_MANIFEST="bvk_rules_manifest.txt"
+_RL_FORMAT=1
+_RL_ENTRY_RE='^(select|display)/([^/]+/([^/]+)?)?$'
+
+_rl_export() {
+  _bz_need zip || return 1
+  _rl_ensure_store
+  _bz_export "$_SEL_RULES_DIR" "$(_bz_dest "${path:-}" "$_SEL_RULES_DIR")" \
+    rules_export "$_RL_MANIFEST" BVK_RULES_EXPORT "$_RL_FORMAT" rules select display
+}
+
+_rl_import() {
+  _bz_need unzip || return 1
+  _rl_ensure_store
+  _bz_import "$_SEL_RULES_DIR" "${path:-$PWD}" \
+    "$_RL_MANIFEST" BVK_RULES_EXPORT "$_RL_FORMAT" rules rules "$_RL_ENTRY_RE"
+}
 
 # "mango" / "mango.txt" / "mango.rule" → mango
 _rl_clean_name() {
@@ -255,9 +278,7 @@ _rl_menu_header() {
   else
     printf '🕘 Last %d expressions not in the rule book — type a number to save one\n' "$_RL_HIST_MAX"
   fi
-  if [ -n "$_filter_query" ]; then
-    printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "$(_filter_total_count)"
-  fi
+  _vp_filter_header_line
 }
 
 _rl_menu_footer() {
@@ -266,11 +287,12 @@ _rl_menu_footer() {
     printf 'N) Save as rule   clr) Clear list   u) Exit   .r) Close\n'
   elif [ -z "$_rl_cur" ]; then
     printf '\n[Rules]  select = .s rules · display = .d rules  (built in — cannot be deleted)\n'
-    printf 'N) Open folder   u) Exit   .r) Close\n'
+    printf 'N) Open folder   ux) Export all   ui) Import all   u) Exit   .r) Close\n'
   else
     printf '\n[%s rules]  %d here\n' "$_rl_cur" "${#items[@]}"
     printf 'N) Run   c) Create   d) Delete   r) Rename   u) Up\n'
     printf 'e-N) Edit rule   em-N) Edit description   i-N) Info   .r) Close\n'
+    printf 'ux) Export all   ui) Import all\n'
   fi
 }
 
@@ -308,29 +330,14 @@ _rl_redraw_fresh() {
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   _rl_build_items
   _rl_set_viewport
-  _vp_start=1
-  _vp_cache_reset
-  _vp_prime_rows
-  _vp_render_fresh
+  _vp_render_from_top
 }
 
 _rl_tab_redraw() {
   local _old_blk_h="${_blk_h:-0}"
   _rl_build_items
   _rl_set_viewport
-  _vp_start=1
-  _vp_cache_reset
-  _vp_prime_rows
-  local _up=$(( _old_blk_h ))
-  local _rows; _rows=$(_term_rows)
-  (( _up > _rows - 1 )) && _up=$(( _rows - 1 ))
-  (( _up < 0 ))         && _up=0
-  (( _up > 0 ))         && printf '\033[%dA' "$_up"
-  printf '\r\033[J'
-  _vp_build_chrome
-  _vp_geometry
-  _vp_ensure_visible "${_hl_index:-1}"
-  _vp_emit
+  _vp_tab_repaint "$_old_blk_h"
 }
 
 # ── helpers for commands that take a row number ──────────────────────────────
@@ -516,6 +523,7 @@ _rl_help() {
  Rules tab:  N open folder / run rule · c create · d delete · r rename
              e-N edit expression · em-N edit description · i-N info · u up
  Last used:  N save that expression as a rule · clr clear list
+ ux export all rules to a zip · ui import rules from a zip (Rules tab) · p-… path map of items
  select/ holds .s rules, display/ holds .d rules (built in, can't be deleted).
  A rule is a folder:  NAME/NAME.rule (the expression)  +  NAME/NAME.meta (description)
  -r inside the expression makes a rule recursive.  Rules may use  .s.rule OTHER  (5 levels).
@@ -597,6 +605,16 @@ rules_menu() {
           local _a; read -r -p "Clear the last-used list? Your saved rules are not touched. (y/N): " _a
           if [[ "$_a" == [yY] ]]; then : > "$(_rl_hist_file)"; echo "✅ Last-used list cleared"; else echo "🚫 Cancelled"; _rl_fresh=false; fi
         else echo "⚠️  clr works in the Last used tab"; _rl_fresh=false; fi ;;
+
+      ux|rules.export)
+        if [ "$_rl_tab" = rules ]; then _rl_export; else echo "⚠️  Not available in the Last used tab"; fi
+        _rl_fresh=false ;;
+
+      ui|rules.import)
+        if [ "$_rl_tab" = rules ]; then _rl_import || _rl_fresh=false      # list is rebuilt below (new rules appear)
+        else echo "⚠️  Not available in the Last used tab"; _rl_fresh=false; fi ;;
+
+      p-*)  handle_staging_map "$_rl_choice" ;;
 
       f)    find_menu; _rl_fresh=false ;;
       disk) df -h; _rl_fresh=false ;;

@@ -295,9 +295,7 @@ _sw_menu_header() {
     *)       _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}" ;;
   esac
   printf '📂 %s\n' "$_loc"
-  if [ -n "$_filter_query" ]; then
-    printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "$(_filter_total_count)"
-  fi
+  _vp_filter_header_line
 }
 
 _sw_menu_header_imaginary() {
@@ -540,27 +538,7 @@ _sw_tab_redraw() {
 
   _sw_build_items_for_tab
   _sw_set_viewport_for_tab
-  _vp_start=1
-  _vp_cache_reset
-  _vp_prime_rows
-
-  # _read_choice terminated with a trailing `echo`, so the cursor currently
-  # sits one row BELOW the block. To reach the top of the same block we must
-  # move up the FULL old block height — not _old_blk_h - 1, which leaves a
-  # one-line residual each switch and accumulates drift.
-  local _up=$(( _old_blk_h ))
-  local _rows; _rows=$(_term_rows)
-  (( _up > _rows - 1 )) && _up=$(( _rows - 1 ))
-  (( _up < 0 )) && _up=0
-  (( _up > 0 )) && printf '\033[%dA' "$_up"
-  printf '\r\033[J'
-  # Emit WITHOUT input line: _read_choice prints it fresh each loop.
-  # Calling _vp_render_fresh here adds an extra input-line print
-  # causing +1 line drift per tab switch.
-  _vp_build_chrome
-  _vp_geometry
-  _vp_ensure_visible "${_hl_index:-1}"
-  _vp_emit
+  _vp_tab_repaint "$_old_blk_h"
 }
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -588,10 +566,7 @@ switch_menu() {
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   _sw_build_items_for_tab
   _sw_set_viewport_for_tab
-  _vp_start=1
-  _vp_cache_reset
-  _vp_prime_rows
-  _vp_render_fresh
+  _vp_render_from_top
 
   while true; do
 
@@ -724,7 +699,6 @@ switch_menu() {
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || { cd "$path" && exec "$SHELL"; }
         ;;
 
-      m)            map_directory ;;
       disk)         df -h ;;
       ram)          free -h ;;
 
@@ -737,6 +711,14 @@ switch_menu() {
 
       c-*|m-*|s-*|b-*)
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_staging_stage "$_sw_choice"
+        ;;
+
+      p-*)
+        # path map only READS the listed items, so every tab may use it; "save to txt"
+        # goes to the folder sw was opened from (not the bookmark store)
+        local _saved_path_p="$path"; path="$_sw_outer_path"
+        handle_staging_map "$_sw_choice"
+        path="$_saved_path_p"
         ;;
 
       _*)           _sw_do_fresh=false ;;   # filter: viewport handles it live
@@ -793,10 +775,7 @@ switch_menu() {
       declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
       _sw_build_items_for_tab
       _sw_set_viewport_for_tab
-      _vp_start=1
-      _vp_cache_reset
-      _vp_prime_rows
-      _vp_render_fresh
+      _vp_render_from_top
     fi
 
   done

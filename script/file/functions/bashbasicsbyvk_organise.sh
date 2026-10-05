@@ -80,6 +80,61 @@ esac
 echo "✅ Organised by extension"
 }
 
+_ORG_MONTHS=(jan feb mar apr may jun jul aug sep oct nov dec)
+
+# min/max year over files[] (needs _FILE_TS from _batch_stat)  → _MIN_Y _MAX_Y
+_year_range() {
+_MIN_Y=99999 _MAX_Y=0
+local f
+for f in "$@"; do
+_ts_to_ymd "${_FILE_TS[$f]:-0}"
+(( _YMD_Y < _MIN_Y )) && _MIN_Y=$_YMD_Y
+(( _YMD_Y > _MAX_Y )) && _MAX_Y=$_YMD_Y
+done
+}
+
+# Bucket helpers — the ONE definition of how years / months / days are grouped.
+# Each sets a global and takes the parent folder as its last argument.
+#   _year_dest  <y> <group_y> <min_y> <max_y>   → _YDEST   ($path/<y> or $path/<a>-<b>/<y>)
+#   _month_dest <m> <group_m> <parent>          → _MDEST
+#   _day_dest   <d> <group_d> <parent>          → _DDEST
+_year_dest() {
+if [ "$2" -eq 1 ]; then
+_YDEST="$path/$1"
+else
+local offset=$(( $1 - $3 ))
+local gstart=$(( $3 + (offset / $2) * $2 ))
+local gend=$(( gstart + $2 - 1 ))
+[ $gend -gt $4 ] && gend=$4
+_YDEST="$path/${gstart}-${gend}/$1"
+fi
+}
+
+_month_dest() {
+local mname="${_ORG_MONTHS[$(($1-1))]}"
+if [ "$2" -eq 1 ]; then
+_MDEST="$3/$mname"
+else
+local mgi=$(( ($1-1) / $2 ))
+local mstart=$(( mgi * $2 + 1 ))
+local mend=$(( mstart + $2 - 1 ))
+[ $mend -gt 12 ] && mend=12
+_MDEST="$3/${_ORG_MONTHS[$((mstart-1))]}-${_ORG_MONTHS[$((mend-1))]}/$mname"
+fi
+}
+
+_day_dest() {
+if [ "$2" -eq 1 ]; then
+_DDEST="$3/$1"
+else
+local dgi=$(( ($1-1) / $2 ))
+local dstart=$(( dgi * $2 + 1 ))
+local dend=$(( dstart + $2 - 1 ))
+[ $dend -gt 31 ] && dend=31
+_DDEST="$3/${dstart}-${dend}/$1"
+fi
+}
+
 organise_by_year() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
@@ -87,26 +142,12 @@ for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 read -p "Number of years to group (1 = each year separate): " group_y
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
 _batch_stat "$path"
-local min_y=99999 max_y=0
-for f in "${files[@]}"; do
-_ts_to_ymd "${_FILE_TS[$f]:-0}"
-(( _YMD_Y < min_y )) && min_y=$_YMD_Y
-(( _YMD_Y > max_y )) && max_y=$_YMD_Y
-done
+_year_range "${files[@]}"
 declare -A buckets=()
 for f in "${files[@]}"; do
 _ts_to_ymd "${_FILE_TS[$f]:-0}"
-local y=$_YMD_Y dest
-if [ "$group_y" -eq 1 ]; then
-dest="$path/$y"
-else
-local offset=$(( y - min_y ))
-local gstart=$(( min_y + (offset / group_y) * group_y ))
-local gend=$(( gstart + group_y - 1 ))
-[ $gend -gt $max_y ] && gend=$max_y
-dest="$path/${gstart}-${gend}/$y"
-fi
-buckets["$dest"]+="$f"$'\n'
+_year_dest "$_YMD_Y" "$group_y" "$_MIN_Y" "$_MAX_Y"
+buckets["$_YDEST"]+="$f"$'\n'
 done
 _flush_buckets buckets
 echo "✅ Organised by year(s)"
@@ -121,39 +162,14 @@ read -p "Number of years to group: " group_y
 read -p "Number of months to group: " group_m
 [[ $group_m =~ ^[0-9]+$ ]] || group_m=1
 _batch_stat "$path"
-local month_abbr=(jan feb mar apr may jun jul aug sep oct nov dec)
-local min_y=99999 max_y=0
-for f in "${files[@]}"; do
-_ts_to_ymd "${_FILE_TS[$f]:-0}"
-(( _YMD_Y < min_y )) && min_y=$_YMD_Y
-(( _YMD_Y > max_y )) && max_y=$_YMD_Y
-done
+_year_range "${files[@]}"
 declare -A buckets=()
 for f in "${files[@]}"; do
 _ts_to_ymd "${_FILE_TS[$f]:-0}"
-local y=$_YMD_Y m=$_YMD_M
-local year_dest
-if [ "$group_y" -eq 1 ]; then
-year_dest="$path/$y"
-else
-local offset=$(( y - min_y ))
-local gstart=$(( min_y + (offset / group_y) * group_y ))
-local gend=$(( gstart + group_y - 1 ))
-[ $gend -gt $max_y ] && gend=$max_y
-year_dest="$path/${gstart}-${gend}/$y"
-fi
-local mname="${month_abbr[$((m-1))]}"
-local dest
-if [ "$group_m" -eq 1 ]; then
-dest="$year_dest/$mname"
-else
-local mgi=$(( (m-1) / group_m ))
-local mstart=$(( mgi * group_m + 1 ))
-local mend=$(( mstart + group_m - 1 ))
-[ $mend -gt 12 ] && mend=12
-dest="$year_dest/${month_abbr[$((mstart-1))]}-${month_abbr[$((mend-1))]}/$mname"
-fi
-buckets["$dest"]+="$f"$'\n'
+local m=$_YMD_M
+_year_dest "$_YMD_Y" "$group_y" "$_MIN_Y" "$_MAX_Y"
+_month_dest "$m" "$group_m" "$_YDEST"
+buckets["$_MDEST"]+="$f"$'\n'
 done
 _flush_buckets buckets
 echo "✅ Organised by year(s) > month(s)"
@@ -170,49 +186,15 @@ read -p "Number of months to group: " group_m
 read -p "Number of days to group: " group_d
 [[ $group_d =~ ^[0-9]+$ ]] || group_d=1
 _batch_stat "$path"
-local month_abbr=(jan feb mar apr may jun jul aug sep oct nov dec)
-local min_y=99999 max_y=0
-for f in "${files[@]}"; do
-_ts_to_ymd "${_FILE_TS[$f]:-0}"
-(( _YMD_Y < min_y )) && min_y=$_YMD_Y
-(( _YMD_Y > max_y )) && max_y=$_YMD_Y
-done
+_year_range "${files[@]}"
 declare -A buckets=()
 for f in "${files[@]}"; do
 _ts_to_ymd "${_FILE_TS[$f]:-0}"
-local y=$_YMD_Y m=$_YMD_M d=$_YMD_D
-local year_dest
-if [ "$group_y" -eq 1 ]; then
-year_dest="$path/$y"
-else
-local offset=$(( y - min_y ))
-local gstart=$(( min_y + (offset / group_y) * group_y ))
-local gend=$(( gstart + group_y - 1 ))
-[ $gend -gt $max_y ] && gend=$max_y
-year_dest="$path/${gstart}-${gend}/$y"
-fi
-local mname="${month_abbr[$((m-1))]}"
-local month_dest
-if [ "$group_m" -eq 1 ]; then
-month_dest="$year_dest/$mname"
-else
-local mgi=$(( (m-1) / group_m ))
-local mstart=$(( mgi * group_m + 1 ))
-local mend=$(( mstart + group_m - 1 ))
-[ $mend -gt 12 ] && mend=12
-month_dest="$year_dest/${month_abbr[$((mstart-1))]}-${month_abbr[$((mend-1))]}/$mname"
-fi
-local dest
-if [ "$group_d" -eq 1 ]; then
-dest="$month_dest/$d"
-else
-local dgi=$(( (d-1) / group_d ))
-local dstart=$(( dgi * group_d + 1 ))
-local dend=$(( dstart + group_d - 1 ))
-[ $dend -gt 31 ] && dend=31
-dest="$month_dest/${dstart}-${dend}/$d"
-fi
-buckets["$dest"]+="$f"$'\n'
+local m=$_YMD_M d=$_YMD_D
+_year_dest "$_YMD_Y" "$group_y" "$_MIN_Y" "$_MAX_Y"
+_month_dest "$m" "$group_m" "$_YDEST"
+_day_dest "$d" "$group_d" "$_MDEST"
+buckets["$_DDEST"]+="$f"$'\n'
 done
 _flush_buckets buckets
 echo "✅ Organised by year(s) > month(s) > date(s)"

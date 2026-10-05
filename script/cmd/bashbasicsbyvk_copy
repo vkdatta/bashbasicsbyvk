@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-WORKER_URL="https://fileapi.bashbasics.workers.dev"
 MAX_OSC52_BYTES=1024
 
 # Everything this script creates in /tmp is private to the current user.
@@ -16,73 +15,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# HTTPS only, TLS>=1.2, never follow redirects. Secrets go to curl via stdin config,
-# never argv (argv is visible to every local user through `ps`).
-CURL_OPTS=(--proto '=https' --proto-redir '=https' --tlsv1.2 --max-redirs 0)
-_bb_cfg_escape() {
-    local v="$1"
-    v=${v//\\/\\\\}; v=${v//\"/\\\"}; v=${v//$'\n'/}; v=${v//$'\r'/}
-    printf '%s' "$v"
-}
-_bb_cfg_header() { printf 'header = "%s: %s"\n' "$1" "$(_bb_cfg_escape "$2")"; }
-
-_bb_get_credentials() {
-    local email="${FILEAPI_BASHBASICS_EMAIL:-}"
-    local apikey="${FILEAPI_BASHBASICS_KEY:-}"
-
-    if [ -z "$email" ] || [ -z "$apikey" ]; then
-        if [ ! -t 0 ]; then
-            echo "❌ Error: fileapi.bashbasics.email / fileapi.bashbasics.key are not set, and no terminal is available to prompt for them."
-            echo "   Set them with: export FILEAPI_BASHBASICS_EMAIL=you@example.com; export FILEAPI_BASHBASICS_KEY=your_api_key"
-            return 1
-        fi
-        echo "🔑 No saved credentials found (FILEAPI_BASHBASICS_EMAIL / FILEAPI_BASHBASICS_KEY)."
-        [ -z "$email" ] && read -p "   Enter email: " email
-        if [ -z "$apikey" ]; then
-            read -s -p "   Enter API key: " apikey
-            echo
-        fi
-        if [ -z "$email" ] || [ -z "$apikey" ]; then
-            echo "❌ Email and API key are both required."
-            return 1
-        fi
-        export FILEAPI_BASHBASICS_EMAIL="$email"
-        export FILEAPI_BASHBASICS_KEY="$apikey"
-        echo "ℹ️  Using these for the rest of this session. Export them yourself beforehand to skip this prompt next time."
-    fi
-    return 0
-}
-
-_bb_json_get() {
-    local json="$1" field="$2"
-    node -e '
-        let d = "";
-        process.stdin.on("data", c => d += c);
-        process.stdin.on("end", () => {
-            try {
-                const o = JSON.parse(d);
-                process.stdout.write(o[process.argv[1]] !== undefined ? String(o[process.argv[1]]) : "");
-            } catch (e) {}
-        });
-    ' "$field" <<< "$json"
-}
-
-_bb_fail_reason() {
-    local body="$1" http_status="$2"
-    local reason
-    reason=$(_bb_json_get "$body" message)
-    if [ -n "$reason" ]; then
-        printf '%s' "$reason"
-        return
-    fi
-    local trimmed
-    trimmed=$(printf '%s' "$body" | tr '\n\r' '  ' | sed 's/  */ /g; s/^ *//; s/ *$//')
-    if [ -n "$trimmed" ]; then
-        printf 'HTTP %s: %s' "$http_status" "${trimmed:0:300}"
-    else
-        printf 'Request failed (HTTP %s)' "$http_status"
-    fi
-}
+# Shared endpoint (WORKER_URL), curl hardening (_BB_CURL_OPTS) and _bb_* helpers.
+# Prefer the copy next to this script; fall back to PATH lookup (flat pip install).
+_bb_lib="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" 2>/dev/null)/_3bvk_fileapi_lib.sh"
+[ -f "$_bb_lib" ] || _bb_lib="_3bvk_fileapi_lib.sh"
+# shellcheck disable=SC1090
+source "$_bb_lib" || { echo "❌ Error: cannot load _3bvk_fileapi_lib.sh (reinstall bashbasicsbyvk)." >&2; exit 1; }
+unset _bb_lib
 
 if [ -n "$1" ]; then
 
@@ -202,7 +141,7 @@ else
         HDRFILE=$(mktemp)
         CFG=$({ _bb_cfg_header X-User-Email "$FILEAPI_BASHBASICS_EMAIL"
                 _bb_cfg_header X-User-Key   "$FILEAPI_BASHBASICS_KEY"; })
-        RESPONSE=$(curl -s "${CURL_OPTS[@]}" -K - -D "$HDRFILE" -w "\n%{http_code}" \
+        RESPONSE=$(curl -s "${_BB_CURL_OPTS[@]}" -K - -D "$HDRFILE" -w "\n%{http_code}" \
             -H "Expect:" \
             -X PUT \
             --data-binary "@$ENC_FILE" \

@@ -16,6 +16,8 @@
 #   _filter_map  for each filtered row, its 0-based position in _filter_src.
 #                Loops that keep arrays parallel to items[] (fx ADF tab) use
 #                it so row N of the FILTERED list resolves to the right entry.
+declare -g  _filter_query=""
+declare -ga _all_items=()
 declare -ga _filter_src=()
 declare -ga _filter_map=()
 declare -g  _filter_map_active=false
@@ -145,7 +147,7 @@ _imag_filter_apply() {
       G) group_counts["$a"]="$b"; group_chars+=("$a") ;;
       F) _paths+=("$a") ;;
     esac
-  done < <(python3 - "$path" "$group_prefix" "$q" \
+  done < <(_bvk_py_group "$path" "$group_prefix" "$q" \
                     "${filter_mode:-partial}" "$(_filter_effective_hidden)" <<'PYEOF'
 import os, sys
 path   = sys.argv[1]
@@ -154,7 +156,6 @@ query  = sys.argv[3].lower()
 mode   = sys.argv[4]
 show_hidden = sys.argv[5] == "true"
 pfx_len = len(pfx)
-SPECIALS = set("_.-()[]{}@!~+=^&%$,;' ")
 
 counts = {}
 order  = []
@@ -175,11 +176,7 @@ try:
                     if not tail.startswith(query): continue
                 else:
                     if query not in tail: continue
-            nxt = tail[0] if tail else ""
-            if   nxt.isalpha(): ch = nxt.upper()
-            elif nxt.isdigit(): ch = nxt
-            elif nxt in SPECIALS: ch = nxt
-            else: ch = "#"
+            ch = group_key(tail[0] if tail else "")
             if ch not in counts:
                 counts[ch] = 0
                 order.append(ch)
@@ -392,10 +389,7 @@ _filter_commit() {
     if [ "${#_filter_src[@]}" -gt 0 ] || [ -n "$_filter_query" ]; then _filter_clear; fi
   fi
   _hl_index=0
-  _vp_start=1
-  _vp_cache_reset
-  _vp_prime_rows
-  _vp_render_fresh
+  _vp_render_from_top
 }
 
 # Drop-in replacement for _read_choice in every loop.

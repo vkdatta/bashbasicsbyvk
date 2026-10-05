@@ -468,6 +468,43 @@ _vp_redraw_in_place() {
   _vp_force_pop=0
 }
 
+# Fresh (block-emitting) render of the current list from the top: reset scroll + caches,
+# re-prime rows, draw.  Callers set up items[] / viewport first.
+_vp_render_from_top() {
+  _vp_start=1
+  _vp_cache_reset
+  _vp_prime_rows
+  _vp_render_fresh
+}
+
+# Shared tail of every in-place TAB redraw (switch / functions / rule book).
+# Caller rebuilds items + calls its *_set_viewport first, and passes the block height
+# it snapshotted BEFORE the tab changed:   _vp_tab_repaint "$_old_blk_h"
+# _read_choice ends with a trailing `echo`, so the cursor sits one row BELOW the block;
+# we move up the FULL old height (not -1, which drifts one line per switch) and emit the
+# chrome WITHOUT an input line (_read_choice prints that fresh each loop).
+_vp_tab_repaint() {
+  _vp_start=1
+  _vp_cache_reset
+  _vp_prime_rows
+  local _up=$(( ${1:-0} ))
+  local _rows; _rows=$(_term_rows)
+  (( _up > _rows - 1 )) && _up=$(( _rows - 1 ))
+  (( _up < 0 ))         && _up=0
+  (( _up > 0 ))         && printf '\033[%dA' "$_up"
+  printf '\r\033[J'
+  _vp_build_chrome
+  _vp_geometry
+  _vp_ensure_visible "${_hl_index:-1}"
+  _vp_emit
+}
+
+# "🔍 filter: Q*  (shown/total)" header row — identical in every loop header.
+_vp_filter_header_line() {
+  [ -n "$_filter_query" ] || return 0
+  printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "$(_filter_total_count)"
+}
+
 _vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + 1 )); }
 
 _vp_repaint_row() {

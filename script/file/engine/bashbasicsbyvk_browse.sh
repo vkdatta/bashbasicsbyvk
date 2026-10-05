@@ -63,18 +63,34 @@ PYEOF
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Group-key rule — the ONE definition of "which group does this file fall in".
+#   next char after the prefix: letter → UPPER, digit → itself, one of SPECIALS →
+#   itself, anything else → "#".   Used by get_imaginary_groups, _bvk_fallback_scan
+#   and the filter's imaginary scan (settings/bashbasicsbyvk_filter.sh).
+#   _bvk_py_group <args…> <<'PYEOF' … PYEOF   runs python with SPECIALS and
+#   group_key(nxt) already defined; sys.argv works exactly like `python3 - args`.
+# ═══════════════════════════════════════════════════════════════════════════
+_BVK_GKEY_PY='SPECIALS = set("_.-()[]{}@!~+=^&%$,;'"'"' ")
+def group_key(nxt):
+    if nxt.isalpha(): return nxt.upper()
+    if nxt.isdigit(): return nxt
+    if nxt in SPECIALS: return nxt
+    return "#"'
+_bvk_py_group() { python3 -c "${_BVK_GKEY_PY}
+$(cat)" "$@"; }
+
+# ═══════════════════════════════════════════════════════════════════════════
 # _bvk_fallback_scan — the "#" branch in handle_selection.
 # ═══════════════════════════════════════════════════════════════════════════
 _bvk_fallback_scan() {
   local p="$1"
   local pfx="$2"
-  python3 - "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
+  _bvk_py_group "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
 import os, sys
 path = sys.argv[1]
 pfx  = sys.argv[2].lower()
 show_hidden = sys.argv[3] == "true"
 pfx_len = len(pfx)
-SPECIALS = set("_.-()[]{}@!~+=^&%$,;' ")
 try:
     with os.scandir(path) as it:
         for e in it:
@@ -84,8 +100,7 @@ try:
             bl = bn.lower()
             if pfx and not bl.startswith(pfx): continue
             if len(bl) <= pfx_len: continue
-            nxt = bl[pfx_len]
-            if nxt.isalpha() or nxt.isdigit() or nxt in SPECIALS:
+            if group_key(bl[pfx_len]) != "#":
                 continue
             print(e.path)
 except Exception as ex:
@@ -113,13 +128,12 @@ get_imaginary_groups() {
   group_chars=()
 
   local py_out
-  py_out=$(python3 - "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
+  py_out=$(_bvk_py_group "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
 import os, sys
 path = sys.argv[1]
 pfx  = sys.argv[2].lower()
 show_hidden = sys.argv[3] == "true"
 pfx_len = len(pfx)
-SPECIALS = set("_.-()[]{}@!~+=^&%$,;' ")
 
 counts = {}
 order  = []
@@ -133,74 +147,7 @@ try:
             bl = bn.lower()
             if len(bl) <= pfx_len: continue
             if pfx and not bl.startswith(pfx): continue
-            nxt = bl[pfx_len]
-            if   nxt.isalpha(): ch = nxt.upper()
-            elif nxt.isdigit(): ch = nxt
-            elif nxt in SPECIALS: ch = nxt
-            else: ch = "#"
-            if ch not in counts:
-                counts[ch] = 0
-                order.append(ch)
-            counts[ch] += 1
-except Exception as ex:
-    sys.stderr.write(f"scandir: {ex}\n")
-
-for ch in order:
-    print(f"{ch}\t{counts[ch]}")
-PYEOF
-  )
-
-  while IFS=$'\t' read -r ch cnt; do
-    [ -z "$ch" ] && continue
-    group_counts["$ch"]="$cnt"
-    group_chars+=("$ch")
-  done <<< "$py_out"
-}
-
-# ═══════════════════════════════════════════════════════════════════════════
-# get_imaginary_groups_filtered — with query applied.
-# ═══════════════════════════════════════════════════════════════════════════
-get_imaginary_groups_filtered() {
-  local p="$1"
-  local pfx="$2"
-  local query="$3"
-  declare -gA group_counts=()
-  group_chars=()
-
-  local py_out
-  py_out=$(python3 - "$p" "$pfx" "$query" "${filter_mode:-partial}" "$(_filter_effective_hidden)" <<'PYEOF'
-import os, sys
-path   = sys.argv[1]
-pfx    = sys.argv[2].lower()
-query  = sys.argv[3].lower()
-mode   = sys.argv[4]
-show_hidden = sys.argv[5] == "true"
-pfx_len = len(pfx)
-SPECIALS = set("_.-()[]{}@!~+=^&%$,;' ")
-
-counts = {}
-order  = []
-
-try:
-    with os.scandir(path) as it:
-        for e in it:
-            bn = e.name
-            if bn in (".", ".."): continue
-            if not show_hidden and bn.startswith("."): continue
-            bl = bn.lower()
-            if pfx and not bl.startswith(pfx): continue
-            if len(bl) <= pfx_len: continue
-            if query:
-                tail = bl[pfx_len:]
-                if mode == "exact":
-                    if not tail.startswith(query): continue
-                else:
-                    if query not in tail: continue
-            nxt = bl[pfx_len]
-            if   nxt.isalpha(): ch = nxt.upper()
-            elif nxt.isdigit(): ch = nxt
-            elif nxt in SPECIALS: ch = nxt
-            else: ch = "#"
+            ch = group_key(bl[pfx_len])
             if ch not in counts:
                 counts[ch] = 0
                 order.append(ch)

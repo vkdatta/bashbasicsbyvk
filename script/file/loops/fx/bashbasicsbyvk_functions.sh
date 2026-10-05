@@ -175,12 +175,8 @@ _fx_tab_next() {
   esac
 }
 
-_fx_tab_prev() {
-  case "$_fx_tab" in
-    adf) _fx_tab=udf ;;
-    udf) _fx_tab=adf ;;
-  esac
-}
+# only two tabs, so "previous" is the same flip as "next"
+_fx_tab_prev() { _fx_tab_next; }
 
 _fx_tab_label() {
   local ad="🛠️  ADF" ud="👤 UDF"
@@ -204,9 +200,7 @@ _fx_menu_header() {
       printf '📂 %s%s\n' "$path" "${group_prefix:+ [group: ${group_prefix^^}*]}"
       ;;
   esac
-  if [ -n "$_filter_query" ]; then
-    printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "$(_filter_total_count)"
-  fi
+  _vp_filter_header_line
 }
 
 _fx_menu_header_imaginary() {
@@ -403,20 +397,7 @@ _fx_tab_redraw() {
 
   _fx_build_items_for_tab
   _fx_set_viewport_for_tab
-  _vp_start=1
-  _vp_cache_reset
-  _vp_prime_rows
-
-  local _up=$(( _old_blk_h ))
-  local _rows; _rows=$(_term_rows)
-  (( _up > _rows - 1 )) && _up=$(( _rows - 1 ))
-  (( _up < 0 ))         && _up=0
-  (( _up > 0 ))         && printf '\033[%dA' "$_up"
-  printf '\r\033[J'
-  _vp_build_chrome
-  _vp_geometry
-  _vp_ensure_visible "${_hl_index:-1}"
-  _vp_emit
+  _vp_tab_repaint "$_old_blk_h"
 }
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -444,10 +425,7 @@ functions_menu() {
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   _fx_build_items_for_tab
   _fx_set_viewport_for_tab
-  _vp_start=1
-  _vp_cache_reset
-  _vp_prime_rows
-  _vp_render_fresh
+  _vp_render_from_top
 
   while true; do
 
@@ -574,7 +552,6 @@ functions_menu() {
 
       f)   find_menu ;;
       s)   settings_menu ;;
-      m)   map_directory ;;
       disk) df -h ;;
       ram)  free -h ;;
 
@@ -590,6 +567,14 @@ functions_menu() {
 
       d-) handle_staging_dispatch ;;
       v-) handle_staging_view ;;
+
+      p-*)
+        if [ "$_fx_tab" = "udf" ]; then
+          handle_staging_map "$_fx_choice"
+        else
+          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+        fi
+        ;;
 
       c-*|m-*|s-*)
         if [ "$_fx_tab" = "udf" ]; then
@@ -639,10 +624,7 @@ functions_menu() {
       declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
       _fx_build_items_for_tab
       _fx_set_viewport_for_tab
-      _vp_start=1
-      _vp_cache_reset
-      _vp_prime_rows
-      _vp_render_fresh
+      _vp_render_from_top
     fi
 
   done
