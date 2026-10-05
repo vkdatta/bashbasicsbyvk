@@ -1,3 +1,1 @@
-recursive-include script *.xlsx
-recursive-include script *.txt
-global-exclude __pycache__ *.pyc *.pyo
+recursive-include script *.go go.mod build.sh bvk-ls-linux-*

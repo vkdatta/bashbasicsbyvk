@@ -23,6 +23,11 @@ fast_count() {
 # ═══════════════════════════════════════════════════════════════════════════
 count_items_in_path() {
   local p="$1"
+  if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin; then
+    local _h=0; [ "${show_hidden_files:-false}" = "true" ] && _h=1
+    "$_BVK_GO_BIN" count "$p" "$_h" 2>/dev/null || echo 0
+    return
+  fi
   python3 - "$p" "${show_hidden_files:-false}" <<'PYEOF'
 import os, sys
 path = sys.argv[1]
@@ -44,6 +49,11 @@ PYEOF
 _bvk_prefix_scan() {
   local p="$1"
   local pfx="$2"
+  if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin; then
+    local _h=0; [ "${show_hidden_files:-false}" = "true" ] && _h=1
+    "$_BVK_GO_BIN" scan "$p" raw "$_h" "$pfx"
+    return
+  fi
   python3 - "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
 import os, sys
 path = sys.argv[1]

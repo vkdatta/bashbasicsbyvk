@@ -9,6 +9,33 @@
 #                           fanout. Never blocks render.
 # ════════════════════════════════════════════════════════════════════════════
 
+
+# ── Go fast path: use bvk-ls when installed, else fall back to Python ─────────
+_bvk_go_bin() {
+  if [ -z "${_BVK_GO_BIN+x}" ]; then
+    _BVK_GO_BIN=""
+    if [ "${BVK_NO_GO:-0}" != "1" ]; then
+      local _m _b
+      case "$(uname -m)" in
+        aarch64|arm64) _m=arm64 ;;
+        x86_64|amd64)  _m=amd64 ;;
+        armv7*|armv8l) _m=arm ;;
+        *)             _m="" ;;
+      esac
+      local _o _d
+      _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
+      for _b in "$(command -v bvk-ls 2>/dev/null)" \
+                ${_m:+"$_d/../bashbasicsbyvk/bin/bvk-ls-linux-$_m"} \
+                ${_m:+"$(command -v "bvk-ls-linux-$_m" 2>/dev/null)"}; do
+        [ -n "$_b" ] && [ -f "$_b" ] || continue
+        [ -x "$_b" ] || chmod +x "$_b" 2>/dev/null
+        [ -x "$_b" ] && { _BVK_GO_BIN="$_b"; break; }
+      done
+    fi
+  fi
+  [ -n "$_BVK_GO_BIN" ]
+}
+
 # ── Core arrays ───────────────────────────────────────────────────────────────
 
 declare -gA item_size=()
@@ -101,6 +128,7 @@ _is_plugin() {
 # _py_scan_script — Layer 1: name index with optional parallel stat.
 # ═══════════════════════════════════════════════════════════════════════════════
 _py_scan_script() {
+_bvk_go_bin && { "$_BVK_GO_BIN" scan "$@"; return; }
 python3 - "$@" <<'PYEOF'
 import os, sys, stat as st_mod
 import multiprocessing as mp
@@ -221,6 +249,7 @@ PYEOF
 # _py_meta_script — Layer 2: batch stat for the visible window.
 # ═══════════════════════════════════════════════════════════════════════════════
 _py_meta_script() {
+_bvk_go_bin && { "$_BVK_GO_BIN" meta "$1"; return; }
 python3 - "$1" <<'PYEOF'
 import os, sys, stat as st_mod
 import multiprocessing as mp
@@ -332,6 +361,7 @@ PYEOF
 # top dir at the end. Runs in background via & disown from bash.
 # ═══════════════════════════════════════════════════════════════════════════════
 _py_recursive_size() {
+_bvk_go_bin && { "$_BVK_GO_BIN" dsize "$1"; return; }
 python3 - "$1" <<'PYEOF'
 import os, sys
 import multiprocessing as mp
