@@ -29,7 +29,7 @@ jobs:
         working-directory: script/file/engine/bvk-ls
         run: |
           chmod +x build.sh
-          ./build.sh
+          REQUIRE_ANDROID=1 ./build.sh
 
       - name: Verify binaries
         working-directory: script/file/engine/bvk-ls
@@ -37,6 +37,12 @@ jobs:
           file bvk-ls-linux-arm64
           file bvk-ls-linux-amd64
           file bvk-ls-linux-arm
+          file bvk-ls-android-arm64
+          file bvk-ls-android-amd64
+          file bvk-ls-android-arm
+          # Android's linker needs PT_PHDR + PT_INTERP (a glibc static-pie has neither)
+          readelf -lW bvk-ls-android-arm64 | grep -q PHDR
+          readelf -lW bvk-ls-android-arm64 | grep -q INTERP
 
       - name: Commit generated binaries
         run: |
@@ -46,7 +52,10 @@ jobs:
           git add \
             script/file/engine/bvk-ls/bvk-ls-linux-arm64 \
             script/file/engine/bvk-ls/bvk-ls-linux-amd64 \
-            script/file/engine/bvk-ls/bvk-ls-linux-arm
+            script/file/engine/bvk-ls/bvk-ls-linux-arm \
+            script/file/engine/bvk-ls/bvk-ls-android-arm64 \
+            script/file/engine/bvk-ls/bvk-ls-android-amd64 \
+            script/file/engine/bvk-ls/bvk-ls-android-arm
 
           git diff --cached --quiet || git commit \
             -m "build: update bvk-ls binaries [skip ci]"

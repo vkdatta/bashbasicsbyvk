@@ -15,23 +15,36 @@ _bvk_go_bin() {
   if [ -z "${_BVK_GO_BIN+x}" ]; then
     _BVK_GO_BIN=""
     if [ "${BVK_NO_GO:-0}" != "1" ]; then
-      local _m _b
+      local _m _os _b _o _d
+      local -a _cand=()
       case "$(uname -m)" in
         aarch64|arm64) _m=arm64 ;;
         x86_64|amd64)  _m=amd64 ;;
         armv7*|armv8l) _m=arm ;;
         *)             _m="" ;;
       esac
-      local _o _d
+      # Android (bionic) cannot run the static glibc "linux" builds: its linker
+      # needs PT_PHDR, which a glibc static-pie binary does not have, and aborts
+      # ("Could not find a PHDR: broken executable?"). Android uses the NDK
+      # "android" builds; everything else uses the "linux" ones.
+      case "$(uname -o 2>/dev/null)" in
+        Android) _os=android ;;
+        *)       _os=linux ;;
+      esac
       _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
-      for _b in "$(command -v bvk-ls 2>/dev/null)" \
-                ${_m:+"$_d/../bashbasicsbyvk/bin/bvk-ls-linux-$_m"} \
-                ${_m:+"$(command -v "bvk-ls-linux-$_m" 2>/dev/null)"}; do
+      _cand=("$(command -v bvk-ls 2>/dev/null)")
+      if [ -n "$_m" ]; then
+        _cand+=("$_d/../bashbasicsbyvk/bin/bvk-ls-$_os-$_m"
+                "$(command -v "bvk-ls-$_os-$_m" 2>/dev/null)")
+      fi
+      for _b in "${_cand[@]}"; do
         [ -n "$_b" ] && [ -f "$_b" ] || continue
         [ -x "$_b" ] || chmod +x "$_b" 2>/dev/null
         [ -x "$_b" ] || continue
-        # self-test: skip binaries the OS refuses to run (e.g. non-PIE on Android)
-        "$_b" count / 0 >/dev/null 2>&1 || continue
+        # self-test: skip binaries the OS refuses to run. Probe $HOME, not "/":
+        # Android denies apps access to the filesystem root, so "count /" fails
+        # even for a perfectly working binary.
+        "$_b" count "${HOME:-.}" 0 >/dev/null 2>&1 || continue
         _BVK_GO_BIN="$_b"; break
       done
     fi

@@ -13,12 +13,12 @@ _BVK_SRC = os.sep + "bvk-ls" + os.sep
 def _is_bvk_src(f):
     return _BVK_SRC in f
 
-# Prebuilt bvk-ls-linux-<arch> binaries are installed as data files, not scripts:
+# Prebuilt bvk-ls-linux-<arch> / bvk-ls-android-<arch> binaries are installed as data files, not scripts:
 # setuptools reads scripts as text to rewrite shebangs, which is unsafe for ELF.
 binary_files = [
     f for f in all_paths
     if os.path.isfile(f) and _is_bvk_src(f)
-    and os.path.basename(f).startswith("bvk-ls-linux-")
+    and os.path.basename(f).startswith(("bvk-ls-linux-", "bvk-ls-android-"))
 ]
 script_files = [
     f for f in all_paths
