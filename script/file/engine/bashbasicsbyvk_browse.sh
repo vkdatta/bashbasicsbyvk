@@ -46,14 +46,9 @@ PYEOF
 # ═══════════════════════════════════════════════════════════════════════════
 # _bvk_prefix_scan — files matching group_prefix.
 # ═══════════════════════════════════════════════════════════════════════════
-_bvk_prefix_scan() {
+_bvk_prefix_scan_py() {
   local p="$1"
   local pfx="$2"
-  if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin; then
-    local _h=0; [ "${show_hidden_files:-false}" = "true" ] && _h=1
-    "$_BVK_GO_BIN" scan "$p" raw "$_h" "$pfx"
-    return
-  fi
   python3 - "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
 import os, sys
 path = sys.argv[1]
@@ -70,6 +65,48 @@ try:
 except Exception as ex:
     sys.stderr.write(f"scandir: {ex}\n")
 PYEOF
+}
+
+# C first, Python if the binary is missing or fails (stdout form, legacy).
+_bvk_prefix_scan() {
+  local _h=0; [ "${show_hidden_files:-false}" = "true" ] && _h=1
+  if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin \
+     && "$_BVK_GO_BIN" scan "$1" raw "$_h" "$2" 2>/dev/null; then return 0; fi
+  _bvk_prefix_scan_py "$1" "$2"
+}
+
+# items[] = entries starting with group prefix $2 in dir $1 (file-based read,
+# records _BVK_LOAD_SRC for the header tag).
+_bvk_load_prefix_items() {
+  local _h=0; [ "${show_hidden_files:-false}" = "true" ] && _h=1
+  local _f; _f="$(_bvk_tmp)" || return 1
+  if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin \
+     && "$_BVK_GO_BIN" scan "$1" raw "$_h" "$2" >"$_f" 2>/dev/null; then
+    _BVK_LOAD_SRC=c
+  else
+    _BVK_LOAD_SRC=py
+    _bvk_prefix_scan_py "$1" "$2" >"$_f" 2>/dev/null
+  fi
+  _BVK_META_SRC=""
+  mapfile -t items <"$_f"
+  rm -f "$_f"
+}
+
+# items[] = the "#" group of prefix $2 (names whose next char is not a letter,
+# digit or a known special). C `hashscan`; Python when Unicode rules are needed.
+_bvk_load_hash_items() {
+  local _h=0; [ "${show_hidden_files:-false}" = "true" ] && _h=1
+  local _f; _f="$(_bvk_tmp)" || return 1
+  if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin \
+     && "$_BVK_GO_BIN" hashscan "$1" "$_h" "$2" >"$_f" 2>/dev/null; then
+    _BVK_LOAD_SRC=c
+  else
+    _BVK_LOAD_SRC=py
+    _bvk_fallback_scan "$1" "$2" >"$_f" 2>/dev/null
+  fi
+  _BVK_META_SRC=""
+  mapfile -t items <"$_f"
+  rm -f "$_f"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -137,7 +174,14 @@ get_imaginary_groups() {
   declare -gA group_counts=()
   group_chars=()
 
-  local py_out
+  local py_out _gh=0
+  [ "${show_hidden_files:-false}" = "true" ] && _gh=1
+  _BVK_META_SRC=""
+  if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin \
+     && py_out=$("$_BVK_GO_BIN" groups "$p" "$_gh" "$pfx" 2>/dev/null); then
+    _BVK_LOAD_SRC=c
+  else
+  _BVK_LOAD_SRC=py
   py_out=$(_bvk_py_group "$p" "$pfx" "${show_hidden_files:-false}" <<'PYEOF'
 import os, sys
 path = sys.argv[1]
@@ -169,6 +213,7 @@ for ch in order:
     print(f"{ch}\t{counts[ch]}")
 PYEOF
   )
+  fi
 
   while IFS=$'\t' read -r ch cnt; do
     [ -z "$ch" ] && continue
@@ -359,7 +404,7 @@ handle_selection() {
       if [ "$ch" == "#" ]; then
         imaginary_mode=false
         items=()
-        mapfile -t items < <(_bvk_fallback_scan "$path" "$group_prefix")
+        _bvk_load_hash_items "$path" "$group_prefix"
         _collect_metadata
         apply_sort
       elif [[ "$ch" =~ ^[A-Z]$ ]]; then
@@ -405,6 +450,7 @@ handle_selection() {
 _menu_header() {
   echo
   local _hdr_loc="📂 Location: $path${group_prefix:+ [group: ${group_prefix^^}*]}"
+  _bvk_src_tag_v; _hdr_loc+="$_bst_out"
   if [ -n "$_filter_query" ]; then
     if ${imaginary_mode:-false}; then
       local _itot=0 _ch

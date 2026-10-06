@@ -133,22 +133,20 @@ declare -g _imag_filter_committed=false   # an imaginary-origin filter result is
 
 # Single Python scan returns groups AND matching file paths together.
 # Emits "G\t<char>\t<count>" lines, then "F\t<path>" lines.
-_imag_filter_apply() {
-  local q="${_imag_filter_query,,}"
-  local threshold="${index_mode_threshold:-200}"
-
-  declare -gA group_counts=()
-  group_chars=()
-  local -a _paths=()
-  local line tag a b
-
-  while IFS=$'\t' read -r tag a b; do
-    case "$tag" in
-      G) group_counts["$a"]="$b"; group_chars+=("$a") ;;
-      F) _paths+=("$a") ;;
-    esac
-  done < <(_bvk_py_group "$path" "$group_prefix" "$q" \
-                    "${filter_mode:-partial}" "$(_filter_effective_hidden)" <<'PYEOF'
+# Group-menu "=" filter scan: "G<TAB>ch<TAB>n" lines then "F<TAB>path" lines.
+# C `gfilter` first; Python when the binary is missing/fails or Unicode rules
+# are needed (it prints nothing in that case, so there is no duplicate output).
+_imag_filter_scan() {
+  local q="$1" hid _h=0
+  hid="$(_filter_effective_hidden)"; [ "$hid" = "true" ] && _h=1
+  _BVK_META_SRC=""
+  if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin \
+     && "$_BVK_GO_BIN" gfilter "$path" "$_h" "$group_prefix" "$q" "${filter_mode:-partial}" 2>/dev/null; then
+    _BVK_LOAD_SRC=c
+    return 0
+  fi
+  _BVK_LOAD_SRC=py
+  _bvk_py_group "$path" "$group_prefix" "$q" "${filter_mode:-partial}" "$hid" <<'PYEOF'
 import os, sys
 path   = sys.argv[1]
 pfx    = sys.argv[2].lower()
@@ -190,7 +188,26 @@ for ch in order:
 for p in paths:
     print(f"F\t{p}")
 PYEOF
-  )
+}
+
+_imag_filter_apply() {
+  local q="${_imag_filter_query,,}"
+  local threshold="${index_mode_threshold:-200}"
+
+  declare -gA group_counts=()
+  group_chars=()
+  local -a _paths=()
+  local line tag a b
+
+  local _gf; _gf="$(_bvk_tmp)"
+  _imag_filter_scan "$q" >"$_gf"
+  while IFS=$'\t' read -r tag a b; do
+    case "$tag" in
+      G) group_counts["$a"]="$b"; group_chars+=("$a") ;;
+      F) _paths+=("$a") ;;
+    esac
+  done <"$_gf"
+  rm -f "$_gf"
 
   local tot="${#_paths[@]}"
   _filter_query="$_imag_filter_query"
@@ -252,7 +269,7 @@ _imag_filter_restore() {
   else
     imaginary_mode=false
     if [ -n "$group_prefix" ]; then
-      mapfile -t items < <(_bvk_prefix_scan "$path" "$group_prefix")
+      _bvk_load_prefix_items "$path" "$group_prefix"
       _all_items=("${items[@]}")
     else
       build_items_with_meta "$path" ""

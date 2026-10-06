@@ -1,6 +1,8 @@
 #include "bvk.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -39,35 +41,70 @@ void list_dir(const char *dir, bool hidden, const char *prefix, ents_t *out, are
 
 typedef struct {
     const char *dir;
+    int dfd; /* open directory fd, or -1 -> fall back to full-path stat() */
     ent_t *es;
 } stat_ctx_t;
 
 static void stat_one(size_t i, void *p) {
     stat_ctx_t *c = p;
-    char *full = path_join(c->dir, c->es[i].name);
     struct stat st;
-    if (stat(full, &st) == 0) {
+    int rc;
+    if (c->dfd >= 0) {
+        /* relative to the dir fd: no per-entry malloc, no path walk from / */
+        rc = fstatat(c->dfd, c->es[i].name, &st, 0); /* 0 = follow symlinks, like stat() */
+    } else {
+        char *full = path_join(c->dir, c->es[i].name);
+        rc = stat(full, &st);
+        free(full);
+    }
+    if (rc == 0) {
         c->es[i].mtime = mtime_sec(&st);
         if (!S_ISDIR(st.st_mode)) c->es[i].size = (int64_t)st.st_size;
     }
-    free(full);
 }
 
 static void stat_all(const char *dir, ents_t *es) {
     int w = pool_ncpu();
     if (w > 16) w = 16;
-    stat_ctx_t c = {dir, es->v};
-    pool_run(es->n, w, 64, stat_one, &c);
+    stat_ctx_t c = {dir, open(dir, O_RDONLY | O_DIRECTORY), es->v};
+    pool_run(es->n, w, 256, stat_one, &c);
+    if (c.dfd >= 0) close(c.dfd);
 }
 
 /* ---- sorting: one comparator per mode (qsort has no portable context) -- */
 
 static int by_name(const ent_t *a, const ent_t *b) { return strcmp(a->name, b->name); }
 
+/* ASCII fold table: A-Z -> a-z, every other byte unchanged (unsigned compare,
+ * identical ordering to strcmp over ascii_lower()'d copies). */
+static unsigned char g_fold[256];
+static void fold_init(void) {
+    for (int i = 0; i < 256; i++) g_fold[i] = (unsigned char)((i >= 'A' && i <= 'Z') ? i + 32 : i);
+}
+
+/* 8 folded bytes starting at s, big-endian, zero padded after the NUL. */
+static uint64_t fold_key8(const char *s) {
+    uint64_t k = 0;
+    int i = 0;
+    for (; i < 8 && s[i]; i++) k = (k << 8) | g_fold[(unsigned char)s[i]];
+    return i == 8 ? k : k << (8 * (8 - i));
+}
+
 static int cmp_az(const void *pa, const void *pb) {
     const ent_t *a = pa, *b = pb;
-    int c = strcmp(a->low, b->low);
-    return c ? c : by_name(a, b);
+    if (a->key != b->key) return a->key < b->key ? -1 : 1;
+    if (a->key2 != b->key2) return a->key2 < b->key2 ? -1 : 1;
+    /* first 16 bytes folded-equal: walk the rest (only names >= 16 bytes get here
+     * with a non-trivial tail; shorter equal names are identical when folded). */
+    if ((a->key2 & 0xff) != 0) { /* byte 15 present => name is >= 16 long */
+        const unsigned char *x = (const unsigned char *)a->name + 16, *y = (const unsigned char *)b->name + 16;
+        for (;; x++, y++) {
+            unsigned char cx = g_fold[*x], cy = g_fold[*y];
+            if (cx != cy) return cx < cy ? -1 : 1;
+            if (!cx) break;
+        }
+    }
+    return by_name(a, b);
 }
 static int cmp_za(const void *pa, const void *pb) { return -cmp_az(pa, pb); }
 
@@ -98,12 +135,9 @@ void sort_ents(const char *dir, const char *mode, ents_t *es, arena_t *ar) {
     int (*cmp)(const void *, const void *) = NULL;
 
     if (!strcmp(mode, "az") || !strcmp(mode, "za")) {
-        for (size_t i = 0; i < es->n; i++) {
-            size_t len = strlen(es->v[i].name);
-            char *low = arena_strndup(ar, es->v[i].name, len);
-            ascii_lower(low, es->v[i].name);
-            es->v[i].low = low;
-        }
+        (void)ar;
+        fold_init();
+        for (size_t i = 0; i < es->n; i++) { const char *nm = es->v[i].name; es->v[i].key = fold_key8(nm); es->v[i].key2 = (strlen(nm) > 8) ? fold_key8(nm + 8) : 0; }
         cmp = mode[0] == 'a' ? cmp_az : cmp_za;
     } else if (!strcmp(mode, "new") || !strcmp(mode, "old") || !strcmp(mode, "big") ||
                !strcmp(mode, "small")) {

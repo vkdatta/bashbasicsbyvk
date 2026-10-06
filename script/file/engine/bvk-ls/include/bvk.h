@@ -8,7 +8,8 @@
  *   icon.c   file-kind label (archive/image/plugin/exec/...)
  *   meta.c   "path|size|mtime|children|icon" rows
  *   dsize.c  recursive directory size
- *   main.c   command dispatch (scan/meta/dsize/count/window)
+ *   groups.c group menu (groups/hashscan) with Unicode -> Python fallback
+ *   main.c   command dispatch (scan/meta/dsize/count/window/groups/hashscan)
  */
 #ifndef BVK_H
 #define BVK_H
@@ -18,6 +19,7 @@
 #endif
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
@@ -60,7 +62,8 @@ void pool_run(size_t n, int workers, size_t chunk, pool_fn fn, void *ctx);
 
 typedef struct {
     const char *name;
-    const char *low; /* lowercase name, set only for az/za sorts */
+    uint64_t key;    /* bytes 0-7, ASCII-folded, big-endian (az/za sorts only) */
+    uint64_t key2;   /* bytes 8-15, same encoding */
     unsigned char typ;
     int64_t size;
     int64_t mtime;
@@ -88,6 +91,18 @@ bool filter_keep(const filter_t *f, const char *nm, size_t len);
 /* Filtered listing; dies if the directory cannot be read at all. */
 void list_dir(const char *dir, bool hidden, const char *prefix, ents_t *out, arena_t *ar);
 void sort_ents(const char *dir, const char *mode, ents_t *es, arena_t *ar);
+
+/* ---- groups.c: group-menu helpers (same rules as the shell/Python code) -- */
+/* Exit code used when the answer needs Unicode rules the C code does not
+ * implement; the shell then falls back to Python for exactness. */
+#define BVK_NEED_FALLBACK 3
+/* Group key of one ASCII byte: letter -> UPPER, digit -> itself,
+ * one of SPECIALS -> itself, anything else -> '#'. */
+char group_key_ascii(unsigned char c);
+int groups_cmd(FILE *out, const char *dir, bool hidden, const char *pfx);
+int hashscan_cmd(FILE *out, const char *dir, bool hidden, const char *pfx);
+int gfilter_cmd(FILE *out, const char *dir, bool hidden, const char *pfx, const char *q,
+                const char *mode);
 
 /* ---- icon.c / meta.c / dsize.c --------------------------------------- */
 

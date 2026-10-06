@@ -146,6 +146,10 @@ _vp_row_text() {
   elif [ "$_vp_mode" == "imaginary" ]; then
     t="${imaginary_lines[$((i-1))]}"
   else
+    if $_vp_lazy_rows && declare -F _load_window >/dev/null 2>&1 \
+       && (( _win_lo < 1 || i < _win_lo || i > _win_hi )); then
+      _load_window "$i"      # keep the metadata window under the rows being drawn
+    fi
     if declare -F _item_line_text_v >/dev/null 2>&1; then _item_line_text_v "$i"; t="$_ilt_out"; else t="$(_item_line_text "$i")"; fi
   fi
   _vp_fit "$t"
@@ -159,6 +163,13 @@ _vp_cache_reset() {
   _vp_disp_ok=false
 }
 
+# Lists longer than this are NOT pre-formatted row by row. Pre-formatting walks
+# every item in bash (a -d test + type checks + a pipe read per item): ~20-60 s
+# for 200k files in force-show. Above the limit only the rows that are drawn get
+# formatted (_vp_row_text -> _item_line_text_v) and the metadata window (C `meta`)
+# follows the rows. Override with BVK_PRIME_MAX.
+declare -g _vp_lazy_rows=false
+
 _vp_prime_rows() {
   [ "$_vp_mode" == "items" ] || return 0
   # If a custom row-text function is set it owns every row — display_items
@@ -167,6 +178,13 @@ _vp_prime_rows() {
   declare -F display_items >/dev/null 2>&1 || return 0
   _vp_count
   (( _vp_n == 0 )) && return 0
+  _vp_lazy_rows=false
+  if (( _vp_n > ${BVK_PRIME_MAX:-1500} )); then
+    _vp_lazy_rows=true
+    _vp_disp_ok=false
+    declare -F _ensure_meta >/dev/null 2>&1 && _ensure_meta
+    return 0
+  fi
   local -a _dl=()
   mapfile -t _dl < <(display_items)
   if [ "${#_dl[@]}" -eq "$_vp_n" ]; then

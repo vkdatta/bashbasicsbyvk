@@ -197,7 +197,8 @@ _fx_menu_header() {
       [ -n "$_fx_adf_cur_staging" ] && printf '  u) Up   (in: /%s)\n' "$_fx_adf_cur_staging"
       ;;
     *)
-      printf '📂 %s%s\n' "$path" "${group_prefix:+ [group: ${group_prefix^^}*]}"
+      _bvk_src_tag_v
+      printf '📂 %s%s%s\n' "$path" "${group_prefix:+ [group: ${group_prefix^^}*]}" "$_bst_out"
       ;;
   esac
   _vp_filter_header_line

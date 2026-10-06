@@ -7,6 +7,11 @@
  *   bvk-ls dsize  PATHS_FILE                      path|recursive_size
  *   bvk-ls count  DIR HIDDEN                      number of entries
  *   bvk-ls window DIR MODE HIDDEN PREFIX START N  "#total" then meta rows for [START, START+N)
+ *   bvk-ls groups   DIR HIDDEN PREFIX             "CH<TAB>count" per next-char group
+ *   bvk-ls hashscan DIR HIDDEN PREFIX             paths whose next-char group is '#'
+ *   bvk-ls gfilter  DIR HIDDEN PREFIX QUERY MODE  "G<TAB>ch<TAB>n" lines, then "F<TAB>path" lines
+ *
+ * Exit code 3 (groups/hashscan) = "needs Unicode rules, ask Python".
  *
  * MODE: az za new old big small   HIDDEN: 1|0   START is 1-based.
  */
@@ -114,7 +119,7 @@ static void cmd_window(FILE *out) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) bvk_fatal("usage: bvk-ls scan|meta|dsize|count|window ...");
+    if (argc < 2) bvk_fatal("usage: bvk-ls scan|meta|dsize|count|window|groups|hashscan|gfilter ...");
     g_argv0cmd = argv[1];
     g_a = argv + 2;
     g_na = argc - 2;
@@ -123,13 +128,19 @@ int main(int argc, char **argv) {
     static char obuf[1 << 20];
     setvbuf(out, obuf, _IOFBF, sizeof obuf);
 
+    int rc = 0;
     if (!strcmp(g_argv0cmd, "scan")) cmd_scan(out);
     else if (!strcmp(g_argv0cmd, "count")) cmd_count(out);
     else if (!strcmp(g_argv0cmd, "meta")) cmd_meta(out);
     else if (!strcmp(g_argv0cmd, "dsize")) cmd_dsize(out);
     else if (!strcmp(g_argv0cmd, "window")) cmd_window(out);
+    else if (!strcmp(g_argv0cmd, "groups")) rc = groups_cmd(out, arg(0), !strcmp(arg(1), "1"), arg(2));
+    else if (!strcmp(g_argv0cmd, "gfilter"))
+        rc = gfilter_cmd(out, arg(0), !strcmp(arg(1), "1"), arg(2), arg(3), arg(4));
+    else if (!strcmp(g_argv0cmd, "hashscan")) rc = hashscan_cmd(out, arg(0), !strcmp(arg(1), "1"), arg(2));
     else bvk_fatal("unknown command \"%s\"", g_argv0cmd);
 
+    if (rc != 0) return rc; /* nothing was printed on the fallback path */
     if (fflush(out) != 0 || ferror(out)) return 1;
     return 0; /* process exit reclaims all memory */
 }

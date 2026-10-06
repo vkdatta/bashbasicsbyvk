@@ -39,6 +39,51 @@ _bvk_go_bin() {
   [ -n "$_BVK_GO_BIN" ]
 }
 
+# ── Load-source tracking (debug tag in the menu header) ──────────────────────
+# _BVK_LOAD_SRC : who listed / searched the current menu   (c | py | "")
+# _BVK_META_SRC : who produced the visible rows' metadata  (c | py | "")
+# Header shows " [loaded by c]" only when the native binary did all of it,
+# " [loaded by py]" as soon as the Python backup was used for any part.
+# Set BVK_SHOW_SRC=0 to hide the tag.
+declare -g _BVK_LOAD_SRC=""
+declare -g _BVK_META_SRC=""
+
+_bvk_src_tag_v() {
+  _bst_out=""
+  [ "${BVK_SHOW_SRC:-1}" = "1" ] || return 0
+  [ -n "$_BVK_LOAD_SRC" ] || return 0
+  if [ "$_BVK_LOAD_SRC" = c ] && [ "${_BVK_META_SRC:-c}" = c ]; then
+    _bst_out=" [loaded by c]"
+  else
+    _bst_out=" [loaded by py]"
+  fi
+}
+_bvk_src_tag() { local _bst_out; _bvk_src_tag_v; printf '%s' "$_bst_out"; }
+
+# Scratch file for listings. Results are read back with `mapfile < file`:
+# bash reads a pipe/process-substitution ONE BYTE at a time, which made
+# `mapfile -t items < <(cmd)` ~30x slower than the listing itself (200k files:
+# ~1.1 s from a pipe vs ~35 ms from a regular file).
+_bvk_tmp() {
+  mktemp "${_BVK_DSIZE_TMP:-${TMPDIR:-/tmp}}/ld.XXXXXX" 2>/dev/null || mktemp
+}
+
+# _bvk_fill_items <python-fallback-fn> <bvk-ls subcommand> args...
+# Fills items[] from the C binary, or from the Python fallback (called with the
+# same args minus the subcommand) when the binary is missing / fails.
+_bvk_fill_items() {
+  local _fb="$1"; shift
+  local _f; _f="$(_bvk_tmp)" || return 1
+  if _bvk_go_bin && "$_BVK_GO_BIN" "$@" >"$_f" 2>/dev/null; then
+    _BVK_LOAD_SRC=c
+  else
+    _BVK_LOAD_SRC=py
+    "$_fb" "${@:2}" >"$_f" 2>/dev/null
+  fi
+  mapfile -t items <"$_f"
+  rm -f "$_f"
+}
+
 # ── Core arrays ───────────────────────────────────────────────────────────────
 
 declare -gA item_size=()
@@ -130,8 +175,7 @@ _is_plugin() {
 # ═══════════════════════════════════════════════════════════════════════════════
 # _py_scan_script — Layer 1: name index with optional parallel stat.
 # ═══════════════════════════════════════════════════════════════════════════════
-_py_scan_script() {
-_bvk_go_bin && { "$_BVK_GO_BIN" scan "$@"; return; }
+_py_scan_python() {
 python3 - "$@" <<'PYEOF'
 import os, sys, stat as st_mod
 import multiprocessing as mp
@@ -248,11 +292,16 @@ for e in entries:
 PYEOF
 }
 
+# C first, Python if the binary is missing or fails (legacy entry point).
+_py_scan_script() {
+  if _bvk_go_bin && "$_BVK_GO_BIN" scan "$@"; then return 0; fi
+  _py_scan_python "$@"
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # _py_meta_script — Layer 2: batch stat for the visible window.
 # ═══════════════════════════════════════════════════════════════════════════════
-_py_meta_script() {
-_bvk_go_bin && { "$_BVK_GO_BIN" meta "$1"; return; }
+_py_meta_python() {
 python3 - "$1" <<'PYEOF'
 import os, sys, stat as st_mod
 import multiprocessing as mp
@@ -354,6 +403,11 @@ else:
 
 sys.stdout.write("\n".join(results) + "\n")
 PYEOF
+}
+
+_py_meta_script() {
+  if _bvk_go_bin && "$_BVK_GO_BIN" meta "$1"; then return 0; fi
+  _py_meta_python "$1"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -485,7 +539,8 @@ build_items_with_meta() {
   $show_hidden_files && hidden_flag=1
   local mode="${sort_mode:-az}"
 
-  mapfile -t items < <(_py_scan_script "$p" "$mode" "$hidden_flag" "$pfx" 2>/dev/null)
+  _BVK_META_SRC=""
+  _bvk_fill_items _py_scan_python scan "$p" "$mode" "$hidden_flag" "$pfx"
 
   _items_presorted=true
   _items_presorted_mode="$mode"
@@ -615,25 +670,37 @@ _load_window() {
     return
   fi
 
+  local tmp_out; tmp_out="$(_bvk_tmp)"
+  if _bvk_go_bin && "$_BVK_GO_BIN" meta "$tmp_in" >"$tmp_out" 2>/dev/null; then
+    _BVK_META_SRC=c
+  else
+    _BVK_META_SRC=py
+    _py_meta_python "$tmp_in" >"$tmp_out" 2>/dev/null
+  fi
   while IFS='|' read -r fpath fsize fmtime fchildren ftype; do
     [ -z "$fpath" ] && continue
     item_size["$fpath"]="$fsize"
     item_mtime["$fpath"]="$fmtime"
     item_children["$fpath"]="$fchildren"
     item_icon["$fpath"]="$ftype"
-  done < <(_py_meta_script "$tmp_in" 2>/dev/null)
-  rm -f "$tmp_in"
+  done <"$tmp_out"
+  rm -f "$tmp_in" "$tmp_out"
 
   local evict_lo=$(( lo - _BVK_WIN_RADIUS ))
   local evict_hi=$(( hi + _BVK_WIN_RADIUS ))
   if (( _win_lo > 0 )); then
-    local j
-    for (( j=_win_lo; j<lo; j++ )); do
+    # Only the OLD window (<= 2*radius+1 rows) can hold metadata, so the walk is
+    # clamped to it. Walking the whole gap to the new window made a jump to the
+    # end of a 200k list cost ~4 s.
+    local j _e1 _s2
+    _e1=$(( lo - 1 )); (( _e1 > _win_hi )) && _e1=$_win_hi
+    for (( j=_win_lo; j<=_e1; j++ )); do
       (( j < evict_lo )) || continue
       local pf="${items[$((j-1))]}"
       unset "item_size[$pf]" "item_mtime[$pf]" "item_icon[$pf]" "item_children[$pf]"
     done
-    for (( j=hi+1; j<=_win_hi; j++ )); do
+    _s2=$(( hi + 1 )); (( _s2 < _win_lo )) && _s2=$_win_lo
+    for (( j=_s2; j<=_win_hi; j++ )); do
       (( j > evict_hi )) || continue
       local pf="${items[$((j-1))]}"
       unset "item_size[$pf]" "item_mtime[$pf]" "item_icon[$pf]" "item_children[$pf]"

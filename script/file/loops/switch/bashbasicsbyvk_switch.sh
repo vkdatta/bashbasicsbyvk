@@ -292,7 +292,8 @@ _sw_menu_header() {
   case "$_sw_tab" in
     recents) _loc="(recently modified — read only)" ;;
     favourites) _loc="⭐ favourites of: $_sw_outer_path" ;;
-    *)       _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}" ;;
+    *)       _bvk_src_tag_v
+             _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}$_bst_out" ;;
   esac
   printf '📂 %s\n' "$_loc"
   _vp_filter_header_line

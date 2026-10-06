@@ -81,7 +81,7 @@ while true; do
   elif [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && ! $_disp_on; then
     imaginary_mode=true
     if [ -n "$group_prefix" ]; then
-      mapfile -t local_arr < <(_bvk_prefix_scan "$path" "$group_prefix")
+      _bvk_load_prefix_items "$path" "$group_prefix"; local_arr=("${items[@]}"); items=()
       pfx_count="${#local_arr[@]}"
       if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
         imaginary_mode=false
