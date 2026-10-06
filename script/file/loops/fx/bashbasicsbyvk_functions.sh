@@ -633,6 +633,10 @@ functions_menu() {
   shopt -u nocasematch
   _fx_in_mode=0
   _sw_in_mode=0
+  # The ADF tab installs _fx_adf_rowtext as the row renderer. If it is left set,
+  # _vp_prime_rows leaves the file list to it and rows come back as bare full
+  # paths with icons from the ADF type table. (rules.sh resets it the same way.)
+  _vp_rowtext_fn=""
 
   path="$_fx_outer_path"
   group_prefix="$_fx_saved_prefix"

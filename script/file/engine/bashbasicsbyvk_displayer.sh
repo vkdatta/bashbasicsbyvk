@@ -500,7 +500,9 @@ def _plan(paths):
             if base:
                 tasks.append((p, p, base, "base"))
         else:
-            tasks.append((p, p, base, "walk"))
+            # _walk_size(p) already counts p's direct files, so base must be 0
+            # here (it used to be `base`, which doubled every small folder).
+            tasks.append((p, p, 0, "walk"))
     return tasks
 
 def _run(task):
@@ -1081,7 +1083,7 @@ display_items() {
     echo "🛑 This directory is empty"
     return
   fi
-  if _needs_metadata; then
+  if _needs_metadata && ! ${_vp_meta_primed:-false}; then
     _ensure_meta
   fi
   local use_group=false

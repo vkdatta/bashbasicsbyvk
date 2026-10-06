@@ -121,6 +121,9 @@ while true; do
   _msel_set=()
   _vp_input_fn=_print_input_line
   _vp_start=1
+  # The file list is always drawn by display_items. An inner loop (fx, smartmenu)
+  # may have left its own row renderer set, which would replace the file rows.
+  _vp_rowtext_fn=""
   _vp_cache_reset
   _vp_prime_rows
   _vp_render_fresh

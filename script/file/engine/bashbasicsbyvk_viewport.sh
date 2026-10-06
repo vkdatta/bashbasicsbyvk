@@ -169,6 +169,7 @@ _vp_cache_reset() {
 # formatted (_vp_row_text -> _item_line_text_v) and the metadata window (C `meta`)
 # follows the rows. Override with BVK_PRIME_MAX.
 declare -g _vp_lazy_rows=false
+declare -g _vp_meta_primed=false   # true while display_items runs in the prime subshell
 
 _vp_prime_rows() {
   [ "$_vp_mode" == "items" ] || return 0
@@ -186,7 +187,19 @@ _vp_prime_rows() {
     return 0
   fi
   local -a _dl=()
+  # Load the metadata window and start the background folder-size job HERE, in
+  # the main shell. `< <(display_items)` runs in a subshell: anything it
+  # started (item_size[], the dsize job PID and output file) was thrown away
+  # when it exited, so folders showed the "⏳" placeholder forever and the poll
+  # loop had no job to harvest. display_items skips its own load while
+  # _vp_meta_primed is set.
+  if declare -F _needs_metadata >/dev/null 2>&1 && _needs_metadata \
+     && declare -F _ensure_meta >/dev/null 2>&1; then
+    _ensure_meta
+  fi
+  _vp_meta_primed=true
   mapfile -t _dl < <(display_items)
+  _vp_meta_primed=false
   if [ "${#_dl[@]}" -eq "$_vp_n" ]; then
     local i
     for ((i=1; i<=_vp_n; i++)); do
