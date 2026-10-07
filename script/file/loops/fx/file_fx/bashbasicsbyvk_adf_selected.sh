@@ -7,13 +7,13 @@
 #
 #    copy / move / shortcut / bookmark   stage into the once-buffer, then d-
 #    upload                              encrypted upload of files + folders (up-)
-#    upload.text                         merge files into ONE text blob      (ups-)
+#    upload.text                         merge files into ONE text blob      (c2c-)
 #    map                                 folder-tree text → clipboard / file (p-)
 #    zip / unzip                         compress / extract                   (z- / uz-)
 #    delete                              confirm, then remove
 #
 #  Reuses: _fx_sel_need / _fx_sel_stage (adf_selection.sh), _csv_append_batch,
-#          _up_do_multipart_upload, _ups_upload_paths, _map_generate_for_paths,
+#          _up_do_multipart_upload, _c2c_paths, _map_generate_for_paths,
 #          _map_deliver, _compress_paths, _decompress_paths, _fxdel_run_selected.
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -33,7 +33,7 @@ _fx_adf_sel_upload_text() {
   local -a sel=()
   _fx_sel_need || return
   _sel_summary sel "📝 Uploading as one merged text blob"
-  _ups_upload_paths "${sel[@]}"
+  _c2c_paths "${sel[@]}"
 }
 
 _fx_adf_sel_map() {

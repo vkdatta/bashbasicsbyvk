@@ -158,7 +158,7 @@ while true; do
     p-*)         handle_staging_map "$choice" ;;
     c-*|m-*|s-*|b-*)  handle_staging_stage "$choice" ;;
     do-)         handle_do_import ;;
-    ups-*)       handle_ups_upload "$choice" ;;
+    c2c-*)       handle_c2c_upload "$choice" ;;
     up-*)        handle_up_upload "$choice" ;;
     uz-*)        handle_decompress_items "$choice" ;;
     z-*)         handle_compress_items "$choice" ;;

@@ -9,7 +9,7 @@ _SP_HARD_LIMIT_BYTES=$((32*1024*1024*1024))
 # _BB_MAX_PAR is how many blobs/parts upload concurrently.
 _BB_CHUNK_BYTES=$((90*1024*1024))
 _BB_MAX_PAR="${FILEAPI_BASHBASICS_PARALLEL:-16}"
-# Small files are packed into blobs of about this size (default 16 MiB) => few requests.
+# The tar.gz stream is cut into encrypted chunks of this size (default 16 MiB) => few requests, no file-size limit.
 _BB_PACK_BYTES=$(( ${FILEAPI_BASHBASICS_PACK_MB:-16} * 1024 * 1024 ))
 
 _bb_authed_put() {
@@ -74,12 +74,12 @@ _bb_authed_put() {
 
 # Crypto format v2: AES-256-GCM, blob = [12B IV][ciphertext][16B tag], with Additional
 # Authenticated Data binding each ciphertext to its role/position:
-#   "bbvk2|copy"  "bbvk2|manifest"  "bbvk2|blob|<index>"
+#   "bbvk2|copy" (c2c-/copy text)   "bbvk4|manifest"   "bbvk4|blob|<index>" (up- archives)
 # so a hostile server cannot swap, replay or substitute pieces undetected.
 
 _crypto_check() {
   if ! command -v node &>/dev/null; then
-    echo "❌ 'node' is required for encryption (up-/ups-/do-) but wasn't found in PATH."
+    echo "❌ 'node' is required for encryption (up-/c2c-/do-) but wasn't found in PATH."
     return 1
   fi
   return 0
@@ -159,20 +159,20 @@ _announce_link() {
   fi
 }
 
-# Format v3 ("packed"): small files are concatenated into ~PACK_BYTES blobs so a 58k-file
-# tree becomes a few dozen HTTP requests instead of 58k. Every file is still encrypted
-# on its own (AES-256-GCM), record = [12B IV][ciphertext][16B tag], AAD binds each record
-# to its exact place:  "bbvk3|blob|<blobIndex>|<offset>". The manifest (gzipped, then
-# encrypted, AAD "bbvk3|manifest") carries blobIndex/offset/length per file.
-_crypto_pack_upload() {
-  local outdir="$1" listfile="$2"
-  BB_PACK_BYTES="${_BB_PACK_BYTES}" node -e '
-    const fs = require("fs"), path = require("path"), crypto = require("crypto"), zlib = require("zlib");
+# Format v4 ("tar.gz stream"): the selection is packed as ONE tar.gz stream, cut into fixed-size
+# chunks (default 16 MiB, FILEAPI_BASHBASICS_PACK_MB) and every chunk is encrypted on its own
+# with AES-256-GCM: blob record = [12B IV][ciphertext][16B tag], AAD "bbvk4|blob|<index>".
+# The manifest (AAD "bbvk4|manifest") holds {version:4, format, name, size, chunkBytes, blobCount}.
+# Chunking means NO file-size limit: memory use is one chunk, whatever the archive size, and
+# a 58k-file tree is ~50 uploads instead of 58k.  Reads the tar.gz on stdin.
+# usage: <tar.gz stream> | _crypto_stream_pack <outdir> <display-name>
+# prints: key \n total-cipher-bytes \n blob-count
+_crypto_stream_pack() {
+  local outdir="$1" arcname="$2"
+  BB_PACK_BYTES="${_BB_PACK_BYTES}" BB_ARC_NAME="$arcname" node -e '
+    const fs = require("fs"), path = require("path"), crypto = require("crypto");
     const outdir = process.argv[1];
-    const listfile = process.argv[2];
-    const PACK = parseInt(process.env.BB_PACK_BYTES, 10) || 16 * 1024 * 1024;
-    const lines = fs.readFileSync(listfile, "utf8").split("\n").filter(Boolean);
-
+    const CHUNK = parseInt(process.env.BB_PACK_BYTES, 10) || 16 * 1024 * 1024;
     const key = crypto.randomBytes(32);
     const keyB64url = key.toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 
@@ -184,239 +184,203 @@ _crypto_pack_upload() {
       return Buffer.concat([iv, ct, cipher.getAuthTag()]);
     }
 
-    const COLS = 24, TTY = process.stderr.isTTY;
-    let lastPct = -1;
-    function bar(done, total, label) {
+    const TTY = process.stderr.isTTY, t0 = Date.now();
+    let lastDraw = 0, seen = 0;
+    function status(final) {
       if (!TTY) return;
-      const pct = total > 0 ? Math.floor(done * 100 / total) : 100;
-      if (pct === lastPct && done < total) return;
-      lastPct = pct;
-      const filled = Math.floor(pct * COLS / 100);
-      const b = "\u2588".repeat(filled) + "\u2591".repeat(COLS - filled);
-      const color = done >= total ? "\u001b[32m" : "\u001b[36m";
-      process.stderr.write("\r\u001b[K" + color + "[" + b + "] " +
-        String(pct).padStart(3) + "%\u001b[0m  " + label + " " + done + "/" + total);
-      if (done >= total) process.stderr.write("\n");
-    }
-
-    const entries = [];
-    let totalBytes = 0, blobIdx = 0, cur = [], curBytes = 0;
-    function seal() {
-      if (curBytes === 0 && cur.length === 0) return;
-      fs.writeFileSync(path.join(outdir, "blob" + blobIdx), cur.length === 1 ? cur[0] : Buffer.concat(cur), { mode: 0o600 });
-      blobIdx++; cur = []; curBytes = 0;
-    }
-
-    const totalFiles = lines.length;
-    lines.forEach((line, idx) => {
-      const tabIdx = line.indexOf("\t");
-      const relpath = line.slice(0, tabIdx);
-      const abspath = line.slice(tabIdx + 1);
-      const data = fs.readFileSync(abspath);   // throws on >2GB (Buffer limit) -> caught below
-      if (data.length > 2000000000) {
-        console.error("\n  \u274c " + relpath + " is larger than 2 GB; single-record encryption holds a file in memory and cannot handle it.");
-        process.exit(2);
-      }
-      // A record that would overflow the current pack closes it first.
-      if (curBytes > 0 && curBytes + data.length + 28 > PACK) seal();
-      const offset = curBytes;
-      const rec = encrypt(data, "bbvk3|blob|" + blobIdx + "|" + offset);
-      cur.push(rec); curBytes += rec.length; totalBytes += rec.length;
-      entries.push({ path: relpath, size: data.length, blobIndex: blobIdx, offset, length: rec.length });
-      if (curBytes >= PACK) seal();            // big file => its own blob; full pack => closed
-      bar(idx + 1, totalFiles, "\uD83D\uDD10 Encrypting");
-    });
-    seal();
-
-    let idCounter = 0;
-    const nextId = () => "n" + (idCounter++);
-    const root = [];
-    const folderCache = new Map();
-    for (const entry of entries) {
-      const parts = entry.path.split("/").filter(Boolean);
-      let children = root, acc = "";
-      for (let i = 0; i < parts.length - 1; i++) {
-        acc += (acc ? "/" : "") + parts[i];
-        let folder = folderCache.get(acc);
-        if (!folder) {
-          folder = { id: nextId(), name: parts[i], type: "folder", children: [] };
-          children.push(folder);
-          folderCache.set(acc, folder);
-        }
-        children = folder.children;
-      }
-      const name = parts[parts.length - 1] || entry.path;
-      children.push({ id: nextId(), name, type: "file", size: entry.size,
-                      blobIndex: entry.blobIndex, offset: entry.offset, length: entry.length });
-    }
-
-    const manifest = { version: 3, fileCount: entries.length, blobCount: blobIdx, tree: root };
-    const mz = zlib.gzipSync(Buffer.from(JSON.stringify(manifest), "utf8"), { level: 6 });
-    fs.writeFileSync(path.join(outdir, "manifest.enc"), encrypt(mz, "bbvk3|manifest"), { mode: 0o600 });
-
-    process.stdout.write(keyB64url + "\n" + totalBytes);
-  ' "$outdir" "$listfile"
-}
-
-_crypto_import_upload() {
-  local link="$1" key="$2" dest="$3"
-  BB_KEY="$key" node -e '
-    const fs = require("fs"), path = require("path"), crypto = require("crypto"), zlib = require("zlib");
-    const link = process.argv[1];
-    const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
-    const dest = path.resolve(process.argv[2]);
-    const CONC = Math.max(1, parseInt(process.argv[3], 10) || 16);
-    const MAX_FILES = 200000;
-
-    function decrypt(buf, aad) {
-      if (buf.length < 28) throw new Error("short");
-      const iv = buf.subarray(0, 12);
-      const tag = buf.subarray(buf.length - 16);
-      const ct = buf.subarray(12, buf.length - 16);
-      const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-      decipher.setAuthTag(tag);
-      decipher.setAAD(Buffer.from(aad, "utf8"));
-      return Buffer.concat([decipher.update(ct), decipher.final()]);
-    }
-
-    // A malicious sender controls every filename. Never let one escape `dest`.
-    function safeParts(rel) {
-      if (typeof rel !== "string" || rel.length === 0 || rel.length > 4096) return null;
-      if (rel.indexOf("\0") !== -1 || rel.indexOf("\\") !== -1 || rel[0] === "/") return null;
-      const parts = rel.split("/");
-      for (const p of parts) { if (p === "" || p === "." || p === ".." || p.length > 255) return null; }
-      return parts;
-    }
-    // Create directories one level at a time and refuse to traverse symlinks.
-    function safeMkdirs(parts) {
-      let cur = dest;
-      for (const p of parts) {
-        cur = path.join(cur, p);
-        let st;
-        try { st = fs.lstatSync(cur); } catch (e) { fs.mkdirSync(cur); continue; }
-        if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("unsafe path component");
-      }
-      return cur;
-    }
-    // Never overwrite an existing file; "wx" also refuses to follow a planted symlink.
-    function writeNoClobber(dir, name, data) {
-      const ext = path.extname(name), stem = name.slice(0, name.length - ext.length);
-      for (let n = 0; n < 100; n++) {
-        const cand = path.join(dir, n === 0 ? name : stem + " (" + n + ")" + ext);
-        try { fs.writeFileSync(cand, data, { flag: "wx", mode: 0o644 }); return cand; }
-        catch (e) { if (e.code !== "EEXIST") throw e; }
-      }
-      throw new Error("too many name collisions");
+      const now = Date.now();
+      if (!final && now - lastDraw < 150) return;
+      lastDraw = now;
+      const mb = (seen / 1048576).toFixed(1), s = Math.floor((now - t0) / 1000);
+      process.stderr.write("\r\u001b[K\u001b[36m\uD83D\uDCE6 Packing tar.gz \u2192 \uD83D\uDD10 Encrypting\u001b[0m  " + mb + " MB packed  (" + s + "s)");
+      if (final) process.stderr.write("\n");
     }
 
     (async () => {
-      fs.mkdirSync(dest, { recursive: true });
-      const manifestRes = await fetch(link + "/manifest", { redirect: "error", credentials: "omit" });
-      if (!manifestRes.ok) { console.error("Manifest fetch failed (HTTP " + manifestRes.status + ")"); console.log(0); return; }
-      const mbuf = Buffer.from(await manifestRes.arrayBuffer());
-      let manifest, ver = 0;
-      // Try v3 (gzipped, packed) first, then legacy v2 (one blob per file).
+      const buf = Buffer.allocUnsafe(CHUNK);
+      let fill = 0, idx = 0, plainTotal = 0, cipherTotal = 0;
+      function flush() {
+        if (fill === 0) return;
+        const rec = encrypt(buf.subarray(0, fill), "bbvk4|blob|" + idx);
+        fs.writeFileSync(path.join(outdir, "blob" + idx), rec, { mode: 0o600 });
+        cipherTotal += rec.length; plainTotal += fill; idx++; fill = 0;
+      }
       try {
-        manifest = JSON.parse(zlib.gunzipSync(decrypt(mbuf, "bbvk3|manifest")).toString("utf8")); ver = 3;
-      } catch (e3) {
-        try {
-          manifest = JSON.parse(decrypt(mbuf, "bbvk2|manifest").toString("utf8")); ver = 2;
-        } catch (e2) {
-          console.error("Decryption failed \u2014 wrong key, corrupted link, or the data was tampered with.");
-          console.log(0);
-          return;
-        }
-      }
-      if (!manifest || manifest.version !== ver || !Array.isArray(manifest.tree)) {
-        console.error("Unsupported or modified manifest (expected format v2 or v3).");
-        console.log(0);
-        return;
-      }
-
-      // Group files by the blob that holds them: each blob is downloaded ONCE.
-      const packs = new Map();
-      const seen = new Set();
-      let bad = 0, nfiles = 0;
-      (function walk(nodes, prefix, depth) {
-        if (depth > 64) { bad++; return; }
-        for (const n of nodes) {
-          if (!n || typeof n.name !== "string") { bad++; continue; }
-          if (n.type === "file") {
-            const bi = n.blobIndex;
-            if (!Number.isInteger(bi) || bi < 0 || bi >= MAX_FILES) { bad++; continue; }
-            let off = 0, len = 0;
-            if (ver === 3) {
-              off = n.offset; len = n.length;
-              if (!Number.isInteger(off) || off < 0 || !Number.isInteger(len) || len < 28) { bad++; continue; }
-            }
-            const sk = bi + ":" + off;
-            if (seen.has(sk)) { bad++; continue; }
-            seen.add(sk);
-            if (!packs.has(bi)) packs.set(bi, []);
-            packs.get(bi).push({ relpath: prefix + n.name, off, len });
-            nfiles++;
-          } else if (n.type === "folder" && Array.isArray(n.children)) {
-            walk(n.children, prefix + n.name + "/", depth + 1);
+        for await (const piece of process.stdin) {
+          let off = 0;
+          while (off < piece.length) {
+            const n = Math.min(CHUNK - fill, piece.length - off);
+            piece.copy(buf, fill, off, off + n);
+            fill += n; off += n;
+            if (fill === CHUNK) flush();
           }
-          if (nfiles > MAX_FILES) return;
+          seen += piece.length;
+          status(false);
         }
-      })(manifest.tree, "", 0);
-
-      const COLS = 24, TTY = process.stderr.isTTY, TOTAL = nfiles;
-      let lastPct = -1;
-      function bar(done) {
-        if (!TTY) return;
-        const pct = TOTAL > 0 ? Math.floor(done * 100 / TOTAL) : 100;
-        if (pct === lastPct && done < TOTAL) return;
-        lastPct = pct;
-        const filled = Math.floor(pct * COLS / 100);
-        const b = "\u2588".repeat(filled) + "\u2591".repeat(COLS - filled);
-        const color = done >= TOTAL ? "\u001b[32m" : "\u001b[36m";
-        process.stderr.write("\r\u001b[K" + color + "[" + b + "] " +
-          String(pct).padStart(3) + "%\u001b[0m  \uD83D\uDCE5 Downloading " + done + "/" + TOTAL);
-        if (done >= TOTAL) process.stderr.write("\n");
+        flush();
+      } catch (e) {
+        if (TTY) process.stderr.write("\n");
+        console.error("  \u274c " + (e && e.code === "ENOSPC" ? "Disk full while writing encrypted blobs." : "Packing failed: " + (e && e.message)));
+        process.exit(3);
       }
+      status(true);
+      if (idx === 0) { console.error("  \u274c Nothing to pack."); process.exit(2); }
 
-      let ok = 0, done = 0, failed = bad;
-      const queue = Array.from(packs.keys());
-      let next = 0;
-      async function worker() {
-        while (true) {
-          const qi = next++;
-          if (qi >= queue.length) return;
-          const bi = queue[qi], items = packs.get(bi);
-          let blob = null;
-          try {
-            const res = await fetch(link + "/file/" + bi, { redirect: "error", credentials: "omit" });
-            if (res.ok) blob = Buffer.from(await res.arrayBuffer());
-          } catch (e) {}
-          for (const f of items) {
-            try {
-              const parts = safeParts(f.relpath);
-              if (!parts || !blob) { failed++; done++; bar(done); continue; }
-              let plain;
-              if (ver === 3) {
-                if (f.off + f.len > blob.length) throw new Error("range");
-                plain = decrypt(blob.subarray(f.off, f.off + f.len), "bbvk3|blob|" + bi + "|" + f.off);
-              } else {
-                plain = decrypt(blob, "bbvk2|blob|" + bi);
-              }
-              const dir = safeMkdirs(parts.slice(0, -1));
-              writeNoClobber(dir, parts[parts.length - 1], plain);
-              ok++; done++; bar(done);
-            } catch (e) {
-              failed++; done++; bar(done);
-            }
-          }
-        }
-      }
-      await Promise.all(Array.from({ length: Math.min(CONC, queue.length || 1) }, worker));
-
-      if (TTY && TOTAL === 0) process.stderr.write("\n");
-      if (failed > 0) process.stderr.write("  \u26a0\ufe0f  " + failed + " file(s) failed (download error, failed integrity check, or unsafe path rejected).\n");
-      console.log(ok);
+      const manifest = { version: 4, format: "tar.gz", name: process.env.BB_ARC_NAME || "files.tar.gz",
+                         size: plainTotal, chunkBytes: CHUNK, blobCount: idx };
+      fs.writeFileSync(path.join(outdir, "manifest.enc"), encrypt(Buffer.from(JSON.stringify(manifest), "utf8"), "bbvk4|manifest"), { mode: 0o600 });
+      process.stdout.write(keyB64url + "\n" + cipherTotal + "\n" + idx);
     })();
-  ' "$link" "$dest" "$_BB_MAX_PAR"
+  ' "$outdir"
+}
+
+# Download + decrypt a v4 link into <outfile> (a pre-created empty file).
+# Chunks are fetched in parallel and written at their exact offset, so order doesn't matter
+# and memory stays at a few chunks no matter how big the archive is.
+# stdout: "OK<TAB>name" | "EXPIRED" | "BADKEY" | "FAILED"
+_crypto_fetch_archive() {
+  local link="$1" key="$2" outfile="$3"
+  BB_KEY="$key" node -e '
+    const fs = require("fs"), crypto = require("crypto");
+    const link = process.argv[1], outfile = process.argv[2];
+    const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
+    const CONC = Math.max(1, Math.min(parseInt(process.argv[3], 10) || 8, 8));   // 8 x 16 MiB in flight
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    function decrypt(buf, aad) {
+      if (buf.length < 28) throw new Error("short");
+      const d = crypto.createDecipheriv("aes-256-gcm", key, buf.subarray(0, 12));
+      d.setAuthTag(buf.subarray(buf.length - 16));
+      d.setAAD(Buffer.from(aad, "utf8"));
+      return Buffer.concat([d.update(buf.subarray(12, buf.length - 16)), d.final()]);
+    }
+    async function get(url) {
+      for (let a = 0; a < 4; a++) {
+        try {
+          const res = await fetch(url, { redirect: "error", credentials: "omit" });
+          if (res.ok) return Buffer.from(await res.arrayBuffer());
+          if (res.status === 404) return null;
+        } catch (e) {}
+        await sleep(300 * (a + 1));
+      }
+      return null;
+    }
+
+    (async () => {
+      const mbuf = await get(link + "/manifest");
+      if (!mbuf) { console.log("EXPIRED"); return; }
+      let m;
+      try { m = JSON.parse(decrypt(mbuf, "bbvk4|manifest").toString("utf8")); }
+      catch (e) { console.log("BADKEY"); return; }
+      const n = m && m.blobCount, C = m && m.chunkBytes, size = m && m.size;
+      if (m.version !== 4 || m.format !== "tar.gz" || !Number.isInteger(n) || n < 1 || n > 199999 ||
+          !Number.isInteger(C) || C < 1048576 || C > 94371840 ||
+          !Number.isInteger(size) || size <= (n - 1) * C || size > n * C) {
+        console.log("BADKEY"); return;
+      }
+
+      const fd = fs.openSync(outfile, "r+");
+      const COLS = 24, TTY = process.stderr.isTTY;
+      let done = 0, lastPct = -1, failed = false, next = 0;
+      function bar() {
+        if (!TTY) return;
+        const pct = Math.floor(done * 100 / n);
+        if (pct === lastPct && done < n) return;
+        lastPct = pct;
+        const f = Math.floor(pct * COLS / 100);
+        process.stderr.write("\r\u001b[K" + (done >= n ? "\u001b[32m" : "\u001b[36m") + "[" + "\u2588".repeat(f) + "\u2591".repeat(COLS - f) + "] " +
+          String(pct).padStart(3) + "%\u001b[0m  \uD83D\uDCE5 Downloading + \uD83D\uDD13 decrypting " + done + "/" + n);
+        if (done >= n) process.stderr.write("\n");
+      }
+      async function worker() {
+        while (!failed) {
+          const i = next++;
+          if (i >= n) return;
+          try {
+            const blob = await get(link + "/file/" + i);
+            if (!blob) throw new Error("missing");
+            const plain = decrypt(blob, "bbvk4|blob|" + i);
+            const want = i < n - 1 ? C : size - (n - 1) * C;
+            if (plain.length !== want) throw new Error("length");
+            fs.writeSync(fd, plain, 0, plain.length, i * C);
+            done++; bar();
+          } catch (e) { failed = true; return; }
+        }
+      }
+      bar();
+      await Promise.all(Array.from({ length: Math.min(CONC, n) }, worker));
+      fs.closeSync(fd);
+      if (TTY && failed) process.stderr.write("\n");
+      console.log(failed ? "FAILED" : "OK\t" + String(m.name || "files.tar.gz"));
+    })();
+  ' "$link" "$outfile" "$_BB_MAX_PAR"
+}
+
+# Unpack a downloaded tar.gz into <dest> SAFELY. The archive comes from a link, so it is untrusted:
+#  * only regular files + directories are accepted (no symlinks/hardlinks/devices => no way to
+#    write outside the target through a planted link)
+#  * absolute names and ".." components are refused
+#  * it extracts into a brand-new hidden folder, never over your files; top-level items are then
+#    moved into <dest>, renamed "name (1)" if the name is already taken
+#  * expanded size is checked against free disk space first (tar.gz "bombs")
+# prints the number of files on stdout is NOT used; messages go to the terminal. Returns 0 on success.
+_unpack_targz_safe() {
+  local arc="$1" dest="$2"
+  command -v tar &>/dev/null || { echo "❌ 'tar' not found — install it first."; return 1; }
+
+  local ls_tmp; ls_tmp=$(mktemp "$dest/.bbvk_ls.XXXXXX") || { echo "❌ Could not write to $dest"; return 1; }
+  if ! tar -tzvf "$arc" --numeric-owner > "$ls_tmp" 2>/dev/null; then
+    echo "❌ The decrypted archive is not a valid tar.gz — refusing to unpack."
+    rm -f "$ls_tmp"; return 1
+  fi
+
+  local nbad nnames stats nfiles expanded free
+  nbad=$(LC_ALL=C awk '{ c = substr($0,1,1); if (c != "-" && c != "d") n++ } END { print n+0 }' "$ls_tmp")
+  if [ "$nbad" -gt 0 ]; then
+    echo "❌ Archive contains $nbad link/special entr(y/ies) — refusing to unpack (possible path-escape attack)."
+    rm -f "$ls_tmp"; return 1
+  fi
+  nnames=$(tar -tzf "$arc" 2>/dev/null | LC_ALL=C awk '/^\// || /(^|\/)\.\.(\/|$)/ { n++ } END { print n+0 }')
+  if [ "$nnames" -gt 0 ]; then
+    echo "❌ Archive contains absolute or '..' paths — refusing to unpack."
+    rm -f "$ls_tmp"; return 1
+  fi
+  stats=$(LC_ALL=C awk 'substr($0,1,1)=="-" { s += $3; n++ } END { printf "%d %d", n+0, s+0 }' "$ls_tmp")
+  nfiles="${stats% *}"; expanded="${stats#* }"
+  rm -f "$ls_tmp"
+
+  free=$(df -Pk "$dest" 2>/dev/null | awk 'NR==2 { print $4 * 1024 }')
+  if [[ "$free" =~ ^[0-9]+$ ]] && [ "$expanded" -gt "$free" ]; then
+    echo "❌ Not enough free space: archive expands to $((expanded/1024/1024)) MB, only $((free/1024/1024)) MB free in $dest."
+    return 1
+  fi
+
+  echo "📂 Unpacking $nfiles file(s), $((expanded/1024/1024)) MB..."
+  local stage; stage=$(mktemp -d "$dest/.bbvk_x.XXXXXX") || return 1
+  local errf; errf=$(mktemp)
+  if ! tar -xzf "$arc" -C "$stage" --no-same-owner --no-same-permissions --no-overwrite-dir 2> "$errf"; then
+    echo "❌ Unpacking failed:"; head -n 3 "$errf" | sed 's/^/   /'
+    rm -rf "$stage" "$errf"; return 1
+  fi
+  rm -f "$errf"
+
+  # Move top-level items into place without ever overwriting anything.
+  local _shopts; _shopts=$(shopt -p nullglob dotglob)
+  shopt -s nullglob dotglob
+  local e bn cand stem ext i
+  for e in "$stage"/*; do
+    bn="${e##*/}"; cand="$bn"; i=0
+    stem="$bn"; ext=""
+    if [ -f "$e" ] && [[ "$bn" == ?*.* ]]; then stem="${bn%.*}"; ext=".${bn##*.}"; fi
+    while [ -e "$dest/$cand" ] || [ -L "$dest/$cand" ]; do
+      i=$((i + 1)); cand="${stem} (${i})${ext}"
+    done
+    mv -- "$e" "$dest/$cand"
+  done
+  eval "$_shopts"
+  rmdir "$stage" 2>/dev/null
+  echo "✅ Imported $nfiles file(s) into: $dest"
+  return 0
 }
 
 # Phase 1: authorize + credit precheck, get an upload id back. Echoes the id.
@@ -654,85 +618,97 @@ _bb_upload_commit() {
 _up_do_multipart_upload() {
   local -a paths=("$@")
   _crypto_check || return 1
+  if ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; then
+    echo "❌ 'tar' and 'gzip' are required for up- (pkg install tar gzip)."
+    return 1
+  fi
+  local -a gz=(gzip)
+  command -v pigz &>/dev/null && gz=(pigz)          # parallel gzip when available
+  local lvl="${FILEAPI_BASHBASICS_GZIP_LEVEL:-6}"
+  [[ "$lvl" =~ ^[1-9]$ ]] || lvl=6
 
   echo "🔎 Scanning selection..."
-  local listfile; listfile=$(mktemp)
-  local p base file
-  # Build the file list WITHOUT forking a `stat` per file. For a 50k-file tree
-  # that per-file subprocess was why nothing printed for minutes. The whole
-  # loop redirects to the list once (one open, not one per line), and the exact
-  # byte total is computed by the encryption pass instead.
-  {
-    for p in "${paths[@]}"; do
-      if [ -d "$p" ]; then
-        base=$(basename -- "$p")
-        while IFS= read -r -d '' file; do
-          printf '%s\t%s\n' "${base}/${file#$p/}" "$file"
-        done < <(find "$p" -type f -print0)
-      elif [ -f "$p" ]; then
-        printf '%s\t%s\n' "$(basename -- "$p")" "$p"
-      else
-        echo "  ⚠️  Skipping missing item: $p" >&2
-      fi
-    done
-  } >> "$listfile"
+  # Stage the selection by name as symlinks so the archive holds "<name>/..." entries relative
+  # to nothing absolute (same layout the old per-file upload produced).
+  local stage tmpdir rcfile errfile
+  stage=$(mktemp -d) && tmpdir=$(mktemp -d) && rcfile=$(mktemp) && errfile=$(mktemp) \
+    || { echo "❌ Could not create temp files."; return 1; }
+  _up_cleanup() { rm -rf "$stage" "$tmpdir" "$rcfile" "$errfile"; }
 
-  if [ ! -s "$listfile" ]; then
-    echo "❌ No valid files found in selection"
-    rm -f "$listfile"
-    return 1
+  local -a rel_items=()
+  local p bn cand n
+  for p in "${paths[@]}"; do
+    p="${p%/}"; [[ "$p" == /* ]] || p="$PWD/$p"
+    if [ ! -f "$p" ] && [ ! -d "$p" ]; then echo "  ⚠️  Skipping missing item: $p" >&2; continue; fi
+    bn="${p##*/}"; cand="$bn"; n=1
+    while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
+    ln -s "$p" "$stage/$cand"
+    rel_items+=("./$cand")                            # "./" so a name starting with "-" is never an option
+  done
+  if [ ${#rel_items[@]} -eq 0 ]; then
+    echo "❌ No valid files found in selection"; _up_cleanup; return 1
   fi
 
-  local file_count; file_count=$(wc -l < "$listfile" | tr -d ' ')
-  if [ "$file_count" -gt 2000 ]; then
-    echo "📦 $file_count files — packing into ~$((_BB_PACK_BYTES/1024/1024))MB encrypted blobs."
-  fi
+  local arcname="files.tar.gz"
+  [ ${#rel_items[@]} -eq 1 ] && arcname="${rel_items[0]#./}.tar.gz"
+  arcname=$(printf '%s' "$arcname" | LC_ALL=C tr -c 'A-Za-z0-9._ -' '_' | cut -c1-120)
 
-  local tmpdir; tmpdir=$(mktemp -d)
-  local packout; packout=$(_crypto_pack_upload "$tmpdir" "$listfile")
-  rm -f "$listfile"
+  echo "📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)"
+  # find lists regular files + folders only (symlinks inside the tree are skipped, as before);
+  # tar -h resolves the staging symlinks at the top level.  tar's exit status goes to $rcfile.
+  local packout
+  packout=$(
+    cd "$stage" || exit 1
+    find -H "${rel_items[@]}" \( -type f -o -type d \) -print0 2>> "$errfile" \
+      | { tar --null --no-recursion -h -T - -cf - 2>> "$errfile"; echo $? > "$rcfile"; } \
+      | "${gz[@]}" "-$lvl" -c \
+      | _crypto_stream_pack "$tmpdir" "$arcname"
+  )
 
-  local key total_size
+  local key total_size nblobs tar_rc
   key=$(printf '%s' "$packout" | sed -n '1p')
   total_size=$(printf '%s' "$packout" | sed -n '2p')
+  nblobs=$(printf '%s' "$packout" | sed -n '3p')
+  tar_rc=$(cat "$rcfile" 2>/dev/null)
 
-  if [[ ! "$key" =~ ^[A-Za-z0-9_-]{43}$ ]] || [[ ! "$total_size" =~ ^[0-9]+$ ]]; then
-    echo "❌ Local encryption failed"
-    rm -rf "$tmpdir"
-    return 1
+  if [[ ! "$key" =~ ^[A-Za-z0-9_-]{43}$ ]] || [[ ! "$total_size" =~ ^[0-9]+$ ]] || [[ ! "$nblobs" =~ ^[0-9]+$ ]]; then
+    echo "❌ Packing/encryption failed"
+    [ -s "$errfile" ] && head -n 3 "$errfile" | sed 's/^/   /'
+    _up_cleanup; return 1
   fi
+  if [ -z "$tar_rc" ] || [ "$tar_rc" -ge 2 ]; then
+    echo "❌ tar failed (exit ${tar_rc:-?}) — upload aborted."
+    [ -s "$errfile" ] && head -n 3 "$errfile" | sed 's/^/   /'
+    _up_cleanup; return 1
+  fi
+  if [ "$tar_rc" -eq 1 ]; then
+    echo "⚠️  Some files changed or were unreadable while packing (they may be missing/partial):"
+    head -n 3 "$errfile" | sed 's/^/   /'
+  fi
+  echo "   $((total_size/1024/1024)) MB after tar.gz + encryption, in $nblobs blob(s)."
 
   if [ "$total_size" -gt "$_SP_HARD_LIMIT_BYTES" ]; then
-    echo "❌ Selection is $((total_size/1024/1024/1024))GB — exceeds the absolute upload ceiling"
-    rm -rf "$tmpdir"
-    return 1
+    echo "❌ Packed size is $((total_size/1024/1024/1024))GB — exceeds the absolute upload ceiling"
+    _up_cleanup; return 1
   fi
-  local oversized=0
   if [ "$total_size" -gt "$_SP_SOFT_UPLOAD_BYTES" ]; then
-    oversized=1
-    echo "ℹ️  Selection is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
+    echo "ℹ️  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
   fi
-
-  local nblobs=0
-  while [ -f "$tmpdir/blob$nblobs" ]; do nblobs=$((nblobs + 1)); done
 
   # ---- Phase 1: init (auth + credit precheck) ----
   local init_out id token
-  init_out=$(_bb_upload_init "$total_size") || { rm -rf "$tmpdir"; return 1; }
+  init_out=$(_bb_upload_init "$total_size") || { _up_cleanup; return 1; }
   id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
   if [ -z "$id" ] || [ -z "$token" ]; then
-    echo "❌ Upload init failed (no id returned)"
-    rm -rf "$tmpdir"
-    return 1
+    echo "❌ Upload init failed (no id returned)"; _up_cleanup; return 1
   fi
 
   # ---- Phase 2: parallel streaming blob uploads (single Node process) ----
   [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
-
   local upres
   upres=$(_bb_upload_blobs "$id" "$tmpdir" "$nblobs" "$token")
   if [ "$upres" != "OK" ]; then
-    rm -rf "$tmpdir"
+    _up_cleanup
     echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects auto-expire in 30 min."
     return 1
   fi
@@ -740,8 +716,8 @@ _up_do_multipart_upload() {
   # ---- Phase 3: commit (manifest + credit settlement) ----
   local result final_url deducted balance
   result=$(_bb_upload_commit "$id" "$nblobs" "$tmpdir/manifest.enc" "$token") \
-    || { rm -rf "$tmpdir"; return 1; }
-  rm -rf "$tmpdir"
+    || { _up_cleanup; return 1; }
+  _up_cleanup
 
   final_url=$(echo "$result" | sed -n '1p')
   deducted=$(echo "$result" | sed -n '2p')
@@ -758,22 +734,22 @@ handle_up_upload() {
   _up_do_multipart_upload "${sp_resolved[@]}"
 }
 
-handle_ups_upload() {
+handle_c2c_upload() {
   local raw="$1"
-  local itemlist="${raw#ups-}"
-  _sp_guard_and_resolve "$itemlist" "ups-" || return
-  _ups_upload_paths "${sp_resolved[@]}"
+  local itemlist="${raw#c2c-}"
+  _sp_guard_and_resolve "$itemlist" "c2c-" || return
+  _c2c_paths "${sp_resolved[@]}"
 }
 
 # Merge the given files into ONE encrypted text blob and upload it.
-# Shared by ups- (numbered items) and the fx *.upload.text.* functions
+# Shared by c2c- (numbered items) and the fx *.upload.text.* functions
 # (CSV / .s selection), so every entry point behaves identically.
-_ups_upload_paths() {
+_c2c_paths() {
   local -a paths=("$@")
   local p
   for p in "${paths[@]}"; do
     if [ -d "$p" ]; then
-      echo "❌ ups- doesn't support folder upload. Try up- instead."
+      echo "❌ c2c- doesn't support folders. Try up- instead."
       return 1
     fi
   done
@@ -922,18 +898,21 @@ handle_do_import() {
     return 1
   fi
 
-  echo "📦 Multi-file link detected."
-  local dest="$path"
-  mkdir -p "$dest"
+  echo "📦 Archive link detected."
+  mkdir -p "$path"
+  local arc; arc=$(mktemp "$path/.bbvk_dl.XXXXXX") || { echo "❌ Cannot write to $path"; return 1; }
 
-  echo "🔐 Decrypting and importing..."
-  local n
-  n=$(_crypto_import_upload "$link" "$key" "$dest")
+  local res; res=$(_crypto_fetch_archive "$link" "$key" "$arc")
+  case "${res%%$'\t'*}" in
+    OK) ;;
+    EXPIRED) echo "❌ Link expired, invalid, or already nuked."; rm -f "$arc"; return 1 ;;
+    BADKEY)  echo "❌ Decryption failed — wrong key, tampered data, or a link made by an older client version (those expire after 30 minutes)."; rm -f "$arc"; return 1 ;;
+    *)       echo "❌ Download failed — some chunks could not be fetched or failed their integrity check. Nothing was unpacked."; rm -f "$arc"; return 1 ;;
+  esac
 
-  if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ]; then
-    echo "✅ Imported $n file(s) into: $dest"
-    echo "ℹ️  The remote copy is left in place and will auto-delete on its own after 30 minutes."
-  else
-    echo "❌ Import failed — nothing was decrypted."
-  fi
+  _unpack_targz_safe "$arc" "$path"
+  local rc=$?
+  rm -f "$arc"
+  [ $rc -eq 0 ] && echo "ℹ️  The remote copy is left in place and will auto-delete on its own after 30 minutes."
+  return $rc
 }
