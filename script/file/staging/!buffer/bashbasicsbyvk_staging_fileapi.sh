@@ -9,6 +9,8 @@ _SP_HARD_LIMIT_BYTES=$((32*1024*1024*1024))
 # _BB_MAX_PAR is how many blobs/parts upload concurrently.
 _BB_CHUNK_BYTES=$((90*1024*1024))
 _BB_MAX_PAR="${FILEAPI_BASHBASICS_PARALLEL:-16}"
+# Small files are packed into blobs of about this size (default 16 MiB) => few requests.
+_BB_PACK_BYTES=$(( ${FILEAPI_BASHBASICS_PACK_MB:-16} * 1024 * 1024 ))
 
 _bb_authed_put() {
   local endpoint="$1" est_size="$2"; shift 2
@@ -157,12 +159,18 @@ _announce_link() {
   fi
 }
 
+# Format v3 ("packed"): small files are concatenated into ~PACK_BYTES blobs so a 58k-file
+# tree becomes a few dozen HTTP requests instead of 58k. Every file is still encrypted
+# on its own (AES-256-GCM), record = [12B IV][ciphertext][16B tag], AAD binds each record
+# to its exact place:  "bbvk3|blob|<blobIndex>|<offset>". The manifest (gzipped, then
+# encrypted, AAD "bbvk3|manifest") carries blobIndex/offset/length per file.
 _crypto_pack_upload() {
   local outdir="$1" listfile="$2"
-  node -e '
-    const fs = require("fs"), path = require("path"), crypto = require("crypto");
+  BB_PACK_BYTES="${_BB_PACK_BYTES}" node -e '
+    const fs = require("fs"), path = require("path"), crypto = require("crypto"), zlib = require("zlib");
     const outdir = process.argv[1];
     const listfile = process.argv[2];
+    const PACK = parseInt(process.env.BB_PACK_BYTES, 10) || 16 * 1024 * 1024;
     const lines = fs.readFileSync(listfile, "utf8").split("\n").filter(Boolean);
 
     const key = crypto.randomBytes(32);
@@ -173,8 +181,7 @@ _crypto_pack_upload() {
       const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
       cipher.setAAD(Buffer.from(aad, "utf8"));
       const ct = Buffer.concat([cipher.update(buf), cipher.final()]);
-      const tag = cipher.getAuthTag();
-      return Buffer.concat([iv, ct, tag]);
+      return Buffer.concat([iv, ct, cipher.getAuthTag()]);
     }
 
     const COLS = 24, TTY = process.stderr.isTTY;
@@ -182,7 +189,7 @@ _crypto_pack_upload() {
     function bar(done, total, label) {
       if (!TTY) return;
       const pct = total > 0 ? Math.floor(done * 100 / total) : 100;
-      if (pct === lastPct && done < total) return;   // only redraw when % changes
+      if (pct === lastPct && done < total) return;
       lastPct = pct;
       const filled = Math.floor(pct * COLS / 100);
       const b = "\u2588".repeat(filled) + "\u2591".repeat(COLS - filled);
@@ -193,23 +200,33 @@ _crypto_pack_upload() {
     }
 
     const entries = [];
-    let totalBytes = 0;
+    let totalBytes = 0, blobIdx = 0, cur = [], curBytes = 0;
+    function seal() {
+      if (curBytes === 0 && cur.length === 0) return;
+      fs.writeFileSync(path.join(outdir, "blob" + blobIdx), cur.length === 1 ? cur[0] : Buffer.concat(cur), { mode: 0o600 });
+      blobIdx++; cur = []; curBytes = 0;
+    }
+
     const totalFiles = lines.length;
     lines.forEach((line, idx) => {
       const tabIdx = line.indexOf("\t");
       const relpath = line.slice(0, tabIdx);
       const abspath = line.slice(tabIdx + 1);
-      if (fs.statSync(abspath).size > 2000000000) {
-        console.error("\n  \u274c " + relpath + " is larger than 2 GB; single-blob encryption holds a file in memory and cannot handle it.");
+      const data = fs.readFileSync(abspath);   // throws on >2GB (Buffer limit) -> caught below
+      if (data.length > 2000000000) {
+        console.error("\n  \u274c " + relpath + " is larger than 2 GB; single-record encryption holds a file in memory and cannot handle it.");
         process.exit(2);
       }
-      const data = fs.readFileSync(abspath);
-      const enc = encrypt(data, "bbvk2|blob|" + idx);
-      totalBytes += enc.length;   // billed/validated size = real ciphertext bytes stored
-      fs.writeFileSync(path.join(outdir, "blob" + idx), enc, { mode: 0o600 });
-      entries.push({ path: relpath, size: data.length, blobIndex: idx });
+      // A record that would overflow the current pack closes it first.
+      if (curBytes > 0 && curBytes + data.length + 28 > PACK) seal();
+      const offset = curBytes;
+      const rec = encrypt(data, "bbvk3|blob|" + blobIdx + "|" + offset);
+      cur.push(rec); curBytes += rec.length; totalBytes += rec.length;
+      entries.push({ path: relpath, size: data.length, blobIndex: blobIdx, offset, length: rec.length });
+      if (curBytes >= PACK) seal();            // big file => its own blob; full pack => closed
       bar(idx + 1, totalFiles, "\uD83D\uDD10 Encrypting");
     });
+    seal();
 
     let idCounter = 0;
     const nextId = () => "n" + (idCounter++);
@@ -229,11 +246,13 @@ _crypto_pack_upload() {
         children = folder.children;
       }
       const name = parts[parts.length - 1] || entry.path;
-      children.push({ id: nextId(), name, type: "file", size: entry.size, blobIndex: entry.blobIndex });
+      children.push({ id: nextId(), name, type: "file", size: entry.size,
+                      blobIndex: entry.blobIndex, offset: entry.offset, length: entry.length });
     }
 
-    const manifest = { version: 2, fileCount: entries.length, tree: root };
-    fs.writeFileSync(path.join(outdir, "manifest.enc"), encrypt(Buffer.from(JSON.stringify(manifest), "utf8"), "bbvk2|manifest"), { mode: 0o600 });
+    const manifest = { version: 3, fileCount: entries.length, blobCount: blobIdx, tree: root };
+    const mz = zlib.gzipSync(Buffer.from(JSON.stringify(manifest), "utf8"), { level: 6 });
+    fs.writeFileSync(path.join(outdir, "manifest.enc"), encrypt(mz, "bbvk3|manifest"), { mode: 0o600 });
 
     process.stdout.write(keyB64url + "\n" + totalBytes);
   ' "$outdir" "$listfile"
@@ -242,7 +261,7 @@ _crypto_pack_upload() {
 _crypto_import_upload() {
   local link="$1" key="$2" dest="$3"
   BB_KEY="$key" node -e '
-    const fs = require("fs"), path = require("path"), crypto = require("crypto");
+    const fs = require("fs"), path = require("path"), crypto = require("crypto"), zlib = require("zlib");
     const link = process.argv[1];
     const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
     const dest = path.resolve(process.argv[2]);
@@ -294,40 +313,56 @@ _crypto_import_upload() {
       fs.mkdirSync(dest, { recursive: true });
       const manifestRes = await fetch(link + "/manifest", { redirect: "error", credentials: "omit" });
       if (!manifestRes.ok) { console.error("Manifest fetch failed (HTTP " + manifestRes.status + ")"); console.log(0); return; }
-      let manifest;
+      const mbuf = Buffer.from(await manifestRes.arrayBuffer());
+      let manifest, ver = 0;
+      // Try v3 (gzipped, packed) first, then legacy v2 (one blob per file).
       try {
-        manifest = JSON.parse(decrypt(Buffer.from(await manifestRes.arrayBuffer()), "bbvk2|manifest").toString("utf8"));
-      } catch (e) {
-        console.error("Decryption failed \u2014 wrong key, corrupted link, or the data was tampered with.");
-        console.log(0);
-        return;
+        manifest = JSON.parse(zlib.gunzipSync(decrypt(mbuf, "bbvk3|manifest")).toString("utf8")); ver = 3;
+      } catch (e3) {
+        try {
+          manifest = JSON.parse(decrypt(mbuf, "bbvk2|manifest").toString("utf8")); ver = 2;
+        } catch (e2) {
+          console.error("Decryption failed \u2014 wrong key, corrupted link, or the data was tampered with.");
+          console.log(0);
+          return;
+        }
       }
-      if (!manifest || manifest.version !== 2 || !Array.isArray(manifest.tree)) {
-        console.error("Unsupported or modified manifest (expected format v2).");
+      if (!manifest || manifest.version !== ver || !Array.isArray(manifest.tree)) {
+        console.error("Unsupported or modified manifest (expected format v2 or v3).");
         console.log(0);
         return;
       }
 
-      const files = [];
+      // Group files by the blob that holds them: each blob is downloaded ONCE.
+      const packs = new Map();
       const seen = new Set();
-      let bad = 0;
+      let bad = 0, nfiles = 0;
       (function walk(nodes, prefix, depth) {
         if (depth > 64) { bad++; return; }
         for (const n of nodes) {
           if (!n || typeof n.name !== "string") { bad++; continue; }
           if (n.type === "file") {
             const bi = n.blobIndex;
-            if (!Number.isInteger(bi) || bi < 0 || bi >= MAX_FILES || seen.has(bi)) { bad++; continue; }
-            seen.add(bi);
-            files.push({ relpath: prefix + n.name, blobIndex: bi });
+            if (!Number.isInteger(bi) || bi < 0 || bi >= MAX_FILES) { bad++; continue; }
+            let off = 0, len = 0;
+            if (ver === 3) {
+              off = n.offset; len = n.length;
+              if (!Number.isInteger(off) || off < 0 || !Number.isInteger(len) || len < 28) { bad++; continue; }
+            }
+            const sk = bi + ":" + off;
+            if (seen.has(sk)) { bad++; continue; }
+            seen.add(sk);
+            if (!packs.has(bi)) packs.set(bi, []);
+            packs.get(bi).push({ relpath: prefix + n.name, off, len });
+            nfiles++;
           } else if (n.type === "folder" && Array.isArray(n.children)) {
             walk(n.children, prefix + n.name + "/", depth + 1);
           }
-          if (files.length > MAX_FILES) return;
+          if (nfiles > MAX_FILES) return;
         }
       })(manifest.tree, "", 0);
 
-      const COLS = 24, TTY = process.stderr.isTTY, TOTAL = files.length;
+      const COLS = 24, TTY = process.stderr.isTTY, TOTAL = nfiles;
       let lastPct = -1;
       function bar(done) {
         if (!TTY) return;
@@ -342,27 +377,40 @@ _crypto_import_upload() {
         if (done >= TOTAL) process.stderr.write("\n");
       }
 
-      let ok = 0, done = 0, failed = bad, next = 0;
+      let ok = 0, done = 0, failed = bad;
+      const queue = Array.from(packs.keys());
+      let next = 0;
       async function worker() {
         while (true) {
-          const i = next++;
-          if (i >= files.length) return;
-          const f = files[i];
+          const qi = next++;
+          if (qi >= queue.length) return;
+          const bi = queue[qi], items = packs.get(bi);
+          let blob = null;
           try {
-            const parts = safeParts(f.relpath);
-            if (!parts) { failed++; done++; bar(done); continue; }
-            const fileRes = await fetch(link + "/file/" + f.blobIndex, { redirect: "error", credentials: "omit" });
-            if (!fileRes.ok) { failed++; done++; bar(done); continue; }
-            const plain = decrypt(Buffer.from(await fileRes.arrayBuffer()), "bbvk2|blob|" + f.blobIndex);
-            const dir = safeMkdirs(parts.slice(0, -1));
-            writeNoClobber(dir, parts[parts.length - 1], plain);
-            ok++; done++; bar(done);
-          } catch (e) {
-            failed++; done++; bar(done);
+            const res = await fetch(link + "/file/" + bi, { redirect: "error", credentials: "omit" });
+            if (res.ok) blob = Buffer.from(await res.arrayBuffer());
+          } catch (e) {}
+          for (const f of items) {
+            try {
+              const parts = safeParts(f.relpath);
+              if (!parts || !blob) { failed++; done++; bar(done); continue; }
+              let plain;
+              if (ver === 3) {
+                if (f.off + f.len > blob.length) throw new Error("range");
+                plain = decrypt(blob.subarray(f.off, f.off + f.len), "bbvk3|blob|" + bi + "|" + f.off);
+              } else {
+                plain = decrypt(blob, "bbvk2|blob|" + bi);
+              }
+              const dir = safeMkdirs(parts.slice(0, -1));
+              writeNoClobber(dir, parts[parts.length - 1], plain);
+              ok++; done++; bar(done);
+            } catch (e) {
+              failed++; done++; bar(done);
+            }
           }
         }
       }
-      await Promise.all(Array.from({ length: Math.min(CONC, files.length || 1) }, worker));
+      await Promise.all(Array.from({ length: Math.min(CONC, queue.length || 1) }, worker));
 
       if (TTY && TOTAL === 0) process.stderr.write("\n");
       if (failed > 0) process.stderr.write("  \u26a0\ufe0f  " + failed + " file(s) failed (download error, failed integrity check, or unsafe path rejected).\n");
@@ -637,7 +685,7 @@ _up_do_multipart_upload() {
 
   local file_count; file_count=$(wc -l < "$listfile" | tr -d ' ')
   if [ "$file_count" -gt 2000 ]; then
-    echo "⏳ $file_count files — this is packed one blob per file, so it will take a while."
+    echo "📦 $file_count files — packing into ~$((_BB_PACK_BYTES/1024/1024))MB encrypted blobs."
   fi
 
   local tmpdir; tmpdir=$(mktemp -d)
@@ -679,7 +727,7 @@ _up_do_multipart_upload() {
   fi
 
   # ---- Phase 2: parallel streaming blob uploads (single Node process) ----
-  [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted file entr(y/ies) — up to $_BB_MAX_PAR in parallel..."
+  [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
 
   local upres
   upres=$(_bb_upload_blobs "$id" "$tmpdir" "$nblobs" "$token")
