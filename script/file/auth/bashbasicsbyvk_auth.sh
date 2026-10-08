@@ -28,7 +28,7 @@ _bvk_auth_parse() {  # $1=file ; sets P_MAIL P_DISEPS P_APIKEY P_DINONS P_CREATE
   P_MAIL=""; P_DISEPS=""; P_APIKEY=""; P_DINONS=""; P_CREATED=""
   [ -r "$1" ] || return 1
   local line k v
-  while IFS= read -r line || [ -n "$line" ]; do
+  while IFS= builtin read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"
     case "$line" in ''|\#*) continue ;; esac
     k="${line%%=*}"; v="${line#*=}"
@@ -130,17 +130,22 @@ _bvk_auth_err() {
 _bvk_auth_jstr() { node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$1"; }
 
 # ---------------------------------------------------------------- profile list / selection
-_BVK_AUTH_IDS=()
+# Data only -- the screens are drawn by the shared viewport engine (see "screens" below).
+_BVK_AUTH_IDS=()      # profile id per row (UNFILTERED order)
+_BVK_AUTH_MAILS=()    # mail per row        (what the = filter searches)
+_BVK_AUTH_TAGS=()     # "[abc123…]" per row
+_BVK_AUTH_ACTIVE=""   # id of the active profile
 _bvk_auth_list() {
-  _BVK_AUTH_IDS=(); local f i=0 act; act=$(cat "$_BVK_AUTH_DIR/active" 2>/dev/null)
+  _BVK_AUTH_IDS=(); _BVK_AUTH_MAILS=(); _BVK_AUTH_TAGS=()
+  local f
+  _BVK_AUTH_ACTIVE=$(cat "$_BVK_AUTH_DIR/active" 2>/dev/null)
   for f in "$_BVK_AUTH_DIR"/profiles/p_*; do
     [ -f "$f" ] || continue
+    [[ "$f" == *.prev || "$f" == *.tmp ]] && continue
     _bvk_auth_parse "$f" || continue
     [ -n "$P_MAIL" ] && [ -n "$P_DISEPS" ] || continue
-    _BVK_AUTH_IDS+=("${f##*/}"); i=$((i+1))
-    printf '  %d) %s  [%s…]%s\n' "$i" "$P_MAIL" "${P_DISEPS:0:6}" "$([ "${f##*/}" = "$act" ] && echo '  ★ active')"
+    _BVK_AUTH_IDS+=("${f##*/}"); _BVK_AUTH_MAILS+=("$P_MAIL"); _BVK_AUTH_TAGS+=("[${P_DISEPS:0:6}…]")
   done
-  [ "$i" -eq 0 ] && echo "  (no users yet — press c to create one, or ui to import)"
   return 0
 }
 _bvk_auth_new_id() { echo "p_$(node -e 'process.stdout.write(require("crypto").randomBytes(8).toString("hex"))')"; }
@@ -166,7 +171,7 @@ _bvk_auth_create() {
    For any help with paid services ONLY a receipt from the e-mail used here
    is accepted. Anything else is rejected outright, with no reply.
 TXT
-  local mail; read -r -p $'\n   Enter email: ' mail
+  local mail; builtin read -r -p $'\n   Enter email: ' mail
   [ -z "$mail" ] && { echo "↩️  Cancelled."; return; }
   _bvk_auth_mail_ok "$mail" || { echo "❌ Invalid input (max 256 chars; no spaces, quotes, < > \` \$ \\ ; | & ( ) { })."; return; }
   [ -r "$_BVK_TELEMETRY_DIR/uuid" ] || { echo "❌ No telemetry id found (is BVK_TELEMETRY=off?). Creating a user needs it for abuse protection. Restart 'o' once with telemetry on."; return; }
@@ -200,11 +205,16 @@ TXT
 # ---------------------------------------------------------------- export / import (local only, no server, no limits)
 _bvk_auth_export() {  # $1=profile id
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$1" || return
-  echo "📤 Export — choose items (e.g. 1 3 4, or 'a' for all):"
-  echo "   1) Mail   2) Diseps   3) apikey   4) Dinons"
-  local sel; read -r -p "   > " sel; [ -z "$sel" ] && return
-  [ "$sel" = a ] && sel="1 2 3 4"
-  local out="${path:-$PWD}/bashbasicsbyvk_export_$(date +%Y%m%d_%H%M%S).txt" n
+  echo "📤 Export — what to include?"
+  echo "   1) Mail"
+  echo "   2) Diseps"
+  echo "   3) apikey"
+  echo "   4) Dinons"
+  echo "   a) all"
+  local sel; builtin read -r -p "   Items (e.g. 1 3 4, or a for all; Enter = cancel): " sel; [ -z "$sel" ] && { echo "↩️  Cancelled."; return; }
+  sel="${sel//,/ }"; sel="${sel,,}"
+  case " $sel " in *" a "*) sel="1 2 3 4" ;; esac
+  local out="${path:-$PWD}/bashbasicsbyvk_export_$(date +%Y%m%d_%H%M%S).txt" n wrote=0
   ( umask 077; : > "$out"
     for n in $sel; do case "$n" in
       1) printf 'mail=%s\n'   "$P_MAIL"   >> "$out" ;;
@@ -212,12 +222,13 @@ _bvk_auth_export() {  # $1=profile id
       3) printf 'apikey=%s\n' "$P_APIKEY" >> "$out" ;;
       4) printf 'dinons=%s\n' "$P_DINONS" >> "$out" ;;
     esac; done )
+  [ -s "$out" ] || { rm -f "$out"; echo "❌ Nothing selected."; return; }
   echo "✅ Exported to $out  (keep it private — it contains secrets)"
 }
 
 _bvk_auth_import() {
   echo "📥 Import — path to a credentials / export file:"
-  local f; read -r -e -p "   > " f; f="${f/#\~/$HOME}"
+  local f; builtin read -r -e -p "   > " f; f="${f/#\~/$HOME}"
   [ -f "$f" ] || { echo "❌ File not found."; return; }
   [ "$(wc -c < "$f")" -le 8192 ] || { echo "❌ File too large to be a credentials file."; return; }
   _bvk_auth_parse "$f"
@@ -245,7 +256,7 @@ _bvk_auth_import() {
 _bvk_auth_link() {
   echo; echo "🔗 Link existing account (one-time upgrade)"
   echo "   Use the e-mail and API key you used before this update. A diseps + dinons will be added to it."
-  local mail key; read -r -p "   Email: " mail; read -r -s -p "   API key: " key; echo
+  local mail key; builtin read -r -p "   Email: " mail; builtin read -r -s -p "   API key: " key; echo
   _bvk_auth_mail_ok "$mail" && [ -n "$key" ] || { echo "❌ Invalid input."; return; }
   P_MAIL="$mail"; P_APIKEY="$key"; P_DISEPS=""                      # no diseps yet => server treats it as legacy login
   P_DINONS=$(_bvk_auth_gen_codes $_BVK_DINONS_N); local nd fek wrapped
@@ -276,7 +287,7 @@ _bvk_auth_regen() {  # $1=what: diseps|apikey|dinons|mail   (P_* = current profi
   cp -f "$file" "$file.prev" 2>/dev/null && chmod 600 "$file.prev"        # lock-out safety net
   case "$what" in
     mail)
-      read -r -p "   New email: " newmail
+      builtin read -r -p "   New email: " newmail
       _bvk_auth_mail_ok "$newmail" || { echo "❌ Invalid input."; return; }
       json=$(printf '{"action":"change_mail","new_mail":%s}' "$(_bvk_auth_jstr "$newmail")") ;;
     diseps)
@@ -306,73 +317,228 @@ _bvk_auth_regen() {  # $1=what: diseps|apikey|dinons|mail   (P_* = current profi
   [ "$what" = diseps ] && echo "   ℹ️  Tell the admin your new diseps for support requests."
 }
 
-_bvk_auth_user_menu() {  # $1=profile id
-  local id="$1" file="$_BVK_AUTH_DIR/profiles/$1" c
-  while :; do
-    _bvk_auth_parse "$file" || return
-    clear 2>/dev/null
-    echo "👤 Acting as: $P_MAIL"
-    cat <<'TXT'
+# ================================================================ screens
+# Both screens are drawn by the SAME viewport engine as `o`, fx, sw and .r, so they look and
+# behave identically:  header · rule · numbered rows · rule · footer · "Select:" prompt,
+# arrow-key highlight, u = back, q = close, "=" = live filter, bad input -> message + redraw.
+# (No `cat`/raw `read -p` menus here: the smart-menu shim cannot see those, which is what
+#  broke highlighting, header/footer detection and the prompt.)
+#
+#   list screen   items[] = the users' mails   (the = filter searches these)
+#   user screen   items[] = the action labels
 
-  1) Change Mail ID        5) Report Issue
-  2) Regenerate diseps     6) Recharge
-  3) Regenerate apikey     7) Set as active user
-  4) Regenerate dinons
-  ─────────────────────────────────────────
-  ux) export   ui) import   b) back
-TXT
-    read -r -p "> " c
-    case "$c" in
-      1) _bvk_auth_regen mail   "$file" ;;
-      2) _bvk_auth_regen diseps "$file" ;;
-      3) _bvk_auth_regen apikey "$file" ;;
-      4) _bvk_auth_regen dinons "$file" ;;
-      5) _bvk_auth_mailto "bashbasicsbyvk: support" "mail: $P_MAIL" ;;
-      6) _bvk_auth_mailto "bashbasicsbyvk: recharge" "mail: $P_MAIL
+_AU_SCREEN="list"      # list | user
+_AU_UID=""             # profile id shown on the user screen
+_AU_QUIT=0             # set by q on the user screen: close -auth entirely
+_AU_MAIL=""            # mail shown in the user-screen header
+
+# display row N (1-based, filtered or not) -> 0-based slot in the unfiltered arrays
+_au_slot() {
+  if $_filter_map_active; then _AU_SLOT="${_filter_map[$(( $1 - 1 ))]:-0}"; else _AU_SLOT=$(( $1 - 1 )); fi
+}
+
+# ---- list screen
+_au_list_rowtext() {
+  _au_slot "$1"
+  local mark=""
+  [ "${_BVK_AUTH_IDS[$_AU_SLOT]}" = "$_BVK_AUTH_ACTIVE" ] && mark="  ★ active"
+  printf -v _vp_line ' %2d) 👤 %s  %s%s' "$1" "${items[$(( $1 - 1 ))]}" "${_BVK_AUTH_TAGS[$_AU_SLOT]}" "$mark"
+}
+_au_list_header() {
+  echo
+  echo "🔐 -auth — select user"
+  [ "${#_BVK_AUTH_IDS[@]}" -eq 0 ] && echo "   (no users yet — press c to create one, or ui to import)"
+  _vp_filter_header_line
+}
+_au_list_footer() {
+  printf '\nc) Create user   r) Remove user   l) Link old account\n'
+  printf 'ux) Export users   ui) Import users   =) Filter\n'
+  printf 'u) Back to main menu   q) Close\n'
+}
+_au_list_build() {
+  _bvk_auth_list
+  _filter_reset_state
+  items=("${_BVK_AUTH_MAILS[@]}")
+  _hl_index=0
+}
+
+# ---- user screen
+_AU_ACTIONS=("Change Mail ID" "Regenerate diseps" "Regenerate apikey" "Regenerate dinons" "Report Issue" "Recharge" "Set as active user")
+_au_user_rowtext() {
+  _au_slot "$1"
+  local mark=""
+  [ "$_AU_SLOT" -eq 6 ] && [ "$_AU_UID" = "$_BVK_AUTH_ACTIVE" ] && mark="  ★ active"
+  printf -v _vp_line ' %2d) %s%s' "$1" "${items[$(( $1 - 1 ))]}" "$mark"
+}
+_au_user_header() {
+  echo
+  echo "👤 Acting as: $_AU_MAIL"
+  _vp_filter_header_line
+}
+_au_user_footer() {
+  printf '\nux) Export   ui) Import   =) Filter\n'
+  printf 'u) Back   q) Close\n'
+}
+_au_user_build() {                       # returns 1 if the profile vanished
+  _bvk_auth_list
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
+  [ -n "$P_MAIL" ] || return 1
+  _AU_MAIL="$P_MAIL"
+  _filter_reset_state
+  items=("${_AU_ACTIONS[@]}")
+  _hl_index=0
+}
+
+# ---- shared plumbing
+_au_set_viewport() {
+  _vp_mode="items"
+  _vp_hl_fn=_vp_is_hl_single
+  _msel_set=()
+  _vp_input_fn=_print_input_line
+  case "$_AU_SCREEN" in
+    user) _vp_rowtext_fn=_au_user_rowtext; _vp_header_fn=_au_user_header; _vp_footer_fn=_au_user_footer ;;
+    *)    _vp_rowtext_fn=_au_list_rowtext; _vp_header_fn=_au_list_header; _vp_footer_fn=_au_list_footer ;;
+  esac
+  _vp_cache_reset
+}
+# rebuild the current screen and draw it fresh (this is what puts the "Select:" menu back
+# after every action, bad input or message)
+_au_fresh() {
+  _buf=""; _pos=0
+  declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
+  case "$_AU_SCREEN" in
+    user) _au_user_build || return 1 ;;
+    *)    _au_list_build ;;
+  esac
+  _au_set_viewport
+  _vp_render_from_top
+  return 0       # (the draw's own status is the input line's, not a failure)
+}
+_au_pause() {
+  builtin printf '\n  ↵ press any key to continue'
+  builtin read -rsn1 _ </dev/tty 2>/dev/null
+  builtin printf '\n'
+}
+# resolve a typed row number against what is on screen -> _AU_SLOT ; 1 = invalid
+_au_row() {
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  local n=$(( 10#$1 ))
+  [ "$n" -ge 1 ] && [ "$n" -le "${#items[@]}" ] || return 1
+  _au_slot "$n"
+}
+# number for r / ux : taken from "r-2" / "ux-2", else asked
+_au_ask_row() {  # $1=typed command  $2=prompt  -> _AU_SLOT
+  local arg="" n
+  [[ "$1" == *-* ]] && arg="${1#*-}"
+  if [ -z "$arg" ]; then
+    builtin read -r -p "   $2 " arg
+    [ -z "$arg" ] && { echo "↩️  Cancelled."; return 1; }
+  fi
+  _au_row "$arg" || { echo "⚠️  Invalid selection"; return 1; }
+}
+
+_au_user_action() {  # $1 = 0-based action slot
+  local file="$_BVK_AUTH_DIR/profiles/$_AU_UID"
+  case "$1" in
+    0) _bvk_auth_regen mail   "$file" ;;
+    1) _bvk_auth_regen diseps "$file" ;;
+    2) _bvk_auth_regen apikey "$file" ;;
+    3) _bvk_auth_regen dinons "$file" ;;
+    4) _bvk_auth_mailto "bashbasicsbyvk: support" "mail: $P_MAIL" ;;
+    5) _bvk_auth_mailto "bashbasicsbyvk: recharge" "mail: $P_MAIL
 diseps: $P_DISEPS
 (see -h → pricing for the charge break-up)" ;;
-      7) printf '%s' "$id" > "$_BVK_AUTH_DIR/active"; echo "★ Active user set." ;;
-      ux) _bvk_auth_export "$id" ;;
-      ui) _bvk_auth_import ;;
-      b|q|"") return ;;
-      *) echo "❓ Unknown option." ;;
+    6) printf '%s' "$_AU_UID" > "$_BVK_AUTH_DIR/active"; echo "★ Active user set." ;;
+  esac
+}
+
+_bvk_auth_user_menu() {  # $1=profile id
+  _AU_SCREEN="user"; _AU_UID="$1"
+  _au_fresh || { _AU_SCREEN="list"; return 0; }
+  local quiet
+  while :; do
+    _read_choice_filtered
+    quiet=false
+    case "${choice,,}" in
+      u)  break ;;
+      q)  _AU_QUIT=1; break ;;
+      "") quiet=true ;;
+      ux) _bvk_auth_export "$_AU_UID"; _au_pause ;;
+      ui) _bvk_auth_import;            _au_pause ;;
+      *[!0-9]*) echo "❓ Unknown option." ;;
+      *)  if _au_row "$choice"; then _au_user_action "$_AU_SLOT"; _au_pause
+          else echo "⚠️  Invalid selection"; fi ;;
     esac
-    read -rsn1 -p "↵ press any key" _ </dev/tty 2>/dev/null; echo
+    _au_fresh || break          # profile vanished -> back to the list
   done
+  _AU_SCREEN="list"
+  return 0
 }
 
 # ---------------------------------------------------------------- entry point: -auth
 auth_menu() {
   _bvk_auth_init || { echo "❌ Cannot create $_BVK_AUTH_DIR"; return 1; }
-  local c
+
+  # borrow the shared list/viewport state, give it back untouched on the way out
+  local -a _au_keep_items=("${items[@]}")
+  local _au_keep_hl="${_hl_index:-0}" _au_keep_mode="${_vp_mode:-items}" _au_keep_hdr="${_vp_header_fn:-}" \
+        _au_keep_ftr="${_vp_footer_fn:-}" _au_keep_row="${_vp_rowtext_fn:-}" _au_keep_inp="${_vp_input_fn:-}" \
+        _au_keep_hlf="${_vp_hl_fn:-}" _au_keep_fx="${_fx_in_mode:-0}" _au_keep_imag="${imaginary_mode:-false}" \
+        _au_keep_fq="${_filter_query:-}"
+  local -a _au_keep_all=("${_all_items[@]}") _au_keep_src=("${_filter_src[@]}") _au_keep_map=("${_filter_map[@]}")
+  local _au_keep_mapact="${_filter_map_active:-false}"
+
+  _fx_in_mode=1          # virtual list: never re-scan the folder for hidden files; inner-loop animation
+  imaginary_mode=false   # a big folder in grouped view must not hijack the = filter
+  _AU_SCREEN="list"; _AU_QUIT=0
+
+  _au_fresh
+  local quiet
   while :; do
-    clear 2>/dev/null
-    echo "🔐 -auth  —  select user"; echo
-    _bvk_auth_list
-    echo; echo "  c) Create User   r) Remove User   ui) import users   ux) export users"
-    echo "  l) link existing (pre-update) account   q) back"
-    read -r -p "> " c
-    case "$c" in
-      c)  _bvk_auth_create; read -rsn1 -p "↵ press any key" _ </dev/tty 2>/dev/null; echo ;;
-      r)  if [ "${#_BVK_AUTH_IDS[@]}" -eq 0 ]; then continue; fi
-          read -r -p "   Remove which number? " c
-          if [[ "$c" =~ ^[0-9]+$ ]] && [ "$c" -ge 1 ] && [ "$c" -le "${#_BVK_AUTH_IDS[@]}" ]; then
-            local rid="${_BVK_AUTH_IDS[$((c-1))]}"
-            echo "   ⚠️  Removes this user from THIS machine only. Without an export you lose the apikey/dinons."
-            read -r -p "   Type yes to confirm: " c
-            [ "$c" = yes ] && { rm -f "$_BVK_AUTH_DIR/profiles/$rid" "$_BVK_AUTH_DIR/profiles/$rid.prev"
-              [ "$(cat "$_BVK_AUTH_DIR/active" 2>/dev/null)" = "$rid" ] && rm -f "$_BVK_AUTH_DIR/active"; echo "🗑️  Removed."; sleep 1; }
-          fi ;;
-      l)  _bvk_auth_link; read -rsn1 -p "↵ press any key" _ </dev/tty 2>/dev/null; echo ;;
-      ui) _bvk_auth_import; read -rsn1 -p "↵ press any key" _ </dev/tty 2>/dev/null; echo ;;
-      ux) if [ "${#_BVK_AUTH_IDS[@]}" -eq 0 ]; then continue; fi
-          read -r -p "   Export which number? " c
-          [[ "$c" =~ ^[0-9]+$ ]] && [ "$c" -ge 1 ] && [ "$c" -le "${#_BVK_AUTH_IDS[@]}" ] && _bvk_auth_export "${_BVK_AUTH_IDS[$((c-1))]}"
-          read -rsn1 -p "↵ press any key" _ </dev/tty 2>/dev/null; echo ;;
-      q|"") return 0 ;;
-      *)  if [[ "$c" =~ ^[0-9]+$ ]] && [ "$c" -ge 1 ] && [ "$c" -le "${#_BVK_AUTH_IDS[@]}" ]; then
-            _bvk_auth_user_menu "${_BVK_AUTH_IDS[$((c-1))]}"
-          fi ;;
+    _read_choice_filtered
+    quiet=false
+    case "${choice,,}" in
+      u|q) break ;;
+      "")  quiet=true ;;
+      c)   _bvk_auth_create; _au_pause ;;
+      l)   _bvk_auth_link;   _au_pause ;;
+      ui)  _bvk_auth_import; _au_pause ;;
+      r|r-*)
+        if [ "${#items[@]}" -eq 0 ]; then echo "ℹ️  No users to remove."
+        elif _au_ask_row "$choice" "Remove which number?"; then
+          local rid="${_BVK_AUTH_IDS[$_AU_SLOT]}" ans
+          echo "   ⚠️  Removes this user from THIS machine only. Without an export you lose the apikey/dinons."
+          builtin read -r -p "   Type yes to confirm: " ans
+          if [ "$ans" = yes ]; then
+            rm -f "$_BVK_AUTH_DIR/profiles/$rid" "$_BVK_AUTH_DIR/profiles/$rid.prev"
+            [ "$(cat "$_BVK_AUTH_DIR/active" 2>/dev/null)" = "$rid" ] && rm -f "$_BVK_AUTH_DIR/active"
+            echo "🗑️  Removed."
+          else echo "↩️  Cancelled."; fi
+        fi
+        _au_pause ;;
+      ux|ux-*)
+        if [ "${#items[@]}" -eq 0 ]; then echo "ℹ️  No users to export."
+        elif _au_ask_row "$choice" "Export which number?"; then _bvk_auth_export "${_BVK_AUTH_IDS[$_AU_SLOT]}"; fi
+        _au_pause ;;
+      *[!0-9]*) echo "❓ Unknown option." ;;
+      *)
+        if _au_row "$choice"; then
+          _bvk_auth_user_menu "${_BVK_AUTH_IDS[$_AU_SLOT]}"
+          [ "$_AU_QUIT" = 1 ] && break
+        else echo "⚠️  Invalid selection"; fi ;;
     esac
+    _au_fresh
   done
+
+  # leave tidy
+  _AU_QUIT=0
+  _filter_reset_state
+  items=("${_au_keep_items[@]}"); _hl_index="$_au_keep_hl"
+  _vp_mode="$_au_keep_mode"; _vp_header_fn="$_au_keep_hdr"; _vp_footer_fn="$_au_keep_ftr"
+  _vp_rowtext_fn="$_au_keep_row"; _vp_input_fn="$_au_keep_inp"; _vp_hl_fn="$_au_keep_hlf"
+  _fx_in_mode="$_au_keep_fx"; imaginary_mode="$_au_keep_imag"
+  _filter_query="$_au_keep_fq"; _all_items=("${_au_keep_all[@]}"); _filter_src=("${_au_keep_src[@]}")
+  _filter_map=("${_au_keep_map[@]}"); _filter_map_active="$_au_keep_mapact"
+  _vp_cache_reset
+  return 0
 }
