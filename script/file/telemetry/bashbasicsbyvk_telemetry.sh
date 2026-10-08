@@ -30,6 +30,9 @@ _bvk_telemetry_ping() {
     [[ "$uuid" =~ ^[0-9a-f-]{36}$ ]] || return 0
     printf '%s\n' "$uuid" > "$uuid_file" 2>/dev/null || return 0
   fi
+  # Read-only on disk. This only stops accidents: real tamper-protection is the server-issued
+  # signature (sig) below -- an edited/forged id fails verification at the worker.
+  chmod 400 "$uuid_file" "$_BVK_TELEMETRY_DIR/sig" 2>/dev/null
 
   # 2. idempotency flag: already reported today (UTC)?
   local today daily_file="$_BVK_TELEMETRY_DIR/daily" last_date last_flag
@@ -47,10 +50,18 @@ _bvk_telemetry_ping() {
   country=$(curl -s --max-time 4 https://ipinfo.io/country 2>/dev/null | tr -d '[:space:]' | tr 'a-z' 'A-Z')
   [[ "$country" =~ ^[A-Z]{2}$ ]] || country="XX"
 
-  code=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' \
+  local sig_file="$_BVK_TELEMETRY_DIR/sig" sig="" resp
+  sig=$(cat "$sig_file" 2>/dev/null)
+  resp=$(curl -s --max-time 5 -w '\n%{http_code}' \
     -X POST "$_BVK_TELEMETRY_URL" \
     -H 'Content-Type: application/json' \
-    -d "{\"id\":\"$uuid\",\"country\":\"$country\"}" 2>/dev/null)
+    -d "{\"id\":\"$uuid\",\"country\":\"$country\",\"sig\":\"$sig\"}" 2>/dev/null)
+  code="${resp##*$'\n'}"
+  # first ping: worker answers {"sig":"<hmac of id>"}; keep it (never overwrite an existing one)
+  if [ -z "$sig" ]; then
+    sig=$(printf '%s' "${resp%$'\n'*}" | sed -n 's/.*"sig"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9_-]\{20,128\}\)".*/\1/p')
+    [ -n "$sig" ] && { printf '%s\n' "$sig" > "$sig_file" 2>/dev/null; chmod 400 "$sig_file" 2>/dev/null; }
+  fi
 
   # only mark done on success, so a failed send retries on next launch
   [ "$code" = "200" ] && printf '%s true\n' "$today" > "$daily_file" 2>/dev/null

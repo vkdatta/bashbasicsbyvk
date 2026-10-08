@@ -139,8 +139,7 @@ else
         ATTEMPT=$((ATTEMPT + 1))
 
         HDRFILE=$(mktemp)
-        CFG=$({ _bb_cfg_header X-User-Email "$FILEAPI_BASHBASICS_EMAIL"
-                _bb_cfg_header X-User-Key   "$FILEAPI_BASHBASICS_KEY"; })
+        CFG=$(_bb_auth_cfg)
         RESPONSE=$(curl -s "${_BB_CURL_OPTS[@]}" -K - -D "$HDRFILE" -w "\n%{http_code}" \
             -H "Expect:" \
             -X PUT \

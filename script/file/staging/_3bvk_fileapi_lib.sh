@@ -7,31 +7,21 @@
 
 WORKER_URL="https://fileapi.bashbasics.workers.dev"
 
+# Credentials now come ONLY from the active -auth profile (no env-var / prompt fallback).
 _bb_get_credentials() {
-  local email="${FILEAPI_BASHBASICS_EMAIL:-}"
-  local apikey="${FILEAPI_BASHBASICS_KEY:-}"
-
-  if [ -z "$email" ] || [ -z "$apikey" ]; then
-    if [ ! -t 0 ]; then
-      echo "❌ Error: fileapi.bashbasics.email / fileapi.bashbasics.key are not set, and no terminal is available to prompt for them."
-      echo "   Set them with: export FILEAPI_BASHBASICS_EMAIL=you@example.com; export FILEAPI_BASHBASICS_KEY=your_api_key"
-      return 1
-    fi
-    echo "🔑 No saved credentials found (FILEAPI_BASHBASICS_EMAIL / FILEAPI_BASHBASICS_KEY)."
-    [ -z "$email" ] && read -p "   Enter email: " email
-    if [ -z "$apikey" ]; then
-      read -s -p "   Enter API key: " apikey
-      echo
-    fi
-    if [ -z "$email" ] || [ -z "$apikey" ]; then
-      echo "❌ Email and API key are both required."
-      return 1
-    fi
-    export FILEAPI_BASHBASICS_EMAIL="$email"
-    export FILEAPI_BASHBASICS_KEY="$apikey"
-    echo "ℹ️  Using these for the rest of this session. Export them yourself beforehand to skip this prompt next time."
+  if [ -z "${_BVK_AUTH_DIR:-}" ]; then
+    _BVK_AUTH_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/auth"
   fi
-  return 0
+  if ! declare -F _bvk_auth_load_active >/dev/null 2>&1; then
+    local _d; _d="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" 2>/dev/null)"
+    # shellcheck disable=SC1090
+    source "$_d/../auth/bashbasicsbyvk_auth.sh" 2>/dev/null || source "bashbasicsbyvk_auth.sh" 2>/dev/null
+  fi
+  if declare -F _bvk_auth_load_active >/dev/null 2>&1 && _bvk_auth_load_active; then
+    return 0
+  fi
+  echo "❌ No active user. Run  -auth  inside 'o' to create or import one." >&2
+  return 1
 }
 
 # ---- transport hardening ---------------------------------------------------
@@ -47,8 +37,9 @@ _bb_cfg_escape() {
 }
 _bb_cfg_header() { printf 'header = "%s: %s"\n' "$1" "$(_bb_cfg_escape "$2")"; }
 _bb_auth_cfg() {
-  _bb_cfg_header X-User-Email "$FILEAPI_BASHBASICS_EMAIL"
-  _bb_cfg_header X-User-Key   "$FILEAPI_BASHBASICS_KEY"
+  _bb_cfg_header X-User-Email  "$FILEAPI_BASHBASICS_EMAIL"
+  _bb_cfg_header X-User-Diseps "$FILEAPI_BASHBASICS_DISEPS"
+  _bb_cfg_header X-User-Key    "$FILEAPI_BASHBASICS_KEY"
 }
 
 _bb_json_get() {

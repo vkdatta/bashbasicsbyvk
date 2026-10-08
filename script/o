@@ -14,6 +14,7 @@ source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_functions.sh"
 source "bashbasicsbyvk_infinity.sh"
 source "bashbasicsbyvk_telemetry.sh"
+source "bashbasicsbyvk_auth.sh"
 source "bashbasicsbyvk_ai.sh"
 
 # Inner-loop driver: sw, fx and r (the .r rule book) hand over to each other via _inner_next,
@@ -170,6 +171,7 @@ while true; do
     scr-sync)    handle_scr_sync ;;
     sast)        bashbasicsbyvk_sast ;;
     .s|.s.*|.s\ *|.us|.us.*|.us\ *|.r|.r.*|.r\ *)  handle_select_cmd "$choice" ;;
+    -auth)       auth_menu ;;
     .ai|.ai\ *)  handle_ai_cmd "$choice" ;;
     .dm|.dm.*)   handle_daemon_cmd "$choice" ;;
     .d|.d.*|.d\ *)  handle_display_cmd "$choice" ;;
