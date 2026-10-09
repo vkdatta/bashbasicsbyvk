@@ -21,6 +21,14 @@ declare -ga _all_items=()
 declare -ga _filter_src=()
 declare -ga _filter_map=()
 declare -g  _filter_map_active=false
+declare -gA _REC_LABEL=()          # full path → "sub/dir/name" shown for recursive hits
+declare -g  _filter_rec_active=false   # the rows on screen are recursive search results
+
+# filter_recursive: false | true   (Settings → Search filter → Search depth)
+#   false  the filter only looks at what the current folder lists (default)
+#   true   the filter looks through every sub-folder below the folder you have
+#          navigated to ($path — NOT the shell's startup/cd directory). Rows then
+#          show the path relative to that folder (see _REC_LABEL).
 
 # filter_hidden_mode: respect | include | exclude   (Settings → Search filter)
 #   respect  filter whatever the folder view currently shows
@@ -43,6 +51,7 @@ _filter_reset_state() {
   _filter_src=()
   _filter_map=()
   _filter_map_active=false
+  _REC_LABEL=(); _filter_rec_active=false
   _imag_filter_active=false
   _imag_filter_query=""
   _imag_filter_committed=false
@@ -68,6 +77,69 @@ _filter_can_rescan_hidden() {
   return 0
 }
 
+
+# Recursive mode is on AND this screen is a real folder view we can walk.
+_filter_is_recursive() {
+  [ "${filter_recursive:-false}" = "true" ] || return 1
+  _filter_can_rescan_hidden
+}
+
+# Walk every sub-folder below $path (the navigation path) and print the full
+# paths whose NAME matches $1 (same partial/exact rule as the flat filter),
+# sorted like the folder view. Folder symlinks are not followed (no loops);
+# hidden folders are not entered unless hidden files are in play.
+_filter_rec_scan() {
+  local q="$1" hid
+  hid="$(_filter_effective_hidden)"
+  python3 - "$path" "$q" "${filter_mode:-partial}" "$hid" "${sort_mode:-az}" <<'PYEOF'
+import os, sys
+root, q, mode, hid, sm = sys.argv[1:6]
+q = q.lower(); show_hidden = hid == "true"
+hits = []
+def match(n):
+    n = n.lower()
+    return n.startswith(q) if mode == "exact" else q in n
+for dp, dns, fns in os.walk(root, followlinks=False):
+    if not show_hidden:
+        dns[:] = [d for d in dns if not d.startswith(".")]
+        fns = [f for f in fns if not f.startswith(".")]
+    for n in dns + fns:
+        if match(n):
+            hits.append(os.path.join(dp, n))
+def key_stat(p, f):
+    try:
+        st = os.stat(p)
+        return f(st, p)
+    except OSError:
+        return 0
+rel = lambda p: os.path.relpath(p, root).lower()
+if   sm == "za":    hits.sort(key=rel, reverse=True)
+elif sm == "new":   hits.sort(key=lambda p: key_stat(p, lambda s, _: s.st_mtime), reverse=True)
+elif sm == "old":   hits.sort(key=lambda p: key_stat(p, lambda s, _: s.st_mtime))
+elif sm == "big":   hits.sort(key=lambda p: key_stat(p, lambda s, q: 0 if os.path.isdir(q) else s.st_size), reverse=True)
+elif sm == "small": hits.sort(key=lambda p: key_stat(p, lambda s, q: 0 if os.path.isdir(q) else s.st_size))
+else:               hits.sort(key=rel)
+out = sys.stdout
+for p in hits:
+    out.write(p + "\n")
+PYEOF
+}
+
+# Fill items[] (+ _REC_LABEL) with the recursive hits for query $1.
+_filter_rec_fill() {
+  local f _tmp
+  _tmp="$(_bvk_tmp)"
+  _filter_rec_scan "$1" >"$_tmp" 2>/dev/null
+  mapfile -t items <"$_tmp"
+  rm -f "$_tmp"
+  _REC_LABEL=()
+  local base="${path%/}"
+  for f in "${items[@]}"; do _REC_LABEL["$f"]="${f#"$base"/}"; done
+  _filter_rec_active=true
+  _items_presorted=true; _items_presorted_mode="${sort_mode:-az}"
+  _meta_loaded=false; _win_lo=0; _win_hi=0
+}
+
 _filter_snapshot() {
   _all_items=("${items[@]}")
   _filter_src=("${items[@]}")
@@ -91,6 +163,14 @@ _filter_snapshot() {
 _filter_apply() {
   local q="${_filter_query,,}"
   local hm="${filter_hidden_mode:-respect}"
+  # Recursive: search every sub-folder below the navigation path. With nothing
+  # typed yet there is nothing to search for, so the normal list stays.
+  if [ -n "$q" ] && _filter_is_recursive; then
+    _filter_rec_fill "$q"
+    _filter_map=(); _filter_map_active=false
+    return 0
+  fi
+  _REC_LABEL=(); _filter_rec_active=false
   items=()
   _filter_map=()
   _filter_map_active=true
@@ -111,6 +191,7 @@ _filter_apply() {
 
 _filter_clear() {
   items=("${_all_items[@]}")
+  _REC_LABEL=(); _filter_rec_active=false
   _filter_query=""
   _all_items=()
   _filter_src=()
@@ -121,6 +202,8 @@ _filter_clear() {
 
 # "(shown/total)" denominator for the header
 _filter_total_count() {
+  # recursive hits have no "total" (it would be the whole tree): header says "N matches"
+  if ${_filter_rec_active:-false}; then echo 0; return; fi
   if [ "${#_filter_src[@]}" -gt 0 ]; then echo "${#_filter_src[@]}"
   else echo "${#_all_items[@]}"; fi
 }
@@ -194,6 +277,27 @@ _imag_filter_apply() {
   local q="${_imag_filter_query,,}"
   local threshold="${index_mode_threshold:-200}"
 
+  # ── Recursive: matches from all sub-folders, always listed flat ────────
+  # (a group menu cannot drill into hits that live in different folders)
+  if [ -n "$q" ] && [ "${filter_recursive:-false}" = "true" ] && [ -d "$path" ]; then
+    _filter_query="$_imag_filter_query"
+    _imag_filter_committed=true
+    imaginary_mode=false
+    _all_items=()
+    _imag_banner=""
+    _filter_rec_fill "$q"
+    _vp_mode="items"
+    _vp_header_fn=_menu_header_flat
+    _vp_footer_fn=_menu_footer_lines
+    _hl_index=0
+    _vp_cache_reset
+    _vp_prime_rows
+    _vp_redraw_in_place
+    _print_input_line
+    return 0
+  fi
+  _REC_LABEL=(); _filter_rec_active=false
+
   declare -gA group_counts=()
   group_chars=()
   local -a _paths=()
@@ -246,6 +350,7 @@ _imag_filter_apply() {
 # Called when the leading "=" is backspaced away. Re-checks the base state;
 # may return to imaginary, or drop to flat if the base is already small.
 _imag_filter_restore() {
+  _REC_LABEL=(); _filter_rec_active=false
   _filter_query=""
   _imag_filter_committed=false
   _imag_banner=""
@@ -429,11 +534,15 @@ _st_fm_build() {
   _st_eq "$filter_hidden_mode" respect; _st_add r "Follow the hidden-files setting" "$_o" "" h:respect
   _st_eq "$filter_hidden_mode" include; _st_add r "Always include"                  "$_o" "" h:include
   _st_eq "$filter_hidden_mode" exclude; _st_add r "Always exclude"                  "$_o" "" h:exclude
+  _st_add h "Recursive"
+  _st_eq "$filter_recursive" false; _st_add r "Off  (this folder only)"                "$_o" "" r:false
+  _st_eq "$filter_recursive" true;  _st_add r "On   (all sub-folders from this path)"  "$_o" "" r:true
 }
 _st_fm_act() {
   case "${_st_tag[$1]}" in
     m:*) filter_mode="${_st_tag[$1]#m:}" ;;
     h:*) filter_hidden_mode="${_st_tag[$1]#h:}" ;;
+    r:*) filter_recursive="${_st_tag[$1]#r:}" ;;
   esac
   save_settings
 }

@@ -959,6 +959,8 @@ _resolve_display_parts_v() {
   fi
   # favourites: alias ("Alias (name)") / ⭐ marker while favourite mode is paused
   [ -n "${_FAV_LABEL[$f]+x}" ] && _rdp_bn="${_FAV_LABEL[$f]}"
+  # recursive "=" filter: show where the hit lives (sub/dir/name)
+  [ -n "${_REC_LABEL[$f]+x}" ] && _rdp_bn="${_REC_LABEL[$f]}"
 }
 
 _shortcut_display_parts() {

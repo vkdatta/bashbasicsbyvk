@@ -482,8 +482,7 @@ functions_menu() {
               _fx_adf_cur_staging=""
             fi
           else
-            echo "↩️  Already at ADF root"
-            _fx_do_fresh=false
+            echo "↩️  At ADF root — exiting functions mode"; break
           fi
         elif [ "$_fx_tab" = "udf" ] && [ -n "$group_prefix" ]; then
           group_prefix="${group_prefix%?}"; force_show=false

@@ -26,6 +26,11 @@
 #     build_fn            fills the rows from the current settings  (_st_add …)
 #     act_fn IDX KEY      reacts to a row  (KEY = toggle | enter | left | right)
 #
+#  "=" filter  type  =text  to show only the rows (or headings) containing text,
+#         live as you type. =text + Enter keeps the filter, then numbers refer to
+#         the rows shown. = + Enter (or u) clears it. Partial/Exact follows
+#         Settings → Search filter.
+#
 #  Row kinds   t toggle [x]/[ ]   r radio [x]/[ ]   a action ›   h heading
 #  (headings are not numbered)
 # ════════════════════════════════════════════════════════════════════════════
@@ -49,6 +54,38 @@ _st_add()    { _st_kind+=("$1"); _st_lbl+=("$2"); _st_on+=("${3:-0}"); _st_val+=
 _st_eq()     { [ "$1" = "$2" ] && _o=1 || _o=0; }   # sets _o (no subshell)
 
 _st_selectable() { [ "${_st_kind[$1]:-h}" != "h" ]; }
+
+# "=" filter: keep only the rows whose label matches $fq (a local of _st_run).
+# Same rule as the file filter: partial = anywhere in the label, exact = label
+# starts with it (Settings → Search filter). A heading stays only when at least
+# one row under it matches. The arrays are compacted, so every act function
+# keeps working with plain row indexes.
+_st_filter_rows() {
+  [ -n "${fq:-}" ] || return 0
+  local q="${fq,,}" i l keep n=${#_st_lbl[@]} hi=-1 hshown=0 hmatch=0
+  local -a k=() L=() V=() O=() T=()
+  for (( i=0; i<n; i++ )); do
+    if [ "${_st_kind[$i]}" = h ]; then
+      hi=$i; hshown=0; hmatch=0
+      l="${_st_lbl[$i]}"; l="${l,,}"
+      # a matching heading brings all its rows along
+      if [ "${filter_mode:-partial}" = exact ]; then [[ "$l" == "$q"* ]] && hmatch=1
+      else [[ "$l" == *"$q"* ]] && hmatch=1; fi
+      continue
+    fi
+    l="${_st_lbl[$i]}"; l="${l,,}"; keep=$hmatch
+    if (( ! keep )); then
+      if [ "${filter_mode:-partial}" = exact ]; then [[ "$l" == "$q"* ]] && keep=1
+      else [[ "$l" == *"$q"* ]] && keep=1; fi
+    fi
+    (( keep )) || continue
+    if (( hi >= 0 && ! hshown )); then
+      k+=(h); L+=("${_st_lbl[$hi]}"); O+=(0); V+=(""); T+=(""); hshown=1
+    fi
+    k+=("${_st_kind[$i]}"); L+=("${_st_lbl[$i]}"); O+=("${_st_on[$i]}"); V+=("${_st_val[$i]}"); T+=("${_st_tag[$i]}")
+  done
+  _st_kind=("${k[@]}"); _st_lbl=("${L[@]}"); _st_on=("${O[@]}"); _st_val=("${V[@]}"); _st_tag=("${T[@]}")
+}
 
 # number the selectable rows 1..N  (_st_num[row] = N, _st_nrow[N] = row)
 _st_number() {
@@ -125,10 +162,11 @@ _st_draw() {
   # footer = suggested commands (same two-step style as the main menu)
   if (( _st_depth > 1 )); then f1="u) Back   q) Close settings   ↑↓) Move"; else f1="u) Back to main menu   q) Close   ↑↓) Move"; fi
   case "$_st_cnt" in
-    0) f2="Nothing to choose here" ;;
+    0) if [ -n "${fq:-}" ]; then f2="No match for =$fq   (= + enter clears)"; else f2="Nothing to choose here"; fi ;;
     1) f2="Type 1, then enter to choose" ;;
     *) f2="Type 1-$_st_cnt, then enter to choose" ;;
   esac
+  if [ -z "${fq:-}" ] && (( _st_cnt > 1 )); then f2="$f2   =) Filter"; fi
   if [[ "$hint" == *"←/→"* ]]; then
     case "$_st_cnt" in 0|1) ;; *) f2="Type 1-$_st_cnt + enter   ←/→) Reorder" ;; esac
   fi
@@ -137,7 +175,9 @@ _st_draw() {
   if (( prev > 1 )); then out+=$'\r\033['"$(( prev - 1 ))"$'A'; fi
 
   out+="$nl"$'\n'                                          # space above
-  out+="$nl⚙️ ${path_title:0:cols-4}"$'\n'                  # header
+  local hd="$path_title"
+  [ -n "${fq:-}" ] && hd="$hd   [filter: =$fq]"
+  out+="$nl⚙️ ${hd:0:cols-4}"$'\n'                          # header
   if (( top > 0 )); then out+="$nl   ▲ $top more above"$'\n'; else out+="$nl$_ST_RULE"$'\n'; fi
 
   for (( i=top; i<top+vis; i++ )); do
@@ -202,7 +242,7 @@ _st_follow() {
 # _st_run "Title" build_fn act_fn ["legacy hint"]
 _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}"
-  local cur=-1 top=0 prev=0 n buf="" num path_title
+  local cur=-1 top=0 prev=0 n buf="" num path_title fq=""
   local parent_title="${_st_title_now:-}"
   _st_depth=$(( _st_depth + 1 ))
   if (( _st_depth > 1 )); then path_title="Settings › $title"; else path_title="$title"; fi
@@ -211,6 +251,7 @@ _st_run() {
 
   while :; do
     "$build"
+    _st_filter_rows
     _st_number
     n=${#_st_lbl[@]}
     (( cur >= n )) && cur=$(( n - 1 ))
@@ -222,8 +263,14 @@ _st_run() {
       down)  _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       home|pgup) cur=-1; _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       end|pgdn)  cur=-1; _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
-      bksp)  buf="${buf%?}"; _st_follow ;;
-      char)  buf+="$_st_d"; _st_follow ;;
+      bksp)
+        buf="${buf%?}"
+        if [[ "$buf" == =* ]]; then fq="${buf:1}"; cur=-1; top=0
+        else _st_follow; fi ;;
+      char)
+        if [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
+        elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
+        else buf+="$_st_d"; _st_follow; fi ;;
       left|right)
         (( cur >= 0 )) && _st_selectable "$cur" && "$act" "$cur" "$_st_k"
         ;;
@@ -231,8 +278,15 @@ _st_run() {
         if (( cur >= 0 )) && _st_selectable "$cur"; then buf=""; _st_activate; fi
         ;;
       enter)
+        if [[ "$buf" == =* ]]; then
+          # =text + Enter keeps the filter · = + Enter clears it
+          [ "$buf" = "=" ] && fq=""
+          buf=""; cur=-1; top=0
+          continue
+        fi
         case "${buf,,}" in
-          u) break ;;                       # buf keeps "u" so the prompt line can stay
+          u) if [ -n "$fq" ]; then fq=""; buf=""; cur=-1; top=0; continue; fi
+             break ;;                       # buf keeps "u" so the prompt line can stay
           q) _st_quit=1; break ;;
           "") (( cur >= 0 )) && _st_selectable "$cur" && _st_activate ;;
           *[!0-9]*) buf="" ;;                         # not a command: clear it

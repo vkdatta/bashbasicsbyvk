@@ -15,6 +15,7 @@ DEFAULT_GROUP_VIEW_LEVELS=""
 DEFAULT_COMPRESS_FORMAT="ask"
 DEFAULT_FILTER_MODE="partial"
 DEFAULT_FILTER_HIDDEN_MODE="respect"
+DEFAULT_FILTER_RECURSIVE=false      # = filter looks only in the folder you are viewing
 DEFAULT_DISPLAY_FILTER_PERSIST=false
 DEFAULT_ANIM_OUTER="pop"       # outer loop: whole screen appears at once
 DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw): rows roll in top to bottom
@@ -30,6 +31,7 @@ unset group_view_levels_str
 unset compress_format
 unset filter_mode
 unset filter_hidden_mode
+unset filter_recursive
 unset display_filter_persist
 unset anim_outer
 unset anim_inner
@@ -47,6 +49,8 @@ unset anim_inner
 : "${compress_format:=$DEFAULT_COMPRESS_FORMAT}"
 : "${filter_mode:=$DEFAULT_FILTER_MODE}"
 : "${filter_hidden_mode:=$DEFAULT_FILTER_HIDDEN_MODE}"
+: "${filter_recursive:=$DEFAULT_FILTER_RECURSIVE}"
+[[ "$filter_recursive" == true || "$filter_recursive" == false ]] || filter_recursive=$DEFAULT_FILTER_RECURSIVE
 : "${display_filter_persist:=$DEFAULT_DISPLAY_FILTER_PERSIST}"
 : "${anim_outer:=$DEFAULT_ANIM_OUTER}"
 : "${anim_inner:=$DEFAULT_ANIM_INNER}"
@@ -71,6 +75,7 @@ save_settings() {
     echo "compress_format=$compress_format"
     echo "filter_mode=$filter_mode"
     echo "filter_hidden_mode=$filter_hidden_mode"
+    echo "filter_recursive=$filter_recursive"
     echo "display_filter_persist=$display_filter_persist"
     echo "anim_outer=$anim_outer"
     echo "anim_inner=$anim_inner"
@@ -107,7 +112,8 @@ _st_top_build() {
   _st_add a "File details"        0 "$sx"                               details
   _st_add a "Group by"            0 "$gv"                               group
   _st_add a "Display filter (.d)" 0 "$dv"                               dfilter
-  _st_add a "Search filter (=)"   0 "$filter_mode"                      filter
+  local fv="$filter_mode"; [ "$filter_recursive" = true ] && fv="$filter_mode · recursive"
+  _st_add a "Search filter (=)"   0 "$fv"                               filter
   _st_add a "Compress format"     0 "$compress_format"                  compress
   _st_add a "Animation"           0 "$anim_outer / $anim_inner"         anim
   _st_add a "Big-folder limit"    0 "$index_mode_threshold"             index
@@ -279,6 +285,7 @@ _st_reset_act() {
   compress_format=$DEFAULT_COMPRESS_FORMAT
   filter_mode=$DEFAULT_FILTER_MODE
   filter_hidden_mode=$DEFAULT_FILTER_HIDDEN_MODE
+  filter_recursive=$DEFAULT_FILTER_RECURSIVE
   display_filter_persist=$DEFAULT_DISPLAY_FILTER_PERSIST
   anim_outer=$DEFAULT_ANIM_OUTER
   anim_inner=$DEFAULT_ANIM_INNER
