@@ -30,6 +30,7 @@ Recents policy:
 """
 
 import os
+import re
 import sys
 import signal
 import subprocess
@@ -187,10 +188,48 @@ def is_alive():
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 
+_TZ_SEEN = [None]     # (mtime, size) of the config file the zone was last read from
+
+def _apply_app_timezone():
+    """Follow Settings → Timezone (app_timezone in the config file). The daemon outlives the app, so it
+    re-reads the file whenever it changes instead of trusting the environment it was started with."""
+    try:
+        cfg = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "bashbasicsbyvk" / "config"
+        st = cfg.stat()
+        sig = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        sig = None
+    if sig == _TZ_SEEN[0]:
+        return
+    _TZ_SEEN[0] = sig
+    zone = ""
+    if sig:
+        try:
+            for line in cfg.read_text(errors="replace").splitlines():
+                if line.startswith("app_timezone="):
+                    zone = line.split("=", 1)[1].strip().strip('"').strip("'")
+        except OSError:
+            pass
+    try:
+        if zone and re.fullmatch(r"[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}", zone):
+            import zoneinfo
+            zoneinfo.ZoneInfo(zone)               # must exist, else keep the system zone
+            os.environ["TZ"] = zone
+        elif _ORIG_TZ[0] is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = _ORIG_TZ[0]
+        time.tzset()
+    except Exception:
+        pass
+
+_ORIG_TZ = [os.environ.get("TZ")]
+
 def _log(msg):
     try:
+        _apply_app_timezone()
         with open(LOG_FILE, "a") as f:
-            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S %Z')} {msg}\n")
     except OSError:
         pass
 
@@ -502,8 +541,9 @@ def _try_install_watchdog():
         _log(f"pip attempt rc={rc} (args={extra})")
 
     try:
+        _apply_app_timezone()
         SENTINEL.write_text(
-            f"{time.strftime('%Y-%m-%d %H:%M:%S')} "
+            f"{time.strftime('%Y-%m-%d %H:%M:%S %Z')} "
             f"{'ok' if success else 'failed'}\n"
         )
     except OSError:

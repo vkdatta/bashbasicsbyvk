@@ -39,6 +39,7 @@ declare -ga _st_lbl=() _st_kind=() _st_on=() _st_val=() _st_tag=()
 declare -ga _st_num=() _st_nrow=()
 _st_cnt=0       # how many numbered (selectable) rows the screen has
 _st_quit=0
+_st_filter_wide=0   # 1 = the = filter also searches the value column (Timezone screen)
 _st_back=0      # a screen sets this to close itself after an action
 _st_depth=0     # 1 = top Settings screen, 2+ = sub settings
 _st_k=""
@@ -62,20 +63,27 @@ _st_selectable() { [ "${_st_kind[$1]:-h}" != "h" ]; }
 # keeps working with plain row indexes.
 _st_filter_rows() {
   [ -n "${fq:-}" ] || return 0
-  local q="${fq,,}" i l keep n=${#_st_lbl[@]} hi=-1 hshown=0 hmatch=0
+  local q="${fq,,}" i l v keep n=${#_st_lbl[@]} hi=-1 hshown=0 hmatch=0 wide="${_st_filter_wide:-0}" xm="${filter_mode:-partial}"
+  # wide (Timezone screen): also search the value column, ignore "_", and always match "contains"
+  if [ "$wide" = 1 ]; then xm=partial; q="${q//_/ }"; fi
   local -a k=() L=() V=() O=() T=()
   for (( i=0; i<n; i++ )); do
     if [ "${_st_kind[$i]}" = h ]; then
       hi=$i; hshown=0; hmatch=0
       l="${_st_lbl[$i]}"; l="${l,,}"
       # a matching heading brings all its rows along
-      if [ "${filter_mode:-partial}" = exact ]; then [[ "$l" == "$q"* ]] && hmatch=1
+      if [ "$xm" = exact ]; then [[ "$l" == "$q"* ]] && hmatch=1
       else [[ "$l" == *"$q"* ]] && hmatch=1; fi
       continue
     fi
-    l="${_st_lbl[$i]}"; l="${l,,}"; keep=$hmatch
+    l="${_st_lbl[$i]}"
+    if [ "$wide" = 1 ]; then       # "UTC+05:30" → "+05:30" so that  =utc  does not match every zone
+      v="${_st_val[$i]}"; v="${v//UTC+/+}"; v="${v//UTC-/-}"; l="$l $v"
+    fi
+    l="${l,,}"; [ "$wide" = 1 ] && l="${l//_/ }"
+    keep=$hmatch
     if (( ! keep )); then
-      if [ "${filter_mode:-partial}" = exact ]; then [[ "$l" == "$q"* ]] && keep=1
+      if [ "$xm" = exact ]; then [[ "$l" == "$q"* ]] && keep=1
       else [[ "$l" == *"$q"* ]] && keep=1; fi
     fi
     (( keep )) || continue
@@ -275,7 +283,8 @@ _st_run() {
         (( cur >= 0 )) && _st_selectable "$cur" && "$act" "$cur" "$_st_k"
         ;;
       space)
-        if (( cur >= 0 )) && _st_selectable "$cur"; then buf=""; _st_activate; fi
+        if [[ "$buf" == =* ]]; then buf+=" "; fq="${buf:1}"; cur=-1; top=0     # a space inside =text is part of the search
+        elif (( cur >= 0 )) && _st_selectable "$cur"; then buf=""; _st_activate; fi
         ;;
       enter)
         if [[ "$buf" == =* ]]; then

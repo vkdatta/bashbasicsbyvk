@@ -22,6 +22,7 @@ DEFAULT_DISPLAY_FILTER_PERSIST=false
 DEFAULT_ANIM_OUTER="pop"       # outer loop: whole screen appears at once
 DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw): rows roll in top to bottom
 DEFAULT_NUKE_TIME_SECONDS=3600   # up- / c2c-: how long a new link lives (1 hour). 60 s .. 30 days
+DEFAULT_APP_TIMEZONE=""          # "" = follow the system clock; else an IANA name, e.g. Asia/Kolkata
 
 unset show_hidden_files
 unset index_mode_threshold
@@ -41,6 +42,7 @@ unset display_filter_persist
 unset anim_outer
 unset anim_inner
 unset nuke_time_seconds
+unset app_timezone
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
 
@@ -65,11 +67,59 @@ unset nuke_time_seconds
 : "${anim_outer:=$DEFAULT_ANIM_OUTER}"
 : "${anim_inner:=$DEFAULT_ANIM_INNER}"
 : "${nuke_time_seconds:=$DEFAULT_NUKE_TIME_SECONDS}"
+: "${app_timezone=$DEFAULT_APP_TIMEZONE}"
 if ! [[ "$nuke_time_seconds" =~ ^[0-9]{1,9}$ ]] || [ "$nuke_time_seconds" -lt 60 ] || [ "$nuke_time_seconds" -gt 2592000 ]; then
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
 fi
 [[ "$anim_outer" == pop || "$anim_outer" == carpet ]] || anim_outer=$DEFAULT_ANIM_OUTER
 [[ "$anim_inner" == pop || "$anim_inner" == carpet ]] || anim_inner=$DEFAULT_ANIM_INNER
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Timezone  (Settings → Timezone)
+#  One setting, used everywhere: the app exports it as  TZ , so every  date  call, every python3 / node
+#  helper and every child process the app starts shows and parses local time in that zone. The recents
+#  daemon is a separate long-running process, so it reads  app_timezone  from the config file itself.
+#  Machine-readable stamps stay in UTC on purpose (CREATED=…Z, telemetry day) and epochs are zone-free.
+#  Empty = follow the system clock exactly as before.
+# ════════════════════════════════════════════════════════════════════════════
+if [ -z "${_BVK_TZ_CAPTURED+x}" ]; then       # remember what the shell came with (first load only)
+  _BVK_TZ_CAPTURED=1
+  if [ -n "${TZ+x}" ]; then _BVK_TZ_ORIG_SET=1; _BVK_TZ_ORIG="$TZ"; else _BVK_TZ_ORIG_SET=0; _BVK_TZ_ORIG=""; fi
+fi
+
+_TZ_DIRS=("${TZDIR:-}" /usr/share/zoneinfo /usr/lib/zoneinfo /usr/share/lib/zoneinfo /etc/zoneinfo "${PREFIX:-}/share/zoneinfo")
+
+# _tz_valid NAME → 0 when NAME is a real zone on this machine (no paths, no '..', must exist in the tz database)
+_tz_valid() {
+  local z="$1" d
+  [[ "$z" =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$ ]] || return 1
+  for d in "${_TZ_DIRS[@]}"; do
+    [ -n "$d" ] && [ -f "$d/$z" ] && return 0
+  done
+  return 1
+}
+
+# put the chosen zone into effect for this shell and everything it starts
+_apply_timezone() {
+  if [ -n "${app_timezone:-}" ] && _tz_valid "$app_timezone"; then
+    export TZ="$app_timezone"
+  elif [ "$_BVK_TZ_ORIG_SET" = 1 ]; then
+    export TZ="$_BVK_TZ_ORIG"
+  else
+    unset TZ
+  fi
+}
+
+# "IST (UTC+05:30)" — what the clock is showing right now
+_tz_short() { local a o; a=$(date +%Z 2>/dev/null); o=$(date +%z 2>/dev/null); printf '%s (UTC%s:%s)' "${a:-?}" "${o:0:3}" "${o:3:2}"; }
+# "Asia/Kolkata · IST (UTC+05:30)" / "system default · UTC (UTC+00:00)"
+_tz_label() {
+  local z="${app_timezone:-system default}"
+  if [ -n "${app_timezone:-}" ] && ! _tz_valid "$app_timezone"; then z="system default (unknown zone '${app_timezone:0:40}' ignored)"; fi
+  printf '%s · %s' "$z" "$(_tz_short)"
+}
+
+_apply_timezone
 
 declare -ga group_view_levels=()
 if [ -n "$group_view_levels_str" ]; then
@@ -96,6 +146,7 @@ save_settings() {
     echo "anim_outer=$anim_outer"
     echo "anim_inner=$anim_inner"
     echo "nuke_time_seconds=$nuke_time_seconds"
+    echo "app_timezone=\"$app_timezone\""
   } > "$SETTINGS_FILE"
 }
 
@@ -123,7 +174,8 @@ _st_top_build() {
   (( ${#group_view_levels[@]} > 0 )) && gv="${group_view_levels[*]}"
   if declare -F _disp_load >/dev/null 2>&1 && _disp_load; then dv="on"; fi
   _st_reset
-  local hf="hide"; [ "$show_hidden_files" = true ] && hf="show"
+  local hf="hide" _tzabbr; [ "$show_hidden_files" = true ] && hf="show"
+  printf -v _tzabbr '%(%Z)T' -1
   _st_add a "Hidden files"        0 "$hf"                               hidden
   _st_add a "Sort order"          0 "$sl"                               sort
   _st_add a "File details"        0 "$sx"                               details
@@ -135,6 +187,7 @@ _st_top_build() {
   _st_add a "Upload hidden (up-)" 0 "$(_hidden_mode_label "$upload_hidden_mode")" uphidden
   _st_add a "Zip hidden (z-)"     0 "$(_hidden_mode_label "$zip_hidden_mode")"    ziphidden
   _st_add a "Nuke time (up-/c2c-)" 0 "$(_bb_fmt_duration "$nuke_time_seconds")" nuke
+  _st_add a "Timezone"            0 "${app_timezone:-system} · $_tzabbr"  timezone
   _st_add a "Animation"           0 "$anim_outer / $anim_inner"         anim
   _st_add a "Big-folder limit"    0 "$index_mode_threshold"             index
   _st_add a "Background color"    0 "#$terminal_bg_color"               bg
@@ -155,6 +208,7 @@ _st_top_act() {
     uphidden) upload_hidden_settings ;;
     ziphidden) zip_hidden_settings ;;
     nuke)     nuke_time_settings ;;
+    timezone) timezone_settings ;;
     anim)     animation_settings ;;
     index)    index_mode_threshold_settings ;;
     bg)       terminal_bg_color_settings ;;
@@ -360,6 +414,7 @@ _st_reset_act() {
   anim_outer=$DEFAULT_ANIM_OUTER
   anim_inner=$DEFAULT_ANIM_INNER
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
+  app_timezone=$DEFAULT_APP_TIMEZONE; _apply_timezone
   _items_presorted=false
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "${_st_tag[$1]}" in

@@ -383,4 +383,10 @@ Same feel as the main menu — no numbers to type:
 | `u` | back one level (sub-screen → Settings → main menu) |
 | `q` | close Settings completely and return to the main menu |
 
-Screens: Show hidden files · Sort order · File details · Group by · Display filter · Search filter · Compress format · Animation · Big-folder limit · Background color · Text color · Import nano settings · Reset all settings.
+Screens: Show hidden files · Sort order · File details · Group by · Display filter · Search filter · Compress format · Timezone · Animation · Big-folder limit · Background color · Text color · Import nano settings · Reset all settings.
+
+### Timezone
+
+`s` → **Timezone** sets one timezone for the whole app: link expiry times in `api`, file times, logs, exported file names and the helper scripts (the background daemon follows it too). Times that show a clock time now carry the zone, e.g. `until 2026-10-10 02:20 IST`.
+
+Every zone in the machine's tz database is listed with its abbreviation and current offset (`Asia/Kolkata  IST  UTC+05:30`). Type `=` and part of a name, abbreviation or offset to search: `=kolkata`, `=ist`, `=new york`, `=+05:30`. Pick **System default** to follow the computer's clock again. Stored machine stamps (`CREATED=…Z`, telemetry day) stay in UTC on purpose.

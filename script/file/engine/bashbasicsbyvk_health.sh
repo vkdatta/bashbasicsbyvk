@@ -247,7 +247,7 @@ _hl_subcommands() {
 _hl_report() {
   local _m="" _os="" _o _d b i
   echo "🩺 bashbasicsbyvk health — C engine (bvk-ls) vs Python fallback"
-  printf '   %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+  printf '   %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
 
   _hl_h "1  this session"
   if [ -z "${_BVK_GO_BIN+x}" ]; then _hl_info "_BVK_GO_BIN : (not probed yet in this shell)"

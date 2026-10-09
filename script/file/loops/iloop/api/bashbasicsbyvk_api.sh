@@ -137,7 +137,7 @@ _api_menu_header() {
 }
 
 _api_menu_footer() {
-  printf '\n[Links]  %d active\n' "${#items[@]}"
+  printf '\n[Links]  %d active   🕐 times in %s  (change: s → Timezone)\n' "${#items[@]}" "$(_tz_label 2>/dev/null || date +%Z)"
   printf 'N) Open   e-N) Edit expiry   x-N) Nuke (x-1,3-5 for several)\n'
   printf 'rf) Refresh   u) Exit   api) Close\n'
 }

@@ -137,12 +137,12 @@ _bb_fmt_duration() {
   printf '%s' "$out"
 }
 
-# epoch-ms → local "YYYY-MM-DD HH:MM" (GNU or BSD date)
+# epoch-ms → "YYYY-MM-DD HH:MM IST" in the app timezone (Settings → Timezone; zone abbreviation included)
 _bb_fmt_when() {
   local ms="$1" sec
   [[ "$ms" =~ ^[0-9]{10,}$ ]] || { printf '?'; return; }
   sec=$((ms / 1000))
-  date -d "@$sec" '+%Y-%m-%d %H:%M' 2>/dev/null || date -r "$sec" '+%Y-%m-%d %H:%M' 2>/dev/null || printf '%ss' "$sec"
+  date -d "@$sec" '+%Y-%m-%d %H:%M %Z' 2>/dev/null || date -r "$sec" '+%Y-%m-%d %H:%M %Z' 2>/dev/null || printf '%ss' "$sec"
 }
 
 # ---- alias ("up-1-3 as user data") ----------------------------------------------------------------
