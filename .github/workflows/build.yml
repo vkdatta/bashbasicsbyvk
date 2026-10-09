@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install cross-compilers
         run: |
@@ -40,7 +42,9 @@ jobs:
           file bvk-ls-android-arm64
           file bvk-ls-android-amd64
           file bvk-ls-android-arm
-          # Android's linker needs PT_PHDR + PT_INTERP (a glibc static-pie has neither)
+
+          # Android's linker needs PT_PHDR + PT_INTERP.
+          # A glibc static-pie has neither.
           readelf -lW bvk-ls-android-arm64 | grep -q PHDR
           readelf -lW bvk-ls-android-arm64 | grep -q INTERP
 
@@ -57,7 +61,12 @@ jobs:
             script/file/engine/bvk-ls/bvk-ls-android-amd64 \
             script/file/engine/bvk-ls/bvk-ls-android-arm
 
-          git diff --cached --quiet || git commit \
-            -m "build: update bvk-ls binaries [skip ci]"
+          if ! git diff --cached --quiet; then
+            COMMIT_MESSAGE="$(git log -1 --format=%s)"
 
-          git push
+            git commit -m "${COMMIT_MESSAGE} [skip ci]"
+
+            git push origin HEAD:main
+          else
+            echo "No binary changes detected. Skipping commit."
+          fi
