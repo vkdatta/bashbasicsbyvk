@@ -690,6 +690,8 @@ _multi_print_input_line() {
 }
 
 _multi_header_fn() {
+  # a screen that is not a folder view (e.g. -auth) supplies its own title via this hook
+  if [ -n "${_multi_header_hook:-}" ]; then $_multi_header_hook; return 0; fi
   _menu_header
   [ "$_vp_mode" == "imaginary" ] && echo "$_imag_banner"
   return 0

@@ -78,9 +78,15 @@ _bz_import() {
   local store="$1" from="$2" manifest="$3" key="$4" fmt="$5" sing="$6" pl="$7" re="${8:-}"
   _bz_need unzip || return 1
 
-  zip_file=""
-  open_zip_menu "$from" || return 1
-  local zf="$zip_file"
+  # _BZ_PICKED: the caller already picked the zip (e.g. -auth lets you pick zip OR txt)
+  local zf
+  if [ -n "${_BZ_PICKED:-}" ]; then
+    zf="$_BZ_PICKED"
+  else
+    zip_file=""
+    open_zip_menu "$from" || return 1
+    zf="$zip_file"
+  fi
 
   local list
   if ! list=$(unzip -Z1 "$zf" 2>/dev/null); then
@@ -141,7 +147,7 @@ _bz_import() {
   fi
 
   if unzip -q "$mode" "$zf" -x "$manifest" -d "$store"; then
-    echo "✅ Imported into $store"
+    [ -n "${_BZ_QUIET:-}" ] || echo "✅ Imported into $store"
     return 0
   fi
   echo "⚠️  Import finished with errors (some entries may have been skipped)"

@@ -202,53 +202,86 @@ TXT
   echo "   If you already have credentials, use 'ui' to import them — or wait 1 day to create new ones."
 }
 
-# ---------------------------------------------------------------- export / import (local only, no server, no limits)
-_bvk_auth_export() {  # $1=profile id
-  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$1" || return
-  echo "📤 Export — what to include?"
-  echo "   1) Mail"
-  echo "   2) Diseps"
-  echo "   3) apikey"
-  echo "   4) Dinons"
-  echo "   a) all"
-  local sel; builtin read -r -p "   Items (e.g. 1 3 4, or a for all; Enter = cancel): " sel; [ -z "$sel" ] && { echo "↩️  Cancelled."; return; }
-  sel="${sel//,/ }"; sel="${sel,,}"
-  case " $sel " in *" a "*) sel="1 2 3 4" ;; esac
-  local out="${path:-$PWD}/bashbasicsbyvk_export_$(date +%Y%m%d_%H%M%S).txt" n wrote=0
-  ( umask 077; : > "$out"
-    for n in $sel; do case "$n" in
-      1) printf 'mail=%s\n'   "$P_MAIL"   >> "$out" ;;
-      2) printf 'diseps=%s\n' "$P_DISEPS" >> "$out" ;;
-      3) printf 'apikey=%s\n' "$P_APIKEY" >> "$out" ;;
-      4) printf 'dinons=%s\n' "$P_DINONS" >> "$out" ;;
-    esac; done )
-  [ -s "$out" ] || { rm -f "$out"; echo "❌ Nothing selected."; return; }
-  echo "✅ Exported to $out  (keep it private — it contains secrets)"
+# ---------------------------------------------------------------- export / import
+# Same engine as fx (UDF) and .r (rules): _bz_export writes ONE zip with a manifest, import
+# goes through the zip picker + the same safety checks (_bz_import).  The picker here also
+# lists .txt, so the credentials file written by "create" can be imported too.
+_AU_MANIFEST="bvk_auth_manifest.txt"; _AU_FORMAT=1
+_AU_FIELDS=("Mail" "Diseps" "apikey" "Dinons")
+
+# _bvk_auth_export <field numbers, e.g. "1 2 3 4"> <profile id>...   -> one zip, one file per user
+_bvk_auth_export() {
+  local fields="$1"; shift
+  _bz_need zip || return 1
+  local tmp id n=0 f; tmp=$(mktemp -d) || { echo "❌ Cannot create a temp folder"; return 1; }
+  chmod 700 "$tmp"
+  for id in "$@"; do
+    _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$id" || continue
+    n=$((n+1))
+    ( umask 077; : > "$tmp/user_$n.txt"
+      for f in $fields; do case "$f" in
+        1) printf 'mail=%s\n'   "$P_MAIL"   ;;
+        2) printf 'diseps=%s\n' "$P_DISEPS" ;;
+        3) printf 'apikey=%s\n' "$P_APIKEY" ;;
+        4) printf 'dinons=%s\n' "$P_DINONS" ;;
+      esac; done >> "$tmp/user_$n.txt" )
+  done
+  if [ "$n" -eq 0 ]; then rm -rf "$tmp"; echo "ℹ️  No users to export"; return 1; fi
+  ( umask 077
+    _bz_export "$tmp" "$(_bz_dest "${path:-}" "$_BVK_AUTH_DIR")" bashbasicsbyvk_users \
+      "$_AU_MANIFEST" BVK_AUTH_EXPORT "$_AU_FORMAT" users )
+  local rc=$?
+  rm -rf "$tmp"
+  [ "$rc" -eq 0 ] && echo "   🔒 It contains secrets — keep it private."
+  return $rc
 }
 
-_bvk_auth_import() {
-  echo "📥 Import — path to a credentials / export file:"
-  local f; builtin read -r -e -p "   > " f; f="${f/#\~/$HOME}"
-  [ -f "$f" ] || { echo "❌ File not found."; return; }
-  [ "$(wc -c < "$f")" -le 8192 ] || { echo "❌ File too large to be a credentials file."; return; }
+# merge one credentials / export file into the profile store (same diseps => same user)
+_bvk_auth_merge_file() {  # $1=file
+  local f="$1" nm nd na nn pf id="" label="${1##*/}"
+  [ -f "$f" ] || { echo "❌ File not found."; return 1; }
+  [ "$(wc -c < "$f")" -le 8192 ] || { echo "❌ $label: too large to be a credentials file."; return 1; }
   _bvk_auth_parse "$f"
-  local nm="$P_MAIL" nd="$P_DISEPS" na="$P_APIKEY" nn="$P_DINONS"
-  [ -n "$nm" ] && [ -n "$nd" ] || { echo "❌ File must contain at least a valid mail= and diseps= line."; return; }
-  local pf id="" cur
-  for pf in "$_BVK_AUTH_DIR"/profiles/p_*; do               # same diseps => same user: merge
-    [ -f "$pf" ] || continue; _bvk_auth_parse "$pf"
+  nm="$P_MAIL"; nd="$P_DISEPS"; na="$P_APIKEY"; nn="$P_DINONS"
+  [ -n "$nm" ] && [ -n "$nd" ] || { echo "❌ $label: needs at least a valid mail= and diseps= line."; return 1; }
+  for pf in "$_BVK_AUTH_DIR"/profiles/p_*; do
+    [ -f "$pf" ] || continue; [[ "$pf" == *.prev || "$pf" == *.tmp ]] && continue
+    _bvk_auth_parse "$pf"
     [ "$P_DISEPS" = "$nd" ] && { id="${pf##*/}"; break; }
   done
   if [ -n "$id" ]; then
     P_MAIL="$nm"; [ -n "$na" ] && P_APIKEY="$na"; [ -n "$nn" ] && P_DINONS="$nn"
-    echo "🔄 Existing user updated."
+    echo "🔄 Updated: $nm"
   else
     id=$(_bvk_auth_new_id); P_MAIL="$nm"; P_DISEPS="$nd"; P_APIKEY="$na"; P_DINONS="$nn"; P_CREATED=$(date -u +%FT%TZ)
-    echo "✅ User imported."
+    echo "✅ Imported: $nm"
   fi
   _bvk_auth_write "$_BVK_AUTH_DIR/profiles/$id"
   [ -f "$_BVK_AUTH_DIR/active" ] || printf '%s' "$id" > "$_BVK_AUTH_DIR/active"
-  [ -z "$na" ] && echo "ℹ️  No apikey in file — file transfers need it (import another file with apikey=)."
+  [ -z "$na" ] && echo "   ℹ️  No apikey for $nm — file transfers need it (import a file that has apikey=)."
+  return 0
+}
+
+_bvk_auth_import() {
+  local auth_in="" f tmp u cnt=0
+  _file_picker "zip txt" auth_in "${path:-$PWD}" || return 1
+  f="$auth_in"
+  case "${f,,}" in
+    *.zip)
+      _bz_need unzip || return 1
+      tmp=$(mktemp -d) || { echo "❌ Cannot create a temp folder"; return 1; }
+      chmod 700 "$tmp"
+      if _BZ_PICKED="$f" _BZ_QUIET=1 _bz_import "$tmp" "${path:-$PWD}" \
+           "$_AU_MANIFEST" BVK_AUTH_EXPORT "$_AU_FORMAT" "users" users '^user_[0-9]+\.txt$'; then
+        for u in "$tmp"/user_*.txt; do
+          [ -f "$u" ] || continue
+          _bvk_auth_merge_file "$u" && cnt=$((cnt+1))
+        done
+        [ "$cnt" -eq 0 ] && echo "ℹ️  Nothing usable inside."
+      fi
+      rm -rf "$tmp" ;;
+    *) _bvk_auth_merge_file "$f" ;;
+  esac
 }
 
 
@@ -370,6 +403,7 @@ _au_user_rowtext() {
   [ "$_AU_SLOT" -eq 6 ] && [ "$_AU_UID" = "$_BVK_AUTH_ACTIVE" ] && mark="  ★ active"
   printf -v _vp_line ' %2d) %s%s' "$1" "${items[$(( $1 - 1 ))]}" "$mark"
 }
+_au_plain_rowtext() { printf -v _vp_line ' %2d) %s' "$1" "${items[$(( $1 - 1 ))]}"; }
 _au_user_header() {
   echo
   echo "👤 Acting as: $_AU_MAIL"
@@ -396,7 +430,8 @@ _au_set_viewport() {
   _msel_set=()
   _vp_input_fn=_print_input_line
   case "$_AU_SCREEN" in
-    user) _vp_rowtext_fn=_au_user_rowtext; _vp_header_fn=_au_user_header; _vp_footer_fn=_au_user_footer ;;
+    user)   _vp_rowtext_fn=_au_user_rowtext; _vp_header_fn=_au_user_header; _vp_footer_fn=_au_user_footer ;;
+    fields) _vp_rowtext_fn=_au_plain_rowtext; _vp_header_fn=_au_user_header; _vp_footer_fn=_au_user_footer ;;
     *)    _vp_rowtext_fn=_au_list_rowtext; _vp_header_fn=_au_list_header; _vp_footer_fn=_au_list_footer ;;
   esac
   _vp_cache_reset
@@ -414,11 +449,6 @@ _au_fresh() {
   _vp_render_from_top
   return 0       # (the draw's own status is the input line's, not a failure)
 }
-_au_pause() {
-  builtin printf '\n  ↵ press any key to continue'
-  builtin read -rsn1 _ </dev/tty 2>/dev/null
-  builtin printf '\n'
-}
 # resolve a typed row number against what is on screen -> _AU_SLOT ; 1 = invalid
 _au_row() {
   [[ "$1" =~ ^[0-9]+$ ]] || return 1
@@ -426,15 +456,63 @@ _au_row() {
   [ "$n" -ge 1 ] && [ "$n" -le "${#items[@]}" ] || return 1
   _au_slot "$n"
 }
-# number for r / ux : taken from "r-2" / "ux-2", else asked
-_au_ask_row() {  # $1=typed command  $2=prompt  -> _AU_SLOT
-  local arg="" n
-  [[ "$1" == *-* ]] && arg="${1#*-}"
-  if [ -z "$arg" ]; then
-    builtin read -r -p "   $2 " arg
-    [ -z "$arg" ] && { echo "↩️  Cancelled."; return 1; }
-  fi
-  _au_row "$arg" || { echo "⚠️  Invalid selection"; return 1; }
+
+# ---- the redrawer: exactly what `d` / `r` use in the outer loop (_multi_prompt_loop) ----
+# Rows stay on screen, typing 1,3-5 / a / a-2 lights them up live; Enter confirms.
+_AU_PICK_TITLE=""
+_au_pick_header() { echo; echo "$_AU_PICK_TITLE"; }
+
+# _au_parse_sel "<1,3-5 | a | a-2>"  -> _AU_SEL = display rows
+_au_parse_sel() {
+  local s="${1// /}" n="${#items[@]}"
+  _AU_SEL=()
+  if   [ "$s" = a ];            then _AU_SEL=($(seq 1 "$n"))
+  elif [[ "$s" =~ ^a-(.+)$ ]];  then _AU_SEL=($(_sp_parse_all_except "${BASH_REMATCH[1]}" "$n"))
+  else                               _AU_SEL=($(parse_selection "$s" "$n")); fi
+  [ "${#_AU_SEL[@]}" -gt 0 ] || { echo "❌ No valid items selected"; return 1; }
+}
+# _au_select_rows "PROMPT" "title line" [typed]   typed = "ux-1,3" style shortcut (no redraw)
+_au_select_rows() {
+  local prompt="$1" title="$2" typed="${3:-}"
+  [ "${#items[@]}" -gt 0 ] || { echo "ℹ️  Nothing to choose from."; return 1; }
+  if [[ "$typed" == *-* ]]; then _au_parse_sel "${typed#*-}"; return; fi
+  local _multi_allow_a=true _multi_header_hook=_au_pick_header _prompt="$prompt"
+  local -A _msel_set=()
+  local _buf _pos
+  _AU_PICK_TITLE="$title"
+  _vp_mode="items"
+  _multi_prompt_loop
+  _au_parse_sel "$_buf"
+}
+# which fields to put in an export -> _AU_FIELDSEL ("1 2 3 4")
+_au_pick_fields() {
+  local keep_screen="$_AU_SCREEN" keep_items=("${items[@]}") rc
+  _AU_SCREEN="fields"; items=("${_AU_FIELDS[@]}"); _filter_reset_state; _au_set_viewport
+  _au_select_rows "INCLUDE" "📤 Export — what to include?"; rc=$?
+  _AU_FIELDSEL="${_AU_SEL[*]}"
+  _AU_SCREEN="$keep_screen"; items=("${keep_items[@]}")
+  return $rc
+}
+# display rows -> profile ids  (list screen)
+_au_ids_of_sel() {
+  _AU_SELIDS=(); local r
+  for r in "${_AU_SEL[@]}"; do _au_slot "$r"; _AU_SELIDS+=("${_BVK_AUTH_IDS[$_AU_SLOT]}"); done
+}
+
+_au_export_ids() {  # profile ids...
+  _au_pick_fields || { echo "↩️  Cancelled."; return 1; }
+  _bvk_auth_export "$_AU_FIELDSEL" "$@"
+}
+_au_remove_ids() {  # profile ids...
+  local ans id
+  echo "⚠️  Removes $# user(s) from THIS machine only. Without an export you lose the apikey/dinons."
+  builtin read -r -p "Are you really sure? (y/n): " ans
+  if [[ "$ans" != y && "$ans" != Y ]]; then echo "🚫 Removal cancelled"; return 1; fi
+  for id in "$@"; do
+    rm -f "$_BVK_AUTH_DIR/profiles/$id" "$_BVK_AUTH_DIR/profiles/$id.prev"
+    [ "$(cat "$_BVK_AUTH_DIR/active" 2>/dev/null)" = "$id" ] && rm -f "$_BVK_AUTH_DIR/active"
+  done
+  echo "🗑️  Removed $# user(s)."
 }
 
 _au_user_action() {  # $1 = 0-based action slot
@@ -455,18 +533,16 @@ diseps: $P_DISEPS
 _bvk_auth_user_menu() {  # $1=profile id
   _AU_SCREEN="user"; _AU_UID="$1"
   _au_fresh || { _AU_SCREEN="list"; return 0; }
-  local quiet
   while :; do
     _read_choice_filtered
-    quiet=false
     case "${choice,,}" in
       u)  break ;;
       q)  _AU_QUIT=1; break ;;
-      "") quiet=true ;;
-      ux) _bvk_auth_export "$_AU_UID"; _au_pause ;;
-      ui) _bvk_auth_import;            _au_pause ;;
+      "") ;;
+      ux) _au_export_ids "$_AU_UID" ;;
+      ui) _bvk_auth_import ;;
       *[!0-9]*) echo "❓ Unknown option." ;;
-      *)  if _au_row "$choice"; then _au_user_action "$_AU_SLOT"; _au_pause
+      *)  if _au_row "$choice"; then _au_user_action "$_AU_SLOT"
           else echo "⚠️  Invalid selection"; fi ;;
     esac
     _au_fresh || break          # profile vanished -> back to the list
@@ -493,33 +569,22 @@ auth_menu() {
   _AU_SCREEN="list"; _AU_QUIT=0
 
   _au_fresh
-  local quiet
   while :; do
     _read_choice_filtered
-    quiet=false
     case "${choice,,}" in
       u|q) break ;;
-      "")  quiet=true ;;
-      c)   _bvk_auth_create; _au_pause ;;
-      l)   _bvk_auth_link;   _au_pause ;;
-      ui)  _bvk_auth_import; _au_pause ;;
+      "")  ;;
+      c)   _bvk_auth_create ;;
+      l)   _bvk_auth_link ;;
+      ui)  _bvk_auth_import ;;
       r|r-*)
-        if [ "${#items[@]}" -eq 0 ]; then echo "ℹ️  No users to remove."
-        elif _au_ask_row "$choice" "Remove which number?"; then
-          local rid="${_BVK_AUTH_IDS[$_AU_SLOT]}" ans
-          echo "   ⚠️  Removes this user from THIS machine only. Without an export you lose the apikey/dinons."
-          builtin read -r -p "   Type yes to confirm: " ans
-          if [ "$ans" = yes ]; then
-            rm -f "$_BVK_AUTH_DIR/profiles/$rid" "$_BVK_AUTH_DIR/profiles/$rid.prev"
-            [ "$(cat "$_BVK_AUTH_DIR/active" 2>/dev/null)" = "$rid" ] && rm -f "$_BVK_AUTH_DIR/active"
-            echo "🗑️  Removed."
-          else echo "↩️  Cancelled."; fi
-        fi
-        _au_pause ;;
+        if _au_select_rows "REMOVE" "🗑️  Remove users — which ones?" "$choice"; then
+          _au_ids_of_sel; _au_remove_ids "${_AU_SELIDS[@]}"
+        fi ;;
       ux|ux-*)
-        if [ "${#items[@]}" -eq 0 ]; then echo "ℹ️  No users to export."
-        elif _au_ask_row "$choice" "Export which number?"; then _bvk_auth_export "${_BVK_AUTH_IDS[$_AU_SLOT]}"; fi
-        _au_pause ;;
+        if _au_select_rows "EXPORT" "📤 Export users — which ones?" "$choice"; then
+          _au_ids_of_sel; _au_export_ids "${_AU_SELIDS[@]}"
+        fi ;;
       *[!0-9]*) echo "❓ Unknown option." ;;
       *)
         if _au_row "$choice"; then

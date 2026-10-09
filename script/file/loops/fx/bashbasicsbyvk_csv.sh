@@ -38,19 +38,25 @@ _file_picker() {
     _fp_out=""
     local _fp_nav_path="$start_path"
 
-    # case-insensitive glob for the extension:  csv → [cC][sS][vV]
-    local _fp_pat="" _fp_i _fp_c
-    for (( _fp_i=0; _fp_i<${#_fp_ext}; _fp_i++ )); do
-        _fp_c="${_fp_ext:_fp_i:1}"
-        _fp_pat+="[${_fp_c,,}${_fp_c^^}]"
+    # case-insensitive glob per extension (one word, or several: "zip txt"):  csv → [cC][sS][vV]
+    local -a _fp_pats=()
+    local _fp_w _fp_pat _fp_i _fp_c
+    for _fp_w in $_fp_ext; do
+        _fp_pat=""
+        for (( _fp_i=0; _fp_i<${#_fp_w}; _fp_i++ )); do
+            _fp_c="${_fp_w:_fp_i:1}"
+            _fp_pat+="[${_fp_c,,}${_fp_c^^}]"
+        done
+        _fp_pats+=("$_fp_pat")
     done
+    local _fp_lbl="${_fp_EXT// /\/}"          # label shown to the user: ZIP/TXT
 
     echo ""
-    echo "📂 Navigate to select your ${_fp_EXT} file (folders and .${_fp_ext} files only)"
+    echo "📂 Navigate to select your ${_fp_lbl} file (folders and .${_fp_ext// / .} files only)"
 
     while true; do
         echo ""
-        echo "📂 ${_fp_EXT} SELECT — Location: $_fp_nav_path"
+        echo "📂 ${_fp_lbl} SELECT — Location: $_fp_nav_path"
 
         # ── Build item list: dirs + matching files only ───────────────────
         # Pure-bash globbing: no find, no sort, no per-file loop, no forks.
@@ -65,15 +71,17 @@ _file_picker() {
         for _e in "$_dir"/*/; do
             _fp_items+=("${_e%/}")
         done
-        for _e in "$_dir"/*.$_fp_pat; do
-            [ -d "$_e" ] || _fp_items+=("$_e")
+        for _fp_pat in "${_fp_pats[@]}"; do
+            for _e in "$_dir"/*.$_fp_pat; do
+                [ -d "$_e" ] || _fp_items+=("$_e")
+            done
         done
         eval "$_sg"
 
         # ── Render list (single rule at the bottom only — the fx menu above
         #    already ends with its own rule, so a top rule here doubled it) ──
         if [ ${#_fp_items[@]} -eq 0 ]; then
-            echo "  🛑 No folders or ${_fp_EXT} files here."
+            echo "  🛑 No folders or ${_fp_lbl} files here."
         else
             local _i=1
             for _it in "${_fp_items[@]}"; do
@@ -89,7 +97,7 @@ _file_picker() {
         echo ""
         echo "  u) Up parent   z) Cancel   q) Quit"
         echo "   ─────────────────────────────"
-        read -p "${_fp_EXT} Nav: " _fp_choice
+        read -p "${_fp_lbl} Nav: " _fp_choice
 
         # strip surrounding whitespace
         _fp_choice="${_fp_choice#"${_fp_choice%%[![:space:]]*}"}"
@@ -99,7 +107,7 @@ _file_picker() {
             q|Q) exit 0 ;;
 
             z|Z)
-                echo "🚫 ${_fp_EXT} selection cancelled."
+                echo "🚫 ${_fp_lbl} selection cancelled."
                 _fp_out=""
                 return 1
                 ;;
