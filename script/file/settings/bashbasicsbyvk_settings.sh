@@ -21,6 +21,7 @@ DEFAULT_FILTER_RECURSIVE=false      # = filter looks only in the folder you are 
 DEFAULT_DISPLAY_FILTER_PERSIST=false
 DEFAULT_ANIM_OUTER="pop"       # outer loop: whole screen appears at once
 DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw): rows roll in top to bottom
+DEFAULT_NUKE_TIME_SECONDS=3600   # up- / c2c-: how long a new link lives (1 hour). 60 s .. 30 days
 
 unset show_hidden_files
 unset index_mode_threshold
@@ -39,6 +40,7 @@ unset filter_recursive
 unset display_filter_persist
 unset anim_outer
 unset anim_inner
+unset nuke_time_seconds
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
 
@@ -62,6 +64,10 @@ unset anim_inner
 : "${display_filter_persist:=$DEFAULT_DISPLAY_FILTER_PERSIST}"
 : "${anim_outer:=$DEFAULT_ANIM_OUTER}"
 : "${anim_inner:=$DEFAULT_ANIM_INNER}"
+: "${nuke_time_seconds:=$DEFAULT_NUKE_TIME_SECONDS}"
+if ! [[ "$nuke_time_seconds" =~ ^[0-9]{1,9}$ ]] || [ "$nuke_time_seconds" -lt 60 ] || [ "$nuke_time_seconds" -gt 2592000 ]; then
+  nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
+fi
 [[ "$anim_outer" == pop || "$anim_outer" == carpet ]] || anim_outer=$DEFAULT_ANIM_OUTER
 [[ "$anim_inner" == pop || "$anim_inner" == carpet ]] || anim_inner=$DEFAULT_ANIM_INNER
 
@@ -89,6 +95,7 @@ save_settings() {
     echo "display_filter_persist=$display_filter_persist"
     echo "anim_outer=$anim_outer"
     echo "anim_inner=$anim_inner"
+    echo "nuke_time_seconds=$nuke_time_seconds"
   } > "$SETTINGS_FILE"
 }
 
@@ -127,6 +134,7 @@ _st_top_build() {
   _st_add a "Compress format"     0 "$compress_format"                  compress
   _st_add a "Upload hidden (up-)" 0 "$(_hidden_mode_label "$upload_hidden_mode")" uphidden
   _st_add a "Zip hidden (z-)"     0 "$(_hidden_mode_label "$zip_hidden_mode")"    ziphidden
+  _st_add a "Nuke time (up-/c2c-)" 0 "$(_bb_fmt_duration "$nuke_time_seconds")" nuke
   _st_add a "Animation"           0 "$anim_outer / $anim_inner"         anim
   _st_add a "Big-folder limit"    0 "$index_mode_threshold"             index
   _st_add a "Background color"    0 "#$terminal_bg_color"               bg
@@ -146,6 +154,7 @@ _st_top_act() {
     compress) compress_format_settings ;;
     uphidden) upload_hidden_settings ;;
     ziphidden) zip_hidden_settings ;;
+    nuke)     nuke_time_settings ;;
     anim)     animation_settings ;;
     index)    index_mode_threshold_settings ;;
     bg)       terminal_bg_color_settings ;;
@@ -282,6 +291,51 @@ _st_anim_act() {
 }
 animation_settings() { _st_run "Animation" _st_anim_build _st_anim_act; }
 
+# ── nuke time (how long a new up- / c2c- link lives) ─────────────────────────
+#  Charged UP FRONT for the whole period, so 1 GB for 7 days needs 168 credits in the ledger first.
+#  Rate: 1 credit per GB per hour, with a minimum charge by size (0-5 MB: 1 per month, 6-50 MB: 1 per
+#  week, 51-500 MB: 1 per day, >500 MB: 1 per hour). Under 1 hour is billed as 1 hour.
+#  Change or nuke a link later from  api  (extending charges, shortening / nuking refunds whole days).
+_ST_NUKE_PRESETS=(3600 21600 86400 604800 2592000)
+_ST_NUKE_LABELS=("1 hour  (default)" "6 hours" "1 day" "7 days" "30 days  (maximum)")
+
+_st_nuke_build() {
+  local i custom=1
+  _st_reset
+  _st_add h "How long a new link lives before it is nuked"
+  for i in "${!_ST_NUKE_PRESETS[@]}"; do
+    _st_eq "${_ST_NUKE_PRESETS[$i]}" "$nuke_time_seconds"
+    [ "$_o" = 1 ] && custom=0
+    _st_add r "${_ST_NUKE_LABELS[$i]}" "$_o" "" "p:${_ST_NUKE_PRESETS[$i]}"
+  done
+  _st_add h "Anything else  (1 minute – 30 days; under 1 hour is billed as 1 hour)"
+  if [ "$custom" = 1 ]; then
+    _st_add r "Custom" 1 "$(_bb_fmt_duration "$nuke_time_seconds")" custom
+  else
+    _st_add a "Custom…" 0 "" custom
+  fi
+}
+_st_nuke_act() {
+  local tag="${_st_tag[$1]}" secs
+  case "$tag" in
+    p:*) nuke_time_seconds="${tag#p:}"; save_settings ;;
+    custom)
+      _st_ask "Nuke time, e.g. 90m · 1 day · 2d12h · 1 week" "$(_bb_fmt_duration "$nuke_time_seconds")" || return
+      if ! secs=$(_bb_parse_duration "$_st_in"); then
+        _st_note "⚠️  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."
+        return
+      fi
+      if [ "$secs" -lt 60 ] || [ "$secs" -gt 2592000 ]; then
+        _st_note "⚠️  Nuke time must be between 1 minute and 30 days."
+        return
+      fi
+      nuke_time_seconds="$secs"; save_settings
+      if [ "$secs" -lt 3600 ]; then _st_note "✅ $(_bb_fmt_duration "$secs") — billed as 1 hour (the minimum)."
+      else _st_note "✅ New links will live $(_bb_fmt_duration "$secs")."; fi ;;
+  esac
+}
+nuke_time_settings() { _st_run "Nuke time" _st_nuke_build _st_nuke_act; }
+
 # ── reset ────────────────────────────────────────────────────────────────────
 _st_reset_build() {
   _st_reset
@@ -305,6 +359,7 @@ _st_reset_act() {
   display_filter_persist=$DEFAULT_DISPLAY_FILTER_PERSIST
   anim_outer=$DEFAULT_ANIM_OUTER
   anim_inner=$DEFAULT_ANIM_INNER
+  nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
   _items_presorted=false
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "${_st_tag[$1]}" in

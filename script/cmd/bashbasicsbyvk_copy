@@ -139,7 +139,7 @@ else
         ATTEMPT=$((ATTEMPT + 1))
 
         HDRFILE=$(mktemp)
-        CFG=$(_bb_auth_cfg)
+        CFG=$({ _bb_auth_cfg; _bb_link_cfg; })
         RESPONSE=$(curl -s "${_BB_CURL_OPTS[@]}" -K - -D "$HDRFILE" -w "\n%{http_code}" \
             -H "Expect:" \
             -X PUT \
@@ -153,6 +153,7 @@ else
             RAW_URL="$BODY"
             CREDITS_DEDUCTED=$(grep -i '^X-Credits-Deducted:' "$HDRFILE" | tr -d '\r' | cut -d' ' -f2-)
             CREDITS_BALANCE=$(grep -i '^X-Credits-Balance:' "$HDRFILE" | tr -d '\r' | cut -d' ' -f2-)
+            LINK_EXPIRES=$(grep -i '^X-Link-Expires:' "$HDRFILE" | tr -d '\r' | cut -d' ' -f2-)
             rm -f "$HDRFILE"
             break
         fi
@@ -192,6 +193,7 @@ else
     echo "-------------------------------------------"
     echo "Link: $FINAL_URL"
     [ -n "$CREDITS_DEDUCTED" ] && echo "💳 Credits deducted: $CREDITS_DEDUCTED   |   Balance: $CREDITS_BALANCE"
+    _bb_print_expiry "$LINK_EXPIRES"
     echo "-------------------------------------------"
 
     if [ "${FILEAPI_BASHBASICS_OPEN:-0}" = "1" ]; then

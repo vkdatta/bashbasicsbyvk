@@ -10,6 +10,7 @@
 #      7) Rules            opens  r  (the .r rule book)
 #      8) Help             opens  -h
 #      9) Authenticate     opens  -auth
+#     10) Links            opens  api  (your up-/c2c- links: edit expiry, nuke, refunds)
 #
 #  Built on the same menu engine as Settings (type a number · ↑↓ · u back · q close).
 #  Needs: _st_run/_st_add (settings_ui), _inner_run (o), open_help, auth_menu.
@@ -26,6 +27,7 @@ _home_build() {
   _st_add a "Rules"         0 "" rules
   _st_add a "Help"          0 "" help
   _st_add a "Authenticate"  0 "" auth
+  _st_add a "Links"         0 "" links
 }
 
 _home_act() {
@@ -39,6 +41,7 @@ _home_act() {
     rules)     _inner_run r;   _st_back=1 ;;
     help)      open_help;      _st_back=1 ;;
     auth)      auth_menu;      _st_back=1 ;;
+    links)     _inner_run api; _st_back=1 ;;
   esac
 }
 

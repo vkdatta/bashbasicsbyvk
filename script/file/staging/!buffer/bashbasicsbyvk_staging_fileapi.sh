@@ -24,6 +24,7 @@ _bb_authed_put() {
 
     local cfg
     cfg=$({ _bb_auth_cfg
+            _bb_link_cfg
             [ -n "$est_size" ] && _bb_cfg_header X-Estimated-Size "$est_size"
             $confirmed && _bb_cfg_header X-Confirm-Oversized yes
             true; })
@@ -34,11 +35,12 @@ _bb_authed_put() {
     body=$(echo "$response" | sed '$d')
 
     if [ "$http_status" == "201" ]; then
-      local deducted balance
+      local deducted balance expires
       deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
       balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+      expires=$(grep -i '^X-Link-Expires:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
       rm -f "$hdrfile"
-      printf '%s\n%s\n%s\n' "$body" "$deducted" "$balance"
+      printf '%s\n%s\n%s\n%s\n' "$body" "$deducted" "$balance" "$expires"
       return 0
     fi
     rm -f "$hdrfile"
@@ -393,6 +395,7 @@ _bb_upload_init() {
     attempt=$((attempt + 1))
     local cfg
     cfg=$({ _bb_auth_cfg
+            _bb_link_cfg
             _bb_cfg_header X-Estimated-Size "$est_size"
             $confirmed && _bb_cfg_header X-Confirm-Oversized yes
             true; })
@@ -676,11 +679,12 @@ _bb_upload_commit() {
   body=$(echo "$response" | sed '$d')
 
   if [ "$http_status" == "201" ]; then
-    local deducted balance
+    local deducted balance expires
     deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
     balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+    expires=$(grep -i '^X-Link-Expires:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
     rm -f "$hdrfile"
-    printf '%s\n%s\n%s\n' "$body" "$deducted" "$balance"
+    printf '%s\n%s\n%s\n%s\n' "$body" "$deducted" "$balance" "$expires"
     return 0
   fi
   rm -f "$hdrfile"
@@ -786,12 +790,12 @@ _up_do_multipart_upload() {
   upres=$(_bb_upload_blobs "$id" "$tmpdir" "$nblobs" "$token")
   if [ "$upres" != "OK" ]; then
     _up_cleanup
-    echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects auto-expire in 30 min."
+    echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects are removed automatically within a few hours."
     return 1
   fi
 
   # ---- Phase 3: commit (manifest + credit settlement) ----
-  local result final_url deducted balance
+  local result final_url deducted balance expires
   result=$(_bb_upload_commit "$id" "$nblobs" "$tmpdir/manifest.enc" "$token") \
     || { _up_cleanup; return 1; }
   _up_cleanup
@@ -799,23 +803,34 @@ _up_do_multipart_upload() {
   final_url=$(echo "$result" | sed -n '1p')
   deducted=$(echo "$result" | sed -n '2p')
   balance=$(echo "$result" | sed -n '3p')
+  expires=$(echo "$result" | sed -n '4p')
 
   _announce_link "${final_url}#k=${key}"
   [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
+  _bb_print_expiry "$expires"
 }
 
+# up-<items> [as <alias>]     e.g.  up-1-5   ·   up-a-1-5 as user data
+# The alias is the label the api loop shows for this link instead of its address.
 handle_up_upload() {
   local raw="$1"
-  local itemlist="${raw#up-}"
-  _sp_guard_and_resolve "$itemlist" "up-" || return
-  _up_do_multipart_upload "${sp_resolved[@]}"
+  _bb_split_alias "${raw#up-}" || return
+  local itemlist="$_BB_ITEMLIST" rc
+  _sp_guard_and_resolve "$itemlist" "up-" || { _BB_LINK_ALIAS=""; return; }
+  _up_do_multipart_upload "${sp_resolved[@]}"; rc=$?
+  _BB_LINK_ALIAS=""
+  return $rc
 }
 
+# c2c-<items> [as <alias>]    e.g.  c2c-2,4 as notes
 handle_c2c_upload() {
   local raw="$1"
-  local itemlist="${raw#c2c-}"
-  _sp_guard_and_resolve "$itemlist" "c2c-" || return
-  _c2c_paths "${sp_resolved[@]}"
+  _bb_split_alias "${raw#c2c-}" || return
+  local itemlist="$_BB_ITEMLIST" rc
+  _sp_guard_and_resolve "$itemlist" "c2c-" || { _BB_LINK_ALIAS=""; return; }
+  _c2c_paths "${sp_resolved[@]}"; rc=$?
+  _BB_LINK_ALIAS=""
+  return $rc
 }
 
 # Merge the given files into ONE encrypted text blob and upload it.
@@ -867,7 +882,7 @@ _c2c_paths() {
   fi
 
   echo "☁️  Uploading ${#paths[@]} encrypted file(s) merged into a single blob..."
-  local result final_url deducted balance
+  local result final_url deducted balance expires
   if ! result=$(_bb_authed_put "/copy" "" --data-binary "@$enc_tmp"); then
     rm -f "$enc_tmp"
     return 1
@@ -877,9 +892,11 @@ _c2c_paths() {
   final_url=$(echo "$result" | sed -n '1p')
   deducted=$(echo "$result" | sed -n '2p')
   balance=$(echo "$result" | sed -n '3p')
+  expires=$(echo "$result" | sed -n '4p')
 
   _announce_link "${final_url}#k=${key}"
   [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
+  _bb_print_expiry "$expires"
 }
 
 handle_do_import() {
@@ -990,6 +1007,6 @@ handle_do_import() {
   _unpack_targz_safe "$arc" "$path"
   local rc=$?
   rm -f "$arc"
-  [ $rc -eq 0 ] && echo "ℹ️  The remote copy is left in place and will auto-delete on its own after 30 minutes."
+  [ $rc -eq 0 ] && echo "ℹ️  The remote copy is left in place and will be nuked on its own when its nuke time runs out (or nuke it earlier from  api)."
   return $rc
 }

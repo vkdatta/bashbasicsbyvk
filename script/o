@@ -13,13 +13,14 @@ source "bashbasicsbyvk_home.sh"
 source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_upgrade.sh"
+source "bashbasicsbyvk_api.sh"
 source "bashbasicsbyvk_functions.sh"
 source "bashbasicsbyvk_infinity.sh"
 source "bashbasicsbyvk_telemetry.sh"
 source "bashbasicsbyvk_auth.sh"
 source "bashbasicsbyvk_ai.sh"
 
-# Inner-loop driver: sw, fx, r (the .r rule book) and upg (the -u upgrade loop) hand over to each other via _inner_next,
+# Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop) and api (the link manager) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
 _inner_next=""
 _inner_run() {
@@ -31,6 +32,7 @@ _inner_run() {
       fx) functions_menu ;;
       r)  rules_menu ;;
       upg) upgrade_menu ;;
+      api) api_menu ;;
     esac
     _next="$_inner_next"
   done
@@ -182,6 +184,7 @@ while true; do
     .d|.d.*|.d\ *)  handle_display_cmd "$choice" ;;
     sw)          _inner_run sw ;;
     fx)          _inner_run fx ;;
+    api)         _inner_run api ;;
     *)           handle_selection "$choice" ;;
   esac
 done
