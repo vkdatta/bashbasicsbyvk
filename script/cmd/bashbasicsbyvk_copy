@@ -158,17 +158,14 @@ else
         fi
         rm -f "$HDRFILE"
 
-        if [ "$HTTP_STATUS" == "401" ] && [ "$ATTEMPT" -le 2 ]; then
+        # 401 = saved credentials are wrong; retrying reloads the same profile, so report once and stop.
+        if [ "$HTTP_STATUS" == "401" ]; then
             MSG=$(_bb_json_get "$BODY" message)
             echo "❌ ${MSG:-Authentication failed.}"
-            unset FILEAPI_BASHBASICS_EMAIL FILEAPI_BASHBASICS_KEY
-            echo "🔁 Please re-enter your credentials."
-            if ! _bb_get_credentials; then
-                rm -f "$ENC_FILE"
-                [ "$TEMP_MODE" = true ] && rm -f "$FILE"
-                exit 1
-            fi
-            continue
+            echo "🔁 Fix the active user with  -auth  inside 'o', then try again."
+            rm -f "$ENC_FILE"
+            [ "$TEMP_MODE" = true ] && rm -f "$FILE"
+            exit 1
         fi
 
         echo "❌ Error: $(_bb_fail_reason "$BODY" "$HTTP_STATUS")"

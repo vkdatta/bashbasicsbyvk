@@ -47,12 +47,12 @@ _bb_authed_put() {
     err_type=$(_bb_json_get "$body" error)
     msg=$(_bb_json_get "$body" message)
 
-    if [ "$http_status" == "401" ] && [ "$attempt" -le 2 ]; then
+    # 401 = the saved profile's credentials are wrong. Retrying would just reload
+    # the same profile and fail identically, so report once and stop.
+    if [ "$http_status" == "401" ]; then
       echo "❌ ${msg:-Authentication failed.}" >&2
-      unset FILEAPI_BASHBASICS_EMAIL FILEAPI_BASHBASICS_KEY
-      echo "🔁 Please re-enter your credentials." >&2
-      _bb_get_credentials || return 1
-      continue
+      echo "🔁 Fix the active user with  -auth  inside 'o', then try again." >&2
+      return 1
     fi
 
     if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
@@ -417,12 +417,12 @@ _bb_upload_init() {
     err_type=$(_bb_json_get "$body" error)
     msg=$(_bb_json_get "$body" message)
 
-    if [ "$http_status" == "401" ] && [ "$attempt" -le 2 ]; then
+    # 401 = the saved profile's credentials are wrong. Retrying would just reload
+    # the same profile and fail identically, so report once and stop.
+    if [ "$http_status" == "401" ]; then
       echo "❌ ${msg:-Authentication failed.}" >&2
-      unset FILEAPI_BASHBASICS_EMAIL FILEAPI_BASHBASICS_KEY
-      echo "🔁 Please re-enter your credentials." >&2
-      _bb_get_credentials || return 1
-      continue
+      echo "🔁 Fix the active user with  -auth  inside 'o', then try again." >&2
+      return 1
     fi
 
     if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
