@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
+# _3bvk_upgrade_core [REF]
+#   no REF  → install the default branch (latest main)      — the old -u behaviour
+#   REF     → install that git tag / branch / commit, e.g.  v0.0.12
+# Called by the -u upgrade loop (bashbasicsbyvk_upgrade.sh).
+
+REF="${1:-}"
+REPO_URL="https://github.com/vkdatta/bashbasicsbyvk.git"
+SPEC="git+${REPO_URL}${REF:+@${REF}}"
 
 INSTALL_LOC=$(pip show bashbasicsbyvk 2>/dev/null | grep '^Location:' | cut -d' ' -f2-)
 
 if [ -z "$INSTALL_LOC" ]; then
-    echo "⚠️  Not installed yet — doing fresh user-local install"
-    pip install -vvv --progress-bar on \
-        git+https://github.com/vkdatta/bashbasicsbyvk.git
+    echo "⚠️  Not installed yet — doing fresh user-local install (${REF:-latest main})"
+    pip install -vvv --progress-bar on "$SPEC"
     exit $?
 fi
 
 if [[ "$INSTALL_LOC" == /usr/* || "$INSTALL_LOC" == /lib/* || "$INSTALL_LOC" == /opt/* ]]; then
-    echo "🔧 System install detected ($INSTALL_LOC) — using --break-system-packages"
+    echo "🔧 System install detected ($INSTALL_LOC) — using --break-system-packages (${REF:-latest main})"
     pip install -vvv --progress-bar on --upgrade --force-reinstall \
-        git+https://github.com/vkdatta/bashbasicsbyvk.git --break-system-packages
+        "$SPEC" --break-system-packages
 else
-    echo "🔧 User install detected ($INSTALL_LOC) — normal upgrade"
+    echo "🔧 User install detected ($INSTALL_LOC) — normal upgrade (${REF:-latest main})"
     pip install -vvv --progress-bar on --upgrade --force-reinstall \
-        git+https://github.com/vkdatta/bashbasicsbyvk.git
+        "$SPEC"
 fi

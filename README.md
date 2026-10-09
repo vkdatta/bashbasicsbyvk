@@ -355,6 +355,22 @@ sudo pip uninstall bashbasicsbyvk
 </details>
 
 
+## Upgrade (`-u`) and `health`
+
+`-u` opens the upgrade loop (arrow keys `←/→` switch tabs):
+
+- **📦 Stable** — published GitHub releases, newest first
+- **🧪 Tags (beta)** — every git tag, newest first (`✓ stable` = also a release)
+
+Type a number to install that exact version (it asks first), `i-N` to read its description,
+`m` for the latest `main`, `rf` to refresh, `u` to leave. `★ installed` marks the last version
+installed from this menu.
+
+`health` explains why the file list is loaded by Python (`[loaded by py]`) instead of the native
+C helper `bvk-ls`: it checks the CPU/OS match, the binary's ELF header, exec permission, noexec
+mounts and a real run, then exercises every `bvk-ls` sub-command. The report is also saved to
+`~/.bashbasicsbyvk/health.log`.
+
 ## Settings (`s`)
 
 Same feel as the main menu — no numbers to type:

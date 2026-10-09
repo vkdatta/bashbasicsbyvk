@@ -455,7 +455,7 @@ _bb_upload_blobs() {
   BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_UTOKEN="$token" node -e '
     const fs = require("fs");
     const path = require("path");
-    const { Readable } = require("stream");
+    const { Readable, Transform } = require("stream");
 
     const base   = process.argv[1];
     const id     = process.argv[2];
@@ -471,19 +471,42 @@ _bb_upload_blobs() {
     const auth = { "X-User-Email": email, "X-Upload-Token": utoken };
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    // Fresh body each attempt: a stream can only be consumed once, so retries
-    // need a factory rather than a reusable body value.
-    function bodyFor(fp, size, start, end) {
-      if (start === undefined && size <= INLINE) return fs.readFileSync(fp);
-      const opts = (start === undefined) ? {} : { start, end };
-      return Readable.toWeb(fs.createReadStream(fp, opts));
+    // ---- progress is measured in BYTES, never in blobs ----------------------
+    // sent  = request-body bytes handed to the network so far (counted as the
+    //         file streams out, so it moves smoothly while a blob is in flight).
+    // total = sum of every blob file size, known up front.
+    // A failed attempt gives its bytes back (see send), so a retry never
+    // double-counts. Small blobs are sent from memory: they are credited when
+    // the server accepts them.
+    let sent = 0, total = 0, done = 0, shown = 0;
+    for (let i = 0; i < N; i++) {
+      try { total += fs.statSync(path.join(dir, "blob" + i)).size; } catch (e) {}
     }
 
-    async function send(url, method, makeBody, extraHeaders) {
+    function counted(rs, ctr) {
+      const t = new Transform({
+        transform(chunk, _enc, cb) { sent += chunk.length; ctr.n += chunk.length; cb(null, chunk); }
+      });
+      rs.on("error", (e) => t.destroy(e));
+      return rs.pipe(t);
+    }
+
+    // Fresh body each attempt: a stream can only be consumed once, so retries
+    // need a factory rather than a reusable body value.
+    function bodyFor(fp, size, start, end, ctr) {
+      if (start === undefined && size <= INLINE) return fs.readFileSync(fp);
+      const opts = { highWaterMark: 64 * 1024 };
+      if (start !== undefined) { opts.start = start; opts.end = end; }
+      return Readable.toWeb(counted(fs.createReadStream(fp, opts), ctr));
+    }
+
+    // credit = body bytes this request carries (0 for control requests).
+    async function send(url, method, makeBody, extraHeaders, credit) {
       let lastErr;
       for (let attempt = 0; attempt < 3; attempt++) {
+        const ctr = { n: 0 };
         try {
-          const body = makeBody();
+          const body = makeBody(ctr);
           const init = {
             method,
             headers: Object.assign({}, auth, extraHeaders || {}),
@@ -492,13 +515,16 @@ _bb_upload_blobs() {
             duplex: "half"
           };
           const res = await fetch(url, init);
-          if (res.ok) return res;
-          // 4xx other than 429 will not fix themselves — fail fast.
+          if (res.ok) { sent += (credit || 0) - ctr.n; return res; }
+          sent -= ctr.n;
+          // 4xx other than 429 will not fix themselves: fail fast.
           if (res.status < 500 && res.status !== 429) {
             throw new Error("HTTP " + res.status);
           }
           lastErr = new Error("HTTP " + res.status);
         } catch (e) {
+          if (e && /^HTTP 4/.test(e.message || "") ) throw e;
+          sent -= ctr.n;
           lastErr = e;
         }
         await sleep(250 * Math.pow(2, attempt));
@@ -506,19 +532,62 @@ _bb_upload_blobs() {
       throw lastErr;
     }
 
-    const COLS = 24, TTY = process.stderr.isTTY;
-    let lastPct = -1, done = 0;
-    function bar() {
+    // ---- the bar --------------------------------------------------------------
+    const TTY = process.stderr.isTTY;
+    const t0 = Date.now();
+    const samples = [];                         // [time, sent] over the last ~8 s
+    function fmtB(b) {
+      if (total >= 1048576) return (b / 1048576).toFixed(1);
+      return (b / 1024).toFixed(0);
+    }
+    const unit = () => (total >= 1048576 ? "MB" : "KB");
+    function fmtT(s) {
+      s = Math.max(0, Math.round(s));
+      if (s >= 3600) return Math.floor(s / 3600) + "h" + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m";
+      if (s >= 60) return Math.floor(s / 60) + "m" + String(s % 60).padStart(2, "0") + "s";
+      return s + "s";
+    }
+    function speed() {
+      const now = Date.now();
+      samples.push([now, sent]);
+      while (samples.length > 2 && now - samples[0][0] > 8000) samples.shift();
+      const a = samples[0], b = samples[samples.length - 1];
+      const dt = (b[0] - a[0]) / 1000;
+      return dt > 0.4 ? Math.max(0, (b[1] - a[1]) / dt) : 0;
+    }
+    function draw(final) {
       if (!TTY) return;
-      const pct = N > 0 ? Math.floor(done * 100 / N) : 100;
-      if (pct === lastPct && done < N) return;
-      lastPct = pct;
-      const filled = Math.floor(pct * COLS / 100);
-      const b = "\u2588".repeat(filled) + "\u2591".repeat(COLS - filled);
-      const color = done >= N ? "\u001b[32m" : "\u001b[36m";
-      process.stderr.write("\r\u001b[K" + color + "[" + b + "] " +
-        String(pct).padStart(3) + "%\u001b[0m  \u2601\uFE0F  Uploading " + done + "/" + N);
-      if (done >= N) process.stderr.write("\n");
+      shown = Math.max(shown, Math.min(sent, total));            // never goes backwards
+      const finished = final && done >= N;
+      let pct = total > 0 ? Math.floor(shown * 100 / total) : 100;
+      if (!finished && pct > 99) pct = 99;                       // 100% only once the server has everything
+      const sp = speed();
+      const cols = process.stderr.columns || 60;
+      const left = fmtB(finished ? total : shown) + "/" + fmtB(total) + " " + unit();
+      const parts = [String(pct).padStart(3) + "%", left];
+      const extra = [];
+      if (!finished) {
+        extra.push(sp > 0 ? (fmtB(sp) + " " + unit() + "/s") : "...");
+        if (sp > 0) extra.push("ETA " + fmtT((total - shown) / sp));
+        extra.push(done + "/" + N);
+      }
+      // drop the least important pieces until the line fits the screen
+      let barW = 22, info;
+      for (;;) {
+        info = parts.concat(extra).join("  ");
+        if (cols - info.length - 4 >= 8 || extra.length === 0) break;
+        extra.pop();
+      }
+      barW = Math.max(6, Math.min(22, cols - info.length - 4));
+      const filled = Math.floor(pct * barW / 100);
+      const b = "\u2588".repeat(filled) + "\u2591".repeat(barW - filled);
+      const color = finished ? "\u001b[32m" : "\u001b[36m";
+      process.stderr.write("\r\u001b[K" + color + "[" + b + "] " + info + "\u001b[0m");
+      if (finished) {
+        const secs = (Date.now() - t0) / 1000;
+        process.stderr.write("\n  \u2705 " + fmtB(total) + " " + unit() + " in " + fmtT(secs) +
+          (secs > 0 ? "  (avg " + fmtB(total / secs) + " " + unit() + "/s)" : "") + "\n");
+      }
     }
 
     async function uploadOne(idx) {
@@ -527,7 +596,7 @@ _bb_upload_blobs() {
 
       if (size <= CHUNK) {
         await send(base + "/upload/" + id + "/blob/" + idx, "PUT",
-                   () => bodyFor(fp, size));
+                   (ctr) => bodyFor(fp, size, undefined, undefined, ctr), undefined, size);
         return;
       }
 
@@ -551,7 +620,7 @@ _bb_upload_blobs() {
           const r = ranges[i];
           const res = await send(
             base + "/upload/" + id + "/blob/" + idx + "/mpu/" + uploadId + "/" + r.pn,
-            "PUT", () => bodyFor(fp, size, r.start, r.end));
+            "PUT", (ctr) => bodyFor(fp, size, r.start, r.end, ctr), undefined, r.end - r.start + 1);
           const j = await res.json();
           parts[i] = { partNumber: j.partNumber, etag: j.etag };
         }
@@ -575,15 +644,19 @@ _bb_upload_blobs() {
             failed++;
             if (errors.length < 3) errors.push("blob " + i + ": " + (e && e.message ? e.message : e));
           }
-          done++; bar();
+          done++;
         }
       }
-      bar();
+      const timer = setInterval(() => draw(false), 200);
+      draw(false);
       await Promise.all(Array.from({ length: Math.min(CONC, N || 1) }, worker));
-      if (TTY && N === 0) process.stderr.write("\n");
+      clearInterval(timer);
+      if (failed === 0) draw(true);
+      else if (TTY) process.stderr.write("\n");
       for (const m of errors) process.stderr.write("  \u26a0\uFE0F  " + m + "\n");
       console.log(failed === 0 ? "OK" : "FAIL");
     })();
+  
   ' "$WORKER_URL" "$id" "$tmpdir" "$nblobs" "$_BB_MAX_PAR" "$_BB_CHUNK_BYTES"
 }
 

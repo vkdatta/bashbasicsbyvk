@@ -11,17 +11,22 @@
 
 
 # ── Native (C) fast path: use bvk-ls when installed, else fall back to Python ─────────
+# _BVK_GO_WHY records why the native binary is NOT in use (read by the `health` command).
+declare -g _BVK_GO_WHY=""
 _bvk_go_bin() {
   if [ -z "${_BVK_GO_BIN+x}" ]; then
     _BVK_GO_BIN=""
-    if [ "${BVK_NO_GO:-0}" != "1" ]; then
+    _BVK_GO_WHY=""
+    if [ "${BVK_NO_GO:-0}" = "1" ]; then
+      _BVK_GO_WHY="BVK_NO_GO=1 is set — the C engine is switched off on purpose"
+    else
       local _m _os _b _o _d
       local -a _cand=()
       case "$(uname -m)" in
         aarch64|arm64) _m=arm64 ;;
         x86_64|amd64)  _m=amd64 ;;
         armv7*|armv8l) _m=arm ;;
-        *)             _m="" ;;
+        *)             _m="" ; _BVK_GO_WHY="no prebuilt bvk-ls for CPU '$(uname -m)'" ;;
       esac
       # Android (bionic) cannot run the static glibc "linux" builds: its linker
       # needs PT_PHDR, which a glibc static-pie binary does not have, and aborts
@@ -37,15 +42,16 @@ _bvk_go_bin() {
         _cand+=("$_d/../bashbasicsbyvk/bin/bvk-ls-$_os-$_m"
                 "$(command -v "bvk-ls-$_os-$_m" 2>/dev/null)")
       fi
+      [ -n "$_BVK_GO_WHY" ] || _BVK_GO_WHY="no bvk-ls binary found (looked next to 'o' and on PATH)"
       for _b in "${_cand[@]}"; do
         [ -n "$_b" ] && [ -f "$_b" ] || continue
         [ -x "$_b" ] || chmod +x "$_b" 2>/dev/null
-        [ -x "$_b" ] || continue
+        [ -x "$_b" ] || { _BVK_GO_WHY="$_b exists but is not executable"; continue; }
         # self-test: skip binaries the OS refuses to run. Probe $HOME, not "/":
         # Android denies apps access to the filesystem root, so "count /" fails
         # even for a perfectly working binary.
-        "$_b" count "${HOME:-.}" 0 >/dev/null 2>&1 || continue
-        _BVK_GO_BIN="$_b"; break
+        "$_b" count "${HOME:-.}" 0 >/dev/null 2>&1 || { _BVK_GO_WHY="$_b failed its self-test (run: health)"; continue; }
+        _BVK_GO_BIN="$_b"; _BVK_GO_WHY=""; break
       done
     fi
   fi

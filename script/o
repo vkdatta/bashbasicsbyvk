@@ -11,13 +11,14 @@ source "_3bvk_import_settings.sh"
 source "bashbasicsbyvk_help.sh"
 source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_switch.sh"
+source "bashbasicsbyvk_upgrade.sh"
 source "bashbasicsbyvk_functions.sh"
 source "bashbasicsbyvk_infinity.sh"
 source "bashbasicsbyvk_telemetry.sh"
 source "bashbasicsbyvk_auth.sh"
 source "bashbasicsbyvk_ai.sh"
 
-# Inner-loop driver: sw, fx and r (the .r rule book) hand over to each other via _inner_next,
+# Inner-loop driver: sw, fx, r (the .r rule book) and upg (the -u upgrade loop) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
 _inner_next=""
 _inner_run() {
@@ -28,6 +29,7 @@ _inner_run() {
       sw) switch_menu ;;
       fx) functions_menu ;;
       r)  rules_menu ;;
+      upg) upgrade_menu ;;
     esac
     _next="$_inner_next"
   done
@@ -153,7 +155,7 @@ while true; do
     cd)          cd "$path" && exec "$SHELL" ;;
     kl)          kill -9 -1 ;;
     i)           infinity_stones_menu ;;
-    -u)          bash _3bvk_upgrade_core ;;
+    -u)          _inner_run upg ;;
     d-)          handle_staging_dispatch ;;
     v-)          handle_staging_view ;;
     p-*)         handle_staging_map "$choice" ;;
@@ -165,6 +167,7 @@ while true; do
     z-*)         handle_compress_items "$choice" ;;
     clear)       hash -r ;;
     =*)          ;;
+    health)      bvk_health ;;
     disk)        df -h ;;
     ram)         free -h ;;
     rf)          handle_refresh ;;
