@@ -13,6 +13,8 @@ DEFAULT_DISPLAY_SUFFIX_SET=""
 DEFAULT_DISPLAY_TIME_FORMAT="full"
 DEFAULT_GROUP_VIEW_LEVELS=""
 DEFAULT_COMPRESS_FORMAT="ask"
+DEFAULT_UPLOAD_HIDDEN_MODE="follow"   # up- : follow | always | never | ask
+DEFAULT_ZIP_HIDDEN_MODE="follow"      # z-  : follow | always | never | ask
 DEFAULT_FILTER_MODE="partial"
 DEFAULT_FILTER_HIDDEN_MODE="respect"
 DEFAULT_FILTER_RECURSIVE=false      # = filter looks only in the folder you are viewing
@@ -29,6 +31,8 @@ unset display_suffix_set
 unset display_time_format
 unset group_view_levels_str
 unset compress_format
+unset upload_hidden_mode
+unset zip_hidden_mode
 unset filter_mode
 unset filter_hidden_mode
 unset filter_recursive
@@ -47,6 +51,10 @@ unset anim_inner
 : "${display_time_format:=$DEFAULT_DISPLAY_TIME_FORMAT}"
 : "${group_view_levels_str:=$DEFAULT_GROUP_VIEW_LEVELS}"
 : "${compress_format:=$DEFAULT_COMPRESS_FORMAT}"
+: "${upload_hidden_mode:=$DEFAULT_UPLOAD_HIDDEN_MODE}"
+: "${zip_hidden_mode:=$DEFAULT_ZIP_HIDDEN_MODE}"
+[[ "$upload_hidden_mode" =~ ^(follow|always|never|ask)$ ]] || upload_hidden_mode=$DEFAULT_UPLOAD_HIDDEN_MODE
+[[ "$zip_hidden_mode" =~ ^(follow|always|never|ask)$ ]] || zip_hidden_mode=$DEFAULT_ZIP_HIDDEN_MODE
 : "${filter_mode:=$DEFAULT_FILTER_MODE}"
 : "${filter_hidden_mode:=$DEFAULT_FILTER_HIDDEN_MODE}"
 : "${filter_recursive:=$DEFAULT_FILTER_RECURSIVE}"
@@ -73,6 +81,8 @@ save_settings() {
     echo "display_time_format=$display_time_format"
     echo "group_view_levels_str=\"${group_view_levels[*]}\""
     echo "compress_format=$compress_format"
+    echo "upload_hidden_mode=$upload_hidden_mode"
+    echo "zip_hidden_mode=$zip_hidden_mode"
     echo "filter_mode=$filter_mode"
     echo "filter_hidden_mode=$filter_hidden_mode"
     echo "filter_recursive=$filter_recursive"
@@ -115,6 +125,8 @@ _st_top_build() {
   local fv="$filter_mode"; [ "$filter_recursive" = true ] && fv="$filter_mode · recursive"
   _st_add a "Search filter (=)"   0 "$fv"                               filter
   _st_add a "Compress format"     0 "$compress_format"                  compress
+  _st_add a "Upload hidden (up-)" 0 "$(_hidden_mode_label "$upload_hidden_mode")" uphidden
+  _st_add a "Zip hidden (z-)"     0 "$(_hidden_mode_label "$zip_hidden_mode")"    ziphidden
   _st_add a "Animation"           0 "$anim_outer / $anim_inner"         anim
   _st_add a "Big-folder limit"    0 "$index_mode_threshold"             index
   _st_add a "Background color"    0 "#$terminal_bg_color"               bg
@@ -132,6 +144,8 @@ _st_top_act() {
     dfilter)  display_filter_settings ;;
     filter)   filter_mode_settings ;;
     compress) compress_format_settings ;;
+    uphidden) upload_hidden_settings ;;
+    ziphidden) zip_hidden_settings ;;
     anim)     animation_settings ;;
     index)    index_mode_threshold_settings ;;
     bg)       terminal_bg_color_settings ;;
@@ -283,6 +297,8 @@ _st_reset_act() {
   display_time_format=$DEFAULT_DISPLAY_TIME_FORMAT
   group_view_levels=(); group_view_levels_str=""
   compress_format=$DEFAULT_COMPRESS_FORMAT
+  upload_hidden_mode=$DEFAULT_UPLOAD_HIDDEN_MODE
+  zip_hidden_mode=$DEFAULT_ZIP_HIDDEN_MODE
   filter_mode=$DEFAULT_FILTER_MODE
   filter_hidden_mode=$DEFAULT_FILTER_HIDDEN_MODE
   filter_recursive=$DEFAULT_FILTER_RECURSIVE

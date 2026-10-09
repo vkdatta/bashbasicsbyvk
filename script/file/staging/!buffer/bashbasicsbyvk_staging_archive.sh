@@ -111,6 +111,10 @@ _compress_paths() {
     rm -f "$arc_path"
   fi
 
+  # ── Hidden files inside the chosen folders (Settings → Zip hidden) ───────
+  _hidden_decide "${zip_hidden_mode:-follow}" "the archive" "${paths[@]}" || return
+  local hid_inc="$_hid_inc"
+
   # ── Build the item list (relative to workdir) ────────────────────────────
   local base="${path%/}/" outside=false
   for p in "${paths[@]}"; do
@@ -139,7 +143,12 @@ _compress_paths() {
   local rc
   if [ "$fmt" = "zip" ]; then
     echo "🗜️  Zipping ${#paths[@]} item(s) → ${arc_name}.zip"
-    ( cd "$workdir" && zip -r "$arc_path" "${rel_items[@]}" )       # zip follows symlinks by default
+    if [ "$hid_inc" = true ]; then
+      ( cd "$workdir" && zip -r "$arc_path" "${rel_items[@]}" )       # zip follows symlinks by default
+    else
+      # same list, minus hidden files/folders inside the chosen items
+      ( cd "$workdir" && _hid_find0 false 0 "${rel_items[@]/#/./}" | tr '\0' '\n' | zip "$arc_path" -@ )
+    fi
     rc=$?
     if [ $rc -eq 0 ]; then
       echo "✅ Created: ${arc_name}.zip"
@@ -150,7 +159,11 @@ _compress_paths() {
     local -a tar_opts=(-czf)
     $outside && tar_opts=(-czhf)                                      # -h: follow the staging symlinks
     echo "🗜️  Creating tar.gz of ${#paths[@]} item(s) → ${arc_name}.tar.gz"
-    ( cd "$workdir" && tar "${tar_opts[@]}" "$arc_path" "${rel_items[@]}" )
+    if [ "$hid_inc" = true ]; then
+      ( cd "$workdir" && tar "${tar_opts[@]}" "$arc_path" "${rel_items[@]}" )
+    else
+      ( cd "$workdir" && _hid_find0 false 0 "${rel_items[@]/#/./}" | tar "${tar_opts[@]}" "$arc_path" --null --no-recursion -T - )
+    fi
     rc=$?
     if [ $rc -eq 0 ]; then
       echo "✅ Created: ${arc_name}.tar.gz"

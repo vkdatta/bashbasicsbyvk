@@ -177,7 +177,7 @@ _st_draw() {
   out+="$nl"$'\n'                                          # space above
   local hd="$path_title"
   [ -n "${fq:-}" ] && hd="$hd   [filter: =$fq]"
-  out+="$nl⚙️ ${hd:0:cols-4}"$'\n'                          # header
+  out+="$nl${_st_icon:-⚙️} ${hd:0:cols-4}"$'\n'                          # header
   if (( top > 0 )); then out+="$nl   ▲ $top more above"$'\n'; else out+="$nl$_ST_RULE"$'\n'; fi
 
   for (( i=top; i<top+vis; i++ )); do

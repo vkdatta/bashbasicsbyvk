@@ -722,6 +722,10 @@ _up_do_multipart_upload() {
     echo "❌ No valid files found in selection"; _up_cleanup; return 1
   fi
 
+  # hidden files inside the chosen folders: Settings → Upload hidden (up-)
+  _hidden_decide "${upload_hidden_mode:-follow}" "the upload" "${paths[@]}" || { _up_cleanup; return 1; }
+  local hid_inc="$_hid_inc"
+
   local arcname="files.tar.gz"
   [ ${#rel_items[@]} -eq 1 ] && arcname="${rel_items[0]#./}.tar.gz"
   arcname=$(printf '%s' "$arcname" | LC_ALL=C tr -c 'A-Za-z0-9._ -' '_' | cut -c1-120)
@@ -732,7 +736,7 @@ _up_do_multipart_upload() {
   local packout
   packout=$(
     cd "$stage" || exit 1
-    find -H "${rel_items[@]}" \( -type f -o -type d \) -print0 2>> "$errfile" \
+    _hid_find0 "$hid_inc" 1 "${rel_items[@]}" 2>> "$errfile" \
       | { tar --null --no-recursion -h -T - -cf - 2>> "$errfile"; echo $? > "$rcfile"; } \
       | "${gz[@]}" "-$lvl" -c \
       | _crypto_stream_pack "$tmpdir" "$arcname"

@@ -9,6 +9,7 @@ source "bashbasicsbyvk_run.sh"
 source "bashbasicsbyvk_csv.sh"
 source "_3bvk_import_settings.sh"
 source "bashbasicsbyvk_help.sh"
+source "bashbasicsbyvk_home.sh"
 source "bashbasicsbyvk_refresh.sh"
 source "bashbasicsbyvk_switch.sh"
 source "bashbasicsbyvk_upgrade.sh"
@@ -137,6 +138,7 @@ while true; do
   case "$choice" in
     q)           if $_sw_did_switch; then cd "$path" && exec "$SHELL"; else exit 0; fi ;;
     -h)          open_help ;;
+    h)           home_menu ;;
     u)           if [ -n "$group_prefix" ]; then
                    group_prefix="${group_prefix%?}"; force_show=false
                  elif [ "$path" != "/" ]; then

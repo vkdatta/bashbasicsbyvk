@@ -21,9 +21,9 @@ handle_file() {
         echo "6) Replace With Clipboard Content"
         echo "7) Rename File"
         echo "8) Share"
-        echo "9) Run (Log)"
         echo "u) Back to Previous Menu"
-        echo "q/h) Back to Home/Exit"
+        echo "q) Quit"
+        echo "h) Home"
         read -p "Enter choice: " action
 
         case "$action" in
@@ -66,7 +66,11 @@ handle_file() {
             u|U)
                 return 1
                 ;;
-            q|Q|h|H)
+            h|H)
+                home_menu
+                return 1
+                ;;
+            q|Q)
                 exit 0
                 ;;
             *)
