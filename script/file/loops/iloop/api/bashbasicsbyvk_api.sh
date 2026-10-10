@@ -30,6 +30,8 @@ declare -ga _API_ID=() _API_KIND=() _API_ALIAS=() _API_BYTES=() _API_CREATED=() 
 declare -ga _API_PAID=() _API_RFND=() _API_RFND_D=()
 _API_BAL=""
 _API_NOW=0           # server clock (ms) at the last refresh
+_API_LOCAL=0         # this computer's clock (s) at the same moment → server "now" stays live between refreshes
+declare -ga _API_PRE=() _API_POST=()   # per-row text that never changes (everything but the countdown)
 _API_ERR=""
 _API_LOADED=0
 _API_US=$'\x1f'
@@ -84,7 +86,7 @@ _api_load() {
   local tag a b c d e f g h i
   while IFS="$_API_US" read -r tag a b c d e f g h i; do
     case "$tag" in
-      META) _API_BAL="$a"; _API_NOW="$b" ;;
+      META) _API_BAL="$a"; _API_NOW="$b"; _API_LOCAL="${EPOCHSECONDS:-$(date +%s)}"; _API_PRE=(); _API_POST=() ;;
       L)    _API_ID+=("$a"); _API_KIND+=("$b"); _API_ALIAS+=("$c"); _API_BYTES+=("$d")
             _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i") ;;
     esac
@@ -112,17 +114,51 @@ _api_name() {
   if [ -n "${_API_ALIAS[$i]}" ]; then printf '%s' "${_API_ALIAS[$i]}"; else printf '(no alias) %s…' "${_API_ID[$i]:0:8}"; fi
 }
 
-_api_left() {            # seconds left for link idx (0-based), as of the last refresh
-  local i="$1"; echo $(( (${_API_EXPIRES[$i]} - _API_NOW) / 1000 ))
+# server "now" in ms, kept live from this computer's clock (no network, no fork)
+_api_now_ms() {
+  local t="${EPOCHSECONDS:-}"; [ -n "$t" ] || printf -v t '%(%s)T' -1
+  _API_CUR=$(( _API_NOW + (t - _API_LOCAL) * 1000 ))
+}
+
+_api_left() {            # seconds left for link idx (0-based), counting down live
+  _api_now_ms
+  echo $(( (${_API_EXPIRES[$1]} - _API_CUR) / 1000 ))
+}
+
+# duration → $_api_dur, same wording as _bb_fmt_duration but without a subshell (runs every second)
+_api_dur_v() {
+  local s="$1" d h m
+  (( s < 0 )) && s=0
+  d=$((s / 86400)); h=$(( (s % 86400) / 3600 )); m=$(( (s % 3600) / 60 ))
+  if   (( d > 0 )); then _api_dur="${d}d"; (( h > 0 )) && _api_dur+=" ${h}h"
+  elif (( h > 0 )); then _api_dur="${h}h"; (( m > 0 )) && _api_dur+=" ${m}m"
+  elif (( m > 0 )); then _api_dur="${m}m $(( s % 60 ))s"
+  else _api_dur="${s}s"; fi
 }
 
 # ── rows ──────────────────────────────────────────────────────────────────────
 _api_rowtext() {
-  local i="$1" k=$(( $1 - 1 )) line icon="📦"
-  [ "${_API_KIND[$k]}" = copy ] && icon="📄"
-  printf -v line " %2d) %s %-28s %9s   %7s left   until %s" "$i" "$icon" "$(_api_trunc "$(_api_name "$k")" 28)" \
-    "$(_api_hsize "${_API_BYTES[$k]}")" "$(_bb_fmt_duration "$(_api_left "$k")")" "$(_bb_fmt_when "${_API_EXPIRES[$k]}")"
-  _vp_line="$line"
+  local i="$1" k=$(( $1 - 1 )) icon="📦" left
+  if [ -z "${_API_PRE[$k]+x}" ]; then          # the parts that never change are built once per refresh
+    [ "${_API_KIND[$k]}" = copy ] && icon="📄"
+    printf -v "_API_PRE[$k]"  ' %2d) %s %-28s %9s   ' "$i" "$icon" "$(_api_trunc "$(_api_name "$k")" 28)" "$(_api_hsize "${_API_BYTES[$k]}")"
+    printf -v "_API_POST[$k]" ' left   until %s' "$(_bb_fmt_when "${_API_EXPIRES[$k]}")"
+  fi
+  _api_now_ms
+  left=$(( (${_API_EXPIRES[$k]} - _API_CUR) / 1000 ))
+  if (( left <= 0 )); then _api_dur="expired"; else _api_dur_v "$left"; fi
+  printf -v _vp_line '%s%7s%s' "${_API_PRE[$k]}" "$_api_dur" "${_API_POST[$k]}"
+}
+
+# once a second: refresh the countdown of the rows on screen (cursor and typed text stay where they are)
+_api_tick() {
+  local i
+  [ "${_vp_rowtext_fn:-}" = _api_rowtext ] || return 0     # only while the Links list itself is on screen
+  _vp_poll_active                                  # keep the 1 s rhythm — never drop to the slow idle poll
+  for (( i=_vp_start; i<=_vp_end; i++ )); do
+    unset "_vp_rowcache[$i]"
+    _vp_repaint_row "$i"
+  done
 }
 
 _api_menu_header() {
@@ -331,6 +367,8 @@ api_menu() {
   _fx_in_mode=1
   _sw_in_mode=1                    # keeps the ←/→ sentinels from leaking out as text (no tabs here)
   _API_LOADED=0
+  local _ap_saved_fast="$_vp_poll_fast" _ap_saved_tick="${_vp_tick_fn:-}"
+  _vp_poll_fast=1; _vp_poll_cur=1; _vp_tick_fn=_api_tick
 
   local _ap_choice _ap_fresh
   shopt -s nullglob
@@ -384,6 +422,7 @@ api_menu() {
   done
 
   shopt -u nocasematch
+  _vp_poll_fast="$_ap_saved_fast"; _vp_poll_cur="$_ap_saved_fast"; _vp_tick_fn="$_ap_saved_tick"
   _fx_in_mode=0
   _sw_in_mode=0
   _vp_rowtext_fn=""

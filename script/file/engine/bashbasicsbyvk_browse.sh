@@ -634,6 +634,8 @@ _read_choice() {
     _rc=$?
     if [ "$_rc" -gt 128 ]; then
       _vp_poll_tick
+      # a screen can ask for a callback on every idle tick (e.g. Links → live "time left" column)
+      [ -n "${_vp_tick_fn:-}" ] && "$_vp_tick_fn"
       if declare -F _dir_size_job_poll >/dev/null 2>&1; then
         if _dir_size_job_poll; then
           _vp_cache_reset
