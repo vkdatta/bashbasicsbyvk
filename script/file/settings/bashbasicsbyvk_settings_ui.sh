@@ -45,6 +45,8 @@ _st_depth=0     # 1 = top Settings screen, 2+ = sub settings
 _st_k=""
 _st_d=""
 _o=0
+_st_stty=""       # saved terminal state while a Settings/Home screen owns the keyboard
+_st_tty_owner=0   # depth that switched the terminal to raw mode
 
 # same rule as the main menu
 _ST_RULE="   ─────────────────────────────"
@@ -111,8 +113,21 @@ _st_number() {
 
 # move $cur by $1 (+1/-1) to the next selectable row, wrapping top ↔ bottom.
 # With nothing highlighted yet (cur=-1): down → first row, up → last row.
+# $2 = how many selectable rows to jump (default 1); a page jump stops at the first/last row
+# instead of wrapping, exactly like PgUp/PgDn in the main menu.
 _st_move() {
-  local d="$1" n=${#_st_lbl[@]} i=$cur t=0
+  local d="$1" steps="${2:-1}" n=${#_st_lbl[@]} i=$cur t=0 moved=0 last=$cur
+  if (( steps > 1 )); then
+    (( n == 0 )) && return 1
+    i=$cur; (( cur < 0 )) && { if (( d > 0 )); then i=-1; else i=$n; fi; }
+    while (( moved < steps )); do
+      i=$(( i + d ))
+      (( i < 0 || i >= n )) && break
+      if _st_selectable "$i"; then last=$i; moved=$(( moved + 1 )); fi
+    done
+    (( last >= 0 )) || return 1
+    cur=$last; return 0
+  fi
   (( n == 0 )) && return 1
   if (( cur < 0 )); then
     if (( d > 0 )); then i=-1; else i=$n; fi
@@ -125,6 +140,19 @@ _st_move() {
     if _st_selectable "$i"; then cur=$i; return 0; fi
   done
   return 1
+}
+
+# Raw keyboard (same as the main menu: no echo, no line buffering).  Without this the terminal echoes
+# arrow keys that arrive while a screen is redrawing, which shows up as a flash of  ^[[B  /  ^^B.
+_st_tty_raw() {
+  [ -t 0 ] || return 0
+  [ -n "$_st_stty" ] || _st_stty=$(stty -g 2>/dev/null)
+  stty -icanon -echo min 1 time 0 2>/dev/null
+}
+# cooked again (echo on) for anything that asks a question with  read
+_st_tty_cooked() {
+  [ -t 0 ] && [ -n "$_st_stty" ] && stty "$_st_stty" 2>/dev/null
+  return 0
 }
 
 # read one key → _st_k = up down left right home end pgup pgdn space enter bksp
@@ -235,7 +263,9 @@ _st_activate() {
     a)
       # actions may ask questions / open a sub-screen: wipe the block first
       _st_wipe
-      "$act" "$cur" enter ;;
+      _st_tty_cooked
+      "$act" "$cur" enter
+      _st_tty_raw ;;
   esac
 }
 
@@ -250,35 +280,44 @@ _st_follow() {
 # _st_run "Title" build_fn act_fn ["legacy hint"]
 _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}"
-  local cur=-1 top=0 prev=0 n buf="" num path_title fq=""
+  local cur=-1 top=0 prev=0 n buf="" num path_title fq="" need=1 page="${_vp_page_step:-10}"
   local parent_title="${_st_title_now:-}"
   _st_depth=$(( _st_depth + 1 ))
   if (( _st_depth > 1 )); then path_title="Settings › $title"; else path_title="$title"; fi
   _st_title_now="$path_title"
   _st_quit=0
+  _st_tty_raw
 
   while :; do
-    "$build"
-    _st_filter_rows
-    _st_number
+    # rows are rebuilt only when something changed (a choice, a filter edit) — never for plain
+    # ↑ ↓ PgUp PgDn Home End, which only move the highlight (this is what made long lists crawl)
+    if (( need )); then
+      "$build"
+      _st_filter_rows
+      _st_number
+      need=0
+    fi
     n=${#_st_lbl[@]}
     (( cur >= n )) && cur=$(( n - 1 ))
     (( cur < 0 && n == 0 )) && cur=-1
     _st_draw
     _st_readkey
+    need=1
     case "$_st_k" in
-      up)    _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
-      down)  _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
-      home|pgup) cur=-1; _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
-      end|pgdn)  cur=-1; _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      up)    need=0; _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      down)  need=0; _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      pgup)  need=0; _st_move -1 "$page"; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;   # ±10 like the main menu
+      pgdn)  need=0; _st_move 1 "$page";  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      home)  need=0; cur=-1; _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      end)   need=0; cur=-1; _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       bksp)
         buf="${buf%?}"
         if [[ "$buf" == =* ]]; then fq="${buf:1}"; cur=-1; top=0
-        else _st_follow; fi ;;
+        else _st_follow; need=0; fi ;;
       char)
         if [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
         elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
-        else buf+="$_st_d"; _st_follow; fi ;;
+        else buf+="$_st_d"; _st_follow; need=0; fi ;;
       left|right)
         (( cur >= 0 )) && _st_selectable "$cur" && "$act" "$cur" "$_st_k"
         ;;
@@ -319,6 +358,7 @@ _st_run() {
   fi
   _st_depth=$(( _st_depth - 1 ))
   _st_title_now="$parent_title"
+  if (( _st_depth == 0 )); then _st_tty_cooked; _st_stty=""; fi
   return 0
 }
 

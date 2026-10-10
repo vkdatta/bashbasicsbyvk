@@ -22,6 +22,7 @@
 
 declare -ga _TZ_NAMES=() _TZ_INFO=()
 _TZ_MANUAL_ONLY=0
+_TZ_LOADED=0
 
 
 # Fill _TZ_NAMES / _TZ_INFO.  python3 gives abbreviation + current offset in one pass (fast); without it
@@ -113,17 +114,19 @@ _TZ_MANUAL=(
 
 _tz_load_manual() {
   local e
-  _TZ_NAMES=(); _TZ_INFO=()
+  _TZ_LOADED=0; _TZ_NAMES=(); _TZ_INFO=()
   for e in "${_TZ_MANUAL[@]}"; do _TZ_NAMES+=("UTC${e%%|*}"); _TZ_INFO+=("${e#*|}"); done
 }
 
 _tz_load() {
+  # the zone list does not change while the app runs: build it once, reuse it on every later visit
+  (( ${#_TZ_NAMES[@]} >= 20 && _TZ_LOADED == 1 )) && return 0
   _TZ_NAMES=(); _TZ_INFO=()
-  local n a o
+  local n a
   if command -v python3 >/dev/null 2>&1; then
-    while IFS='|' read -r n a o; do
+    while IFS='|' read -r n a; do
       [ -n "$n" ] || continue
-      _TZ_NAMES+=("$n"); _TZ_INFO+=("$(printf '%-5s UTC%s' "$a" "$o")")
+      _TZ_NAMES+=("$n"); _TZ_INFO+=("$a")
     done < <(python3 -I - <<'PY' 2>/dev/null
 import os, re, io, struct, datetime
 import zoneinfo
@@ -133,7 +136,7 @@ now = datetime.datetime.now(datetime.timezone.utc)
 def show(n, z):
     t = now.astimezone(z)
     m = int(t.utcoffset().total_seconds() // 60); sg = '+' if m >= 0 else '-'; m = abs(m)
-    print('%s|%s|%s%02d:%02d' % (n, t.tzname() or '', sg, m // 60, m % 60))
+    print('%s|%-5s UTC%s%02d:%02d' % (n, t.tzname() or '', sg, m // 60, m % 60))
 
 # 1) tz files on disk (Termux keeps them under $PREFIX)
 try:
@@ -205,6 +208,8 @@ PY
     mapfile -t _TZ_NAMES < <(printf '%s\n' "${_TZ_NAMES[@]}" | LC_ALL=C sort -u)
     _TZ_INFO=(); local i; for i in "${!_TZ_NAMES[@]}"; do _TZ_INFO+=(""); done
   fi
+  (( ${#_TZ_NAMES[@]} >= 20 )) && _TZ_LOADED=1
+  return 0
 }
 
 _st_tz_build() {
@@ -230,11 +235,10 @@ _st_tzm_build() {
 }
 
 _st_tz_act() {
-  local tag="${_st_tag[$1]}" z before="${app_timezone:-}"
+  local tag="${_st_tag[$1]}" z
   if [ "$tag" = manual ]; then              # open the manual list; if a zone was picked there, close this screen too
     _st_note "Fixed UTC offsets — no automatic daylight-saving change. Search by region: =india  =new york  =tokyo"
     _st_run "Timezone › Manual" _st_tzm_build _st_tz_act
-    [ "${app_timezone:-}" != "$before" ] && _st_back=1
     return
   fi
   z="${tag#tz:}"
@@ -246,9 +250,7 @@ _st_tz_act() {
   save_settings
   _apply_timezone
   _items_presorted=false
-  _st_wipe                                   # radio rows don't wipe the block themselves
-  _st_note "✅ Timezone: $(_tz_label)   —   times everywhere in the app now use it."
-  _st_back=1
+  # stay on this screen, exactly like Sort order / Animation: the [x] mark moves to the chosen zone
 }
 
 timezone_settings() {
