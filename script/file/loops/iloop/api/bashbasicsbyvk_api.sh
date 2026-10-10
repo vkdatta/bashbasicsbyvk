@@ -130,8 +130,8 @@ _api_dur_v() {
   local s="$1" d h m
   (( s < 0 )) && s=0
   d=$((s / 86400)); h=$(( (s % 86400) / 3600 )); m=$(( (s % 3600) / 60 ))
-  if   (( d > 0 )); then _api_dur="${d}d"; (( h > 0 )) && _api_dur+=" ${h}h"
-  elif (( h > 0 )); then _api_dur="${h}h"; (( m > 0 )) && _api_dur+=" ${m}m"
+  if   (( d > 0 )); then _api_dur="${d}d ${h}h ${m}m"                       # days: minutes tick
+  elif (( h > 0 )); then _api_dur="${h}h ${m}m $(( s % 60 ))s"              # hours: seconds tick too
   elif (( m > 0 )); then _api_dur="${m}m $(( s % 60 ))s"
   else _api_dur="${s}s"; fi
 }
@@ -141,13 +141,13 @@ _api_rowtext() {
   local i="$1" k=$(( $1 - 1 )) icon="📦" left
   if [ -z "${_API_PRE[$k]+x}" ]; then          # the parts that never change are built once per refresh
     [ "${_API_KIND[$k]}" = copy ] && icon="📄"
-    printf -v "_API_PRE[$k]"  ' %2d) %s %-28s %9s   ' "$i" "$icon" "$(_api_trunc "$(_api_name "$k")" 28)" "$(_api_hsize "${_API_BYTES[$k]}")"
+    printf -v "_API_PRE[$k]"  ' %2d) %s %-28s %9s ' "$i" "$icon" "$(_api_trunc "$(_api_name "$k")" 28)" "$(_api_hsize "${_API_BYTES[$k]}")"
     printf -v "_API_POST[$k]" ' left   until %s' "$(_bb_fmt_when "${_API_EXPIRES[$k]}")"
   fi
   _api_now_ms
   left=$(( (${_API_EXPIRES[$k]} - _API_CUR) / 1000 ))
   if (( left <= 0 )); then _api_dur="expired"; else _api_dur_v "$left"; fi
-  printf -v _vp_line '%s%7s%s' "${_API_PRE[$k]}" "$_api_dur" "${_API_POST[$k]}"
+  printf -v _vp_line '%s%11s%s' "${_API_PRE[$k]}" "$_api_dur" "${_API_POST[$k]}"
 }
 
 # once a second: refresh the countdown of the rows on screen (cursor and typed text stay where they are)
