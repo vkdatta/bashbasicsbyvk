@@ -1,0 +1,435 @@
+#!/usr/bin/env node
+// _3bvk_ux_core — the client-side crypto + transfer engine behind  ux-  (CSE shares), RBAM dinon sealing and
+// the cloud-surf download.   Called by bash as:  node _3bvk_ux_core <command> [args]
+//
+// Secrets (keys, tokens) are ONLY read from the environment or stdin, never from argv, so they cannot show up in `ps`.
+//
+//   seal-keygen                              -> "<private>\n<public>"   (X25519, base64url; the private half stays local)
+//   seal-pub  env BB_PRIV                  -> the matching public key
+//   jget <a.b.c>   stdin=JSON               -> value at that path
+//   seal      env BB_PUB   stdin=plain       -> sealed (base64url)      only the owner of BB_PUB's private half can open it
+//   unseal    env BB_PRIV  stdin=sealed      -> plain
+//   newkey                                   -> random 256-bit key (base64url)
+//   dk-wrap   env BB_FEK(hex) BB_K           -> K encrypted with the FEK
+//   dk-unwrap env BB_FEK(hex)  stdin=wrapped -> K
+//   prepare <stagedir> <outdir>   env BB_K BB_KDK  stdin=NUL-separated paths relative to <stagedir>
+//                                            encrypts every file chunk + name into <outdir>; writes commit.json
+//   upload <base> <shareId> <outdir>   env BB_UTOKEN [BB_CONC]      sends the chunks (token only, never the API key)
+//   items-decrypt   env BB_K  stdin=share detail JSON               -> TSV: id parent kind bytes chunks name
+//   tsv <gives|receives|notifs|given|received|people>   stdin=server JSON -> rows for the screens, fields separated by 0x1f (so empty fields survive `read`)
+//   download <base> <shareId> <destdir>  env BB_DLTOKEN BB_K [BB_CONC]  stdin={items,ids}  -> decrypt into <destdir>
+//
+// Format "bbvk5":  AES-256-GCM everywhere.  blob = [12 B IV][ciphertext][16 B tag]
+//   file chunk  AAD "bbvk5|<itemId>|<index>"      name  AAD "bbvk5|name|<itemId>"      wrapped key  AAD "bbvk5|dk"
+//   seal        X25519 ephemeral key + HKDF-SHA256 -> AES-256-GCM, AAD "bbvk5|seal";  sealed = [32 B ephemeral pub][blob]
+'use strict';
+const fs = require('fs'), path = require('path'), crypto = require('crypto');
+const { Readable } = require('stream');
+
+const CHUNK = parseInt(process.env.BB_CHUNK, 10) > 0 ? parseInt(process.env.BB_CHUNK, 10) : 16 * 1024 * 1024;
+const OVERHEAD = 28;
+const MAX_ITEMS = 3000;
+const MAX_NAME_BYTES = 255;
+const SPKI_X25519 = Buffer.from('302a300506032b656e032100', 'hex');
+const b64u = (b) => Buffer.from(b).toString('base64url');
+const unb64u = (s) => Buffer.from(String(s || ''), 'base64url');
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const die = (code, msg) => { process.stderr.write(msg + '\n'); process.exit(code); };
+
+function enc(key, plain, aad) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', key, iv);
+  c.setAAD(Buffer.from(aad, 'utf8'));
+  const ct = Buffer.concat([c.update(plain), c.final()]);
+  return Buffer.concat([iv, ct, c.getAuthTag()]);
+}
+function dec(key, buf, aad) {
+  if (buf.length < OVERHEAD) throw new Error('short');
+  const d = crypto.createDecipheriv('aes-256-gcm', key, buf.subarray(0, 12));
+  d.setAuthTag(buf.subarray(buf.length - 16));
+  d.setAAD(Buffer.from(aad, 'utf8'));
+  return Buffer.concat([d.update(buf.subarray(12, buf.length - 16)), d.final()]);
+}
+function key32(s, what, how) {
+  const k = how === 'hex' ? Buffer.from(String(s || ''), 'hex') : unb64u(s);
+  if (k.length !== 32) die(2, `bad ${what}`);
+  return k;
+}
+async function readStdin() {
+  const chunks = [];
+  for await (const c of process.stdin) chunks.push(c);
+  return Buffer.concat(chunks);
+}
+function cleanName(n) {          // anything that reaches the terminal or the disk is stripped of control characters
+  let s = String(n).replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ').replace(/[\\/]/g, '_').trim();
+  if (s === '' || s === '.' || s === '..') s = '_';
+  while (Buffer.byteLength(s) > MAX_NAME_BYTES) s = s.slice(0, -1);
+  return s;
+}
+const fmtMB = (b) => (b / 1048576).toFixed(1);
+
+// ---------------------------------------------------------------- sealing (RBAM dinons)
+function rawPub(keyObj) { const d = keyObj.export({ format: 'der', type: 'spki' }); return d.subarray(d.length - 32); }
+function pubFromRaw(raw) { return crypto.createPublicKey({ key: Buffer.concat([SPKI_X25519, raw]), format: 'der', type: 'spki' }); }
+function sealKey(shared, ephPub, recvPub) {
+  return Buffer.from(crypto.hkdfSync('sha256', shared, Buffer.concat([ephPub, recvPub]), 'bbvk5|seal', 32));
+}
+
+// ---------------------------------------------------------------- commands
+const CMD = {
+  async 'seal-keygen'() {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('x25519');
+    process.stdout.write(b64u(privateKey.export({ format: 'der', type: 'pkcs8' })) + '\n' + b64u(rawPub(publicKey)));
+  },
+
+  async 'seal-pub'() {
+    try {
+      const priv = crypto.createPrivateKey({ key: unb64u(process.env.BB_PRIV), format: 'der', type: 'pkcs8' });
+      process.stdout.write(b64u(rawPub(crypto.createPublicKey(priv))));
+    } catch (e) { process.exit(1); }
+  },
+
+  // jget <a.b.c>   stdin=JSON -> the value at that path (empty when absent)
+  async jget(p) {
+    let d; try { d = JSON.parse((await readStdin()).toString('utf8')); } catch (e) { process.exit(2); }
+    let v = d; for (const k of String(p).split('.')) v = v == null ? undefined : v[k];
+    process.stdout.write(v === undefined || v === null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
+  },
+
+  async seal() {
+    const recvRaw = unb64u(process.env.BB_PUB);
+    if (recvRaw.length !== 32) die(2, 'bad public key');
+    const plain = await readStdin();
+    const eph = crypto.generateKeyPairSync('x25519');
+    const ephRaw = rawPub(eph.publicKey);
+    const shared = crypto.diffieHellman({ privateKey: eph.privateKey, publicKey: pubFromRaw(recvRaw) });
+    const k = sealKey(shared, ephRaw, recvRaw);
+    process.stdout.write(b64u(Buffer.concat([ephRaw, enc(k, plain, 'bbvk5|seal')])));
+  },
+
+  async unseal() {
+    try {
+      const priv = crypto.createPrivateKey({ key: unb64u(process.env.BB_PRIV), format: 'der', type: 'pkcs8' });
+      const myRaw = rawPub(crypto.createPublicKey(priv));
+      const blob = unb64u((await readStdin()).toString('utf8').trim());
+      if (blob.length < 32 + OVERHEAD) process.exit(1);
+      const ephRaw = blob.subarray(0, 32);
+      const shared = crypto.diffieHellman({ privateKey: priv, publicKey: pubFromRaw(ephRaw) });
+      process.stdout.write(dec(sealKey(shared, ephRaw, myRaw), blob.subarray(32), 'bbvk5|seal'));
+    } catch (e) { process.exit(1); }
+  },
+
+  async newkey() { process.stdout.write(b64u(crypto.randomBytes(32))); },
+
+  async 'dk-wrap'() {
+    process.stdout.write(b64u(enc(key32(process.env.BB_FEK, 'FEK', 'hex'), key32(process.env.BB_K, 'K'), 'bbvk5|dk')));
+  },
+  async 'dk-unwrap'() {
+    try {
+      const w = unb64u((await readStdin()).toString('utf8').trim());
+      process.stdout.write(b64u(dec(key32(process.env.BB_FEK, 'FEK', 'hex'), w, 'bbvk5|dk')));
+    } catch (e) { process.exit(1); }
+  },
+
+  // ---------------------------------------------------------------- prepare: encrypt a selection to disk
+  async prepare(stage, outdir) {
+    if (!stage || !outdir) die(2, 'usage: prepare <stagedir> <outdir>');
+    const K = key32(process.env.BB_K, 'K');
+    const kdk = String(process.env.BB_KDK || '');
+    if (!/^[A-Za-z0-9_-]{60,200}$/.test(kdk)) die(2, 'bad wrapped key');
+    const list = (await readStdin()).toString('utf8').split('\0').filter(Boolean)
+      .map(p => path.posix.normalize(p.replace(/^(\.\/)+/, '')))
+      .filter(p => p && p !== '.' && !p.startsWith('..') && !path.posix.isAbsolute(p));
+
+    // entries by depth so a folder always precedes its contents
+    const seen = new Set(), entries = [];
+    for (const rel of list.sort((a, b) => a.split('/').length - b.split('/').length)) {
+      if (seen.has(rel)) continue;
+      seen.add(rel); entries.push(rel);
+    }
+
+    const items = [], idOf = new Map();
+    let cipherTotal = 0, chunkTotal = 0, fileCount = 0, filesDone = 0;
+    const TTY = process.stderr.isTTY, t0 = Date.now();
+    let lastDraw = 0;
+    const status = (final) => {
+      if (!TTY) return;
+      const now = Date.now(); if (!final && now - lastDraw < 150) return; lastDraw = now;
+      process.stderr.write(`\r\u001b[K\u001b[36m🔐 Encrypting\u001b[0m  ${filesDone} file(s)  ${fmtMB(cipherTotal)} MB  (${Math.floor((now - t0) / 1000)}s)`);
+      if (final) process.stderr.write('\n');
+    };
+    const newId = () => b64u(crypto.randomBytes(16));
+    function ensureDir(rel) {
+      if (idOf.has(rel)) return idOf.get(rel);
+      const parts = rel.split('/');
+      const parent = parts.length > 1 ? ensureDir(parts.slice(0, -1).join('/')) : null;
+      const id = newId(); idOf.set(rel, id);
+      items.push({ i: id, p: parent, k: 'd', n: b64u(enc(K, Buffer.from(parts[parts.length - 1]), 'bbvk5|name|' + id)), b: 0, c: 0 });
+      return id;
+    }
+
+    const buf = Buffer.allocUnsafe(CHUNK);
+    for (const rel of entries) {
+      const parts = rel.split('/');
+      const name = parts[parts.length - 1];
+      if (Buffer.byteLength(name) > MAX_NAME_BYTES) die(4, `Name too long (max ${MAX_NAME_BYTES} bytes): ${name.slice(0, 40)}…`);
+      const full = path.join(stage, rel);
+      let st;
+      try { st = parts.length === 1 ? fs.statSync(full) : fs.lstatSync(full); } catch (e) { continue; }
+      if (!st.isDirectory() && !st.isFile()) continue;                          // no symlinks / devices inside the tree
+
+      if (st.isDirectory()) { ensureDir(rel); continue; }
+
+      const parent = parts.length > 1 ? ensureDir(parts.slice(0, -1).join('/')) : null;
+      if (items.length >= MAX_ITEMS) die(5, `Too many files and folders (limit ${MAX_ITEMS} per share) — share fewer items or zip a folder first.`);
+      const id = newId(); idOf.set(rel, id);
+      let idx = 0, total = 0;
+      let fd;
+      try {
+        fd = fs.openSync(full, 'r');
+        for (;;) {
+          let fill = 0;
+          while (fill < CHUNK) {
+            const n = fs.readSync(fd, buf, fill, CHUNK - fill, null);
+            if (n === 0) break;
+            fill += n;
+          }
+          if (fill === 0) break;
+          const rec = enc(K, buf.subarray(0, fill), `bbvk5|${id}|${idx}`);
+          fs.writeFileSync(path.join(outdir, `${id}.${idx}`), rec, { mode: 0o600 });
+          cipherTotal += rec.length; total += fill; idx++; chunkTotal++;
+          status(false);
+          if (fill < CHUNK) break;
+        }
+      } catch (e) {
+        if (TTY) process.stderr.write('\n');
+        die(3, e && e.code === 'ENOSPC' ? 'Disk full while writing encrypted chunks.' : `Could not read ${name}: ${e && e.message}`);
+      } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch (e) {} }
+      items.push({ i: id, p: parent, k: 'f', n: b64u(enc(K, Buffer.from(name), 'bbvk5|name|' + id)), b: total, c: idx });
+      filesDone++; fileCount++;
+    }
+    status(true);
+    if (chunkTotal === 0) die(2, 'Nothing to share (only empty files or folders).');
+    if (items.length > MAX_ITEMS) die(5, `Too many files and folders (limit ${MAX_ITEMS} per share).`);
+    fs.writeFileSync(path.join(outdir, 'commit.json'), JSON.stringify({ kdk, items }), { mode: 0o600 });
+    process.stdout.write(`${cipherTotal}\n${items.length}\n${chunkTotal}\n${fileCount}`);
+  },
+
+  // ---------------------------------------------------------------- upload the prepared chunks
+  async upload(base, id, outdir) {
+    const token = process.env.BB_UTOKEN;
+    const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || 8, 32));
+    const plan = JSON.parse(fs.readFileSync(path.join(outdir, 'commit.json'), 'utf8'));
+    const tasks = [];
+    let total = 0;
+    for (const it of plan.items) {
+      if (it.k !== 'f') continue;
+      for (let i = 0; i < it.c; i++) {
+        const fp = path.join(outdir, `${it.i}.${i}`), size = fs.statSync(fp).size;
+        tasks.push({ it: it.i, i, fp, size }); total += size;
+      }
+    }
+    let sent = 0, done = 0, shown = 0;
+    const TTY = process.stderr.isTTY, t0 = Date.now();
+    function draw(final) {
+      if (!TTY) return;
+      shown = Math.max(shown, Math.min(sent, total));
+      const finished = final && done >= tasks.length;
+      let pct = total ? Math.floor(shown * 100 / total) : 100;
+      if (!finished && pct > 99) pct = 99;
+      const secs = Math.max(0.001, (Date.now() - t0) / 1000);
+      const cols = process.stderr.columns || 60, barW = Math.max(6, Math.min(22, cols - 40));
+      const f = Math.floor(pct * barW / 100);
+      process.stderr.write(`\r\u001b[K${finished ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(barW - f)}] ${String(pct).padStart(3)}%  ${fmtMB(finished ? total : shown)}/${fmtMB(total)} MB  ${fmtMB(shown / secs)} MB/s  ${done}/${tasks.length}\u001b[0m`);
+      if (finished) process.stderr.write('\n');
+    }
+    async function send(t) {
+      let last;
+      for (let a = 0; a < 3; a++) {
+        let credited = 0;
+        try {
+          const rs = fs.createReadStream(t.fp, { highWaterMark: 64 * 1024 });
+          rs.on('data', c => { sent += c.length; credited += c.length; });
+          const res = await fetch(`${base}/ux/${id}/item/${t.it}/blob/${t.i}`, {
+            method: 'PUT', body: Readable.toWeb(rs), duplex: 'half', redirect: 'error',
+            headers: { 'X-Upload-Token': token, 'Content-Length': String(t.size), 'Content-Type': 'application/octet-stream' }
+          });
+          if (res.ok) { sent += t.size - credited; return; }
+          sent -= credited;
+          if (res.status < 500 && res.status !== 429) throw Object.assign(new Error('HTTP ' + res.status), { fatal: true });
+          last = new Error('HTTP ' + res.status);
+        } catch (e) { if (e.fatal) throw e; sent -= credited; last = e; }
+        await sleep(250 * Math.pow(2, a));
+      }
+      throw last;
+    }
+    let next = 0, failed = 0; const errors = [];
+    async function worker() {
+      for (;;) {
+        const t = tasks[next++]; if (!t) return;
+        try { await send(t); } catch (e) { failed++; if (errors.length < 3) errors.push(`chunk ${t.it}.${t.i}: ${e && e.message}`); }
+        done++;
+      }
+    }
+    const timer = setInterval(() => draw(false), 200);
+    await Promise.all(Array.from({ length: Math.min(CONC, tasks.length || 1) }, worker));
+    clearInterval(timer);
+    if (!failed) draw(true); else if (TTY) process.stderr.write('\n');
+    for (const m of errors) process.stderr.write(`  ⚠️  ${m}\n`);
+    console.log(failed ? 'FAIL' : 'OK');
+  },
+
+  // ---------------------------------------------------------------- names for the cloud-surf screens
+  async 'items-decrypt'() {
+    const K = key32(process.env.BB_K, 'K');
+    let d; try { d = JSON.parse((await readStdin()).toString('utf8')); } catch (e) { process.exit(2); }
+    for (const it of (d && d.items) || []) {
+      let name;
+      try { name = cleanName(dec(K, unb64u(it.name), 'bbvk5|name|' + it.id).toString('utf8')); }
+      catch (e) { name = '(cannot decrypt)'; }
+      console.log([it.id, it.parent || '-', it.kind, it.bytes, it.chunks, name.replace(/\t/g, ' ')].join('\t'));
+    }
+  },
+
+  // ---------------------------------------------------------------- server JSON -> TSV for the shell screens
+  // kinds: gives | receives (rbam rels) · notifs · given | received (ux shares) · people (owner share detail)
+  async tsv(kind) {
+    let d; try { d = JSON.parse((await readStdin()).toString('utf8')); } catch (e) { process.exit(2); }
+    const c = (v) => String(v ?? '').replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ');
+    const row = (a) => console.log(a.map(c).join('\x1f'));
+    const flag = (v) => (v ? 1 : 0);
+    if (kind === 'gives') for (const r of d.gives || []) row([r.rid, r.mail, r.d3, r.status, flag(r.mine), flag(r.dinons), flag(r.sealReady), flag(r.held)]);
+    else if (kind === 'receives') for (const r of d.receives || []) row([r.rid, r.mail, r.d3, r.status, flag(r.mine), flag(r.dinons)]);
+    else if (kind === 'notifs') for (const n of d.notifications || []) {
+      const p = n.payload || {};
+      row([n.id, n.kind, n.ref ?? '', n.createdAt, p.mail || p.from_mail || '', p.d3 || p.from_d3 || '', p.alias || '', p.bytes ?? '', p.files ?? '', flag(p.nuked), p.role || '']);
+    }
+    else if (kind === 'given') for (const s of d.given || []) row([s.id, s.alias || '', s.bytes, s.createdAt, s.expiresAt, s.accepted, s.offered, s.nukeRefund, s.nukeRefundDays, s.paidHours]);
+    else if (kind === 'received') for (const s of d.received || []) row([s.id, s.alias || '', s.bytes, s.expiresAt, s.offer, s.from, s.fromD3, s.rid ?? '']);
+    else if (kind === 'people') for (const p of d.people || []) row([p.rid ?? '', p.mail, p.d3, p.status]);
+    else process.exit(2);
+  },
+
+  // ---------------------------------------------------------------- download + decrypt
+  async download(base, id, dest) {
+    const token = process.env.BB_DLTOKEN, K = key32(process.env.BB_K, 'K');
+    const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || 6, 8));
+    let sel; try { sel = JSON.parse((await readStdin()).toString('utf8')); } catch (e) { process.exit(2); }
+    const all = new Map((sel.items || []).map(x => [x.id, x]));
+    const kids = new Map();
+    for (const x of all.values()) { if (x.parent && all.has(x.parent)) { if (!kids.has(x.parent)) kids.set(x.parent, []); kids.get(x.parent).push(x); } }
+    const nameOf = (x) => { try { return cleanName(dec(K, unb64u(x.name), 'bbvk5|name|' + x.id).toString('utf8')); } catch (e) { return null; } };
+
+    const ids = [...new Set(sel.ids || [])].filter(i => all.has(i));
+    // a selected folder already includes its contents: drop selected descendants
+    const idset = new Set(ids);
+    const roots = ids.filter(i => { let p = all.get(i).parent; while (p) { if (idset.has(p)) return false; p = all.get(p)?.parent; } return true; });
+    if (!roots.length) { console.log('FAILED\tnothing selected'); return; }
+
+    fs.mkdirSync(dest, { recursive: true });
+    const created = [], jobs = [], tops = [];
+    let totalBytes = 0;
+    function uniqueTop(name, isDir) {
+      let cand = name, n = 0;
+      const dot = !isDir && name.lastIndexOf('.') > 0 ? name.lastIndexOf('.') : -1;
+      const stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+      for (;;) {
+        const p = path.join(dest, cand);
+        try { fs.lstatSync(p); n++; cand = `${stem} (${n})${ext}`; } catch (e) { return cand; }
+      }
+    }
+    function walk(x, dir, top) {
+      const nm = nameOf(x);
+      if (nm === null) throw new Error('a name failed its integrity check');
+      const target = top ? path.join(dir, uniqueTop(nm, x.kind === 'd')) : path.join(dir, nm);
+      if (x.kind === 'd') {
+        fs.mkdirSync(target, { mode: 0o755 });                                 // fails if it exists: never merge into old data
+        created.push(target); if (top) tops.push(target);
+        const used = new Set();
+        for (const c of kids.get(x.id) || []) {
+          // two children can legitimately end up with the same cleaned name: keep both
+          const cn = nameOf(c); if (cn === null) throw new Error('a name failed its integrity check');
+          let tag = cn, k = 0; while (used.has(tag)) tag = `${cn} (${++k})`;
+          used.add(tag);
+          walkNamed(c, target, tag);
+        }
+      } else {
+        const fd = fs.openSync(target, 'wx', 0o644);                           // O_EXCL: never follows or overwrites anything
+        fs.closeSync(fd);
+        created.push(target); if (top) tops.push(target);
+        if (!Number.isInteger(x.chunks) || x.chunks !== Math.ceil(x.bytes / CHUNK)) throw new Error('inconsistent file size');
+        jobs.push({ x, target }); totalBytes += x.bytes;
+      }
+    }
+    function walkNamed(x, dir, name) {                                          // like walk(), but with an explicit unique name
+      const target = path.join(dir, name);
+      if (x.kind === 'd') {
+        fs.mkdirSync(target, { mode: 0o755 }); created.push(target);
+        const used = new Set();
+        for (const c of kids.get(x.id) || []) {
+          const cn = nameOf(c); if (cn === null) throw new Error('a name failed its integrity check');
+          let tag = cn, k = 0; while (used.has(tag)) tag = `${cn} (${++k})`;
+          used.add(tag); walkNamed(c, target, tag);
+        }
+      } else {
+        const fd = fs.openSync(target, 'wx', 0o644); fs.closeSync(fd); created.push(target);
+        if (!Number.isInteger(x.chunks) || x.chunks !== Math.ceil(x.bytes / CHUNK)) throw new Error('inconsistent file size');
+        jobs.push({ x, target }); totalBytes += x.bytes;
+      }
+    }
+    const rollback = () => { for (const t of tops) try { fs.rmSync(t, { recursive: true, force: true }); } catch (e) {} };
+    try { for (const r of roots) walk(all.get(r), dest, true); }
+    catch (e) { rollback(); console.log('FAILED\t' + (e && e.message)); return; }
+
+    async function get(url) {
+      for (let a = 0; a < 4; a++) {
+        try {
+          const res = await fetch(url, { redirect: 'error', headers: { 'X-Download-Token': token } });
+          if (res.ok) return Buffer.from(await res.arrayBuffer());
+          if (res.status === 404 || res.status === 401) return null;
+        } catch (e) {}
+        await sleep(300 * (a + 1));
+      }
+      return null;
+    }
+    const TTY = process.stderr.isTTY, nChunks = jobs.reduce((s, j) => s + j.x.chunks, 0);
+    let done = 0, failed = null, lastPct = -1;
+    function bar() {
+      if (!TTY) return;
+      const pct = nChunks ? Math.floor(done * 100 / nChunks) : 100;
+      if (pct === lastPct && done < nChunks) return; lastPct = pct;
+      const f = Math.floor(pct * 24 / 100);
+      process.stderr.write(`\r\u001b[K${done >= nChunks ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(24 - f)}] ${String(pct).padStart(3)}%\u001b[0m  📥 Downloading + 🔓 decrypting ${done}/${nChunks}`);
+      if (done >= nChunks) process.stderr.write('\n');
+    }
+    bar();
+    for (const j of jobs) {
+      if (failed) break;
+      const fd = fs.openSync(j.target, 'r+');
+      let next = 0;
+      async function w() {
+        while (!failed) {
+          const i = next++; if (i >= j.x.chunks) return;
+          const blob = await get(`${base}/ux/${id}/item/${j.x.id}/blob/${i}`);
+          if (!blob) { failed = 'a chunk could not be fetched (access removed, share nuked, or network)'; return; }
+          let plain;
+          try { plain = dec(K, blob, `bbvk5|${j.x.id}|${i}`); } catch (e) { failed = 'a chunk failed its integrity check'; return; }
+          const want = i < j.x.chunks - 1 ? CHUNK : j.x.bytes - (j.x.chunks - 1) * CHUNK;
+          if (plain.length !== want) { failed = 'a chunk has the wrong length'; return; }
+          fs.writeSync(fd, plain, 0, plain.length, i * CHUNK);
+          done++; bar();
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CONC, j.x.chunks || 1) }, w));
+      fs.closeSync(fd);
+    }
+    if (failed) { if (TTY) process.stderr.write('\n'); rollback(); console.log('FAILED\t' + failed); return; }
+    console.log(`OK\t${jobs.length}\t${totalBytes}\t${tops.map(t => path.basename(t)).join('|')}`);
+  }
+};
+
+(async () => {
+  const [cmd, ...args] = process.argv.slice(2);
+  if (!CMD[cmd]) die(2, 'unknown command');
+  await CMD[cmd](...args);
+})().catch(e => { process.stderr.write(String(e && e.message || e) + '\n'); process.exit(3); });

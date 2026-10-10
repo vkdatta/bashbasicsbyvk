@@ -18,7 +18,7 @@ hidden_file_settings() { _st_run "Hidden files" _st_hf_build _st_hf_act; }
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  Hidden files in up- (upload) and z- (zip)
+#  Hidden files in up- / ux- (upload) and z- (zip)
 #     follow  = use the "Hidden files" setting above (default)
 #     always  = always include hidden files inside the chosen folders
 #     never   = never include them
@@ -48,6 +48,7 @@ _st_hm_act() { printf -v "$_st_hm_var" '%s' "${_st_tag[$1]}"; save_settings; }
 
 _st_hm_var=""
 upload_hidden_settings() { _st_hm_var=upload_hidden_mode; _st_run "Upload hidden files  (up-)" _st_hm_build _st_hm_act; }
+ux_hidden_settings()     { _st_hm_var=ux_hidden_mode;     _st_run "Upload hidden files  (ux-)"  _st_hm_build _st_hm_act; }
 zip_hidden_settings()    { _st_hm_var=zip_hidden_mode;    _st_run "Zip hidden files  (z-)"      _st_hm_build _st_hm_act; }
 
 # _hidden_any PATH...  → 0 when a chosen folder contains at least one hidden entry

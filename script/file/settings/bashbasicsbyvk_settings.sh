@@ -15,6 +15,7 @@ DEFAULT_GROUP_VIEW_LEVELS=""
 DEFAULT_COMPRESS_FORMAT="ask"
 DEFAULT_UPLOAD_HIDDEN_MODE="follow"   # up- : follow | always | never | ask
 DEFAULT_ZIP_HIDDEN_MODE="follow"      # z-  : follow | always | never | ask
+DEFAULT_UX_HIDDEN_MODE="follow"       # ux- : follow | always | never | ask
 DEFAULT_FILTER_MODE="partial"
 DEFAULT_FILTER_HIDDEN_MODE="respect"
 DEFAULT_FILTER_RECURSIVE=false      # = filter looks only in the folder you are viewing
@@ -22,6 +23,7 @@ DEFAULT_DISPLAY_FILTER_PERSIST=false
 DEFAULT_ANIM_OUTER="pop"       # outer loop: whole screen appears at once
 DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw): rows roll in top to bottom
 DEFAULT_NUKE_TIME_SECONDS=3600   # up- / c2c-: how long a new link lives (1 hour). 60 s .. 30 days
+DEFAULT_UX_NUKE_TIME_SECONDS=2592000   # ux-: how long a new share lives (30 days). 60 s .. 30 days
 DEFAULT_APP_TIMEZONE=""          # "" = follow the system clock; else an IANA name, e.g. Asia/Kolkata
 
 unset show_hidden_files
@@ -35,6 +37,7 @@ unset group_view_levels_str
 unset compress_format
 unset upload_hidden_mode
 unset zip_hidden_mode
+unset ux_hidden_mode
 unset filter_mode
 unset filter_hidden_mode
 unset filter_recursive
@@ -42,6 +45,7 @@ unset display_filter_persist
 unset anim_outer
 unset anim_inner
 unset nuke_time_seconds
+unset ux_nuke_time_seconds
 unset app_timezone
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
@@ -57,8 +61,10 @@ unset app_timezone
 : "${compress_format:=$DEFAULT_COMPRESS_FORMAT}"
 : "${upload_hidden_mode:=$DEFAULT_UPLOAD_HIDDEN_MODE}"
 : "${zip_hidden_mode:=$DEFAULT_ZIP_HIDDEN_MODE}"
+: "${ux_hidden_mode:=$DEFAULT_UX_HIDDEN_MODE}"
 [[ "$upload_hidden_mode" =~ ^(follow|always|never|ask)$ ]] || upload_hidden_mode=$DEFAULT_UPLOAD_HIDDEN_MODE
 [[ "$zip_hidden_mode" =~ ^(follow|always|never|ask)$ ]] || zip_hidden_mode=$DEFAULT_ZIP_HIDDEN_MODE
+[[ "$ux_hidden_mode" =~ ^(follow|always|never|ask)$ ]] || ux_hidden_mode=$DEFAULT_UX_HIDDEN_MODE
 : "${filter_mode:=$DEFAULT_FILTER_MODE}"
 : "${filter_hidden_mode:=$DEFAULT_FILTER_HIDDEN_MODE}"
 : "${filter_recursive:=$DEFAULT_FILTER_RECURSIVE}"
@@ -67,9 +73,13 @@ unset app_timezone
 : "${anim_outer:=$DEFAULT_ANIM_OUTER}"
 : "${anim_inner:=$DEFAULT_ANIM_INNER}"
 : "${nuke_time_seconds:=$DEFAULT_NUKE_TIME_SECONDS}"
+: "${ux_nuke_time_seconds:=$DEFAULT_UX_NUKE_TIME_SECONDS}"
 : "${app_timezone=$DEFAULT_APP_TIMEZONE}"
 if ! [[ "$nuke_time_seconds" =~ ^[0-9]{1,9}$ ]] || [ "$nuke_time_seconds" -lt 60 ] || [ "$nuke_time_seconds" -gt 2592000 ]; then
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
+fi
+if ! [[ "$ux_nuke_time_seconds" =~ ^[0-9]{1,9}$ ]] || [ "$ux_nuke_time_seconds" -lt 60 ] || [ "$ux_nuke_time_seconds" -gt 2592000 ]; then
+  ux_nuke_time_seconds=$DEFAULT_UX_NUKE_TIME_SECONDS
 fi
 [[ "$anim_outer" == pop || "$anim_outer" == carpet ]] || anim_outer=$DEFAULT_ANIM_OUTER
 [[ "$anim_inner" == pop || "$anim_inner" == carpet ]] || anim_inner=$DEFAULT_ANIM_INNER
@@ -157,6 +167,7 @@ save_settings() {
     echo "compress_format=$compress_format"
     echo "upload_hidden_mode=$upload_hidden_mode"
     echo "zip_hidden_mode=$zip_hidden_mode"
+    echo "ux_hidden_mode=$ux_hidden_mode"
     echo "filter_mode=$filter_mode"
     echo "filter_hidden_mode=$filter_hidden_mode"
     echo "filter_recursive=$filter_recursive"
@@ -164,6 +175,7 @@ save_settings() {
     echo "anim_outer=$anim_outer"
     echo "anim_inner=$anim_inner"
     echo "nuke_time_seconds=$nuke_time_seconds"
+    echo "ux_nuke_time_seconds=$ux_nuke_time_seconds"
     echo "app_timezone=\"$app_timezone\""
   } > "$SETTINGS_FILE"
 }
@@ -203,8 +215,10 @@ _st_top_build() {
   _st_add a "Search filter (=)"   0 "$fv"                               filter
   _st_add a "Compress format"     0 "$compress_format"                  compress
   _st_add a "Upload hidden (up-)" 0 "$(_hidden_mode_label "$upload_hidden_mode")" uphidden
+  _st_add a "Upload hidden (ux-)" 0 "$(_hidden_mode_label "$ux_hidden_mode")"     uxhidden
   _st_add a "Zip hidden (z-)"     0 "$(_hidden_mode_label "$zip_hidden_mode")"    ziphidden
   _st_add a "Nuke time (up-/c2c-)" 0 "$(_bb_fmt_duration "$nuke_time_seconds")" nuke
+  _st_add a "Nuke time (ux-)"     0 "$(_bb_fmt_duration "$ux_nuke_time_seconds")" uxnuke
   _st_add a "Timezone"            0 "${app_timezone:-system} · $_tzabbr"  timezone
   _st_add a "Animation"           0 "$anim_outer / $anim_inner"         anim
   _st_add a "Big-folder limit"    0 "$index_mode_threshold"             index
@@ -224,8 +238,10 @@ _st_top_act() {
     filter)   filter_mode_settings ;;
     compress) compress_format_settings ;;
     uphidden) upload_hidden_settings ;;
+    uxhidden) ux_hidden_settings ;;
     ziphidden) zip_hidden_settings ;;
     nuke)     nuke_time_settings ;;
+    uxnuke)   ux_nuke_time_settings ;;
     timezone) timezone_settings ;;
     anim)     animation_settings ;;
     index)    index_mode_threshold_settings ;;
@@ -408,6 +424,49 @@ _st_nuke_act() {
 }
 nuke_time_settings() { _st_run "Nuke time" _st_nuke_build _st_nuke_act; }
 
+# ── nuke time for ux- shares (default 30 days) ───────────────────────────────
+#  Same price list and refund rules as up- links. The whole period is paid up front; the refund (whole days only)
+#  happens only when the data is really gone: you nuke the share, or you shorten its nuke time from cloud surf (cs).
+_ST_UXNUKE_PRESETS=(86400 604800 1209600 2592000)
+_ST_UXNUKE_LABELS=("1 day" "7 days" "14 days" "30 days  (default, maximum)")
+
+_st_uxnuke_build() {
+  local i custom=1
+  _st_reset
+  _st_add h "How long a new ux- share lives before it is nuked"
+  for i in "${!_ST_UXNUKE_PRESETS[@]}"; do
+    _st_eq "${_ST_UXNUKE_PRESETS[$i]}" "$ux_nuke_time_seconds"
+    [ "$_o" = 1 ] && custom=0
+    _st_add r "${_ST_UXNUKE_LABELS[$i]}" "$_o" "" "p:${_ST_UXNUKE_PRESETS[$i]}"
+  done
+  _st_add h "Anything else  (1 minute – 30 days; under 1 hour is billed as 1 hour)"
+  if [ "$custom" = 1 ]; then
+    _st_add r "Custom" 1 "$(_bb_fmt_duration "$ux_nuke_time_seconds")" custom
+  else
+    _st_add a "Custom…" 0 "" custom
+  fi
+}
+_st_uxnuke_act() {
+  local tag="${_st_tag[$1]}" secs
+  case "$tag" in
+    p:*) ux_nuke_time_seconds="${tag#p:}"; save_settings ;;
+    custom)
+      _st_ask "Nuke time, e.g. 90m · 1 day · 2d12h · 1 week" "$(_bb_fmt_duration "$ux_nuke_time_seconds")" || return
+      if ! secs=$(_bb_parse_duration "$_st_in"); then
+        _st_note "⚠️  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."
+        return
+      fi
+      if [ "$secs" -lt 60 ] || [ "$secs" -gt 2592000 ]; then
+        _st_note "⚠️  Nuke time must be between 1 minute and 30 days."
+        return
+      fi
+      ux_nuke_time_seconds="$secs"; save_settings
+      if [ "$secs" -lt 3600 ]; then _st_note "✅ $(_bb_fmt_duration "$secs") — billed as 1 hour (the minimum)."
+      else _st_note "✅ New ux- shares will live $(_bb_fmt_duration "$secs")."; fi ;;
+  esac
+}
+ux_nuke_time_settings() { _st_run "Nuke time (ux-)" _st_uxnuke_build _st_uxnuke_act; }
+
 # ── reset ────────────────────────────────────────────────────────────────────
 _st_reset_build() {
   _st_reset
@@ -425,6 +484,7 @@ _st_reset_act() {
   compress_format=$DEFAULT_COMPRESS_FORMAT
   upload_hidden_mode=$DEFAULT_UPLOAD_HIDDEN_MODE
   zip_hidden_mode=$DEFAULT_ZIP_HIDDEN_MODE
+  ux_hidden_mode=$DEFAULT_UX_HIDDEN_MODE
   filter_mode=$DEFAULT_FILTER_MODE
   filter_hidden_mode=$DEFAULT_FILTER_HIDDEN_MODE
   filter_recursive=$DEFAULT_FILTER_RECURSIVE
@@ -432,6 +492,7 @@ _st_reset_act() {
   anim_outer=$DEFAULT_ANIM_OUTER
   anim_inner=$DEFAULT_ANIM_INNER
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
+  ux_nuke_time_seconds=$DEFAULT_UX_NUKE_TIME_SECONDS
   app_timezone=$DEFAULT_APP_TIMEZONE; _apply_timezone
   _items_presorted=false
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"

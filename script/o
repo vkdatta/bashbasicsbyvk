@@ -18,9 +18,13 @@ source "bashbasicsbyvk_functions.sh"
 source "bashbasicsbyvk_infinity.sh"
 source "bashbasicsbyvk_telemetry.sh"
 source "bashbasicsbyvk_auth.sh"
+source "bashbasicsbyvk_xui.sh"
+source "bashbasicsbyvk_rbam.sh"
+source "bashbasicsbyvk_notify.sh"
+source "bashbasicsbyvk_csurf.sh"
 source "bashbasicsbyvk_ai.sh"
 
-# Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop) and api (the link manager) hand over to each other via _inner_next,
+# Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
 _inner_next=""
 _inner_run() {
@@ -33,6 +37,10 @@ _inner_run() {
       r)  rules_menu ;;
       upg) upgrade_menu ;;
       api) api_menu ;;
+      rbam) rbam_menu ;;
+      nf)  notify_menu ;;
+      cs)  csurf_menu ;;
+      cs-recv) csurf_menu 1 ;;
     esac
     _next="$_inner_next"
   done
@@ -167,6 +175,7 @@ while true; do
     do-)         handle_do_import ;;
     c2c-*)       handle_c2c_upload "$choice" ;;
     up-*)        handle_up_upload "$choice" ;;
+    ux-*)        handle_ux_upload "$choice" ;;
     uz-*)        handle_decompress_items "$choice" ;;
     z-*)         handle_compress_items "$choice" ;;
     clear)       hash -r ;;
@@ -185,6 +194,9 @@ while true; do
     sw)          _inner_run sw ;;
     fx)          _inner_run fx ;;
     api)         _inner_run api ;;
+    rbam)        _inner_run rbam ;;
+    nf)          _inner_run nf ;;
+    cs)          _inner_run cs ;;
     *)           handle_selection "$choice" ;;
   esac
 done

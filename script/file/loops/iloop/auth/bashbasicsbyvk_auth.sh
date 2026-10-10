@@ -9,8 +9,11 @@
 #   DISEPS  27 unique codes x 16 chars, joined with "-"   (sent with every request, shareable with admin)
 #   APIKEY  secret, never shared; only its SHA-256 is sent to the server at creation / regeneration
 #   DINONS  29 unique codes x 16 chars, joined with "-"   (NEVER sent to the server; wraps the FEK)
+#   SEALKEY private X25519 key (base64url), made on first use of rbam / ux-. Its public half is registered on the
+#           server so a sender can SEAL their dinons for you; only this private half can open them.
 # The 64-hex file-encryption-key (FEK) is created locally, wrapped with DINONS (scrypt + AES-256-GCM)
-# and only the wrapped form is uploaded.  DINONS/FEK are for the future RBAC layer, NOT for up-/c2c-/do-/copy.
+# and only the wrapped form is uploaded.  DINONS/FEK/SEALKEY serve rbam + ux- (client-side encrypted shares);
+# up-/c2c-/do-/copy do not use them.
 
 _BVK_AUTH_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/auth"
 _BVK_AUTH_URL="${BVK_AUTH_URL:-https://fileapi.bashbasics.workers.dev}"
@@ -24,8 +27,8 @@ _bvk_auth_init() {
 }
 
 # Parse a KEY=VALUE file into P_* globals. Whitelisted keys only; values validated. Never sources.
-_bvk_auth_parse() {  # $1=file ; sets P_MAIL P_DISEPS P_APIKEY P_DINONS P_CREATED
-  P_MAIL=""; P_DISEPS=""; P_APIKEY=""; P_DINONS=""; P_CREATED=""
+_bvk_auth_parse() {  # $1=file ; sets P_MAIL P_DISEPS P_APIKEY P_DINONS P_SEALKEY P_CREATED
+  P_MAIL=""; P_DISEPS=""; P_APIKEY=""; P_DINONS=""; P_SEALKEY=""; P_CREATED=""
   [ -r "$1" ] || return 1
   local line k v
   while IFS= builtin read -r line || [ -n "$line" ]; do
@@ -38,6 +41,7 @@ _bvk_auth_parse() {  # $1=file ; sets P_MAIL P_DISEPS P_APIKEY P_DINONS P_CREATE
       DISEPS)  _bvk_auth_codes_ok "$v" "$_BVK_DISEPS_N" && P_DISEPS="$v" ;;
       DINONS)  _bvk_auth_codes_ok "$v" "$_BVK_DINONS_N" && P_DINONS="$v" ;;
       APIKEY)  [[ "$v" =~ ^[A-Za-z0-9_-]{32,128}$ ]] && P_APIKEY="$v" ;;
+      SEALKEY) [[ "$v" =~ ^[A-Za-z0-9_-]{40,120}$ ]] && P_SEALKEY="$v" ;;
       CREATED) [[ "$v" =~ ^[0-9T:Z-]{8,32}$ ]] && P_CREATED="$v" ;;
     esac
   done < "$1"
@@ -50,6 +54,7 @@ _bvk_auth_write() {  # $1=file  (uses P_*)
       printf 'DISEPS=%s\n' "$P_DISEPS"
       printf 'APIKEY=%s\n' "$P_APIKEY"
       printf 'DINONS=%s\n' "$P_DINONS"
+      printf 'SEALKEY=%s\n' "$P_SEALKEY"
       printf 'CREATED=%s\n' "${P_CREATED:-$(date -u +%FT%TZ)}"; } > "$1.tmp" && mv -f "$1.tmp" "$1" )
   chmod 600 "$1" 2>/dev/null
 }
@@ -207,7 +212,7 @@ TXT
 # goes through the zip picker + the same safety checks (_bz_import).  The picker here also
 # lists .txt, so the credentials file written by "create" can be imported too.
 _AU_MANIFEST="bvk_auth_manifest.txt"; _AU_FORMAT=1
-_AU_FIELDS=("Mail" "Diseps" "apikey" "Dinons")
+_AU_FIELDS=("Mail" "Diseps" "apikey" "Dinons" "Sealkey")
 
 # _bvk_auth_export <field numbers, e.g. "1 2 3 4"> <profile id>...   -> one zip, one file per user
 _bvk_auth_export() {
@@ -224,6 +229,7 @@ _bvk_auth_export() {
         2) printf 'diseps=%s\n' "$P_DISEPS" ;;
         3) printf 'apikey=%s\n' "$P_APIKEY" ;;
         4) printf 'dinons=%s\n' "$P_DINONS" ;;
+        5) printf 'sealkey=%s\n' "$P_SEALKEY" ;;
       esac; done >> "$tmp/user_$n.txt" )
   done
   if [ "$n" -eq 0 ]; then rm -rf "$tmp"; echo "ℹ️  No users to export"; return 1; fi
@@ -238,11 +244,11 @@ _bvk_auth_export() {
 
 # merge one credentials / export file into the profile store (same diseps => same user)
 _bvk_auth_merge_file() {  # $1=file
-  local f="$1" nm nd na nn pf id="" label="${1##*/}"
+  local f="$1" nm nd na nn ns pf id="" label="${1##*/}"
   [ -f "$f" ] || { echo "❌ File not found."; return 1; }
   [ "$(wc -c < "$f")" -le 8192 ] || { echo "❌ $label: too large to be a credentials file."; return 1; }
   _bvk_auth_parse "$f"
-  nm="$P_MAIL"; nd="$P_DISEPS"; na="$P_APIKEY"; nn="$P_DINONS"
+  nm="$P_MAIL"; nd="$P_DISEPS"; na="$P_APIKEY"; nn="$P_DINONS"; ns="$P_SEALKEY"
   [ -n "$nm" ] && [ -n "$nd" ] || { echo "❌ $label: needs at least a valid mail= and diseps= line."; return 1; }
   for pf in "$_BVK_AUTH_DIR"/profiles/p_*; do
     [ -f "$pf" ] || continue; [[ "$pf" == *.prev || "$pf" == *.tmp ]] && continue
@@ -250,10 +256,10 @@ _bvk_auth_merge_file() {  # $1=file
     [ "$P_DISEPS" = "$nd" ] && { id="${pf##*/}"; break; }
   done
   if [ -n "$id" ]; then
-    P_MAIL="$nm"; [ -n "$na" ] && P_APIKEY="$na"; [ -n "$nn" ] && P_DINONS="$nn"
+    P_MAIL="$nm"; [ -n "$na" ] && P_APIKEY="$na"; [ -n "$nn" ] && P_DINONS="$nn"; [ -n "$ns" ] && P_SEALKEY="$ns"
     echo "🔄 Updated: $nm"
   else
-    id=$(_bvk_auth_new_id); P_MAIL="$nm"; P_DISEPS="$nd"; P_APIKEY="$na"; P_DINONS="$nn"; P_CREATED=$(date -u +%FT%TZ)
+    id=$(_bvk_auth_new_id); P_MAIL="$nm"; P_DISEPS="$nd"; P_APIKEY="$na"; P_DINONS="$nn"; P_SEALKEY="$ns"; P_CREATED=$(date -u +%FT%TZ)
     echo "✅ Imported: $nm"
   fi
   _bvk_auth_write "$_BVK_AUTH_DIR/profiles/$id"
@@ -348,6 +354,7 @@ _bvk_auth_regen() {  # $1=what: diseps|apikey|dinons|mail   (P_* = current profi
   echo "✅ ${what} updated and saved locally."
   [ "$what" != mail ] && echo "   New value: $(case $what in diseps) echo "$P_DISEPS";; apikey) echo "$P_APIKEY";; dinons) echo "$P_DINONS";; esac)" && echo "   📝 Use 'ux' to export it to a file and keep it safe."
   [ "$what" = diseps ] && echo "   ℹ️  Tell the admin your new diseps for support requests."
+  [ "$what" = dinons ] && { echo "   🔑 The FEK was re-encrypted with the new dinons. Everyone who holds your OLD dinons has lost access to your shares."; echo "   Send the new dinons only to people you still trust:  rbam → Give access → sd"; }
 }
 
 # ================================================================ screens
