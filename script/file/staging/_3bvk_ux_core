@@ -14,12 +14,17 @@
 //   dk-unwrap env BB_FEK(hex)  stdin=wrapped -> K
 //   prepare <stagedir> <outdir>   env BB_K BB_KDK  stdin=NUL-separated paths relative to <stagedir>
 //                                            encrypts every file chunk + name into <outdir>; writes commit.json
+//   pack <outdir> <arcname>       env BB_K BB_KDK  stdin=tar.gz stream   (ux- , same method as up-)
+//                                            streams the archive into 16 MiB encrypted chunks of ONE item; no file/folder count limit
+//   fetch-arc <base> <shareId> <itemId> <chunks> <bytes> <outfile>   env BB_DLTOKEN BB_K [BB_CONC]
+//                                            downloads + decrypts an archive share into <outfile> (do- style); the shell then unpacks it safely
 //   upload <base> <shareId> <outdir>   env BB_UTOKEN [BB_CONC]      sends the chunks (token only, never the API key)
 //   items-decrypt   env BB_K  stdin=share detail JSON               -> TSV: id parent kind bytes chunks name
 //   tsv <gives|receives|notifs|given|received|people>   stdin=server JSON -> rows for the screens, fields separated by 0x1f (so empty fields survive `read`)
 //   download <base> <shareId> <destdir>  env BB_DLTOKEN BB_K [BB_CONC]  stdin={items,ids}  -> decrypt into <destdir>
 //
 // Format "bbvk5":  AES-256-GCM everywhere.  blob = [12 B IV][ciphertext][16 B tag]
+//   archive (ux-, one tar.gz item):  chunk AAD "bbvk6|<itemId>|<index>"   name AAD "bbvk6|arc|<itemId>"
 //   file chunk  AAD "bbvk5|<itemId>|<index>"      name  AAD "bbvk5|name|<itemId>"      wrapped key  AAD "bbvk5|dk"
 //   seal        X25519 ephemeral key + HKDF-SHA256 -> AES-256-GCM, AAD "bbvk5|seal";  sealed = [32 B ephemeral pub][blob]
 'use strict';
@@ -215,6 +220,103 @@ const CMD = {
     process.stdout.write(`${cipherTotal}\n${items.length}\n${chunkTotal}\n${fileCount}`);
   },
 
+  // ---------------------------------------------------------------- pack: tar.gz stream -> encrypted chunks of ONE archive item
+  // Same method as up-: the archive is streamed, never written unencrypted. No limit on how many files it holds.
+  async pack(outdir, arcname) {
+    if (!outdir) die(2, 'usage: pack <outdir> <arcname>');
+    const K = key32(process.env.BB_K, 'K');
+    const kdk = String(process.env.BB_KDK || '');
+    if (!/^[A-Za-z0-9_-]{60,200}$/.test(kdk)) die(2, 'bad wrapped key');
+    const name = String(arcname || 'files.tar.gz');
+    const id = b64u(crypto.randomBytes(16));
+    const TTY = process.stderr.isTTY, t0 = Date.now();
+    let lastDraw = 0, seen = 0;
+    const status = (final) => {
+      if (!TTY) return;
+      const now = Date.now(); if (!final && now - lastDraw < 150) return; lastDraw = now;
+      process.stderr.write(`\r\u001b[K\u001b[36m📦 Packing tar.gz → 🔐 Encrypting\u001b[0m  ${fmtMB(seen)} MB packed  (${Math.floor((now - t0) / 1000)}s)`);
+      if (final) process.stderr.write('\n');
+    };
+    const buf = Buffer.allocUnsafe(CHUNK);
+    let fill = 0, idx = 0, plainTotal = 0, cipherTotal = 0;
+    const flush = () => {
+      if (fill === 0) return;
+      const rec = enc(K, buf.subarray(0, fill), `bbvk6|${id}|${idx}`);
+      fs.writeFileSync(path.join(outdir, `${id}.${idx}`), rec, { mode: 0o600 });
+      cipherTotal += rec.length; plainTotal += fill; idx++; fill = 0;
+    };
+    try {
+      for await (const piece of process.stdin) {
+        let off = 0;
+        while (off < piece.length) {
+          const n = Math.min(CHUNK - fill, piece.length - off);
+          piece.copy(buf, fill, off, off + n);
+          fill += n; off += n;
+          if (fill === CHUNK) flush();
+        }
+        seen += piece.length;
+        status(false);
+      }
+      flush();
+    } catch (e) {
+      if (TTY) process.stderr.write('\n');
+      die(3, '  ❌ ' + (e && e.code === 'ENOSPC' ? 'Disk full while writing encrypted blobs.' : 'Packing failed: ' + (e && e.message)));
+    }
+    status(true);
+    if (idx === 0) die(2, '  ❌ Nothing to pack.');
+    const item = { i: id, p: null, k: 'f', n: b64u(enc(K, Buffer.from(name.slice(0, 120)), 'bbvk6|arc|' + id)), b: plainTotal, c: idx };
+    fs.writeFileSync(path.join(outdir, 'commit.json'), JSON.stringify({ kdk, items: [item] }), { mode: 0o600 });
+    process.stdout.write(`${cipherTotal}\n1\n${idx}\n0`);
+  },
+
+  // ---------------------------------------------------------------- fetch-arc: download + decrypt an archive share (do- style)
+  async 'fetch-arc'(base, id, itemId, chunks, bytes, outfile) {
+    const token = process.env.BB_DLTOKEN, K = key32(process.env.BB_K, 'K');
+    const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || 8, 8));        // 8 x 16 MiB in flight
+    const n = parseInt(chunks, 10), size = parseInt(bytes, 10);
+    if (!Number.isInteger(n) || n < 1 || n > 199999 || !Number.isSafeInteger(size) || size <= (n - 1) * CHUNK || size > n * CHUNK) { console.log('FAILED\tbad archive description'); return; }
+    async function get(url) {
+      for (let a = 0; a < 4; a++) {
+        try {
+          const res = await fetch(url, { redirect: 'error', headers: { 'X-Download-Token': token } });
+          if (res.ok) return Buffer.from(await res.arrayBuffer());
+          if (res.status === 404 || res.status === 401) return null;
+        } catch (e) {}
+        await sleep(300 * (a + 1));
+      }
+      return null;
+    }
+    const fd = fs.openSync(outfile, 'r+');
+    const TTY = process.stderr.isTTY;
+    let done = 0, lastPct = -1, failed = null, next = 0;
+    function bar() {
+      if (!TTY) return;
+      const pct = Math.floor(done * 100 / n);
+      if (pct === lastPct && done < n) return; lastPct = pct;
+      const f = Math.floor(pct * 24 / 100);
+      process.stderr.write(`\r\u001b[K${done >= n ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(24 - f)}] ${String(pct).padStart(3)}%\u001b[0m  📥 Downloading + 🔓 decrypting ${done}/${n}`);
+      if (done >= n) process.stderr.write('\n');
+    }
+    async function worker() {
+      while (!failed) {
+        const i = next++; if (i >= n) return;
+        const blob = await get(`${base}/ux/${id}/item/${itemId}/blob/${i}`);
+        if (!blob) { failed = 'a chunk could not be fetched (access removed, share nuked, or network)'; return; }
+        let plain;
+        try { plain = dec(K, blob, `bbvk6|${itemId}|${i}`); } catch (e) { failed = 'a chunk failed its integrity check'; return; }
+        const want = i < n - 1 ? CHUNK : size - (n - 1) * CHUNK;
+        if (plain.length !== want) { failed = 'a chunk has the wrong length'; return; }
+        fs.writeSync(fd, plain, 0, plain.length, i * CHUNK);
+        done++; bar();
+      }
+    }
+    bar();
+    await Promise.all(Array.from({ length: Math.min(CONC, n) }, worker));
+    fs.closeSync(fd);
+    if (TTY && failed) process.stderr.write('\n');
+    console.log(failed ? 'FAILED\t' + failed : 'OK');
+  },
+
   // ---------------------------------------------------------------- upload the prepared chunks
   async upload(base, id, outdir) {
     const token = process.env.BB_UTOKEN;
@@ -284,10 +386,13 @@ const CMD = {
     const K = key32(process.env.BB_K, 'K');
     let d; try { d = JSON.parse((await readStdin()).toString('utf8')); } catch (e) { process.exit(2); }
     for (const it of (d && d.items) || []) {
-      let name;
+      let name, arc = 0;
       try { name = cleanName(dec(K, unb64u(it.name), 'bbvk5|name|' + it.id).toString('utf8')); }
-      catch (e) { name = '(cannot decrypt)'; }
-      console.log([it.id, it.parent || '-', it.kind, it.bytes, it.chunks, name.replace(/\t/g, ' ')].join('\t'));
+      catch (e) {
+        try { name = cleanName(dec(K, unb64u(it.name), 'bbvk6|arc|' + it.id).toString('utf8')); arc = 1; }
+        catch (e2) { name = '(cannot decrypt)'; }
+      }
+      console.log([it.id, it.parent || '-', it.kind, it.bytes, it.chunks, name.replace(/\t/g, ' '), arc].join('\t'));
     }
   },
 

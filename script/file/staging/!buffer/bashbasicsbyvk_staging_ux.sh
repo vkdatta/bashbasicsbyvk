@@ -2,7 +2,8 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  ux-<items> [as <alias>]      e.g.  ux-1-5   ·   ux-a-1-5 as project files
 #
-#  It is  up-  with three differences:
+#  It is  up-  with three differences (packing, encrypting, uploading, downloading and unpacking are the SAME
+#  method and the SAME echoes as up- / do-: tar.gz streamed → 16 MiB encrypted chunks; no limit on how many files):
 #    • no link is ever made — the recipients are people you set up in  rbam  (a "pre-shared preset")
 #    • no end-to-end link key: client-side encryption (CSE) with your File Encryption Key (FEK)
 #    • you choose WHO gets it; they get a notification and accept it into their Cloud Surf (cs)
@@ -278,11 +279,21 @@ _ux_do_share() {
   local K kdk
   K=$(_ux_core newkey) && kdk=$(printf '' | BB_FEK="$_UX_FEK" BB_K="$K" _ux_core dk-wrap) || { echo "❌ Key generation failed."; return 1; }
 
+  if ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; then
+    echo "❌ 'tar' and 'gzip' are required for ux- (pkg install tar gzip)."
+    return 1
+  fi
+  local -a gz=(gzip)
+  command -v pigz &>/dev/null && gz=(pigz)          # parallel gzip when available
+  local lvl="${FILEAPI_BASHBASICS_GZIP_LEVEL:-6}"
+  [[ "$lvl" =~ ^[1-9]$ ]] || lvl=6
+
   echo "🔎 Scanning selection..."
-  local stage tmpdir listf
-  stage=$(mktemp -d) && tmpdir=$(mktemp -d) && listf=$(mktemp) || { echo "❌ Could not create temp files."; return 1; }
+  local stage tmpdir rcfile errfile
+  stage=$(mktemp -d) && tmpdir=$(mktemp -d) && rcfile=$(mktemp) && errfile=$(mktemp) \
+    || { echo "❌ Could not create temp files."; return 1; }
   chmod 700 "$stage" "$tmpdir"
-  _ux_cleanup() { rm -rf "$stage" "$tmpdir" "$listf"; K=""; }
+  _ux_cleanup() { rm -rf "$stage" "$tmpdir" "$rcfile" "$errfile"; K=""; }
 
   local -a rel_items=()
   local p bn cand n
@@ -292,40 +303,72 @@ _ux_do_share() {
     bn="${p##*/}"; cand="$bn"; n=1
     while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
     ln -s "$p" "$stage/$cand"
-    rel_items+=("./$cand")
+    rel_items+=("./$cand")                            # "./" so a name starting with "-" is never an option
   done
   [ ${#rel_items[@]} -gt 0 ] || { echo "❌ No valid files found in selection"; _ux_cleanup; return 1; }
 
+  # hidden files inside the chosen folders: Settings → Hidden files (ux-)
   _hidden_decide "${ux_hidden_mode:-follow}" "the share" "${paths[@]}" || { _ux_cleanup; return 1; }
-  ( cd "$stage" && _hid_find0 "$_hid_inc" 1 "${rel_items[@]}" ) > "$listf" 2>/dev/null
+  local hid_inc="$_hid_inc"
 
-  # 3) encrypt (every file chunk and every NAME) to a temp folder. The plaintext never leaves this machine.
-  echo "🔐 Encrypting on this machine (client-side)..."
-  local packout total_size nitems nchunks nfiles
-  packout=$(BB_K="$K" BB_KDK="$kdk" _ux_core prepare "$stage" "$tmpdir" < "$listf")
+  local arcname="files.tar.gz"
+  [ ${#rel_items[@]} -eq 1 ] && arcname="${rel_items[0]#./}.tar.gz"
+  arcname=$(printf '%s' "$arcname" | LC_ALL=C tr -c 'A-Za-z0-9._ -' '_' | cut -c1-120)
+
+  # 3) pack tar.gz → encrypt, streamed (plaintext archive never touches the disk) — exactly like up-
+  echo "📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)"
+  local packout
+  packout=$(
+    cd "$stage" || exit 1
+    _hid_find0 "$hid_inc" 1 "${rel_items[@]}" 2>> "$errfile" \
+      | { tar --null --no-recursion -h -T - -cf - 2>> "$errfile"; echo $? > "$rcfile"; } \
+      | "${gz[@]}" "-$lvl" -c \
+      | BB_K="$K" BB_KDK="$kdk" _ux_core pack "$tmpdir" "$arcname"
+  )
+
+  local total_size nitems nblobs tar_rc
   total_size=$(printf '%s' "$packout" | sed -n '1p'); nitems=$(printf '%s' "$packout" | sed -n '2p')
-  nchunks=$(printf '%s' "$packout" | sed -n '3p');    nfiles=$(printf '%s' "$packout" | sed -n '4p')
-  if [[ ! "$total_size" =~ ^[0-9]+$ ]] || [[ ! "$nchunks" =~ ^[0-9]+$ ]]; then
-    echo "❌ Encryption failed (see message above)."; _ux_cleanup; return 1
+  nblobs=$(printf '%s' "$packout" | sed -n '3p')
+  tar_rc=$(cat "$rcfile" 2>/dev/null)
+
+  if [[ ! "$total_size" =~ ^[0-9]+$ ]] || [[ ! "$nblobs" =~ ^[0-9]+$ ]]; then
+    echo "❌ Packing/encryption failed"
+    [ -s "$errfile" ] && head -n 3 "$errfile" | sed 's/^/   /'
+    _ux_cleanup; return 1
   fi
-  echo "   $nfiles file(s), $nitems item(s) → $((total_size/1024/1024)) MB encrypted, in $nchunks chunk(s)."
+  if [ -z "$tar_rc" ] || [ "$tar_rc" -ge 2 ]; then
+    echo "❌ tar failed (exit ${tar_rc:-?}) — upload aborted."
+    [ -s "$errfile" ] && head -n 3 "$errfile" | sed 's/^/   /'
+    _ux_cleanup; return 1
+  fi
+  if [ "$tar_rc" -eq 1 ]; then
+    echo "⚠️  Some files changed or were unreadable while packing (they may be missing/partial):"
+    head -n 3 "$errfile" | sed 's/^/   /'
+  fi
+  echo "   $((total_size/1024/1024)) MB after tar.gz + encryption, in $nblobs blob(s)."
 
   if [ "$total_size" -gt "$_SP_HARD_LIMIT_BYTES" ]; then
-    echo "❌ Size is $((total_size/1024/1024/1024))GB — exceeds the absolute ceiling"; _ux_cleanup; return 1
+    echo "❌ Packed size is $((total_size/1024/1024/1024))GB — exceeds the absolute upload ceiling"
+    _ux_cleanup; return 1
   fi
-  [ "$total_size" -gt "$_SP_SOFT_UPLOAD_BYTES" ] && echo "ℹ️  Over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
+  if [ "$total_size" -gt "$_SP_SOFT_UPLOAD_BYTES" ]; then
+    echo "ℹ️  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
+  fi
 
-  # 4) init → chunks → commit
+  # 4) init (auth + credit precheck) → parallel blob uploads → commit
   local init_out id token
   init_out=$(_ux_init "$total_size") || { _ux_cleanup; return 1; }
   id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
+  if [ -z "$id" ] || [ -z "$token" ]; then
+    echo "❌ Upload init failed (no id returned)"; _ux_cleanup; return 1
+  fi
 
-  [ -t 2 ] || echo "☁️  Uploading $nchunks encrypted chunk(s)..."
+  [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
   local upres
   upres=$(BB_UTOKEN="$token" BB_CONC="$_BB_MAX_PAR" _ux_core upload "$WORKER_URL" "$id" "$tmpdir")
   if [ "$upres" != OK ]; then
     _ux_cleanup
-    echo "❌ One or more chunks failed to upload. Nothing was finalized; partial objects are removed automatically within a few hours."
+    echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects are removed automatically within a few hours."
     return 1
   fi
 

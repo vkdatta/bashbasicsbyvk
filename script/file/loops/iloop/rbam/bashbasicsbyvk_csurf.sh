@@ -241,14 +241,14 @@ _cs_people_open() {
 # ═════════════════════════ files and folders ═════════════════════════════════
 _CT_ID=""; _CT_ROLE=""; _CT_RID=""; _CT_LOADED=0; _CT_MAILS=""; _CT_ALIAS=""
 _CT_DETAIL=""; _CT_ITEMS=""; _CT_FROM=""; _CT_EXP=0
-declare -ga _CT_IID=() _CT_PAR=() _CT_KIND=() _CT_BYTES=() _CT_CHUNKS=() _CT_NAME=()   # everything (unfiltered)
+declare -ga _CT_IID=() _CT_PAR=() _CT_KIND=() _CT_BYTES=() _CT_CHUNKS=() _CT_NAME=() _CT_ARC=()   # everything (unfiltered); _CT_ARC=1 → a tar.gz archive share
 declare -ga _CT_ROWS=()                                                                 # slots shown in the current folder
 declare -gA _CT_VIS=()
 declare -ga _CT_STACK=() _CT_CRUMB=()
 _CT_CUR="-"
 
 _ct_load() {
-  _CT_IID=(); _CT_PAR=(); _CT_KIND=(); _CT_BYTES=(); _CT_CHUNKS=(); _CT_NAME=(); _CT_VIS=()
+  _CT_IID=(); _CT_PAR=(); _CT_KIND=(); _CT_BYTES=(); _CT_CHUNKS=(); _CT_NAME=(); _CT_ARC=(); _CT_VIS=()
   _ux_http GET "/ux/$_CT_ID" || return 1
   if ! _ux_ok; then _ux_fail >&2; return 1; fi
   _CT_DETAIL="$_UX_BODY"
@@ -256,10 +256,10 @@ _ct_load() {
   _CT_ITEMS=$(_ux_jget items "$_CT_DETAIL")
   _CT_FROM=$(_ux_jget from.mail "$_CT_DETAIL"); _CT_EXP=$(_ux_jget share.expiresAt "$_CT_DETAIL")
   _ux_K_of "$_CT_DETAIL" || return 1
-  local iid par kind by ch nm
-  while IFS=$'\t' read -r iid par kind by ch nm; do
+  local iid par kind by ch nm arc
+  while IFS=$'\t' read -r iid par kind by ch nm arc; do
     [ -n "$iid" ] || continue
-    _CT_IID+=("$iid"); _CT_PAR+=("$par"); _CT_KIND+=("$kind"); _CT_BYTES+=("$by"); _CT_CHUNKS+=("$ch"); _CT_NAME+=("$nm")
+    _CT_IID+=("$iid"); _CT_PAR+=("$par"); _CT_KIND+=("$kind"); _CT_BYTES+=("$by"); _CT_CHUNKS+=("$ch"); _CT_NAME+=("$nm"); _CT_ARC+=("${arc:-0}")
   done < <(printf '%s' "$_CT_DETAIL" | BB_K="$_UX_K" _ux_core items-decrypt)
   if [ "$_CT_ROLE" = owner ] && [ -n "$_CT_RID" ]; then
     _ux_http GET "/ux/$_CT_ID/access/$_CT_RID" || return 1
@@ -285,6 +285,7 @@ ct_build() {
 ct_row() {
   _xui_slot "$1"; local i="${_CT_ROWS[$_XUI_SLOT]}"
   if [ "${_CT_KIND[$i]}" = d ]; then printf -v _vp_line ' %2d) 📁 %s/' "$1" "$(_xui_trunc "${_CT_NAME[$i]}" 60)"
+  elif [ "${_CT_ARC[$i]:-0}" = 1 ]; then printf -v _vp_line ' %2d) 📦 %-50s %9s' "$1" "$(_xui_trunc "${_CT_NAME[$i]}" 50)" "$(_xui_hsize "${_CT_BYTES[$i]}")"
   else printf -v _vp_line ' %2d) 📄 %-50s %9s' "$1" "$(_xui_trunc "${_CT_NAME[$i]}" 50)" "$(_xui_hsize "${_CT_BYTES[$i]}")"; fi
 }
 ct_header() {
@@ -316,18 +317,53 @@ _ct_download() {                             # d-LIST
   _ux_http POST "/ux/$_CT_ID/dl-token" "{}" || return 1
   if ! _ux_ok; then _ux_fail; echo "   (Access may have been removed or the share nuked.)"; return 1; fi
   local tok; tok=$(_ux_jget token "$_UX_BODY")
-  local out
-  out=$(printf '{"items":%s,"ids":%s}' "$_CT_ITEMS" "$(_cs_idjson "${ids[@]}")" \
-        | BB_DLTOKEN="$tok" BB_K="$_UX_K" BB_CONC="${_BB_MAX_PAR:-4}" _ux_core download "$WORKER_URL" "$_CT_ID" "$dest")
-  tok=""
-  local status n bytes tops; IFS=$'\t' read -r status n bytes tops <<<"$out"
-  if [ "$status" = OK ]; then
-    echo "✅ $n file(s), $(_xui_hsize "$bytes") decrypted into $dest"
-    echo "   ${tops//|/, }"
-  else
-    echo "❌ Download failed: ${n:-unknown error}"
-    echo "   Nothing partial was left behind."
+  # archive shares (made by ux- like up-: one tar.gz) take the do- path; older per-file shares take the tree path
+  local -a arc_idx=() old_ids=() ; local id i
+  for id in "${ids[@]}"; do
+    for i in "${!_CT_IID[@]}"; do
+      [ "${_CT_IID[$i]}" = "$id" ] || continue
+      if [ "${_CT_ARC[$i]:-0}" = 1 ]; then arc_idx+=("$i"); else old_ids+=("$id"); fi
+    done
+  done
+  local rc=0
+  for i in "${arc_idx[@]}"; do _ct_fetch_archive "$tok" "$i" "$dest" || rc=1; done
+  if [ "${#old_ids[@]}" -gt 0 ]; then
+    local out
+    out=$(printf '{"items":%s,"ids":%s}' "$_CT_ITEMS" "$(_cs_idjson "${old_ids[@]}")" \
+          | BB_DLTOKEN="$tok" BB_K="$_UX_K" BB_CONC="${_BB_MAX_PAR:-4}" _ux_core download "$WORKER_URL" "$_CT_ID" "$dest")
+    local status n bytes tops; IFS=$'\t' read -r status n bytes tops <<<"$out"
+    if [ "$status" = OK ]; then
+      echo "✅ $n file(s), $(_xui_hsize "$bytes") decrypted into $dest"
+      echo "   ${tops//|/, }"
+    else
+      echo "❌ Download failed: ${n:-unknown error}"
+      echo "   Nothing partial was left behind."
+      rc=1
+    fi
   fi
+  tok=""
+  return $rc
+}
+
+# archive share → download + decrypt (same as do-) → safe unpack (same as do-)
+_ct_fetch_archive() {                          # <dl token> <slot in _CT_*> <dest>
+  local tok="$1" i="$2" dest="$3"
+  echo "📦 Archive share detected."
+  mkdir -p "$dest"
+  local arc; arc=$(mktemp "$dest/.bbvk_dl.XXXXXX") || { echo "❌ Cannot write to $dest"; return 1; }
+  local res
+  res=$(BB_DLTOKEN="$tok" BB_K="$_UX_K" BB_CONC="${_BB_MAX_PAR:-8}" _ux_core fetch-arc "$WORKER_URL" "$_CT_ID" "${_CT_IID[$i]}" "${_CT_CHUNKS[$i]}" "${_CT_BYTES[$i]}" "$arc")
+  case "${res%%$'\t'*}" in
+    OK) ;;
+    *)  echo "❌ Download failed — some chunks could not be fetched or failed their integrity check. Nothing was unpacked."
+        [ -n "${res#*$'\t'}" ] && [ "$res" != "${res#*$'\t'}" ] && echo "   ${res#*$'\t'}"
+        rm -f "$arc"; return 1 ;;
+  esac
+  _unpack_targz_safe "$arc" "$dest"
+  local rc=$?
+  rm -f "$arc"
+  [ $rc -eq 0 ] && echo "ℹ️  The share stays in your Cloud Surf until its nuke time runs out (or the sender nukes it)."
+  return $rc
 }
 
 _ct_revoke() {                               # r-LIST
