@@ -211,7 +211,15 @@ def _apply_app_timezone():
         except OSError:
             pass
     try:
-        if zone and re.fullmatch(r"[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}", zone):
+        fx = re.fullmatch(r"UTC([+-])(\d{2}):(\d{2})", zone)
+        if fx:                                    # fixed offset (no tz database on this machine)
+            hh, mm = int(fx.group(2)), fx.group(3)
+            if hh == 0 and mm == "00":
+                os.environ["TZ"] = "UTC0"
+            else:
+                inv = "-" if fx.group(1) == "+" else "+"
+                os.environ["TZ"] = "<%s%02d%s>%s%d:%s" % (fx.group(1), hh, mm, inv, hh, mm)
+        elif zone and re.fullmatch(r"[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}", zone):
             import zoneinfo
             zoneinfo.ZoneInfo(zone)               # must exist, else keep the system zone
             os.environ["TZ"] = zone

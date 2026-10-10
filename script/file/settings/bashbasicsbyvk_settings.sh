@@ -89,20 +89,38 @@ fi
 
 _TZ_DIRS=("${TZDIR:-}" /usr/share/zoneinfo /usr/lib/zoneinfo /usr/share/lib/zoneinfo /etc/zoneinfo "${PREFIX:-}/share/zoneinfo")
 
+# "UTC+05:30" → POSIX "<+0530>-5:30".  This fixed-offset form (no daylight saving) is the manual fallback
+# used when the computer has no tz database and the person declined to install one; it needs no files.
+_tz_posix() {
+  local z="$1" sg hh mm inv
+  [[ "$z" =~ ^UTC([+-])([0-9]{2}):([0-9]{2})$ ]] || return 1
+  sg="${BASH_REMATCH[1]}"; hh="${BASH_REMATCH[2]}"; mm="${BASH_REMATCH[3]}"
+  (( 10#$hh > 14 || 10#$mm > 59 )) && return 1
+  if (( 10#$hh == 0 && 10#$mm == 0 )); then printf 'UTC0'; return 0; fi
+  [ "$sg" = + ] && inv=- || inv=+
+  printf '<%s%s%s>%s%d:%s' "$sg" "$hh" "$mm" "$inv" "$((10#$hh))" "$mm"
+}
+
 # _tz_valid NAME → 0 when NAME is a real zone on this machine (no paths, no '..', must exist in the tz database)
+# or a fixed offset like UTC+05:30
 _tz_valid() {
   local z="$1" d
+  _tz_posix "$z" >/dev/null && return 0
   [[ "$z" =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$ ]] || return 1
   for d in "${_TZ_DIRS[@]}"; do
     [ -n "$d" ] && [ -f "$d/$z" ] && return 0
   done
+  # tz data kept somewhere unusual (e.g. Android's single tzdata blob): trust the zone if date resolves it
+  # to a real abbreviation instead of echoing the name back
+  [[ "$z" == */* ]] && [ "$(TZ="$z" date +%Z 2>/dev/null)" != "${z%%/*}" ] && return 0
   return 1
 }
 
 # put the chosen zone into effect for this shell and everything it starts
 _apply_timezone() {
+  local _p
   if [ -n "${app_timezone:-}" ] && _tz_valid "$app_timezone"; then
-    export TZ="$app_timezone"
+    _p=$(_tz_posix "$app_timezone") && export TZ="$_p" || export TZ="$app_timezone"
   elif [ "$_BVK_TZ_ORIG_SET" = 1 ]; then
     export TZ="$_BVK_TZ_ORIG"
   else
