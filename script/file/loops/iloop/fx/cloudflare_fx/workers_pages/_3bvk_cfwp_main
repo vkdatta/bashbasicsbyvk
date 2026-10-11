@@ -13,6 +13,7 @@ Credentials, worker recovery and project lookup are the existing _3bvk_recover_*
 Times follow the app timezone (the app exports TZ).
 """
 import argparse, os, re, sys, traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -30,29 +31,46 @@ NAME_OK = re.compile(r"[A-Za-z0-9_-]+")
 SUFFIX = {"Worker": "-recovered", "Pages": "-pages-recovered"}
 
 
+JOBS = max(1, int(os.environ.get("BVK_RECOVER_JOBS", "6") or 6))     # items recovered at the same time
+
+
+def _progress(futs, labels, status_of):
+    """Live line each time an item finishes: [k/N] icon label."""
+    icon = {"ok": "✅", "skipped": "⏭️", "failed": "❌"}
+    idx = {f: i for i, f in enumerate(futs)}
+    for k, f in enumerate(as_completed(futs), 1):
+        Report(None).echo(f"── [{k}/{len(futs)}] {icon.get(status_of(f.result()), '')} {labels[idx[f]]}")
+
+
+def _recover_one(nav, typ, name, token, account):
+    """One Worker / Pages item -> (type, name, status, detail). Never raises: one item must not kill the batch."""
+    rep = Report(f"{typ} {name}")
+    out = nav / f"{name}{SUFFIX[typ]}"
+    if not NAME_OK.fullmatch(name):
+        rep.echo("ERROR: bad name"); return (typ, name, "failed", "name must be letters, digits, '-' or '_'")
+    if out.exists():
+        rep.echo(f"SKIPPED: {out} already exists. Rename or remove it first.")
+        return (typ, name, "skipped", f"{out.name} already exists (rename or remove it first)")
+    try:
+        if typ == "Worker":
+            recover_worker(name, token, account, out, find_project(name, nav, None), rep)
+        else:
+            recover_pages(name, token, account, out, rep)
+        return (typ, name, "ok", str(out))
+    except (RecoverError, ApiError) as e:
+        rep.echo(f"ERROR: {e}"); return (typ, name, "failed", str(e))
+    except Exception as e:
+        rep.echo(f"ERROR: unexpected {type(e).__name__}: {e}\n{traceback.format_exc()}")
+        return (typ, name, "failed", f"unexpected {type(e).__name__}: {e}")
+
+
 def recover_batch(nav, items, token, account):
-    results = []                                                   # (type, name, status, detail)
-    for k, (typ, name) in enumerate(items, 1):
-        print(f"\n{'=' * 70}\n[{k}/{len(items)}] {typ}: {name}\n{'=' * 70}")
-        out = nav / f"{name}{SUFFIX[typ]}"
-        if not NAME_OK.fullmatch(name):
-            results.append((typ, name, "failed", "name must be letters, digits, '-' or '_'")); print("  ERROR: bad name"); continue
-        if out.exists():
-            results.append((typ, name, "skipped", f"{out.name} already exists (rename or remove it first)"))
-            print(f"  SKIPPED: {out} already exists. Rename or remove it first."); continue
-        rep = Report()
-        try:
-            if typ == "Worker":
-                recover_worker(name, token, account, out, find_project(name, nav, None), rep)
-            else:
-                recover_pages(name, token, account, out, rep)
-            results.append((typ, name, "ok", str(out)))
-        except (RecoverError, ApiError) as e:
-            print(f"  ERROR: {e}"); results.append((typ, name, "failed", str(e)))
-        except Exception as e:                                      # one item's bug must not kill the batch
-            print(f"  ERROR: unexpected {type(e).__name__}: {e}"); traceback.print_exc()
-            results.append((typ, name, "failed", f"unexpected {type(e).__name__}: {e}"))
-    return results
+    """All items run concurrently (BVK_RECOVER_JOBS at a time); results keep the order of `items`."""
+    print(f"\nRecovering {len(items)} item(s), up to {JOBS} at the same time...", flush=True)
+    with ThreadPoolExecutor(max_workers=min(JOBS, len(items))) as ex:
+        futs = [ex.submit(_recover_one, nav, typ, name, token, account) for typ, name in items]
+        _progress(futs, [f"{t} {n}" for t, n in items], lambda r: r[2])
+        return [f.result() for f in futs]
 
 
 def main(argv=None):

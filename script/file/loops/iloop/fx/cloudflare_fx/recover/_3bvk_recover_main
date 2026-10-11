@@ -24,6 +24,7 @@ Needs only Python 3.9+ (standard library). Modules (all _3bvk_recover_*.py besid
 Output per worker: src/ (or src-from-map/), wrangler.*, raw/, config/, RECOVERY-REPORT.txt, RENAMES.txt
 """
 import argparse, os, re, sys, traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -63,32 +64,47 @@ def pick_workers(names):
     return [names[i - 1] for i in sel]
 
 
+JOBS = max(1, int(os.environ.get("BVK_RECOVER_JOBS", "6") or 6))     # workers recovered at the same time
+
+
+def _progress(futs, labels, status_of):
+    """Live line each time an item finishes: [k/N] icon label."""
+    icon = {"ok": "✅", "skipped": "⏭️", "failed": "❌"}
+    idx = {f: i for i, f in enumerate(futs)}
+    for k, f in enumerate(as_completed(futs), 1):
+        Report(None).echo(f"── [{k}/{len(futs)}] {icon.get(status_of(f.result()), '')} {labels[idx[f]]}")
+
+
+def _run_one(nav, name, token, account, out_base, explicit_project):
+    """One worker -> (name, status, detail). Never raises: one worker's bug must not kill the rest of the batch."""
+    rep = Report(f"Worker {name}")
+    out = out_base / f"{name}-recovered"
+    if not NAME_OK.fullmatch(name):
+        rep.echo("ERROR: bad worker name"); return (name, "failed", "name must be letters, digits, '-' or '_'")
+    if out.exists():
+        rep.echo(f"SKIPPED: {out} already exists. Rename or remove it first.")
+        return (name, "skipped", f"{out.name} already exists (rename or remove it first)")
+    project = find_project(name, nav, explicit_project)
+    if explicit_project and not project:
+        rep.echo("ERROR: --project folder has no wrangler.jsonc / wrangler.json / wrangler.toml")
+        return (name, "failed", f"--project {explicit_project}: no wrangler config there")
+    try:
+        recover_worker(name, token, account, out, project, rep)
+        return (name, "ok", str(out))
+    except (RecoverError, ApiError) as e:
+        rep.echo(f"ERROR: {e}"); return (name, "failed", str(e))
+    except Exception as e:
+        rep.echo(f"ERROR: unexpected {type(e).__name__}: {e}\n{traceback.format_exc()}")
+        return (name, "failed", f"unexpected {type(e).__name__}: {e}")
+
+
 def run_batch(nav, workers, token, account, out_base, explicit_project):
-    results = []                                   # (worker, status, detail)
-    for k, name in enumerate(workers, 1):
-        print(f"\n{'=' * 70}\n[{k}/{len(workers)}] {name}\n{'=' * 70}")
-        out = out_base / f"{name}-recovered"
-        if not NAME_OK.fullmatch(name):
-            results.append((name, "failed", "name must be letters, digits, '-' or '_'")); print("  ERROR: bad worker name"); continue
-        if out.exists():
-            results.append((name, "skipped", f"{out.name} already exists (rename or remove it first)"))
-            print(f"  SKIPPED: {out} already exists. Rename or remove it first."); continue
-        project = find_project(name, nav, explicit_project)
-        if explicit_project and not project:
-            results.append((name, "failed", f"--project {explicit_project}: no wrangler config there"))
-            print("  ERROR: --project folder has no wrangler.jsonc / wrangler.json / wrangler.toml"); continue
-        rep = Report()
-        try:
-            recover_worker(name, token, account, out, project, rep)
-            results.append((name, "ok", str(out)))
-        except (RecoverError, ApiError) as e:
-            print(f"  ERROR: {e}")
-            results.append((name, "failed", str(e)))
-        except Exception as e:                      # one worker's bug must not kill the rest of the batch
-            print(f"  ERROR: unexpected {type(e).__name__}: {e}")
-            traceback.print_exc()
-            results.append((name, "failed", f"unexpected {type(e).__name__}: {e}"))
-    return results
+    """Workers run concurrently (BVK_RECOVER_JOBS at a time); results keep the order of `workers`."""
+    print(f"\nRecovering {len(workers)} worker(s), up to {JOBS} at the same time...", flush=True)
+    with ThreadPoolExecutor(max_workers=min(JOBS, len(workers))) as ex:
+        futs = [ex.submit(_run_one, nav, n, token, account, out_base, explicit_project) for n in workers]
+        _progress(futs, [f"Worker {n}" for n in workers], lambda r: r[1])
+        return [f.result() for f in futs]
 
 
 def main(argv=None):

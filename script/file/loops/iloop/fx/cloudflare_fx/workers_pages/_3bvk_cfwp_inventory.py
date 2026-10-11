@@ -7,13 +7,14 @@ Stdlib only. Re-uses the REST helpers of the recover modules (_3bvk_recover_api)
 
 Times are converted to the APP timezone: the app exports TZ (see _apply_timezone in the settings), and Python honours it.
 """
-import csv, json, re, time, urllib.parse
+import csv, json, os, re, time, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from _3bvk_recover_api import ApiError, get_json
 
 TYPES = ("Worker", "Pages")
+LOAD_THREADS = max(1, int(os.environ.get("BVK_LOAD_THREADS", "16") or 16))
 _TS = re.compile(r"^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)(?:\.\d+)?(Z|[+-]\d\d:?\d\d)?$")
 
 
@@ -46,15 +47,17 @@ def fmt_utc(epoch):
 
 # ------------------------------------------------------------------ listing --
 def _pages_projects(token, account):
+    """Page 1 first (it says how many pages there are), then every remaining page at the same time."""
     path = f"/accounts/{account}/pages/projects"
-    out, page = [], 1
-    while True:
-        j = get_json(path + (f"?page={page}" if page > 1 else ""), token)
-        out.extend(j.get("result") or [])
-        info = j.get("result_info") or {}
-        if not out or page >= int(info.get("total_pages") or 1) or not (j.get("result") or []):
-            return out
-        page += 1
+    j = get_json(path, token)
+    out = list(j.get("result") or [])
+    total = int((j.get("result_info") or {}).get("total_pages") or 1)
+    if not out or total <= 1:
+        return out
+    with ThreadPoolExecutor(max_workers=min(LOAD_THREADS, total - 1)) as ex:
+        for res in ex.map(lambda pg: get_json(f"{path}?page={pg}", token).get("result") or [], range(2, total + 1)):
+            out.extend(res)
+    return out
 
 
 def _worker_scripts(token, account):
@@ -93,18 +96,24 @@ def _pages_when(token, account, project):
 
 def list_inventory(token, account):
     warnings, jobs = [], []
-    try:
-        for w in _worker_scripts(token, account):
-            if isinstance(w, dict) and w.get("id"):
-                jobs.append(("Worker", w["id"], w))
-    except ApiError as e:
-        warnings.append(f"Workers listing failed: {e}")
-    try:
-        for p in _pages_projects(token, account):
-            if isinstance(p, dict) and p.get("name"):
-                jobs.append(("Pages", p["name"], p))
-    except ApiError as e:
-        warnings.append(f"Pages listing failed: {e}")
+
+    def listing(fn):                                            # -> (items, warning)
+        try:
+            return fn(token, account), None
+        except ApiError as e:
+            return [], str(e)
+
+    with ThreadPoolExecutor(max_workers=2) as ex:               # workers list and pages list at the same time
+        fw, fp = ex.submit(listing, _worker_scripts), ex.submit(listing, _pages_projects)
+        ws, werr = fw.result(); ps, perr = fp.result()
+    for w in ws:
+        if isinstance(w, dict) and w.get("id"):
+            jobs.append(("Worker", w["id"], w))
+    for p in ps:
+        if isinstance(p, dict) and p.get("name"):
+            jobs.append(("Pages", p["name"], p))
+    if werr: warnings.append(f"Workers listing failed: {werr}")
+    if perr: warnings.append(f"Pages listing failed: {perr}")
     if not jobs and warnings and len(warnings) == 2:
         raise ApiError("; ".join(warnings))
 
@@ -116,7 +125,7 @@ def list_inventory(token, account):
             ep, err = None, f"{type(e).__name__}: {e}"
         return {"type": typ, "name": name, "epoch": ep, "error": err}
 
-    with ThreadPoolExecutor(max_workers=4) as ex:
+    with ThreadPoolExecutor(max_workers=max(1, min(LOAD_THREADS, len(jobs) or 1))) as ex:
         rows = list(ex.map(one, jobs))
     rows.sort(key=lambda r: (TYPES.index(r["type"]), r["name"].lower()))
     return rows, warnings

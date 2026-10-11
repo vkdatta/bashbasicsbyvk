@@ -6,11 +6,14 @@ This is the body of the old recover.py main(), unchanged in behaviour, with thes
   * the output folder is created only after the script was downloaded, so a failed download leaves nothing behind
 """
 import base64, json, os, re
+from concurrent.futures import ThreadPoolExecutor
 from _3bvk_recover_api import ApiError, http_get, get_json, split_multipart
 from _3bvk_recover_unbundle import HASHED_ASSET, extract_source_map, unbundle
 from _3bvk_recover_wasm import wasm_to_wat
 from _3bvk_recover_project import (ASSET_RULE_FILES, build_wrangler, copy_project_files, project_identifiers, read_wrangler)
 from _3bvk_recover_util import RecoverError, safe_join
+
+API_THREADS = max(1, int(os.environ.get("BVK_WORKER_THREADS", "12") or 12))   # parallel API calls inside ONE worker
 
 
 def recover_worker(name, token, account, out, project, rep):
@@ -20,14 +23,40 @@ def recover_worker(name, token, account, out, project, rep):
     base = f"/accounts/{account}/workers/scripts/{name}"
     say(f"Project folder: {project}" if project else "Project folder: not found (wrangler/_headers/_redirects will NOT be byte-exact)")
 
+    # 1-3. everything the API can give for this worker is requested AT THE SAME TIME (code, settings, versions list),
+    #      then the per-version details are requested concurrently too. Results are reported in the usual 1/2/3 order.
+    def _try(fn, *a):
+        try: return fn(*a), None
+        except ApiError as e: return None, e
+
+    def _code():
+        notes, got = [], None
+        for ep in ("/content/v2", ""):
+            try:
+                got = http_get(base + ep, token); break
+            except ApiError as e:
+                notes.append(f"  note: {e}")
+        return got, notes
+
+    cfg_files = (("settings.json", "/settings"), ("script-settings.json", "/script-settings"), ("subdomain.json", "/subdomain"))
+    say(f"\n[1-3/5] Downloading code, configuration and version list for '{name}' (in parallel)...")
+    with ThreadPoolExecutor(max_workers=API_THREADS, thread_name_prefix="worker") as ex:
+        f_code = ex.submit(_code)
+        f_cfg = [(fname, ex.submit(_try, get_json, base + ep, token)) for fname, ep in cfg_files]
+        f_ver = ex.submit(_try, get_json, base + "/versions", token)
+        (raw, notes) = f_code.result()
+        cfg_res = [(fname, f.result()) for fname, f in f_cfg]
+        vl, vl_err = f_ver.result()
+        vitems, vdetail = [], {}
+        if vl is not None:
+            res = vl.get("result", {})
+            vitems = res.get("items", res) if isinstance(res, dict) else res
+            vids = [it.get("id", "") for it in vitems if re.fullmatch(r"[A-Za-z0-9_-]+", it.get("id", ""))]
+            vdetail = dict(zip(vids, ex.map(lambda v: _try(get_json, f"{base}/versions/{v}", token), vids)))
+
     # 1. code ---------------------------------------------------------------
-    say(f"\n[1/5] Downloading deployed code for '{name}'...")
-    raw = None
-    for ep in ("/content/v2", ""):
-        try:
-            data, ctype = http_get(base + ep, token); raw = (data, ctype); break
-        except ApiError as e:
-            say(f"  note: {e}")
+    say(f"\n[1/5] Deployed code for '{name}'...")
+    for n in notes: say(n)
     if not raw:
         raise RecoverError("could not download the script. Check worker name, account ID and token permissions (Workers Scripts: Read).")
     data, ctype = raw
@@ -37,33 +66,28 @@ def recover_worker(name, token, account, out, project, rep):
     say(f"  received {len(parts)} part(s): " + ", ".join(f"{n} ({len(b)} B)" for n, b in parts))
 
     # 2. config -------------------------------------------------------------
-    say("\n[2/5] Downloading configuration...")
+    say("\n[2/5] Configuration...")
     settings = None
-    for fname, ep in (("settings.json", "/settings"), ("script-settings.json", "/script-settings"),
-                      ("subdomain.json", "/subdomain")):
-        try:
-            j = get_json(base + ep, token)
-            (out / "config" / fname).write_text(json.dumps(j, indent=2))
-            if fname == "settings.json": settings = j
-            say(f"  ok: {fname}")
-        except ApiError as e:
-            say(f"  skipped {fname}: {e}")
+    for fname, (j, err) in cfg_res:
+        if err is not None:
+            say(f"  skipped {fname}: {err}"); continue
+        (out / "config" / fname).write_text(json.dumps(j, indent=2))
+        if fname == "settings.json": settings = j
+        say(f"  ok: {fname}")
 
     # 3. versions -----------------------------------------------------------
-    say("\n[3/5] Downloading version history...")
-    try:
-        vl = get_json(base + "/versions", token)
+    say("\n[3/5] Version history...")
+    if vl_err is not None:
+        say(f"  skipped: {vl_err}")
+    else:
         (out / "config/versions.json").write_text(json.dumps(vl, indent=2))
-        res = vl.get("result", {})
-        items = res.get("items", res) if isinstance(res, dict) else res
         found_code = 0
-        for it in items:
+        for it in vitems:
             vid = it.get("id", "")
             if not re.fullmatch(r"[A-Za-z0-9_-]+", vid): continue
-            try:
-                v = get_json(f"{base}/versions/{vid}", token)
-            except ApiError as e:
-                say(f"  version {vid}: {e}"); continue
+            v, verr = vdetail[vid]
+            if verr is not None:
+                say(f"  version {vid}: {verr}"); continue
             num = it.get("number", vid)
             vdir = out / "config" / "versions" / str(num)
             vdir.mkdir(parents=True, exist_ok=True)
@@ -76,11 +100,9 @@ def recover_worker(name, token, account, out, project, rep):
                 raw_b = base64.b64decode(blob) if m.get("content_base64") else blob.encode()
                 (vdir / re.sub(r"[^A-Za-z0-9._-]", "_", m.get("name", "module.js"))).write_bytes(raw_b)
                 found_code += 1
-        say(f"  {len(items)} version(s) listed; {found_code} module body(ies) were embedded in version details.")
+        say(f"  {len(vitems)} version(s) listed; {found_code} module body(ies) were embedded in version details.")
         if not found_code:
             say("  (Cloudflare returned metadata only for older versions - only the latest code is recoverable from the API.)")
-    except ApiError as e:
-        say(f"  skipped: {e}")
 
     # 4. recover sources ----------------------------------------------------
     say("\n[4/5] Recovering sources...")
