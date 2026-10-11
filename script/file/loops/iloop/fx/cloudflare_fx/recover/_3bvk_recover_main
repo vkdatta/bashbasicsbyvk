@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""
+_3bvk_recover_main - Cloudflare Worker recovery for bashbasicsbyvk (the ONLY file the rest of the app talks to).
+
+    _3bvk_recover_main [NAV_PATH] [-w NAME ...] [--all] [--project DIR] [--out DIR]
+    _3bvk_recover_main [NAV_PATH] --list                 print the account's worker names, one per line
+    _3bvk_recover_main [NAV_PATH] --print-credentials    (internal) token + account id, for the file-manager drawer
+
+NAV_PATH is the folder the file navigator is showing (default: the current directory when run by hand).
+Everything is anchored to it:
+  * API token / account id are looked up in NAV_PATH first (.dev.vars, .env, ..., wrangler account_id), see
+    _3bvk_recover_creds; then the environment; then you are asked.
+  * the original project (wrangler.*, _headers, _redirects) is searched for under NAV_PATH only.
+  * every recovery is written to NAV_PATH/<worker>-recovered/   (--out DIR changes the parent folder).
+
+Workers: -w NAME (repeatable) / --all, or - when neither is given - the account's workers are listed and you pick
+several ("1,3-5", "a", "a-2").  A worker whose <name>-recovered folder already exists is skipped, never overwritten.
+
+Needs only Python 3.9+ (standard library). Modules (all _3bvk_recover_*.py beside this file):
+    api        Cloudflare REST + worker list           creds      nav-path secrets
+    worker     one worker's pipeline                   unbundle   esbuild bundle -> modules / source maps
+    jslex      JS lexer + esbuild clean-ups            names      collision-suffix restoration
+    project    wrangler / _headers / _redirects        wasm       .wasm -> .wat       util   shared helpers
+Output per worker: src/ (or src-from-map/), wrangler.*, raw/, config/, RECOVERY-REPORT.txt, RENAMES.txt
+"""
+import argparse, os, re, sys, traceback
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _3bvk_recover_api import ApiError, list_workers
+from _3bvk_recover_creds import credentials
+from _3bvk_recover_project import find_project
+from _3bvk_recover_util import RecoverError, Report
+from _3bvk_recover_worker import recover_worker
+
+NAME_OK = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def parse_selection(text, n):
+    """'1,3-5' | 'a' | 'a-2' -> sorted list of 1-based numbers (invalid parts ignored)."""
+    s = text.replace(" ", "").lower()
+    if not s:
+        return []
+    allr = set(range(1, n + 1))
+    if s == "a":
+        return sorted(allr)
+    if s.startswith("a-"):
+        return sorted(allr - set(parse_selection(s[2:], n)))
+    out = set()
+    for part in s.split(","):
+        m = re.fullmatch(r"(\d+)(?:-(\d+))?", part)
+        if not m:
+            continue
+        lo, hi = int(m.group(1)), int(m.group(2) or m.group(1))
+        out.update(x for x in range(min(lo, hi), max(lo, hi) + 1) if x in allr)
+    return sorted(out)
+
+
+def pick_workers(names):
+    for i, w in enumerate(names, 1):
+        print(f"  {i:>3}) {w}")
+    sel = parse_selection(input("Recover which? (1,3-5 / a / a-2, blank = cancel): "), len(names))
+    return [names[i - 1] for i in sel]
+
+
+def run_batch(nav, workers, token, account, out_base, explicit_project):
+    results = []                                   # (worker, status, detail)
+    for k, name in enumerate(workers, 1):
+        print(f"\n{'=' * 70}\n[{k}/{len(workers)}] {name}\n{'=' * 70}")
+        out = out_base / f"{name}-recovered"
+        if not NAME_OK.fullmatch(name):
+            results.append((name, "failed", "name must be letters, digits, '-' or '_'")); print("  ERROR: bad worker name"); continue
+        if out.exists():
+            results.append((name, "skipped", f"{out.name} already exists (rename or remove it first)"))
+            print(f"  SKIPPED: {out} already exists. Rename or remove it first."); continue
+        project = find_project(name, nav, explicit_project)
+        if explicit_project and not project:
+            results.append((name, "failed", f"--project {explicit_project}: no wrangler config there"))
+            print("  ERROR: --project folder has no wrangler.jsonc / wrangler.json / wrangler.toml"); continue
+        rep = Report()
+        try:
+            recover_worker(name, token, account, out, project, rep)
+            results.append((name, "ok", str(out)))
+        except (RecoverError, ApiError) as e:
+            print(f"  ERROR: {e}")
+            results.append((name, "failed", str(e)))
+        except Exception as e:                      # one worker's bug must not kill the rest of the batch
+            print(f"  ERROR: unexpected {type(e).__name__}: {e}")
+            traceback.print_exc()
+            results.append((name, "failed", f"unexpected {type(e).__name__}: {e}"))
+    return results
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Recover deployed Cloudflare Workers into the navigation path.")
+    ap.add_argument("path", nargs="?", help="navigation path (default: current directory)")
+    ap.add_argument("-w", "--worker", action="append", default=[], metavar="NAME", help="worker to recover (repeatable)")
+    ap.add_argument("--all", action="store_true", help="recover every worker in the account")
+    ap.add_argument("--list", action="store_true", help="print the account's worker names and exit")
+    ap.add_argument("--print-credentials", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--project", help="original project folder for a single worker (default: auto-detected under the navigation path)")
+    ap.add_argument("--out", help="parent folder for the <worker>-recovered folders (default: the navigation path)")
+    args = ap.parse_args(argv)
+
+    nav = Path(args.path or os.getcwd()).expanduser().resolve()
+    if not nav.is_dir():
+        sys.exit(f"ERROR: {nav} is not a folder.")
+
+    if args.print_credentials:
+        if sys.stdout.isatty():
+            sys.exit("ERROR: --print-credentials is internal (it prints the secret); not for a terminal.")
+        token, account = credentials(nav)
+        print(token); print(account)
+        return 0
+
+    token, account = credentials(nav)
+    if args.list:
+        print("\n".join(list_workers(token, account)))
+        return 0
+
+    explicit = args.project or os.environ.get("RECOVER_PROJECT_DIR")
+    workers = list(dict.fromkeys(args.worker))
+    if args.all or not workers:
+        names = list_workers(token, account)
+        if not names:
+            sys.exit("No workers found in this account.")
+        workers = names if args.all else pick_workers(names)
+        if not workers:
+            print("Cancelled."); return 0
+    if explicit and len(workers) > 1:
+        sys.exit("ERROR: --project / RECOVER_PROJECT_DIR names ONE project folder; use it with a single worker.")
+
+    out_base = Path(args.out).expanduser().resolve() if args.out else nav
+    print(f"\nNavigation path: {nav}\nOutput folder  : {out_base}\nWorkers        : {', '.join(workers)}")
+    results = run_batch(nav, workers, token, account, out_base, explicit)
+
+    print(f"\n{'=' * 70}\nSummary")
+    for name, status, detail in results:
+        icon = {"ok": "✅", "skipped": "⏭️ ", "failed": "❌"}[status]
+        print(f"  {icon} {name}: {detail}")
+    return 0 if all(s == "ok" for _, s, _ in results) else 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (KeyboardInterrupt, EOFError):
+        sys.exit("\nCancelled.")
+    except (RecoverError, ApiError) as e:
+        sys.exit(f"ERROR: {e}")
