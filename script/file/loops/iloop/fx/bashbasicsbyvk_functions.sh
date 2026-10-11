@@ -160,7 +160,7 @@ source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_text_csv.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_import_link.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selection.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selected.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_recover.sh"   # cloudflare_fx/recover — single "recover" button (python: _3bvk_recover_*)
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_cfwp.sh"      # cloudflare_fx/workers and pages — single button: list · export · recover (python: _3bvk_cfwp_*, _3bvk_recover_*)
 
 # UDF tab extras: e-N (edit item), ux / ui (export / import all UDFs as a zip)
 source "${_FX_ADF_DIR}/bashbasicsbyvk_udf_io.sh"

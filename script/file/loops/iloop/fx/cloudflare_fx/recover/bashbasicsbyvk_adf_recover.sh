@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_recover.sh
-# adf-staging='recover'
+# adf-staging='cloudflare_fx/recover_workers'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — recover      (the ONE button; everything else lives in _3bvk_recover_*.py)
 #

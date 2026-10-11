@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""
+_3bvk_cfwp_main - Cloudflare Workers AND Pages: list, export, recover (the ONLY file the drawer talks to).
+
+    _3bvk_cfwp_main NAV_PATH --list                       TSV, one per line:  type <TAB> name <TAB> epoch <TAB> error
+    _3bvk_cfwp_main NAV_PATH --export csv|json|both       reads that TSV on stdin, writes NAV_PATH/cloudflare_workers_pages_<stamp>.*
+    _3bvk_cfwp_main NAV_PATH -w WORKER ... -p PAGES ...   recover (repeatable); output folders in NAV_PATH:
+                                                            <worker>-recovered/        (unchanged worker pipeline)
+                                                            <project>-pages-recovered/ (public files of the production deployment)
+    _3bvk_cfwp_main NAV_PATH --print-credentials          (internal) token + account id for the drawer
+
+Credentials, worker recovery and project lookup are the existing _3bvk_recover_* modules, used as they are.
+Times follow the app timezone (the app exports TZ).
+"""
+import argparse, os, re, sys, traceback
+from pathlib import Path
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+for _d in (_HERE, os.path.join(_HERE, "..", "recover")):          # installed flat, or still in the source tree
+    sys.path.insert(0, os.path.abspath(_d))
+from _3bvk_recover_api import ApiError
+from _3bvk_recover_creds import credentials
+from _3bvk_recover_project import find_project
+from _3bvk_recover_util import RecoverError, Report
+from _3bvk_recover_worker import recover_worker
+from _3bvk_cfwp_inventory import export_rows, list_inventory
+from _3bvk_cfwp_pages import recover_pages
+
+NAME_OK = re.compile(r"[A-Za-z0-9_-]+")
+SUFFIX = {"Worker": "-recovered", "Pages": "-pages-recovered"}
+
+
+def recover_batch(nav, items, token, account):
+    results = []                                                   # (type, name, status, detail)
+    for k, (typ, name) in enumerate(items, 1):
+        print(f"\n{'=' * 70}\n[{k}/{len(items)}] {typ}: {name}\n{'=' * 70}")
+        out = nav / f"{name}{SUFFIX[typ]}"
+        if not NAME_OK.fullmatch(name):
+            results.append((typ, name, "failed", "name must be letters, digits, '-' or '_'")); print("  ERROR: bad name"); continue
+        if out.exists():
+            results.append((typ, name, "skipped", f"{out.name} already exists (rename or remove it first)"))
+            print(f"  SKIPPED: {out} already exists. Rename or remove it first."); continue
+        rep = Report()
+        try:
+            if typ == "Worker":
+                recover_worker(name, token, account, out, find_project(name, nav, None), rep)
+            else:
+                recover_pages(name, token, account, out, rep)
+            results.append((typ, name, "ok", str(out)))
+        except (RecoverError, ApiError) as e:
+            print(f"  ERROR: {e}"); results.append((typ, name, "failed", str(e)))
+        except Exception as e:                                      # one item's bug must not kill the batch
+            print(f"  ERROR: unexpected {type(e).__name__}: {e}"); traceback.print_exc()
+            results.append((typ, name, "failed", f"unexpected {type(e).__name__}: {e}"))
+    return results
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="List, export and recover Cloudflare Workers and Pages.")
+    ap.add_argument("path", nargs="?", help="navigation path (default: current directory)")
+    ap.add_argument("-w", "--worker", action="append", default=[], metavar="NAME", help="worker to recover (repeatable)")
+    ap.add_argument("-p", "--pages", action="append", default=[], metavar="NAME", help="Pages project to recover (repeatable)")
+    ap.add_argument("--list", action="store_true", help="print workers + pages with latest deployment (TSV) and exit")
+    ap.add_argument("--export", choices=("csv", "json", "both"), help="write the TSV given on stdin to a file in the navigation path")
+    ap.add_argument("--print-credentials", action="store_true", help=argparse.SUPPRESS)
+    args = ap.parse_args(argv)
+
+    nav = Path(args.path or os.getcwd()).expanduser().resolve()
+    if not nav.is_dir():
+        sys.exit(f"ERROR: {nav} is not a folder.")
+
+    if args.export:                                                 # no credentials needed: it only formats what the drawer shows
+        rows = []
+        for line in sys.stdin.read().splitlines():
+            f = line.split("\t")
+            if len(f) >= 2 and f[0] in ("Worker", "Pages"):
+                rows.append({"type": f[0], "name": f[1], "epoch": int(f[2]) if len(f) > 2 and f[2].isdigit() else None})
+        if not rows:
+            sys.exit("ERROR: nothing to export.")
+        for p in export_rows(rows, nav, args.export):
+            print(p)
+        return 0
+
+    if args.print_credentials:
+        if sys.stdout.isatty():
+            sys.exit("ERROR: --print-credentials is internal (it prints the secret); not for a terminal.")
+        token, account = credentials(nav)
+        print(token); print(account)
+        return 0
+
+    token, account = credentials(nav)
+    if args.list:
+        rows, warnings = list_inventory(token, account)
+        for w in warnings:
+            print(f"WARNING: {w}", file=sys.stderr)
+        for r in rows:
+            err = re.sub(r"\s+", " ", r["error"])[:120]
+            print(f"{r['type']}\t{r['name']}\t{r['epoch'] if r['epoch'] is not None else '-'}\t{err or '-'}")   # '-' = empty (bash read collapses blank tab fields)
+        return 0
+
+    items = [("Worker", n) for n in dict.fromkeys(args.worker)] + [("Pages", n) for n in dict.fromkeys(args.pages)]
+    if not items:
+        sys.exit("Nothing to do: use --list, --export, -w NAME or -p NAME.")
+    print(f"\nNavigation path: {nav}\nItems          : " + ", ".join(f"{t} {n}" for t, n in items))
+    results = recover_batch(nav, items, token, account)
+    print(f"\n{'=' * 70}\nSummary")
+    icon = {"ok": "✅", "skipped": "⏭️ ", "failed": "❌"}
+    for typ, name, status, detail in results:
+        print(f"  {icon[status]} {typ} {name}: {detail}")
+    return 0 if all(s == "ok" for _, _, s, _ in results) else 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (KeyboardInterrupt, EOFError):
+        sys.exit("\nCancelled.")
+    except (RecoverError, ApiError) as e:
+        sys.exit(f"ERROR: {e}")
