@@ -145,15 +145,19 @@ def unbundle(text, out_src, asset_map=None, log=None, restore_names=True, known=
         written += 1
     return written, skipped
 
+VENDOR_DIRS = ("node_modules", ".wrangler")     # never written out: dependencies are re-installed from package.json, not stored
+
 def extract_source_map(map_bytes, out_dir):
+    """Write the app's original files from a source map. Returns (written, skipped_vendor).
+    Sources inside node_modules/ (and wrangler's own scaffolding) are skipped - they are the 100% extra storage."""
     obj = json.loads(map_bytes)
-    n = 0
+    n = skipped = 0
     for s, c in zip(obj.get("sources", []), obj.get("sourcesContent") or []):
         if c is None: continue
         parts = [x for x in re.sub(r"^[\w+.-]+://", "", s).split("/") if x not in ("", ".", "..")]
         if not parts: continue
+        if any(x in VENDOR_DIRS for x in parts): skipped += 1; continue
         dest = out_dir.joinpath(*parts)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(c); n += 1
-    return n
-
+    return n, skipped

@@ -21,6 +21,7 @@ Needs only Python 3.9+ (standard library). Modules (all _3bvk_recover_*.py besid
     worker     one worker's pipeline                   unbundle   esbuild bundle -> modules / source maps
     jslex      JS lexer + esbuild clean-ups            names      collision-suffix restoration
     project    wrangler / _headers / _redirects        wasm       .wasm -> .wat       util   shared helpers
+    wrangler   real wrangler config via `wrangler init --from-dash` in a throwaway folder (nothing installed)
 Output per worker: src/ (or src-from-map/), wrangler.*, raw/, config/, RECOVERY-REPORT.txt, RENAMES.txt
 """
 import argparse, os, re, sys, traceback

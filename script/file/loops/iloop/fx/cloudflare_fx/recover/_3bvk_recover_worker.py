@@ -12,6 +12,7 @@ from _3bvk_recover_unbundle import HASHED_ASSET, extract_source_map, unbundle
 from _3bvk_recover_wasm import wasm_to_wat
 from _3bvk_recover_project import (ASSET_RULE_FILES, build_wrangler, copy_project_files, project_identifiers, read_wrangler)
 from _3bvk_recover_util import RecoverError, safe_join
+import _3bvk_recover_wrangler as wr
 
 API_THREADS = max(1, int(os.environ.get("BVK_WORKER_THREADS", "12") or 12))   # parallel API calls inside ONE worker
 
@@ -112,8 +113,9 @@ def recover_worker(name, token, account, out, project, rep):
     for n, b in maps:
         (out / "raw" / n).write_bytes(b)
         try:
-            k = extract_source_map(b, out / "src-from-map"); exact += k
-            say(f"  source map {n}: {k} original file(s) recovered EXACTLY")
+            k, vend = extract_source_map(b, out / "src-from-map"); exact += k
+            say(f"  source map {n}: {k} original file(s) recovered EXACTLY"
+                + (f"; {vend} node_modules file(s) skipped (not stored)" if vend else ""))
         except Exception as e:
             say(f"  could not parse source map {n}: {e}")
     refs = []
@@ -200,13 +202,28 @@ def recover_worker(name, token, account, out, project, rep):
                 if main and not (out / main).exists():
                     say(f"  WARNING: {r} has main = {main!r} but that file is not in the recovered output - adjust the path.")
     else:
-        (out / "wrangler.jsonc").write_text(gtext)
-        say("  WARNING: wrangler.jsonc was REBUILT from Cloudflare settings - it is not the original file (comments,")
-        say("  formatting, cron triggers, routes, custom domains, migrations and _headers/_redirects are not recoverable")
-        say("  from the API). Re-run with --project <original folder> for byte-exact copies.")
+        # no original project folder: ask wrangler itself (`init --from-dash`, run in a throwaway folder, nothing installed)
+        got = None
+        if wr.enabled():
+            try:
+                got = wr.config_from_dash(name, token, account)
+            except wr.WranglerError as e:
+                say(f"  wrangler init --from-dash unavailable ({e}); falling back to the REST-API rebuild")
+        if got:
+            fname, wdata = got
+            wdata, changed = wr.set_main(fname, wdata, f"src/{main_name}")
+            (out / fname).write_bytes(wdata)
+            say(f"  {fname} written by `wrangler init --from-dash` (the dashboard-accurate config;"
+                f" nothing installed, no node_modules / package.json kept)")
+            say(f"  main -> src/{main_name}" if changed else f"  WARNING: no top-level `main` in {fname}; check it points at src/{main_name}.")
+        else:
+            (out / "wrangler.jsonc").write_text(gtext)
+            say("  WARNING: wrangler.jsonc was REBUILT from Cloudflare settings - it is not the original file (comments,")
+            say("  formatting, cron triggers, routes, custom domains, migrations and _headers/_redirects are not recoverable")
+            say("  from the API). Install Node.js/wrangler, or re-run with --project <original folder>, for the real file.")
     say(f"  secrets to re-set: {', '.join(secrets) if secrets else 'none'}")
 
     say("\nDone. Output: " + str(out))
     say("Next: cd into it, run `npx wrangler deploy --dry-run`, diff against live behavior, then commit to git.")
-    say("Lost for good without a source map: comments, TypeScript types, original formatting, package.json, tests.")
+    say("Lost for good without a source map: comments, TypeScript types, original formatting, tests. (package.json / node_modules are intentionally not kept; re-create with npm init + npm i.)")
     (out / "RECOVERY-REPORT.txt").write_text(rep.text())
