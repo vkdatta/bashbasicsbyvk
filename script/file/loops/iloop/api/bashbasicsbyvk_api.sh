@@ -3,12 +3,14 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  api   opens the link manager (also: Home → Links).   Every ACTIVE link you made with up- / c2c- is
 #  listed, soonest expiry first. A link is shown by its ALIAS (up-1-3 as user data); without one you see
-#  the start of its id. The full link is never shown here: its decryption key lives only in the link you
-#  were given when you made it — the server never sees it.
+#  the start of its id. The full link is shown only on request (c-N). Its decryption key is kept on this
+#  computer, never on the server.
 #
 #  Commands
 #    N          open link N (details, then  e  edit  /  x  nuke)
-#    a-N        set or rename the alias of link N   a-N my notes  (also works for links made without one)
+#    c-N        copy the link of link N to the clipboard  c-1,3-5 (several, one per line)  — no re-upload; g-N is the same
+#    k-N        attach the key of an OLDER link (paste its full link once) so c-N works for it too
+#    a-N        set or rename the alias of link N   a-N my notes  (saved on the server; also works for links made without one)
 #    e-N        edit the expiry of link N          e-N 2d   (value given inline)
 #    x-N        nuke link N now                    x-1,3-5  (several)
 #    rf         refresh the list          u  exit          api  close          q  quit the app
@@ -21,7 +23,7 @@
 #      shorten / nuke    refunded to your ledger in WHOLE DAYS only; time already used is rounded UP to a
 #                        whole day (a 30-day link nuked after 1 day and 1 minute refunds 28 days, not 29)
 #
-#  Server routes used:  GET /links · POST /links/<id>/expiry · DELETE /links/<id>   (full credentials)
+#  Server routes used:  GET /links · POST /links/<id>/expiry · POST /links/<id>/alias · DELETE /links/<id>   (full credentials)
 #
 #  Uses (from the main app): _vp_* viewport, _read_choice_filtered, _inner_run, _filter_reset_state,
 #  _bvk_quit, parse_selection, and _bb_* helpers from _3bvk_fileapi_lib.sh
@@ -92,17 +94,30 @@ _api_load() {
             _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i") ;;
     esac
   done <<<"$out"
+  _api_sync_local_aliases
+  _api_prune_keys
   _api_apply_aliases
   return 0
 }
 
-# ── local aliases ─────────────────────────────────────────────────────────────
-# The server only learns an alias when a link is made (up-/c2c- … as <alias>). So that ANY link can
-# be named or renamed later — also ones made without an alias — the names you give here are kept on
-# this computer: ~/.bashbasicsbyvk/link_aliases   (one line per link:  <id> TAB <alias>)
-# They win over the alias the server holds. Aliases are labels only; the link itself never changes.
+# ── aliases ───────────────────────────────────────────────────────────────────
+# An alias is stored ON THE SERVER (POST /links/<id>/alias), so it is the same on every computer and can
+# be set or renamed for any link, also one made without an alias.
+# ~/.bashbasicsbyvk/link_aliases (one line per link:  <id> TAB <alias>) is now only a PENDING list: a name
+# that could not be sent (offline, error) — and names saved by older versions, which were local-only.
+# They are pushed to the server the next time the list loads, then dropped from the file.
 _API_ALIAS_FILE="${HOME}/.bashbasicsbyvk/link_aliases"
+_API_ALIAS_PUSH_MAX=25      # at most this many pending names are pushed per refresh
 
+# _api_alias_push <id> <alias|"">   ""/null removes the alias.  Sets _API_STATUS.
+_api_alias_push() {
+  local id="$1" al="$2" body
+  if [ -n "$al" ]; then body="{\"alias\":\"$al\"}"; else body='{"alias":null}'; fi   # alias charset has no quotes/backslashes
+  _api_http POST "/links/$id/alias" "$body" || return 1
+  [ "$_API_STATUS" = "200" ]
+}
+
+# apply pending names on top of the server's, for display
 _api_apply_aliases() {
   [ -f "$_API_ALIAS_FILE" ] || return 0
   local id al i
@@ -114,37 +129,150 @@ _api_apply_aliases() {
   done < "$_API_ALIAS_FILE"
 }
 
-# _api_alias_store <id> <alias|"">   ("" = forget the local name → the server's alias, if any, shows again)
+# _api_alias_store <id> <alias|"">   pending list: "" = forget the entry
 _api_alias_store() {
   local id="$1" al="$2" tmp
   mkdir -p "$(dirname "$_API_ALIAS_FILE")" 2>/dev/null
   tmp="$(mktemp "${_API_ALIAS_FILE}.XXXXXX" 2>/dev/null)" || return 1
   { [ -f "$_API_ALIAS_FILE" ] && awk -F'\t' -v id="$id" '$1 != id' "$_API_ALIAS_FILE"
     [ -n "$al" ] && printf '%s\t%s\n' "$id" "$al"; true; } > "$tmp"
-  mv -f "$tmp" "$_API_ALIAS_FILE"
+  if [ ! -s "$tmp" ]; then rm -f "$tmp" "$_API_ALIAS_FILE"; else mv -f "$tmp" "$_API_ALIAS_FILE"; fi
 }
 
-# _api_do_alias <idx> [alias]  — set / rename (blank new name = cancel; "-" = remove the local name)
+# after a successful list load: push pending names, drop the ones that are settled or whose link is gone
+_api_sync_local_aliases() {
+  [ -f "$_API_ALIAS_FILE" ] || return 0
+  local -a pids=() pals=()
+  local id al i pushed=0 found
+  while IFS=$'\t' read -r id al || [ -n "$id" ]; do
+    [ -n "$id" ] && [ -n "$al" ] || continue
+    pids+=("$id"); pals+=("$al")
+  done < "$_API_ALIAS_FILE"
+  for i in "${!pids[@]}"; do
+    id="${pids[$i]}"; al="${pals[$i]}"; found=-1
+    local j
+    for j in "${!_API_ID[@]}"; do [ "${_API_ID[$j]}" = "$id" ] && { found=$j; break; }; done
+    if [ "$found" -lt 0 ]; then _api_alias_store "$id" ""; continue; fi            # link expired / nuked
+    if [ "${_API_ALIAS[$found]}" = "$al" ]; then _api_alias_store "$id" ""; continue; fi   # server already has it
+    [ "$pushed" -ge "$_API_ALIAS_PUSH_MAX" ] && continue
+    pushed=$((pushed + 1))
+    if _api_alias_push "$id" "$al"; then _API_ALIAS[$found]="$al"; _api_alias_store "$id" ""; fi
+  done
+}
+
+# _api_do_alias <idx> [alias]  — set / rename (blank new name = cancel; "-" = remove the alias)
 _api_do_alias() {
-  local k="$1" new="${2:-}"
+  local k="$1" new="${2:-}" id="${_API_ID[$1]}"
   echo "🏷️  Link $((k + 1)):  current alias: ${_API_ALIAS[$k]:-(none)}"
   if [ -z "$new" ]; then
-    read -e -r -p "   New alias (blank = cancel, - = remove local alias): " new
+    read -e -r -p "   New alias (blank = cancel, - = remove alias): " new
   fi
   new="${new#"${new%%[![:space:]]*}"}"; new="${new%"${new##*[![:space:]]}"}"
   [ -z "$new" ] && { echo "🚫 Skipped"; return 1; }
   if [ "$new" = "-" ]; then
-    _api_alias_store "${_API_ID[$k]}" "" || { echo "❌ Could not save"; return 1; }
-    echo "✅ Local alias removed"
+    if _api_alias_push "$id" ""; then
+      _api_alias_store "$id" ""
+      echo "✅ Alias removed"
+    else
+      _api_fail; return 1
+    fi
   else
     if [[ ! "$new" =~ $_BB_ALIAS_RE ]]; then
       echo "⚠️  Alias may use letters, digits, spaces and . _ @ + -  (1-48 characters)."; return 1
     fi
-    _api_alias_store "${_API_ID[$k]}" "$new" || { echo "❌ Could not save"; return 1; }
-    echo "✅ Alias: $new"
+    if _api_alias_push "$id" "$new"; then
+      _api_alias_store "$id" ""                     # settled on the server: no pending copy needed
+      echo "✅ Alias: $new   (saved to the server)"
+    elif [ "$_API_STATUS" = "000" ] || [[ "$_API_STATUS" == 5* ]]; then
+      _api_alias_store "$id" "$new" || { echo "❌ Could not save"; return 1; }
+      _api_fail
+      echo "💾 Kept on this computer — it will be sent to the server the next time the list loads."
+    else
+      _api_fail; return 1
+    fi
   fi
   _API_LOADED=0
   return 0
+}
+
+# ── copy / rebuild links ──────────────────────────────────────────────────────
+# A link = <server>/<id>#k=<key>. The id is on the server; the key is kept on this computer (link_keys,
+# see _3bvk_fileapi_lib.sh) from the moment a link is made. So any link can be copied or rebuilt at will —
+# nothing is uploaded again. Links made before this feature have no stored key: attach it once with
+# k-N (paste the old link) and they work too.
+
+# drop keys of links that are gone (expired / nuked); only after a successful list load
+_api_prune_keys() {
+  [ -f "$_BB_KEY_FILE" ] || return 0
+  local -a gone=()
+  local id k i present
+  while IFS=$'\t' read -r id k || [ -n "$id" ]; do
+    [ -n "$id" ] || continue
+    present=0
+    for i in "${!_API_ID[@]}"; do [ "${_API_ID[$i]}" = "$id" ] && { present=1; break; }; done
+    [ "$present" -eq 0 ] && gone+=("$id")
+  done < "$_BB_KEY_FILE"
+  for id in "${gone[@]}"; do _bb_key_store "$id" ""; done
+}
+
+# _api_link_url <idx>  → full link on stdout, status 1 when the key is unknown
+_api_link_url() {
+  local id="${_API_ID[$1]}" key
+  key=$(_bb_key_get "$id") || return 1
+  printf '%s/%s#k=%s' "${WORKER_URL%/}" "$id" "$key"
+}
+
+# c-LIST / g-LIST : copy (and show) the link(s).  c-2   c-1,3   c-1-4
+_api_cmd_copy() {
+  local list="$1" idx k url out="" shown=0 missing=0
+  local -a ks=()
+  for idx in $(parse_selection "$list" "${#items[@]}"); do ks+=("$((idx - 1))"); done
+  if [ "${#ks[@]}" -eq 0 ]; then echo "⚠️  Usage: c-2   or   c-1,3-5   (copies the link; g- does the same)"; return 1; fi
+  echo "🔗 Links:"
+  for k in "${ks[@]}"; do
+    if url=$(_api_link_url "$k"); then
+      printf '   %s\n   %s\n' "$(_api_name "$k")" "$url"
+      out+="${url}"$'\n'; shown=$((shown + 1))
+    else
+      printf '   %s\n   ❌ key not stored on this computer — attach it with  k-%s  (paste the old link once)\n' "$(_api_name "$k")" "$((k + 1))"
+      missing=$((missing + 1))
+    fi
+  done
+  if [ "$shown" -gt 0 ]; then
+    out="${out%$'\n'}"
+    if declare -F bashbasicsbyvk_copy >/dev/null 2>&1 && printf '%s' "$out" | bashbasicsbyvk_copy 2>/dev/null; then
+      echo "✅ $shown link(s) copied to the clipboard$( [ "$shown" -gt 1 ] && printf ' (one per line)' )"
+    else
+      echo "ℹ️  Could not reach a clipboard — select the link(s) above to copy them."
+    fi
+  fi
+  [ "$missing" -gt 0 ] && echo "⚠️  $missing link(s) have no stored key."
+  [ "$shown" -gt 0 ]
+}
+
+# k-N [link] : remember the key of an existing link (for links made before keys were stored)
+_api_cmd_key() {
+  local arg="$1" num link="" key
+  num="${arg%%[[:space:]]*}"
+  [ "$num" != "$arg" ] && link="${arg#*[[:space:]]}"
+  _api_pick "$num" || return 1
+  local k="$_api_k" id="${_API_ID[$_api_k]}"
+  echo "🔑 Link $((k + 1)): $(_api_name "$k")"
+  if [ -z "$link" ]; then
+    read -e -r -p "   Paste the full link (with #k=…), or just the key (blank = cancel): " link
+  fi
+  link="${link#"${link%%[![:space:]]*}"}"; link="${link%"${link##*[![:space:]]}"}"
+  [ -z "$link" ] && { echo "🚫 Skipped"; return 1; }
+  if [[ "$link" == *"#k="* ]]; then
+    key="${link#*#k=}"
+    local base="${link%%#*}"; base="${base%/}"
+    if [ "${base##*/}" != "$id" ]; then echo "⚠️  That link is for a different upload — not saved."; return 1; fi
+  else
+    key="$link"
+  fi
+  if [[ ! "$key" =~ $_BB_KEY_RE ]]; then echo "⚠️  Not a valid key (43 characters: letters, digits, - and _)."; return 1; fi
+  _bb_key_store "$id" "$key" || { echo "❌ Could not save"; return 1; }
+  echo "✅ Key saved on this computer — c-$((k + 1)) now copies this link."
 }
 
 _api_cmd_alias() {       # a-N [alias]      a-1-3 and a-1,3 not supported here: one link at a time
@@ -225,7 +353,7 @@ _api_tick() {
 _api_menu_header() {
   echo
   printf '🔗 LINKS (api)   💳 balance: %s credits\n' "${_API_BAL:-?}"
-  printf '   soonest expiry first · shown by alias (up-1-3 as <alias>) · the key never leaves your machine\n'
+  printf '   soonest expiry first · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine\n'
   [ -n "$_API_ERR" ] && printf '   ⚠️  %s — rf to retry\n' "$_API_ERR"
   if [ -z "$_API_ERR" ] && [ "${#items[@]}" -eq 0 ]; then
     printf '   No active links. Make one with  up-1-3 as notes  or  c2c-2 as snippet.\n'
@@ -235,7 +363,7 @@ _api_menu_header() {
 
 _api_menu_footer() {
   printf '\n[Links]  %d active   🕐 times in %s  (change: s → Timezone)\n' "${#items[@]}" "$(_tz_label 2>/dev/null || date +%Z)"
-  printf 'N) Open   a-N) Alias/rename   e-N) Edit expiry   x-N) Nuke (x-1,3-5 for several)\n'
+  printf 'N) Open   c-N) Copy link (c-1,3-5 several)   a-N) Alias   e-N) Edit expiry   x-N) Nuke\n'
   printf 'rf) Refresh   u) Exit   api) Close\n'
 }
 
@@ -255,7 +383,10 @@ _api_build_items() {
   _filter_reset_state
   items=()
   _hl_index=0
-  if [ "$_API_LOADED" -eq 0 ]; then echo "⏳ Fetching your links…"; _api_load; fi
+  if [ "$_API_LOADED" -eq 0 ]; then
+    if declare -F _lb_run >/dev/null 2>&1; then _lb_run "Fetching your links" _api_load || true
+    else echo "⏳ Fetching your links…"; _api_load; fi
+  fi
   items=("${_API_ID[@]}")
   _all_items=("${items[@]}")
 }
@@ -294,8 +425,10 @@ _api_cmd_open() {
   _api_pick "$1" || return 1
   _api_show "$_api_k"
   local ans
-  read -e -r -p "   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans
+  read -e -r -p "   c) copy link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans
   case "${ans,,}" in
+    c|g) _api_cmd_copy "$((_api_k + 1))" ;;
+    k) _api_cmd_key "$((_api_k + 1))" ;;
     a) _api_do_alias "$_api_k" "" ;;
     e) _api_do_edit "$_api_k" "" ;;
     x) _api_do_nuke "$_api_k" ;;
@@ -409,13 +542,14 @@ _api_help() {
 🔗 LINKS  (api)
  Every active link you made with up- / c2c-, soonest expiry first. Shown by ALIAS:
    up-1-3 as user data      c2c-2 as snippet      (no alias → the start of the id)
- N open · a-N [name] set/rename alias (a-N - removes it) · e-N [time] edit expiry · x-N nuke (x-1,3-5 several) · rf refresh · u exit · api close
+ N open · c-N copy link (c-1,3-5 several; rebuilt from the key kept on this computer) · k-N attach key of an older link · a-N [name] set/rename alias, saved on the server (a-N - removes it) · e-N [time] edit expiry · x-N nuke (x-1,3-5 several) · rf refresh · u exit · api close
  time = the NEW TOTAL life from creation:  2d · 36h · 1 week     or  +12h extend / -1d shorten
    limits 1 minute – 30 days
  extend  → the extra time is charged now (1 credit per GB per hour, size-bucket minimums, as an upload)
  shorten / nuke → refunded in WHOLE DAYS only; time already used rounds UP to a full day
    (30 days, nuked after 1 day + 1 minute → 28 days refunded)
- The full link (with its key) is not stored anywhere but in the copy you were given.
+ Keys of NEW links are kept on this computer (~/.bashbasicsbyvk/link_keys, never sent to the server), so c-N can
+ rebuild a link without uploading anything. Older links: k-N once. Disable storing with FILEAPI_BASHBASICS_STORE_KEYS=0.
  Change the default lifetime of new links in Settings → Nuke time.
 HLP
 }
@@ -461,6 +595,8 @@ api_menu() {
 
       rf) _API_LOADED=0 ;;                       # rebuilt (and re-fetched) below
 
+      c-*|g-*) _api_cmd_copy "${_ap_choice#[cCgG]-}" || true ;;
+      k-*) _api_cmd_key "${_ap_choice#[kK]-}" || true ;;
       a-*) _api_cmd_alias "${_ap_choice#[aA]-}" || true ;;
       e-*) _api_cmd_edit "${_ap_choice#[eE]-}" || true ;;
       x-*) _api_cmd_nuke "${_ap_choice#[xX]-}" || true ;;

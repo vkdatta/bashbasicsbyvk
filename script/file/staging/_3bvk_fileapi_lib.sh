@@ -190,3 +190,43 @@ _bb_print_expiry() {
   echo "$label"
   echo "   Change or nuke it early from  api  (Home → Links)."
 }
+
+
+# ---- link keys (so a link can be copied / rebuilt later from the api loop) --------------------------
+# The decryption key lives only in the "#k=" part of a link. To let you copy a link again without
+# uploading anything, the key is kept on THIS computer: ~/.bashbasicsbyvk/link_keys  (<id> TAB <key>, mode 600).
+# It never goes to the server. Turn it off with  FILEAPI_BASHBASICS_STORE_KEYS=0  (new links only).
+_BB_KEY_FILE="${HOME}/.bashbasicsbyvk/link_keys"
+_BB_KEY_RE='^[A-Za-z0-9_-]{43}$'
+
+# _bb_key_store <id> <key|"">   ("" = forget)
+_bb_key_store() {
+  local id="$1" key="$2" tmp
+  [[ "$id" =~ ^[A-Za-z0-9_-]{1,256}$ ]] || return 1
+  mkdir -p "$(dirname "$_BB_KEY_FILE")" 2>/dev/null
+  tmp="$(umask 077; mktemp "${_BB_KEY_FILE}.XXXXXX" 2>/dev/null)" || return 1
+  { [ -f "$_BB_KEY_FILE" ] && awk -F'\t' -v id="$id" '$1 != id' "$_BB_KEY_FILE"
+    [ -n "$key" ] && printf '%s\t%s\n' "$id" "$key"; true; } > "$tmp"
+  chmod 600 "$tmp" 2>/dev/null
+  mv -f "$tmp" "$_BB_KEY_FILE"
+}
+
+# _bb_key_get <id>  → key on stdout, status 1 when unknown
+_bb_key_get() {
+  local id="$1" k i
+  [ -f "$_BB_KEY_FILE" ] || return 1
+  while IFS=$'\t' read -r i k || [ -n "$i" ]; do
+    [ "$i" = "$id" ] && [[ "$k" =~ $_BB_KEY_RE ]] && { printf '%s' "$k"; return 0; }
+  done < "$_BB_KEY_FILE"
+  return 1
+}
+
+# _bb_key_remember <full link with #k=...>   (called for every new link)
+_bb_key_remember() {
+  [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" = "0" ] && return 0
+  local url="$1" base id key
+  [[ "$url" == *"#k="* ]] || return 0
+  key="${url#*#k=}"; base="${url%%#*}"; base="${base%/}"; id="${base##*/}"
+  [[ "$key" =~ $_BB_KEY_RE ]] || return 0
+  _bb_key_store "$id" "$key" 2>/dev/null || true
+}

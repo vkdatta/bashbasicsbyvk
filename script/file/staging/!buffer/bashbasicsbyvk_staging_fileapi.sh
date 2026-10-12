@@ -140,6 +140,7 @@ _crypto_decrypt_stdin() {
 _announce_link() {
   local final_url="$1"
   local url_payload
+  _bb_key_remember "$final_url"          # so the api loop can copy / rebuild this link later (no re-upload)
   url_payload=$(printf "%s" "$final_url" | base64 | tr -d '\n')
 
   if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
