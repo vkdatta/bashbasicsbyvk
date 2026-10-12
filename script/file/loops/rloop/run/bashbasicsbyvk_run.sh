@@ -23,7 +23,8 @@ handle_file() {
         echo "7) Rename File"
         echo "8) Share"
 
-        _menu_footer_lines
+        mapfile -t _fl < <(_menu_footer_lines)
+        printf '%s\n' "${_fl[@]}"
 
         read -e -p "Enter choice: " action
 
