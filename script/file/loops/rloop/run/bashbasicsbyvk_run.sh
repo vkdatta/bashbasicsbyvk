@@ -8,6 +8,7 @@ copy_to_clipboard() {
 
 handle_file() {
     local file="$1"
+
     while true; do
         echo
         echo "📄 File selected: $(basename "$file")"
@@ -21,57 +22,24 @@ handle_file() {
         echo "6) Replace With Clipboard Content"
         echo "7) Rename File"
         echo "8) Share"
-        builtin printf "u) Up   q) Quit   h) Home\n"
+
+        _menu_footer_lines
 
         read -e -p "Enter choice: " action
 
         case "$action" in
-            0)
-                run_file "$file"
-                return 1
-                ;;
-            1)
-                force_open "$file"
-                return 1
-                ;;
-            2)
-                nano "$file"
-                return 1
-                ;;
-            3)
-                bashbasicsbyvk_copy "$file"
-                return 1
-                ;;
-            4)
-                bashbasicsbyvk_delete "$file"
-                return 1
-                ;;
-            5)
-                bashbasicsbyvk_erase "$file"
-                return 1
-                ;;
-            6)
-                bashbasicsbyvk_overwrite "$file"
-                return 1
-                ;;
-            7)
-                rename_item "$file"
-                return 1
-                ;;
-            8)
-                force_share "$file"
-                return 1
-                ;;
-            u|U)
-                return 1
-                ;;
-            h|H)
-                home_menu
-                return 1
-                ;;
-            q|Q)
-                exit 0
-                ;;
+            0) run_file "$file"; return 1 ;;
+            1) force_open "$file"; return 1 ;;
+            2) nano "$file"; return 1 ;;
+            3) bashbasicsbyvk_copy "$file"; return 1 ;;
+            4) bashbasicsbyvk_delete "$file"; return 1 ;;
+            5) bashbasicsbyvk_erase "$file"; return 1 ;;
+            6) bashbasicsbyvk_overwrite "$file"; return 1 ;;
+            7) rename_item "$file"; return 1 ;;
+            8) force_share "$file"; return 1 ;;
+            u|U) return 1 ;;
+            h|H) home_menu; return 1 ;;
+            q|Q) exit 0 ;;
             *)
                 echo "❌ Invalid option. Try again."
                 ;;
