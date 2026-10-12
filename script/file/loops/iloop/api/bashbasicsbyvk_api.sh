@@ -8,7 +8,8 @@
 #
 #  Commands
 #    N          open link N (details, then  e  edit  /  x  nuke)
-#    c-N        copy the link of link N to the clipboard  c-1,3-5 (several, one per line)  — no re-upload; g-N is the same
+#    c-N        copy the link of link N to the clipboard (bashbasicsbyvk_copy)   c-1,3-5 several, one per line
+#    g-N        regenerate: link N gets a NEW address (old one stops working at once), nothing re-uploaded   g-1,3-5
 #    k-N        attach the key of an OLDER link (paste its full link once) so c-N works for it too
 #    a-N        set or rename the alias of link N   a-N my notes  (saved on the server; also works for links made without one)
 #    e-N        edit the expiry of link N          e-N 2d   (value given inline)
@@ -23,14 +24,14 @@
 #      shorten / nuke    refunded to your ledger in WHOLE DAYS only; time already used is rounded UP to a
 #                        whole day (a 30-day link nuked after 1 day and 1 minute refunds 28 days, not 29)
 #
-#  Server routes used:  GET /links · POST /links/<id>/expiry · POST /links/<id>/alias · DELETE /links/<id>   (full credentials)
+#  Server routes used:  GET /links · POST /links/<id>/expiry · POST /links/<id>/alias · POST /links/<id>/regenerate · DELETE /links/<id>   (full credentials)
 #
 #  Uses (from the main app): _vp_* viewport, _read_choice_filtered, _inner_run, _filter_reset_state,
 #  _bvk_quit, parse_selection, and _bb_* helpers from _3bvk_fileapi_lib.sh
 # ════════════════════════════════════════════════════════════════════════════
 
 declare -ga _API_ID=() _API_KIND=() _API_ALIAS=() _API_BYTES=() _API_CREATED=() _API_EXPIRES=()
-declare -ga _API_PAID=() _API_RFND=() _API_RFND_D=()
+declare -ga _API_PAID=() _API_RFND=() _API_RFND_D=() _API_PUB=()
 _API_BAL=""
 _API_NOW=0           # server clock (ms) at the last refresh
 _API_LOCAL=0         # this computer's clock (s) at the same moment → server "now" stays live between refreshes
@@ -68,7 +69,7 @@ _api_fail() {            # prints the server's reason for the last call
 # ── loading ───────────────────────────────────────────────────────────────────
 _api_load() {
   _API_ID=(); _API_KIND=(); _API_ALIAS=(); _API_BYTES=(); _API_CREATED=(); _API_EXPIRES=()
-  _API_PAID=(); _API_RFND=(); _API_RFND_D=()
+  _API_PAID=(); _API_RFND=(); _API_RFND_D=(); _API_PUB=()
   _API_ERR=""; _API_LOADED=1; _API_BAL=""
   if ! _crypto_check >/dev/null 2>&1; then _API_ERR="node is required (used to read the server's answer)"; return 1; fi
   _api_http GET /links || { _API_ERR="no active user — run  -auth  inside 'o'"; return 1; }
@@ -83,15 +84,15 @@ _api_load() {
       const clean = (v) => String(v ?? "").replace(/[\x00-\x1f\x7f]/g, " ");
       console.log(["META", o.balance, o.now].join(US));
       for (const l of o.links) {
-        console.log(["L", l.id, l.kind, clean(l.alias), l.bytes, l.createdAt, l.expiresAt, l.paidHours, l.nukeRefund, l.nukeRefundDays].join(US));
+        console.log(["L", l.id, l.kind, clean(l.alias), l.bytes, l.createdAt, l.expiresAt, l.paidHours, l.nukeRefund, l.nukeRefundDays, l.publicId || l.id].join(US));
       }
     });' <<<"$_API_BODY") || { _API_ERR="the server answered, but not with a link list"; return 1; }
-  local tag a b c d e f g h i
-  while IFS="$_API_US" read -r tag a b c d e f g h i; do
+  local tag a b c d e f g h i j
+  while IFS="$_API_US" read -r tag a b c d e f g h i j; do
     case "$tag" in
       META) _API_BAL="$a"; _API_NOW="$b"; _API_LOCAL="${EPOCHSECONDS:-$(date +%s)}"; _API_PRE=(); _API_POST=() ;;
       L)    _API_ID+=("$a"); _API_KIND+=("$b"); _API_ALIAS+=("$c"); _API_BYTES+=("$d")
-            _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i") ;;
+            _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i"); _API_PUB+=("${j:-$a}") ;;
     esac
   done <<<"$out"
   _api_sync_local_aliases
@@ -219,35 +220,79 @@ _api_prune_keys() {
 _api_link_url() {
   local id="${_API_ID[$1]}" key
   key=$(_bb_key_get "$id") || return 1
-  printf '%s/%s#k=%s' "${WORKER_URL%/}" "$id" "$key"
+  printf '%s/%s#k=%s' "${WORKER_URL%/}" "${_API_PUB[$1]:-$id}" "$key"
 }
 
-# c-LIST / g-LIST : copy (and show) the link(s).  c-2   c-1,3   c-1-4
+# can this machine copy more than ~1 KB without bashbasicsbyvk_copy falling back to uploading it?
+# (with no native clipboard tool that script UPLOADS anything over 1 KB — which would cost credits)
+_api_clip_native() {
+  local t
+  for t in pbcopy clip.exe wl-copy xclip termux-clipboard-set; do command -v "$t" >/dev/null 2>&1 && return 0; done
+  return 1
+}
+
+# c-LIST : copy the link(s) to the clipboard with bashbasicsbyvk_copy.  c-2   c-1,3   c-1-4
 _api_cmd_copy() {
-  local list="$1" idx k url out="" shown=0 missing=0
-  local -a ks=()
+  local list="$1" idx k url out="" got=0 missing=0 n
+  local -a ks=() shown=()
   for idx in $(parse_selection "$list" "${#items[@]}"); do ks+=("$((idx - 1))"); done
-  if [ "${#ks[@]}" -eq 0 ]; then echo "⚠️  Usage: c-2   or   c-1,3-5   (copies the link; g- does the same)"; return 1; fi
-  echo "🔗 Links:"
+  if [ "${#ks[@]}" -eq 0 ]; then echo "⚠️  Usage: c-2   or   c-1,3-5   (copies the link to the clipboard)"; return 1; fi
   for k in "${ks[@]}"; do
     if url=$(_api_link_url "$k"); then
-      printf '   %s\n   %s\n' "$(_api_name "$k")" "$url"
-      out+="${url}"$'\n'; shown=$((shown + 1))
+      out+="${url}"$'\n'; shown+=("$url"); got=$((got + 1))
     else
-      printf '   %s\n   ❌ key not stored on this computer — attach it with  k-%s  (paste the old link once)\n' "$(_api_name "$k")" "$((k + 1))"
+      echo "❌ $(_api_name "$k"): key not stored on this computer — attach it with  k-$((k + 1))  (paste the old link once)"
       missing=$((missing + 1))
     fi
   done
-  if [ "$shown" -gt 0 ]; then
-    out="${out%$'\n'}"
-    if declare -F bashbasicsbyvk_copy >/dev/null 2>&1 && printf '%s' "$out" | bashbasicsbyvk_copy 2>/dev/null; then
-      echo "✅ $shown link(s) copied to the clipboard$( [ "$shown" -gt 1 ] && printf ' (one per line)' )"
-    else
-      echo "ℹ️  Could not reach a clipboard — select the link(s) above to copy them."
-    fi
+  [ "$got" -gt 0 ] || return 1
+  out="${out%$'\n'}"
+  if ! command -v bashbasicsbyvk_copy >/dev/null 2>&1; then
+    echo "⚠️  bashbasicsbyvk_copy not found — the link(s):"; printf '%s\n' "${shown[@]}"; return 1
   fi
-  [ "$missing" -gt 0 ] && echo "⚠️  $missing link(s) have no stored key."
-  [ "$shown" -gt 0 ]
+  if [ "${#out}" -gt 1000 ] && ! _api_clip_native; then
+    # no native clipboard: a long text would be uploaded instead of copied — keep to what fits in 1 KB
+    local keep="" cnt=0 u
+    for u in "${shown[@]}"; do
+      [ $(( ${#keep} + ${#u} + 1 )) -gt 1000 ] && break
+      keep+="${u}"$'\n'; cnt=$((cnt + 1))
+    done
+    out="${keep%$'\n'}"
+    echo "ℹ️  No system clipboard here: only $cnt of $got link(s) fit one copy. Copy the rest separately."
+    got=$cnt
+  fi
+  printf '%s' "$out" | bashbasicsbyvk_copy
+  echo "📋 $got link(s) copied$( [ "$got" -gt 1 ] && printf ' (one per line)' )"
+  [ "$missing" -gt 0 ] && echo "⚠️  $missing link(s) skipped: no stored key."
+  return 0
+}
+
+# g-LIST : regenerate — give each link a NEW address; the old one stops working at once.
+# Nothing is uploaded again: the data stays where it is, only the id in the address changes (the key stays).
+_api_cmd_regen() {
+  local list="$1" idx k ans ok=0 id
+  local -a ks=() done_ks=()
+  for idx in $(parse_selection "$list" "${#items[@]}"); do ks+=("$((idx - 1))"); done
+  if [ "${#ks[@]}" -eq 0 ]; then echo "⚠️  Usage: g-2   or   g-1,3-5   (new address for the link; the old one dies)"; return 1; fi
+  echo "🔄 Regenerate ${#ks[@]} link(s) — each gets a NEW address; the current address stops working immediately,"
+  echo "   for everyone who has it. Nothing is re-uploaded, expiry and credits are unchanged."
+  for k in "${ks[@]}"; do printf '   • %s\n' "$(_api_name "$k")"; done
+  read -e -r -p "   Regenerate now? (y/N): " ans
+  case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+  for k in "${ks[@]}"; do
+    id="${_API_ID[$k]}"
+    _api_http POST "/links/$id/regenerate" "{}" || return 1
+    if [ "$_API_STATUS" = "200" ]; then
+      echo "✅ $(_api_name "$k"): new address created"
+      ok=$((ok + 1))
+    else
+      printf '%s  ' "$(_api_name "$k"):"; _api_fail
+    fi
+  done
+  [ "$ok" -gt 0 ] || return 1
+  _API_LOADED=0
+  echo "ℹ️  Use  c-N  to copy the new link (numbers can change after a refresh)."
+  return 0
 }
 
 # k-N [link] : remember the key of an existing link (for links made before keys were stored)
@@ -363,7 +408,7 @@ _api_menu_header() {
 
 _api_menu_footer() {
   printf '\n[Links]  %d active   🕐 times in %s  (change: s → Timezone)\n' "${#items[@]}" "$(_tz_label 2>/dev/null || date +%Z)"
-  printf 'N) Open   c-N) Copy link (c-1,3-5 several)   a-N) Alias   e-N) Edit expiry   x-N) Nuke\n'
+  printf 'N) Open   c-N) Copy link (c-1,3-5)   g-N) New address   a-N) Alias   e-N) Expiry   x-N) Nuke\n'
   printf 'rf) Refresh   u) Exit   api) Close\n'
 }
 
@@ -425,9 +470,10 @@ _api_cmd_open() {
   _api_pick "$1" || return 1
   _api_show "$_api_k"
   local ans
-  read -e -r -p "   c) copy link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans
+  read -e -r -p "   c) copy link   g) regenerate link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans
   case "${ans,,}" in
-    c|g) _api_cmd_copy "$((_api_k + 1))" ;;
+    c) _api_cmd_copy "$((_api_k + 1))" ;;
+    g) _api_cmd_regen "$((_api_k + 1))" ;;
     k) _api_cmd_key "$((_api_k + 1))" ;;
     a) _api_do_alias "$_api_k" "" ;;
     e) _api_do_edit "$_api_k" "" ;;
@@ -542,7 +588,7 @@ _api_help() {
 🔗 LINKS  (api)
  Every active link you made with up- / c2c-, soonest expiry first. Shown by ALIAS:
    up-1-3 as user data      c2c-2 as snippet      (no alias → the start of the id)
- N open · c-N copy link (c-1,3-5 several; rebuilt from the key kept on this computer) · k-N attach key of an older link · a-N [name] set/rename alias, saved on the server (a-N - removes it) · e-N [time] edit expiry · x-N nuke (x-1,3-5 several) · rf refresh · u exit · api close
+ N open · c-N copy link (c-1,3-5 several; rebuilt from the key kept on this computer) · g-N new address (old one dies, no re-upload) · k-N attach key of an older link · a-N [name] set/rename alias, saved on the server (a-N - removes it) · e-N [time] edit expiry · x-N nuke (x-1,3-5 several) · rf refresh · u exit · api close
  time = the NEW TOTAL life from creation:  2d · 36h · 1 week     or  +12h extend / -1d shorten
    limits 1 minute – 30 days
  extend  → the extra time is charged now (1 credit per GB per hour, size-bucket minimums, as an upload)
@@ -595,7 +641,8 @@ api_menu() {
 
       rf) _API_LOADED=0 ;;                       # rebuilt (and re-fetched) below
 
-      c-*|g-*) _api_cmd_copy "${_ap_choice#[cCgG]-}" || true ;;
+      c-*) _api_cmd_copy "${_ap_choice#[cC]-}" || true ;;
+      g-*) _api_cmd_regen "${_ap_choice#[gG]-}" || true ;;
       k-*) _api_cmd_key "${_ap_choice#[kK]-}" || true ;;
       a-*) _api_cmd_alias "${_ap_choice#[aA]-}" || true ;;
       e-*) _api_cmd_edit "${_ap_choice#[eE]-}" || true ;;

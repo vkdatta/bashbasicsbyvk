@@ -178,6 +178,7 @@ else
     rm -f "$ENC_FILE"
 
     FINAL_URL="${RAW_URL}#k=${KEY}"
+    _bb_key_remember "$FINAL_URL"     # lets the api loop copy this link again later
 
     URL_PAYLOAD=$(printf "%s" "$FINAL_URL" | base64 | tr -d '\n')
 
