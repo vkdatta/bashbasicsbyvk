@@ -149,12 +149,36 @@ _sm_plain_len() {
   fi
 }
 
-# physical rows a logical line occupies at the current width
+# Display width of a line in terminal cells (emoji / CJK count 2, variation
+# selectors and joiners 0).  Fast path: pure ASCII is just its length.
+_sm_cells() {
+  local s="$1" i c cp w=0
+  if declare -F _vp_strip_ansi >/dev/null 2>&1; then _vp_strip_ansi "$s"; s="$_vp_plain"; fi
+  if [[ "$s" != *[![:ascii:]]* ]]; then _sm_w=${#s}; return 0; fi
+  for ((i=0; i<${#s}; i++)); do
+    c="${s:i:1}"
+    if [[ "$c" == [[:ascii:]] ]]; then w=$(( w + 1 )); continue; fi
+    builtin printf -v cp '%d' "'$c" 2>/dev/null || cp=0
+    if   (( cp == 0xFE0F || cp == 0xFE0E || cp == 0x200D || (cp >= 0x300 && cp <= 0x36F) )); then :
+    elif (( (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) \
+         || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF00 && cp <= 0xFF60) \
+         || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1F64F) || (cp >= 0x1F680 && cp <= 0x1F6FF) \
+         || (cp >= 0x1F900 && cp <= 0x1F9FF) || (cp >= 0x1FA70 && cp <= 0x1FAFF) )); then w=$(( w + 2 ))
+    else w=$(( w + 1 )); fi
+  done
+  _sm_w=$w
+}
+
+# physical rows a logical line occupies at the CURRENT terminal width.
+# (_vp_cols is only refreshed by the viewport geometry, i.e. AFTER the erase
+#  count is made, so it can be stale/default 80 — read the live size instead.)
+# A line of exactly `cols` cells still occupies ONE row (deferred wrap).
 _sm_phys_rows() {
-  local cols="${_vp_cols:-80}"
-  _sm_plain_len "$1"
+  local cols="${_vp_cols_now:-0}"
   (( cols < 2 )) && cols=80
-  _sm_rows_of=$(( _sm_len / cols + 1 ))
+  _sm_cells "$1"
+  if (( _sm_w <= 0 )); then _sm_rows_of=1
+  else _sm_rows_of=$(( (_sm_w + cols - 1) / cols )); fi
 }
 
 # Fills _sm_hdr / _sm_rows_text / _sm_rows_token / _sm_ftr / _sm_erase
@@ -236,7 +260,13 @@ _sm_detect() {
 
   # the options must still be adjacent to the prompt; if a pile of
   # other output came after them, this read is not that menu's read
-  (( n - 1 - last > 3 )) && return 1
+  # (blank lines are layout, not "other output": only non-blank lines count)
+  local _after=0
+  for ((i=last+1; i<n; i++)); do
+    _sm_plain_len "${_sm_lines[$i]}"
+    [ "$_sm_len" -gt 0 ] && _after=$(( _after + 1 ))
+  done
+  (( _after > 3 )) && return 1
 
   # title lines immediately above the first option (max 6, stop at 2nd blank)
   local h_start=$first blanks=0
@@ -252,6 +282,7 @@ _sm_detect() {
   for ((i=last+1; i<n; i++)); do _sm_ftr+=("${_sm_lines[$i]}"); done
 
   # how many physical rows to erase before re-rendering
+  declare -F _vp_probe_size >/dev/null 2>&1 && _vp_probe_size
   _sm_erase=0
   for i in "${_sm_hdr[@]}" "${_sm_rows_text[@]}" "${_sm_ftr[@]}"; do
     _sm_phys_rows "$i"

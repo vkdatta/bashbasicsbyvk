@@ -183,7 +183,7 @@ _st_readkey() {
 _st_draw() {
   local rows cols n=${#_st_lbl[@]} vis i out="" line mark val f1 f2 marks=0 nl=$'\r\033[2K'
   rows=$(_term_rows); cols=$(_term_cols)
-  vis=$(( rows - 9 )); (( vis < 3 )) && vis=3; (( vis > n )) && vis=$n
+  vis=$(( rows - 12 )); (( vis < 3 )) && vis=3; (( vis > n )) && vis=$n
   if (( cur >= 0 )); then
     (( cur < top )) && top=$cur
     (( cur >= top + vis )) && top=$(( cur - vis + 1 ))
@@ -214,6 +214,7 @@ _st_draw() {
   local hd="$path_title"
   [ -n "${fq:-}" ] && hd="$hd   [filter: =$fq]"
   out+="$nl${_st_icon:-⚙️} ${hd:0:cols-4}"$'\n'                          # header
+  out+="$nl"$'\n'                                         # linebreak under the header
   if (( top > 0 )); then out+="$nl   ▲ $top more above"$'\n'; else out+="$nl$_ST_RULE"$'\n'; fi
 
   for (( i=top; i<top+vis; i++ )); do
@@ -242,11 +243,13 @@ _st_draw() {
   done
 
   if (( top + vis < n )); then out+="$nl   ▼ $(( n - top - vis )) more below"$'\n'; else out+="$nl$_ST_RULE"$'\n'; fi
+  out+="$nl"$'\n'                                         # linebreak above the footer
   out+="$nl${f1:0:cols-1}"$'\n'
   out+="$nl${f2:0:cols-1}"$'\n'
+  out+="$nl"$'\n'                                         # linebreak under the footer
   out+="${nl}Select: $buf"$'\033[J'
   builtin printf '\033[?2026h%s\033[?2026l' "$out"
-  prev=$(( vis + 7 ))
+  prev=$(( vis + 10 ))
 }
 
 # erase the block (cursor ends where the block started)

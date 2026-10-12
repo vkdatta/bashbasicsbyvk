@@ -90,9 +90,9 @@ cfw_header() {
 }
 
 cfw_footer() {
-  printf '\nSelect:  N · 1,3-5 · a (all) · a-2 (all except 2)      r) live picker   rf) refresh   u) back\n'
-  printf 'Recover  → %s/<name>-recovered  (worker) · <name>-pages-recovered  (pages)\n' "$_CFW_NAV"
-  printf 'Export   → e (all shown) · e-1,3-5 (picked)  as csv / json / both into the same folder\n'
+  _mc_footer "#Select:  N · 1,3-5 · a (all) · a-2 (all except 2)" "r:live picker" "rf:refresh" "u:back" \
+    "#Recover  → $_CFW_NAV/<name>-recovered  (worker) · <name>-pages-recovered  (pages)" \
+    "#Export   → e (all shown) · e-1,3-5 (picked)  as csv / json / both into the same folder"
 }
 
 # _XUI_SEL (display rows) -> confirm -> recover them

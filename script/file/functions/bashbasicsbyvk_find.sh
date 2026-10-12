@@ -1,10 +1,7 @@
 find_menu() {
-    echo "🔍 Find mode in: $path"
-    echo "1) Find file/folder names"
-    echo "2) Find inside file contents"
-    echo "3) Find & replace in file/folder names"
-    echo "4) Find & replace inside file contents"
-    read -e -p "Choice: " ftype
+    _mc_menu "🔍 Find mode in: $path" -- "Find file/folder names" "Find inside file contents" \
+      "Find & replace in file/folder names" "Find & replace inside file contents" -- @back_quit
+    read -e -p "Select: " ftype
 
     local -a results=()
     case "$ftype" in
@@ -19,11 +16,8 @@ find_menu() {
             mapfile -t results < <(grep -rl "$pat" "$path" 2>/dev/null | head -100)
             ;;
         3)
-            echo ""
-            echo "🔤 Find & Replace in file/folder names"
-            echo "1) Single Mutation"
-            echo "2) Multi Mutation (CSV)"
-            read -e -p "Mode [1-2]: " fr_name_mode
+            _mc_menu "🔤 Find & Replace in file/folder names" -- "Single Mutation" "Multi Mutation (CSV)" -- @back_quit
+            read -e -p "Select: " fr_name_mode
 
             case "$fr_name_mode" in
             u|U) return ;;
@@ -178,11 +172,8 @@ PYEOF
             return
             ;;
         4)
-            echo ""
-            echo "🔄 Find & Replace inside file contents"
-            echo "1) Single Mutation"
-            echo "2) Multi Mutation (CSV)"
-            read -e -p "Mode [1-2]: " fr_mode
+            _mc_menu "🔄 Find & Replace inside file contents" -- "Single Mutation" "Multi Mutation (CSV)" -- @back_quit
+            read -e -p "Select: " fr_mode
 
             case "$fr_mode" in
             u|U) return ;;
@@ -220,10 +211,7 @@ for i, f in enumerate(files, 1):
     print(f"  {i:3d}) {rel}  ({hits} match(es))")
 PYEOF
 
-                    echo ""
-                    echo "a) Apply to ALL files"
-                    echo "Enter number to apply to a single file"
-                    echo "q) Cancel"
+                    _mc_footer "a:Apply to ALL files" "#Enter number to apply to a single file" "q:Cancel"
                     read -e -p "Action: " act
 
                     case "$act" in

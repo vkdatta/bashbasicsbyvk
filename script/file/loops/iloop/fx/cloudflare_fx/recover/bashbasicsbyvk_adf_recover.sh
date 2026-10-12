@@ -68,8 +68,8 @@ rcv_header() {
 }
 
 rcv_footer() {
-  printf '\nSelect workers:  N · 1,3-5 · a (all) · a-2 (all except 2)      r) live picker   rf) refresh   u) back\n'
-  printf 'Recovered into  %s/<worker>-recovered\n' "$_RCV_NAV"
+  _mc_footer "#Select workers:  N · 1,3-5 · a (all) · a-2 (all except 2)" "r:live picker" "rf:refresh" "u:back" \
+    "#Recovered into  $_RCV_NAV/<worker>-recovered"
 }
 
 # _XUI_SEL (display rows) -> confirm -> recover them

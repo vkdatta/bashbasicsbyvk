@@ -54,11 +54,8 @@ _compress_paths() {
   local fmt="${compress_format:-ask}"
 
   if [ "$fmt" = "ask" ]; then
-    echo ""
-    echo "📦 Compress as:"
-    echo "   1) zip"
-    echo "   2) tar.gz"
-    read -e -r -p "Choice [1-2]: " fmt_choice
+    _mc_menu "📦 Compress as:" -- "zip" "tar.gz" -- @back_quit
+    read -e -r -p "Select: " fmt_choice
     fmt_choice="${fmt_choice%$'\r'}"
     case "$fmt_choice" in
     u|U) return ;;

@@ -407,9 +407,9 @@ _api_menu_header() {
 }
 
 _api_menu_footer() {
-  printf '\n[Links]  %d active   🕐 times in %s  (change: s → Timezone)\n' "${#items[@]}" "$(_tz_label 2>/dev/null || date +%Z)"
-  printf 'N) Open   c-N) Copy link (c-1,3-5)   g-N) New address   a-N) Alias   e-N) Expiry   x-N) Nuke\n'
-  printf 'rf) Refresh   u) Exit   api) Close\n'
+  _mc_footer "#[Links]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+    "N:Open" "c-N:Copy link (c-1,3-5)" "g-N:New address" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" \
+    "rf:Refresh" "u:Exit" "api:Close"
 }
 
 _api_set_viewport() {

@@ -391,9 +391,7 @@ _au_list_header() {
   _vp_filter_header_line
 }
 _au_list_footer() {
-  printf '\nc) Create user   r) Remove user   l) Link old account\n'
-  printf 'ux) Export users   ui) Import users   =) Filter\n'
-  printf 'u) Back to main menu   q) Close\n'
+  _mc_footer "c:Create user" "r:Remove user" "l:Link old account" "|" "ux:Export users" "ui:Import users" "=:Filter" "|" "u:Back to main menu" "q:Close"
 }
 _au_list_build() {
   _bvk_auth_list
@@ -417,8 +415,7 @@ _au_user_header() {
   _vp_filter_header_line
 }
 _au_user_footer() {
-  printf '\nux) Export   ui) Import   =) Filter\n'
-  printf 'u) Back   q) Close\n'
+  _mc_footer "ux:Export" "ui:Import" "=:Filter" "|" "u:Back" "q:Close"
 }
 _au_user_build() {                       # returns 1 if the profile vanished
   _bvk_auth_list

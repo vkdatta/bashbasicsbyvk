@@ -13,13 +13,10 @@ _fx_adf_delete_by_date() {
   _fxdel_list_files files
   [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
 
-  echo "🗑️  Delete by date in $path (file modified date):"
-  echo "1) Day     (e.g. 2024-03-15)"
-  echo "2) Month   (e.g. 2024-03)"
-  echo "3) Year    (e.g. 2024)"
-  echo "4) Decade  (e.g. 2020s)"
+  _mc_menu "🗑️  Delete by date in $path (file modified date):" -- "Day     (e.g. 2024-03-15)" \
+    "Month   (e.g. 2024-03)" "Year    (e.g. 2024)" "Decade  (e.g. 2020s)" -- @back_quit
   local lvl
-  read -e -p "Choice [1-4]: " lvl
+  read -e -p "Select: " lvl
   case "${lvl,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit ;; esac
   case "$lvl" in 1|2|3|4) ;; *) echo "❌ Invalid choice"; return ;; esac
 

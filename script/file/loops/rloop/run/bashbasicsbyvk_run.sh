@@ -17,7 +17,7 @@ handle_file() {
                       "Rename File" "Share"
         _mc_footer @file_menu
 
-        read -e -p "Enter choice: " action
+        read -e -p "Select: " action
 
         case "$action" in
             0) run_file "$file"; return 1 ;;

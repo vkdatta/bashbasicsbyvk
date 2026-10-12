@@ -94,9 +94,7 @@ _file_picker() {
                 _i=$((_i + 1))
             done
         fi
-        echo ""
-        echo "  u) Up parent   z) Cancel   q) Quit"
-        echo "   ─────────────────────────────"
+        _mc_footer "u:Up parent" "z:Cancel" "q:Quit"
         read -e -p "${_fp_lbl} Nav: " _fp_choice
 
         # strip surrounding whitespace

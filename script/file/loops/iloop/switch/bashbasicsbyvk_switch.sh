@@ -305,16 +305,17 @@ _sw_menu_header_imaginary() {
 }
 
 _sw_menu_footer_bookmarks() {
-  printf '\na) Add current path   b) Remove   sw) Exit\nu) Up   s) Settings\nr<N>) File actions on item N\n'
-  [ -n "$group_prefix" ] && printf 'u) Remove last prefix (%s*)\n' "${group_prefix^^}"
+  local -a _f=("a:Add current path" "b:Remove" "sw:Exit" "|" "u:Up" "s:Settings" "|" "r<N>:File actions on item N")
+  [ -n "$group_prefix" ] && _f+=("|" "u:Remove last prefix (${group_prefix^^}*)")
+  _mc_footer "${_f[@]}"
 }
 
 _sw_menu_footer_favourites() {
-  printf '\n⭐ N) open / go    b) Remove    rn) Rename (alias)    e) Edit file\nsw) Exit switch mode      (add favourites in the file view:  fa)\n'
+  _mc_footer "N:⭐ open / go" "b:Remove" "rn:Rename (alias)" "e:Edit file" "|" "sw:Exit switch mode" "#(add favourites in the file view:  fa)"
 }
 
 _sw_menu_footer_recents() {
-  printf '\n[READ ONLY]   Select a file → open/edit/run/copy\nxe) Exclude list   clr) Clear list   sw) Exit switch mode\n'
+  _mc_footer "#[READ ONLY]   Select a file → open/edit/run/copy" "xe:Exclude list" "clr:Clear list" "sw:Exit switch mode"
 }
 
 _sw_set_viewport_for_tab() {

@@ -283,16 +283,12 @@ _rl_menu_header() {
 
 _rl_menu_footer() {
   if [ "$_rl_tab" = last ]; then
-    printf '\n[Last used]  %d unsaved expression(s)\n' "${#items[@]}"
-    printf 'N) Save as rule   clr) Clear list   u) Exit   .r) Close\n'
+    _mc_footer "#[Last used]  ${#items[@]} unsaved expression(s)" "N:Save as rule" "clr:Clear list" "u:Exit" ".r:Close"
   elif [ -z "$_rl_cur" ]; then
-    printf '\n[Rules]  select = .s rules · display = .d rules  (built in — cannot be deleted)\n'
-    printf 'N) Open folder   ux) Export all   ui) Import all   u) Exit   .r) Close\n'
+    _mc_footer "#[Rules]  select = .s rules · display = .d rules  (built in — cannot be deleted)" "N:Open folder" "ux:Export all" "ui:Import all" "u:Exit" ".r:Close"
   else
-    printf '\n[%s rules]  %d here\n' "$_rl_cur" "${#items[@]}"
-    printf 'N) Run   c) Create   d) Delete   r) Rename   u) Up\n'
-    printf 'e-N) Edit rule   em-N) Edit description   i-N) Info   .r) Close\n'
-    printf 'ux) Export all   ui) Import all\n'
+    _mc_footer "#[$_rl_cur rules]  ${#items[@]} here" "N:Run" "c:Create" "d:Delete" "r:Rename" "u:Up" "|" \
+      "e-N:Edit rule" "em-N:Edit description" "i-N:Info" ".r:Close" "|" "ux:Export all" "ui:Import all"
   fi
 }
 
@@ -383,8 +379,8 @@ _rl_cmd_run() {                  # N inside select/ or display/ → apply the ru
 _rl_cmd_create() {
   local kind="$_rl_cur" ans name raw expr desc
   if [ -z "$kind" ]; then
-    echo; echo "Create a rule:"; echo "1) select rule  (.s ...)"; echo "2) display rule (.d ...)"
-    read -e -r -p "Choice [1-2]: " ans
+    _mc_menu "Create a rule:" -- "select rule  (.s ...)" "display rule (.d ...)" -- @back_quit
+    read -e -r -p "Select: " ans
     case "$ans" in
       u|U) return 1 ;;
       q|Q) _bvk_quit ;;

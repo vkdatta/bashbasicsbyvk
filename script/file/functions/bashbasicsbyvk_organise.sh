@@ -36,10 +36,8 @@ done
 }
 
 organise_by_ext() {
-echo "📁 Organise by extension:"
-echo "1) All files by ext"
-echo "2) Selected extension"
-read -e -p "Choice: " ech
+_mc_menu "📁 Organise by extension:" -- "All files by ext" "Selected extension" -- @back_quit
+read -e -p "Select: " ech
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
@@ -201,10 +199,8 @@ echo "✅ Organised by year(s) > month(s) > date(s)"
 }
 
 unorganise() {
-echo "🔄 Unorganise and bring to current location:"
-echo "1) Unorganise all"
-echo "2) Unorganise selected folders"
-read -e -p "Choice: " uch
+_mc_menu "🔄 Unorganise and bring to current location:" -- "Unorganise all" "Unorganise selected folders" -- @back_quit
+read -e -p "Select: " uch
 case "$uch" in
 u|U) return ;;
 q|Q) _bvk_quit ;;
@@ -264,14 +260,10 @@ echo "✅ Organised A-Z"
 }
 
 organise_menu() {
-echo "🗂️ Organise files in current location ($path):"
-echo "1) Organise by ext"
-echo "2) Organise by year(s) (metadata)"
-echo "3) Organise by year(s) > month(s) (metadata)"
-echo "4) Organise by year(s) > month(s) > date(s) (metadata)"
-echo "5) Unorganise and bring it to current location"
-echo "6) Organise A-Z"
-read -e -p "Enter choice [1-6]: " och
+_mc_menu "🗂️ Organise files in current location ($path):" -- "Organise by ext" "Organise by year(s) (metadata)" \
+  "Organise by year(s) > month(s) (metadata)" "Organise by year(s) > month(s) > date(s) (metadata)" \
+  "Unorganise and bring it to current location" "Organise A-Z" -- @back_quit
+read -e -p "Select: " och
 case "$och" in
 u|U) return ;;
 q|Q) _bvk_quit ;;

@@ -108,8 +108,7 @@ _sp_view_one_buffer() {
       done
     fi
 
-    echo
-    echo "x) Remove item(s)   clr) Clear entire $label buffer   u) Back   q) Quit"
+    _mc_footer "x:Remove item(s)" "clr:Clear entire $label buffer" "u:Back" "q:Quit"
     read -e -p "$label buffer: " bv_choice
 
     case "$bv_choice" in
@@ -176,18 +175,17 @@ handle_staging_view() {
     _sp_load sc_once "$_SP_SC_ONCE_FILE"
     _sp_load bm_once "$_SP_BM_ONCE_FILE"
 
-    echo
-    echo "🗂️  Shortpath buffers"
-    echo "  1) Copy      persistent (--)  (${#cp_list[@]} item(s))"
-    echo "  2) Move      persistent (--)  (${#mv_list[@]} item(s))"
-    echo "  3) Shortcut  persistent (--)  (${#sc_list[@]} item(s))"
-    echo "  4) Bookmark  persistent (--)  (${#bm_list[@]} item(s))"
-    echo "  5) Copy      once (-)         (${#cp_once[@]} item(s))"
-    echo "  6) Move      once (-)         (${#mv_once[@]} item(s))"
-    echo "  7) Shortcut  once (-)         (${#sc_once[@]} item(s))"
-    echo "  8) Bookmark  once (-)         (${#bm_once[@]} item(s))"
-    echo "  clr) Clear ALL buffers"
-    echo "  u) Back   q) Quit"
+    _mc_header "🗂️  Shortpath buffers"
+    _mc_options 1 \
+      "Copy      persistent (--)  (${#cp_list[@]} item(s))" \
+      "Move      persistent (--)  (${#mv_list[@]} item(s))" \
+      "Shortcut  persistent (--)  (${#sc_list[@]} item(s))" \
+      "Bookmark  persistent (--)  (${#bm_list[@]} item(s))" \
+      "Copy      once (-)         (${#cp_once[@]} item(s))" \
+      "Move      once (-)         (${#mv_once[@]} item(s))" \
+      "Shortcut  once (-)         (${#sc_once[@]} item(s))" \
+      "Bookmark  once (-)         (${#bm_once[@]} item(s))"
+    _mc_footer "clr:Clear ALL buffers" "u:Back" "q:Quit"
     read -e -p "View buffer: " v_choice
 
     case "$v_choice" in

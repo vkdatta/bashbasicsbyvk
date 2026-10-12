@@ -223,13 +223,9 @@ _scr_validate() {
 # User-facing entry point for registry maintenance.
 # ---------------------------------------------------------------------------
 handle_scr_sync() {
-  echo ""
-  echo "🗂️  Shortcut Registry"
-  echo "  1) Show registry contents"
-  echo "  2) Validate (find & remove stale entries)"
-  echo "  3) Full rebuild (rescan \$HOME — slow, use when in doubt)"
-  echo "  q) Back"
-  read -e -p "Choice: " _scr_choice
+  _mc_menu "🗂️  Shortcut Registry" -- "Show registry contents" "Validate (find & remove stale entries)" \
+    "Full rebuild (rescan \$HOME — slow, use when in doubt)" -- @back_quit
+  read -e -p "Select: " _scr_choice
 
   case "$_scr_choice" in
   u|U) return ;;

@@ -213,19 +213,17 @@ _fx_menu_header_imaginary() {
 _fx_menu_footer_adf() {
   local total="${#_fx_adf_labels[@]}"
   local here="${#items[@]}"
-  printf '\n[ADF — Admin Defined]  %d item(s) here  (%d total)\n' "$here" "$total"
   if [ -n "$_fx_adf_cur_staging" ]; then
-    printf 'Select to open folder or run function   u) Up   fx) Exit\n'
+    _mc_footer "#[ADF — Admin Defined]  $here item(s) here  ($total total)" "#Select to open folder or run function" "u:Up" "fx:Exit"
   else
-    printf 'Select to open folder or run function   fx) Exit\n'
+    _mc_footer "#[ADF — Admin Defined]  $here item(s) here  ($total total)" "#Select to open folder or run function" "fx:Exit"
   fi
 }
 
 _fx_menu_footer_udf() {
-  printf '\n[UDF — User Defined]  Scripts in execute dir — run from current path\n'
-  printf 'u) Up   s) Settings   fx) Exit\n'
-  printf 'e-N) Edit item   ux) Export all   ui) Import all\n'
-  [ -n "$group_prefix" ] && printf 'u) Remove last prefix (%s*)\n' "${group_prefix^^}"
+  local -a _f=("#[UDF — User Defined]  Scripts in execute dir — run from current path" "u:Up" "s:Settings" "fx:Exit" "|" "e-N:Edit item" "ux:Export all" "ui:Import all")
+  [ -n "$group_prefix" ] && _f+=("|" "u:Remove last prefix (${group_prefix^^}*)")
+  _mc_footer "${_f[@]}"
 }
 
 # Custom row renderer for the ADF tab.

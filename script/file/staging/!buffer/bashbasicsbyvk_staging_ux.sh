@@ -194,7 +194,7 @@ declare -ga _UX_PICKED=()
 ux_pk_build() { _xui_begin_items "${_UX_PK_MAIL[@]}"; }
 ux_pk_row() { _xui_slot "$1"; printf -v _vp_line ' %2d) 👤 %s   [%s…]' "$1" "${_UX_PK_MAIL[$_XUI_SLOT]}" "${_UX_PK_D3[$_XUI_SLOT]:0:6}"; }
 ux_pk_header() { echo; echo "📨 Share with whom?   (only people you linked in rbam → Give access)"; _vp_filter_header_line; }
-ux_pk_footer() { printf '\n1,3-5) several   a) everyone   Enter) send   (u = cancel)\n'; }
+ux_pk_footer() { _mc_footer "1,3-5:several" "a:everyone" "Enter:send" "u:cancel"; }
 
 # active receivers -> arrays ; returns 1 when there is nobody
 _ux_load_people() {

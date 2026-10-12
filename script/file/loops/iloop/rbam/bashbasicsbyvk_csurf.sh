@@ -84,8 +84,8 @@ cs_header() {
   _vp_filter_header_line
 }
 cs_footer() {
-  if [ "$_CS_TAB" = 0 ]; then printf '\nN) people   x-N) nuke for everyone (refund)   e-N [time]) nuke time   rf) refresh   u) back\n'
-  else                        printf '\nN) open   r-N) drop from my list   rf) refresh   u) back\n'; fi
+  if [ "$_CS_TAB" = 0 ]; then _mc_footer "N:people" "x-N:nuke for everyone (refund)" "e-N [time]:nuke time" "rf:refresh" "u:back"
+  else                        _mc_footer "N:open" "r-N:drop from my list" "rf:refresh" "u:back"; fi
 }
 
 _cs_nuke() {                                 # x-LIST
@@ -192,7 +192,7 @@ cs_pp_header() {
   [ "${#items[@]}" -eq 0 ] && echo "   Nobody (everyone was revoked)."
   _vp_filter_header_line
 }
-cs_pp_footer() { printf '\nN) their files   r-N) revoke person   g) offer to more people   t) all my files   u) back\n'; }
+cs_pp_footer() { _mc_footer "N:their files" "r-N:revoke person" "g:offer to more people" "t:all my files" "u:back"; }
 
 _pp_revoke() {
   _xui_select_rows "REVOKE" "🚫 Revoke which people from this share?" "$1" || return 1
@@ -299,10 +299,13 @@ ct_header() {
   _vp_filter_header_line
 }
 ct_footer() {
-  local rv="r-N) revoke"
-  [ "$_CT_ROLE" = receiver ] && rv="r-N) drop"
+  local rv="r-N:revoke"
+  [ "$_CT_ROLE" = receiver ] && rv="r-N:drop"
   [ "$_CT_ROLE" = owner ] && [ -z "$_CT_RID" ] && rv=""
-  printf '\nN) open   d-N) download here   %s   rf) refresh   u) up/back\n' "$rv"
+  local -a _f=("N:open" "d-N:download here")
+  [ -n "$rv" ] && _f+=("$rv")
+  _f+=("rf:refresh" "u:up/back")
+  _mc_footer "${_f[@]}"
 }
 
 _ct_dest() { local d="${path:-$PWD}"; [ -d "$d" ] && [ -w "$d" ] || d="$PWD"; printf '%s' "$d"; }

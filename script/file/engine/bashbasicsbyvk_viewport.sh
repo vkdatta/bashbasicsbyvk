@@ -231,9 +231,45 @@ _vp_mark_sel() {
   _sel_mark_v "${items[$(( $1 - 1 ))]:-}" "$_vp_line"
 }
 
+# Menu chrome layout (every screen that goes through the viewport):
+#
+#     header
+#     <linebreak>
+#     ───────────
+#     options
+#     ───────────
+#     <linebreak>
+#     footer
+#     <linebreak>
+#     Select:
+#
+# The two linebreaks around the options block and the one after the footer are
+# added HERE, so no menu has to print them and none can forget them:
+#   header : trailing blank lines are dropped, exactly one is appended
+#   footer : leading + trailing blank lines are dropped, one is put before and
+#            one after.  An empty header / footer adds nothing.
 _vp_build_chrome() {
+  local _i _n
   mapfile -t _vp_hdr_arr < <($_vp_header_fn)
   mapfile -t _vp_ftr_arr < <($_vp_footer_fn)
+
+  # header: drop trailing blanks, then add the one linebreak that separates it from the rule
+  _n=${#_vp_hdr_arr[@]}
+  while (( _n > 0 )) && [ -z "${_vp_hdr_arr[$((_n-1))]// /}" ]; do _n=$(( _n - 1 )); done
+  _vp_hdr_arr=("${_vp_hdr_arr[@]:0:_n}")
+  (( _n > 0 )) && _vp_hdr_arr+=("")
+
+  # footer: drop blanks at both edges, then frame it with one linebreak above and one below
+  _n=${#_vp_ftr_arr[@]}
+  while (( _n > 0 )) && [ -z "${_vp_ftr_arr[$((_n-1))]// /}" ]; do _n=$(( _n - 1 )); done
+  _vp_ftr_arr=("${_vp_ftr_arr[@]:0:_n}")
+  _i=0
+  while (( _i < _n )) && [ -z "${_vp_ftr_arr[$_i]// /}" ]; do _i=$(( _i + 1 )); done
+  _vp_ftr_arr=("${_vp_ftr_arr[@]:_i}")
+  if (( ${#_vp_ftr_arr[@]} > 0 )); then
+    _vp_ftr_arr=("" "${_vp_ftr_arr[@]}" "")
+  fi
+
   _vp_top_n=${#_vp_hdr_arr[@]}
   _vp_footer_n=${#_vp_ftr_arr[@]}
 }
@@ -422,7 +458,7 @@ _vp_emit() {
   # one grep for all visible rows instead of one per row (selection marks)
   declare -F _sel_prewarm >/dev/null 2>&1 && _sel_prewarm "$_vp_start" "$_vp_end"
 
-  for line in "${_vp_hdr_out[@]}"; do _vp_el "$line"; done
+  for line in "${_vp_hdr_out[@]}"; do _vp_fit "$line"; _vp_el "$_vp_line"; done
 
   if (( _vp_ind > 0 )); then
     if (( _vp_start > 1 )); then
@@ -452,7 +488,7 @@ _vp_emit() {
     fi
   fi
 
-  for line in "${_vp_ftr_out[@]}"; do _vp_el "$line"; done
+  for line in "${_vp_ftr_out[@]}"; do _vp_fit "$line"; _vp_el "$_vp_line"; done
 
   # frame is complete — now just play it
   if [ "$_carpet" = 1 ] && _vp_play_carpet; then

@@ -89,12 +89,10 @@ handle_staging_map() {
 _map_deliver() {
   local map_output="$1"
   echo
-  echo "1) Copy to clipboard"
-  echo "2) Save to txt file"
-  echo
+  _mc_menu -- "Copy to clipboard" "Save to txt file" -- @back_quit
 
   local choice
-  read -e -p "Choose option [1-2]: " choice
+  read -e -p "Select: " choice
 
   case "$choice" in
   u|U) return ;;

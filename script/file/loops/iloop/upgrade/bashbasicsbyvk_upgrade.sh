@@ -164,10 +164,10 @@ _upg_menu_header() {
 }
 
 _upg_menu_footer() {
-  if [ "$_upg_tab" = stable ]; then printf '\n[Stable]  %d release(s)\n' "${#items[@]}"
-  else printf '\n[Tags]  %d tag(s) — betas included, newest first\n' "${#items[@]}"; fi
-  printf 'N) Install version N   i-N) Info   m) Latest main\n'
-  printf 'rf) Refresh   u) Exit   -u) Close\n'
+  local _uh
+  if [ "$_upg_tab" = stable ]; then _uh="[Stable]  ${#items[@]} release(s)"
+  else _uh="[Tags]  ${#items[@]} tag(s) — betas included, newest first"; fi
+  _mc_footer "#$_uh" "N:Install version N" "i-N:Info" "m:Latest main" "|" "rf:Refresh" "u:Exit" "-u:Close"
 }
 
 _upg_set_viewport() {

@@ -1,10 +1,12 @@
-infinity_stones_menu() {
-  printf "\n💎 Infinity Stones\n1) Extract Tables and Links from Web\n2) JavaScript Audit\n3) Python Audit\n4) Git Push\n5) Generate SQL\n6) LocalHost\nq) Exit\n"
-
+# The risk warning is printed FIRST (plain scroll-back text). The menu itself —
+# title, options, key hints — is drawn by the shared menu chrome (_mc_*), so it is
+# the last thing above the prompt and the viewport can take it over like any
+# other menu (a warning printed after the options hid the menu from it).
+_infinity_warning() {
   printf "\n"
   printf "⚠️  DEVELOPMENT / EXTREME-RISK WARNING\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-  printf "All Infinity Stones features above are currently in DEVELOPMENT STAGE and\n"
+  printf "All Infinity Stones features below are currently in DEVELOPMENT STAGE and\n"
   printf "are subject to extreme stress, failure, data-loss, corruption, and incorrect\n"
   printf "result cases. HIGHLY ADVISED: DO NOT USE THESE FUNCTIONS.\n"
   printf "\n"
@@ -16,11 +18,19 @@ infinity_stones_menu() {
   printf "file damage, repository changes, production impact, or other adverse\n"
   printf "consequences resulting from use of these functions.\n"
   printf "\n"
-  printf "DO NOT USE THE ABOVE FUNCTIONS, EVEN AT YOUR OWN RISK, until they have been\n"
+  printf "DO NOT USE THE FUNCTIONS BELOW, EVEN AT YOUR OWN RISK, until they have been\n"
   printf "fully tested and declared production-ready.\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+}
 
-  read -e -p "Choice: " is_choice
+infinity_stones_menu() {
+  _infinity_warning
+
+  _mc_menu "💎 Infinity Stones" -- \
+    "Extract Tables and Links from Web" "JavaScript Audit" "Python Audit" \
+    "Git Push" "Generate SQL" "LocalHost" -- @infinity
+
+  read -e -p "Select: " is_choice
 
   case "$is_choice" in
   u|U) return ;;

@@ -116,8 +116,7 @@ _view_selections_menu() {
         i=$((i+1))
       done
     fi
-    echo
-    echo "c) Confirm   x) Remove   u) Back   q) Quit"
+    _mc_footer "c:Confirm" "x:Remove" "u:Back" "q:Quit"
     read -e -p "Selection view: " sv_choice
 
     case "$sv_choice" in
@@ -252,12 +251,10 @@ local_navigator() {
       fi
     fi
 
-    echo
     if [ "$mode" == "source" ]; then
-      echo "u) Up   v) View selections   z) Cancel   q) Quit"
-      echo "tip: use prefix 's' to select a folder"
+      _mc_footer "u:Up" "v:View selections" "z:Cancel" "q:Quit" "#tip: use prefix 's' to select a folder"
     else
-      echo "u) Up   n) New folder   c) Confirm destination   z) Cancel   q) Quit"
+      _mc_footer "u:Up" "n:New folder" "c:Confirm destination" "z:Cancel" "q:Quit"
     fi
 
     read -e -p "Nav: " nav_choice
@@ -444,12 +441,10 @@ gcloud_navigator() {
       done
     fi
 
-    echo
     if [ "$mode" == "source" ]; then
-      echo "u) Up   v) View selections   z) Cancel   q) Quit"
-      echo "tip: use prefix 's' to select a folder"
+      _mc_footer "u:Up" "v:View selections" "z:Cancel" "q:Quit" "#tip: use prefix 's' to select a folder"
     else
-      echo "u) Up   n) New folder   c) Confirm destination   z) Cancel   q) Quit"
+      _mc_footer "u:Up" "n:New folder" "c:Confirm destination" "z:Cancel" "q:Quit"
     fi
 
     read -e -p "GCloud Nav: " gnav_choice
@@ -817,14 +812,13 @@ _get_mime_type() {
 }
 
 transfer_menu() {
-  echo
-  echo "📦 TRANSFER — Step 1: Choose mode"
-  echo "1) Intra-location (Current CLI → Current CLI [Up Down])"
-  echo "2) Intra-location (Current CLI → Current CLI [Down Up])"
-  echo "3) Current CLI To Drive (Via rclone)"
-  echo "4) Local To GCloud (Run from Local)"
-  echo "5) GCloud To Local (Run from Local)"
-  read -e -p "Mode [1-5]: " t_mode
+  _mc_menu "📦 TRANSFER — Step 1: Choose mode" -- \
+    "Intra-location (Current CLI → Current CLI [Up Down])" \
+    "Intra-location (Current CLI → Current CLI [Down Up])" \
+    "Current CLI To Drive (Via rclone)" \
+    "Local To GCloud (Run from Local)" \
+    "GCloud To Local (Run from Local)" -- @back_quit
+  read -e -p "Select: " t_mode
 
   case "$t_mode" in
   u|U) return ;;
@@ -926,14 +920,14 @@ transfer_menu() {
     return
   fi
 
-  echo
-  echo "📦 TRANSFER — Step 4: Action"
+  _mc_header "📦 TRANSFER — Step 4: Action"
   if [[ "$t_mode" == "1" || "$t_mode" == "2" ]]; then
-    echo "c) Copy   m) Move   s) Shortcut"
+    _mc_keyed "c:Copy" "m:Move" "s:Shortcut"
   else
-    echo "c) Copy   m) Move"
+    _mc_keyed "c:Copy" "m:Move"
   fi
-  read -e -p "Action: " t_action
+  _mc_footer "u:Back" "q:Quit"
+  read -e -p "Select: " t_action
 
   local t_op
   case "$t_action" in

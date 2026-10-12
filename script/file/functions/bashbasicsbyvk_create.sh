@@ -36,12 +36,8 @@ create_dirs() {
 }
 
 handle_create() {
-  echo
-  echo "Create:"
-  echo "1) New folders"
-  echo "2) New files"
-  echo
-  read -e -r -p "Choice [1-2]: " cr
+  _mc_menu "Create:" -- "New folders" "New files" -- @back_quit
+  read -e -r -p "Select: " cr
 
   case "$cr" in
   u|U) return ;;
