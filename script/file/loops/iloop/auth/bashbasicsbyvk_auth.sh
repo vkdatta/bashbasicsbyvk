@@ -176,7 +176,7 @@ _bvk_auth_create() {
    For any help with paid services ONLY a receipt from the e-mail used here
    is accepted. Anything else is rejected outright, with no reply.
 TXT
-  local mail; builtin read -r -p $'\n   Enter email: ' mail
+  local mail; builtin read -e -r -p $'\n   Enter email: ' mail
   [ -z "$mail" ] && { echo "↩️  Cancelled."; return; }
   _bvk_auth_mail_ok "$mail" || { echo "❌ Invalid input (max 256 chars; no spaces, quotes, < > \` \$ \\ ; | & ( ) { })."; return; }
   [ -r "$_BVK_TELEMETRY_DIR/uuid" ] || { echo "❌ No telemetry id found (is BVK_TELEMETRY=off?). Creating a user needs it for abuse protection. Restart 'o' once with telemetry on."; return; }
@@ -295,7 +295,7 @@ _bvk_auth_import() {
 _bvk_auth_link() {
   echo; echo "🔗 Link existing account (one-time upgrade)"
   echo "   Use the e-mail and API key you used before this update. A diseps + dinons will be added to it."
-  local mail key; builtin read -r -p "   Email: " mail; builtin read -r -s -p "   API key: " key; echo
+  local mail key; builtin read -e -r -p "   Email: " mail; builtin read -r -s -p "   API key: " key; echo
   _bvk_auth_mail_ok "$mail" && [ -n "$key" ] || { echo "❌ Invalid input."; return; }
   P_MAIL="$mail"; P_APIKEY="$key"; P_DISEPS=""                      # no diseps yet => server treats it as legacy login
   P_DINONS=$(_bvk_auth_gen_codes $_BVK_DINONS_N); local nd fek wrapped
@@ -326,7 +326,7 @@ _bvk_auth_regen() {  # $1=what: diseps|apikey|dinons|mail   (P_* = current profi
   cp -f "$file" "$file.prev" 2>/dev/null && chmod 600 "$file.prev"        # lock-out safety net
   case "$what" in
     mail)
-      builtin read -r -p "   New email: " newmail
+      builtin read -e -r -p "   New email: " newmail
       _bvk_auth_mail_ok "$newmail" || { echo "❌ Invalid input."; return; }
       json=$(printf '{"action":"change_mail","new_mail":%s}' "$(_bvk_auth_jstr "$newmail")") ;;
     diseps)
@@ -513,7 +513,7 @@ _au_export_ids() {  # profile ids...
 _au_remove_ids() {  # profile ids...
   local ans id
   echo "⚠️  Removes $# user(s) from THIS machine only. Without an export you lose the apikey/dinons."
-  builtin read -r -p "Are you really sure? (y/n): " ans
+  builtin read -e -r -p "Are you really sure? (y/n): " ans
   if [[ "$ans" != y && "$ans" != Y ]]; then echo "🚫 Removal cancelled"; return 1; fi
   for id in "$@"; do
     rm -f "$_BVK_AUTH_DIR/profiles/$id" "$_BVK_AUTH_DIR/profiles/$id.prev"

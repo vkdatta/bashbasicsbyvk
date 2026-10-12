@@ -8,6 +8,7 @@
 #
 #  Commands
 #    N          open link N (details, then  e  edit  /  x  nuke)
+#    a-N        set or rename the alias of link N   a-N my notes  (also works for links made without one)
 #    e-N        edit the expiry of link N          e-N 2d   (value given inline)
 #    x-N        nuke link N now                    x-1,3-5  (several)
 #    rf         refresh the list          u  exit          api  close          q  quit the app
@@ -91,7 +92,67 @@ _api_load() {
             _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i") ;;
     esac
   done <<<"$out"
+  _api_apply_aliases
   return 0
+}
+
+# ── local aliases ─────────────────────────────────────────────────────────────
+# The server only learns an alias when a link is made (up-/c2c- … as <alias>). So that ANY link can
+# be named or renamed later — also ones made without an alias — the names you give here are kept on
+# this computer: ~/.bashbasicsbyvk/link_aliases   (one line per link:  <id> TAB <alias>)
+# They win over the alias the server holds. Aliases are labels only; the link itself never changes.
+_API_ALIAS_FILE="${HOME}/.bashbasicsbyvk/link_aliases"
+
+_api_apply_aliases() {
+  [ -f "$_API_ALIAS_FILE" ] || return 0
+  local id al i
+  while IFS=$'\t' read -r id al || [ -n "$id" ]; do
+    [ -n "$id" ] && [ -n "$al" ] || continue
+    for i in "${!_API_ID[@]}"; do
+      [ "${_API_ID[$i]}" = "$id" ] && { _API_ALIAS[$i]="$al"; break; }
+    done
+  done < "$_API_ALIAS_FILE"
+}
+
+# _api_alias_store <id> <alias|"">   ("" = forget the local name → the server's alias, if any, shows again)
+_api_alias_store() {
+  local id="$1" al="$2" tmp
+  mkdir -p "$(dirname "$_API_ALIAS_FILE")" 2>/dev/null
+  tmp="$(mktemp "${_API_ALIAS_FILE}.XXXXXX" 2>/dev/null)" || return 1
+  { [ -f "$_API_ALIAS_FILE" ] && awk -F'\t' -v id="$id" '$1 != id' "$_API_ALIAS_FILE"
+    [ -n "$al" ] && printf '%s\t%s\n' "$id" "$al"; true; } > "$tmp"
+  mv -f "$tmp" "$_API_ALIAS_FILE"
+}
+
+# _api_do_alias <idx> [alias]  — set / rename (blank new name = cancel; "-" = remove the local name)
+_api_do_alias() {
+  local k="$1" new="${2:-}"
+  echo "🏷️  Link $((k + 1)):  current alias: ${_API_ALIAS[$k]:-(none)}"
+  if [ -z "$new" ]; then
+    read -e -r -p "   New alias (blank = cancel, - = remove local alias): " new
+  fi
+  new="${new#"${new%%[![:space:]]*}"}"; new="${new%"${new##*[![:space:]]}"}"
+  [ -z "$new" ] && { echo "🚫 Skipped"; return 1; }
+  if [ "$new" = "-" ]; then
+    _api_alias_store "${_API_ID[$k]}" "" || { echo "❌ Could not save"; return 1; }
+    echo "✅ Local alias removed"
+  else
+    if [[ ! "$new" =~ $_BB_ALIAS_RE ]]; then
+      echo "⚠️  Alias may use letters, digits, spaces and . _ @ + -  (1-48 characters)."; return 1
+    fi
+    _api_alias_store "${_API_ID[$k]}" "$new" || { echo "❌ Could not save"; return 1; }
+    echo "✅ Alias: $new"
+  fi
+  _API_LOADED=0
+  return 0
+}
+
+_api_cmd_alias() {       # a-N [alias]      a-1-3 and a-1,3 not supported here: one link at a time
+  local arg="$1" num name=""
+  num="${arg%%[[:space:]]*}"
+  [ "$num" != "$arg" ] && name="${arg#*[[:space:]]}"
+  _api_pick "$num" || return 1
+  _api_do_alias "$_api_k" "$name"
 }
 
 # ── formatting ────────────────────────────────────────────────────────────────
@@ -174,7 +235,7 @@ _api_menu_header() {
 
 _api_menu_footer() {
   printf '\n[Links]  %d active   🕐 times in %s  (change: s → Timezone)\n' "${#items[@]}" "$(_tz_label 2>/dev/null || date +%Z)"
-  printf 'N) Open   e-N) Edit expiry   x-N) Nuke (x-1,3-5 for several)\n'
+  printf 'N) Open   a-N) Alias/rename   e-N) Edit expiry   x-N) Nuke (x-1,3-5 for several)\n'
   printf 'rf) Refresh   u) Exit   api) Close\n'
 }
 
@@ -233,8 +294,9 @@ _api_cmd_open() {
   _api_pick "$1" || return 1
   _api_show "$_api_k"
   local ans
-  read -r -p "   e) edit expiry   x) nuke   Enter) back: " ans
+  read -e -r -p "   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans
   case "${ans,,}" in
+    a) _api_do_alias "$_api_k" "" ;;
     e) _api_do_edit "$_api_k" "" ;;
     x) _api_do_nuke "$_api_k" ;;
   esac
@@ -274,14 +336,14 @@ _api_do_edit() {         # _api_do_edit <idx> [spec]
     _api_show "$k"
     echo "   Enter the NEW TOTAL life counted from creation (2d · 36h · 1 week), or +12h to extend / -1d to shorten."
     echo "   Extending charges the extra time now; shortening refunds whole days only (time used rounds UP to a day)."
-    read -r -p "   New time (u = back): " spec
+    read -e -r -p "   New time (u = back): " spec
     case "${spec,,}" in u|q|"") echo "↩️  Back"; return 0 ;; esac
   fi
   total=$(_api_resolve_time "$k" "$spec") || return 1
   local nexp=$(( ${_API_CREATED[$k]} + total * 1000 )) dir="extends"
   [ "$nexp" -lt "${_API_EXPIRES[$k]}" ] && dir="shortens"
   [ "$nexp" -eq "${_API_EXPIRES[$k]}" ] && dir="keeps"
-  read -r -p "   $(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it. Continue? (y/N): " ans
+  read -e -r -p "   $(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it. Continue? (y/N): " ans
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total}" || return 1
   if [ "$_API_STATUS" != "200" ]; then _api_fail; return 1; fi
@@ -308,7 +370,7 @@ _api_do_nuke() {         # _api_do_nuke <idx>...
     total=$((total + ${_API_RFND[$k]}))
   done
   echo "   Refund is in whole days only; time already used rounds up to a full day."
-  read -r -p "   Nuke now and refund about $total credit(s)? (y/N): " ans
+  read -e -r -p "   Nuke now and refund about $total credit(s)? (y/N): " ans
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   local ok=0 bal="" rf rd
   for k in "${ks[@]}"; do
@@ -347,7 +409,7 @@ _api_help() {
 🔗 LINKS  (api)
  Every active link you made with up- / c2c-, soonest expiry first. Shown by ALIAS:
    up-1-3 as user data      c2c-2 as snippet      (no alias → the start of the id)
- N open · e-N [time] edit expiry · x-N nuke (x-1,3-5 several) · rf refresh · u exit · api close
+ N open · a-N [name] set/rename alias (a-N - removes it) · e-N [time] edit expiry · x-N nuke (x-1,3-5 several) · rf refresh · u exit · api close
  time = the NEW TOTAL life from creation:  2d · 36h · 1 week     or  +12h extend / -1d shorten
    limits 1 minute – 30 days
  extend  → the extra time is charged now (1 credit per GB per hour, size-bucket minimums, as an upload)
@@ -399,6 +461,7 @@ api_menu() {
 
       rf) _API_LOADED=0 ;;                       # rebuilt (and re-fetched) below
 
+      a-*) _api_cmd_alias "${_ap_choice#[aA]-}" || true ;;
       e-*) _api_cmd_edit "${_ap_choice#[eE]-}" || true ;;
       x-*) _api_cmd_nuke "${_ap_choice#[xX]-}" || true ;;
 

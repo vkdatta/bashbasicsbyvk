@@ -4,18 +4,18 @@ find_menu() {
     echo "2) Find inside file contents"
     echo "3) Find & replace in file/folder names"
     echo "4) Find & replace inside file contents"
-    read -p "Choice: " ftype
+    read -e -p "Choice: " ftype
 
     local -a results=()
     case "$ftype" in
     u|U) return ;;
     q|Q) _bvk_quit ;;
         1)
-            read -p "Name pattern (e.g. report): " pat
+            read -e -p "Name pattern (e.g. report): " pat
             mapfile -t results < <(find "$path" -name "*$pat*" 2>/dev/null | head -100)
             ;;
         2)
-            read -p "Text to search inside files: " pat
+            read -e -p "Text to search inside files: " pat
             mapfile -t results < <(grep -rl "$pat" "$path" 2>/dev/null | head -100)
             ;;
         3)
@@ -23,15 +23,15 @@ find_menu() {
             echo "🔤 Find & Replace in file/folder names"
             echo "1) Single Mutation"
             echo "2) Multi Mutation (CSV)"
-            read -p "Mode [1-2]: " fr_name_mode
+            read -e -p "Mode [1-2]: " fr_name_mode
 
             case "$fr_name_mode" in
             u|U) return ;;
             q|Q) _bvk_quit ;;
                 1)
                     # ── Single Mutation ──────────────────────────────────────────
-                    read -p "Name pattern to find: " pat
-                    read -p "Replace with: " rep
+                    read -e -p "Name pattern to find: " pat
+                    read -e -p "Replace with: " rep
                     mapfile -t results < <(find "$path" -name "*$pat*" 2>/dev/null | head -100)
 
                     if [ ${#results[@]} -eq 0 ]; then
@@ -51,7 +51,7 @@ for f in sys.argv[3:]:
     print(f"  {base}  →  {newname}")
 PYEOF
 
-                    read -p "Apply all renames? [y/N]: " confirm
+                    read -e -p "Apply all renames? [y/N]: " confirm
                     if [[ "$confirm" =~ ^[Yy]$ ]]; then
                         # Python replaces $(basename)+$(dirname) per file and shells out to mv.
                         # os.rename() is a single syscall; no subprocess per file.
@@ -182,15 +182,15 @@ PYEOF
             echo "🔄 Find & Replace inside file contents"
             echo "1) Single Mutation"
             echo "2) Multi Mutation (CSV)"
-            read -p "Mode [1-2]: " fr_mode
+            read -e -p "Mode [1-2]: " fr_mode
 
             case "$fr_mode" in
             u|U) return ;;
             q|Q) _bvk_quit ;;
                 1)
                     # ── Single Mutation ─────────────────────────────────────────
-                    read -p "Text to find inside files: " pat
-                    read -p "Replace with: " rep
+                    read -e -p "Text to find inside files: " pat
+                    read -e -p "Replace with: " rep
                     mapfile -t results < <(grep -rl "$pat" "$path" 2>/dev/null | head -100)
 
                     if [ ${#results[@]} -eq 0 ]; then
@@ -224,7 +224,7 @@ PYEOF
                     echo "a) Apply to ALL files"
                     echo "Enter number to apply to a single file"
                     echo "q) Cancel"
-                    read -p "Action: " act
+                    read -e -p "Action: " act
 
                     case "$act" in
                         u|U) return ;;
@@ -390,7 +390,7 @@ PYEOF
 
     echo "Enter item number to navigate | q) exit"
     while true; do
-        read -p "Action: " act
+        read -e -p "Action: " act
         case "$act" in
             u|U) return ;;
             q|Q) _bvk_quit ;;

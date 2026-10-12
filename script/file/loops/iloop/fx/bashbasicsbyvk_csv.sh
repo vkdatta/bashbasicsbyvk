@@ -97,7 +97,7 @@ _file_picker() {
         echo ""
         echo "  u) Up parent   z) Cancel   q) Quit"
         echo "   ─────────────────────────────"
-        read -p "${_fp_lbl} Nav: " _fp_choice
+        read -e -p "${_fp_lbl} Nav: " _fp_choice
 
         # strip surrounding whitespace
         _fp_choice="${_fp_choice#"${_fp_choice%%[![:space:]]*}"}"

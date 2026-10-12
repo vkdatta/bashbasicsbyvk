@@ -23,6 +23,7 @@ declare -ga _filter_map=()
 declare -g  _filter_map_active=false
 declare -gA _REC_LABEL=()          # full path → "sub/dir/name" shown for recursive hits
 declare -g  _filter_rec_active=false   # the rows on screen are recursive search results
+declare -g  _filter_force_rec=false    # this query was typed with "==" → recursive even if Settings says off
 
 # filter_recursive: false | true   (Settings → Search filter → Search depth)
 #   false  the filter only looks at what the current folder lists (default)
@@ -51,7 +52,7 @@ _filter_reset_state() {
   _filter_src=()
   _filter_map=()
   _filter_map_active=false
-  _REC_LABEL=(); _filter_rec_active=false
+  _REC_LABEL=(); _filter_rec_active=false; _filter_force_rec=false
   _imag_filter_active=false
   _imag_filter_query=""
   _imag_filter_committed=false
@@ -80,8 +81,33 @@ _filter_can_rescan_hidden() {
 
 # Recursive mode is on AND this screen is a real folder view we can walk.
 _filter_is_recursive() {
-  [ "${filter_recursive:-false}" = "true" ] || return 1
+  _filter_rec_wanted || return 1
   _filter_can_rescan_hidden
+}
+
+# "recursive" is wanted for the query being typed: Settings → Search depth = On,
+# or the query was started with "==" (see _filter_deferred_buf).
+_filter_rec_wanted() {
+  [ "${filter_recursive:-false}" = "true" ] || ${_filter_force_rec:-false}
+}
+
+# Can this screen be searched recursively at all? (a real folder view, flat OR grouped;
+# virtual lists — fx tab, favourites, switch/recents — keep what they show.)
+_filter_rec_context() {
+  [ "${_sw_in_mode:-0}" = "1" ] && return 1
+  [ "${_fx_in_mode:-0}" = "1" ] && return 1
+  ${_fav_on:-false} && return 1
+  [ -d "$path" ]
+}
+
+# Is the text being typed a RECURSIVE query?  "==text" always; "=text" when Settings →
+# Search depth is On.  A recursive search walks the whole tree, so it is NOT run on every
+# keystroke: the characters are just collected and the search runs when Enter is pressed.
+_filter_deferred_buf() {
+  [[ "$_buf" == =?* ]] || return 1
+  _filter_rec_context || return 1
+  [[ "$_buf" == ==* ]] && return 0
+  [ "${filter_recursive:-false}" = "true" ]
 }
 
 # Walk every sub-folder below $path (the navigation path) and print the full
@@ -191,7 +217,7 @@ _filter_apply() {
 
 _filter_clear() {
   items=("${_all_items[@]}")
-  _REC_LABEL=(); _filter_rec_active=false
+  _REC_LABEL=(); _filter_rec_active=false; _filter_force_rec=false
   _filter_query=""
   _all_items=()
   _filter_src=()
@@ -279,7 +305,7 @@ _imag_filter_apply() {
 
   # ── Recursive: matches from all sub-folders, always listed flat ────────
   # (a group menu cannot drill into hits that live in different folders)
-  if [ -n "$q" ] && [ "${filter_recursive:-false}" = "true" ] && [ -d "$path" ]; then
+  if [ -n "$q" ] && _filter_rec_wanted && [ -d "$path" ]; then
     _filter_query="$_imag_filter_query"
     _imag_filter_committed=true
     imaginary_mode=false
@@ -350,7 +376,7 @@ _imag_filter_apply() {
 # Called when the leading "=" is backspaced away. Re-checks the base state;
 # may return to imaginary, or drop to flat if the base is already small.
 _imag_filter_restore() {
-  _REC_LABEL=(); _filter_rec_active=false
+  _REC_LABEL=(); _filter_rec_active=false; _filter_force_rec=false
   _filter_query=""
   _imag_filter_committed=false
   _imag_banner=""
@@ -413,6 +439,9 @@ _filter_on_backspace() {
       _buf="${_buf:0:_pos-1}${_buf:_pos}"
       _pos=$(( _pos - 1 ))
       _imag_filter_query="${_buf:1}"
+      # recursive query: only edit the text, the search runs on Enter
+      if _filter_deferred_buf; then _print_input_line; return 0; fi
+      _filter_force_rec=false
       _imag_filter_apply
       return 0
     fi
@@ -421,8 +450,12 @@ _filter_on_backspace() {
 
   # ── Flat filter ─────────────────────────────────────────────────────────
   if [[ "$_buf" == =?* ]]; then
+    [ "$_pos" -gt 0 ] || return 0
     _buf="${_buf:0:_pos-1}${_buf:_pos}"
     _pos=$(( _pos - 1 ))
+    # recursive query: only edit the text, the search runs on Enter
+    if _filter_deferred_buf; then _print_input_line; return 0; fi
+    _filter_force_rec=false
     _filter_query="${_buf:1}"
     _filter_apply
     _hl_index=0
@@ -449,9 +482,13 @@ _filter_on_char() {
   # ── Imaginary-origin filter already active ──────────────────────────────
   if ${_imag_filter_active:-false}; then
     if [[ "$_buf" == =* ]]; then
+      # "==" only means something where a recursive search is possible
+      if [ "$_buf" = "=" ] && [ "$key" = "=" ] && ! _filter_rec_context; then return 0; fi
       _buf="${_buf:0:_pos}${key}${_buf:_pos}"
       _pos=$(( _pos + 1 ))
       _imag_filter_query="${_buf:1}"
+      # recursive query: only collect the text, the search runs on Enter
+      if _filter_deferred_buf; then _print_input_line; return 0; fi
       _imag_filter_apply
       return 0
     fi
@@ -464,6 +501,7 @@ _filter_on_char() {
   if ${imaginary_mode:-false} || ${_imag_filter_committed:-false}; then
     if [ -z "$_buf" ] && [ "$key" = "=" ]; then
       _imag_filter_active=true
+      _filter_force_rec=false
       _imag_filter_query=""
       _buf="="; _pos=1
       _print_input_line
@@ -478,9 +516,15 @@ _filter_on_char() {
       # A committed filter (Enter on =text) already holds the original list in
       # _filter_src — re-filter from that instead of from the filtered rows.
       [ "${#_filter_src[@]}" -eq 0 ] && _filter_snapshot
+      _filter_force_rec=false
     fi
+    # "==" only means something where a recursive search is possible
+    if [ "$_buf" = "=" ] && [ "$key" = "=" ] && ! _filter_rec_context; then return 0; fi
     _buf="${_buf:0:_pos}${key}${_buf:_pos}"
     _pos=$(( _pos + 1 ))
+    # recursive query ("==text", or "=text" with Search depth On): only collect the
+    # text — walking the whole tree per keystroke is far too slow. Enter runs it.
+    if _filter_deferred_buf; then _print_input_line; return 0; fi
     _filter_query="${_buf:1}"
     _filter_apply
     _hl_index=0
@@ -502,13 +546,42 @@ _filter_on_char() {
 #   =      + Enter   clear the filter
 _filter_commit() {
   _imag_filter_active=false          # leave the typed query; result stays
-  if [ "$choice" = "=" ]; then
+  local c="$choice" q="" rec=false
+  [ "$c" = "==" ] && c="="           # "==" + Enter with no text = clear, like "="
+  if [ "$c" = "=" ]; then
     if ${_imag_filter_committed:-false}; then
       _imag_filter_query=""
       _imag_filter_restore           # redraws by itself
       return 0
     fi
     if [ "${#_filter_src[@]}" -gt 0 ] || [ -n "$_filter_query" ]; then _filter_clear; fi
+    _hl_index=0
+    _vp_render_from_top
+    return 0
+  fi
+
+  # "==text" (always) or "=text" with Search depth On: the search runs NOW, once.
+  if _filter_rec_context; then
+    if [[ "$c" == ==* ]]; then q="${c:2}"; rec=true; _filter_force_rec=true
+    elif [ "${filter_recursive:-false}" = "true" ]; then q="${c:1}"; rec=true; _filter_force_rec=false
+    fi
+  fi
+  if $rec && [ -n "$q" ]; then
+    builtin printf '\033[1A\r'       # _read_choice left the cursor one row below the input line
+    if ${imaginary_mode:-false} || ${_imag_filter_committed:-false}; then
+      _imag_filter_query="$q"
+      _imag_filter_apply             # redraws by itself
+      return 0
+    fi
+    [ "${#_filter_src[@]}" -eq 0 ] && _filter_snapshot
+    _filter_query="$q"
+    _filter_apply
+    _hl_index=0
+    _vp_count
+    _vp_cache_reset
+    _vp_prime_rows
+    _vp_redraw_in_place
+    return 0
   fi
   _hl_index=0
   _vp_render_from_top

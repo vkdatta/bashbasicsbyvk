@@ -11,7 +11,7 @@ if [ -z "$1" ]; then
   fi
 
   echo "Are you sure you want to delete '$1'? You may not recover this."
-  read -p "Type 'yes' to confirm: " confirm
+  read -e -p "Type 'yes' to confirm: " confirm
   if [ "$confirm" = "yes" ]; then
     rm -rf "$1"
     echo "Deleted: $1"

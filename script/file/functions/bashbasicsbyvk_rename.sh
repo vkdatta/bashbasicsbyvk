@@ -133,10 +133,10 @@ rename_item() {
 
   if [ -d "$target" ]; then
     dir=$(dirname -- "$target")
-    read -p "📝 Enter new folder name for '$(basename "$target")': " newname
+    read -e -p "📝 Enter new folder name for '$(basename "$target")': " newname
   elif [ -f "$target" ]; then
     dir=$(dirname -- "$target")
-    read -p "📝 Enter new file name for '$(basename "$target")': " newname
+    read -e -p "📝 Enter new file name for '$(basename "$target")': " newname
   else
     echo "❌ Cannot rename: '$target' not found." >&2
     return 1
@@ -172,7 +172,7 @@ _rename_single_mutation() {
         && echo "🔑  Shortcut (dir): $cur_name" \
         || echo "🗝️  Shortcut (file): $cur_name"
       echo "Renaming a shortcut only changes the shortcut's name — the original is untouched."
-      read -p "New display name (blank = cancel): " new_name
+      read -e -p "New display name (blank = cancel): " new_name
       [ -z "$new_name" ] && echo "🚫 Skipped" && continue
 
       local tmp_file
@@ -196,7 +196,7 @@ echo "✅ Shortcut renamed: $cur_name → $new_name"
     fi
 
     echo "Current name: $bn"
-    read -p "New name (blank = cancel): " new_name
+    read -e -p "New name (blank = cancel): " new_name
     [ -z "$new_name" ] && echo "🚫 Skipped" && continue
 
     local new_path

@@ -38,7 +38,7 @@ fi
 
 echo
 
-read -rp "Enter localhost port: " PORT
+read -e -rp "Enter localhost port: " PORT
 
 if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
     echo
@@ -117,7 +117,7 @@ kill_port() {
 if port_busy "$PORT"; then
 
     echo
-    read -rp "Port $PORT is already in use. Force it? (Y/N): " ANS
+    read -e -rp "Port $PORT is already in use. Force it? (Y/N): " ANS
 
     case "$ANS" in
 
@@ -165,7 +165,7 @@ start_server() {
         echo
         echo "Python reports port already in use."
 
-        read -rp "Force terminate process and retry? (Y/N): " AGAIN
+        read -e -rp "Force terminate process and retry? (Y/N): " AGAIN
 
         case "$AGAIN" in
 

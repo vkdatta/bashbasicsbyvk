@@ -19,7 +19,7 @@ _fx_adf_delete_by_date() {
   echo "3) Year    (e.g. 2024)"
   echo "4) Decade  (e.g. 2020s)"
   local lvl
-  read -p "Choice [1-4]: " lvl
+  read -e -p "Choice [1-4]: " lvl
   case "${lvl,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit ;; esac
   case "$lvl" in 1|2|3|4) ;; *) echo "❌ Invalid choice"; return ;; esac
 
@@ -47,7 +47,7 @@ _fx_adf_delete_by_date() {
   done
   echo "Pick one or more: numbers/ranges (1,3 or 2-4), or a = all"
   local reply
-  read -p "Choice: " reply
+  read -e -p "Choice: " reply
   [ -z "$reply" ] && { echo "🚫 Cancelled"; return; }
   case "${reply,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit ;; esac
 

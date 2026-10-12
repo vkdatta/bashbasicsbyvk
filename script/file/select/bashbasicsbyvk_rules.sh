@@ -189,12 +189,12 @@ _rule_save_as() {
   fi
   local dir; dir="$(_rl_dir "$scope" "$name")"
   if [ -e "$dir" ]; then
-    read -r -p "Rule '$name' exists in $scope — overwrite the expression? (y/n): " ans
+    read -e -r -p "Rule '$name' exists in $scope — overwrite the expression? (y/n): " ans
     [[ "$ans" == [yY] ]] || { echo "🚫 Cancelled"; return 1; }
     printf '%s\n' "$expr" > "$dir/$name.rule"
     echo "💾 Updated $scope rule '$name'"; return 0
   fi
-  read -r -p "📝 Description (optional): " desc
+  read -e -r -p "📝 Description (optional): " desc
   _rl_write_bundle "$scope" "$name" "$expr" "$desc" || { echo "❌ Could not write the rule"; return 1; }
   echo "💾 Saved $scope rule '$name'   (.r to manage it)"
 }
@@ -202,7 +202,7 @@ _rule_save_as() {
 _rule_delete_bundle() {          # _rule_delete_bundle <kind> <name>   (asks y/n)
   local kind="$1" name="$2" ans dir; dir="$(_rl_dir "$kind" "$name")"
   _rl_is_bundle "$dir" || { echo "❌ $kind rule '$name' not found"; return 1; }
-  read -r -p "Delete $kind rule '$name'? (y/n): " ans
+  read -e -r -p "Delete $kind rule '$name'? (y/n): " ans
   if [[ "$ans" == [yY] ]]; then rm -rf -- "$dir"; echo "🗑️  Deleted rule '$name'"; else echo "🚫 Cancelled"; fi
 }
 
@@ -384,7 +384,7 @@ _rl_cmd_create() {
   local kind="$_rl_cur" ans name raw expr desc
   if [ -z "$kind" ]; then
     echo; echo "Create a rule:"; echo "1) select rule  (.s ...)"; echo "2) display rule (.d ...)"
-    read -r -p "Choice [1-2]: " ans
+    read -e -r -p "Choice [1-2]: " ans
     case "$ans" in
       u|U) return 1 ;;
       q|Q) _bvk_quit ;;
@@ -394,15 +394,15 @@ _rl_cmd_create() {
     esac
   fi
   local head=.s; [ "$kind" = display ] && head=.d
-  read -r -p "📄 Rule name (e.g. mango or mango.txt): " raw
+  read -e -r -p "📄 Rule name (e.g. mango or mango.txt): " raw
   case "$raw" in u|U) return 1 ;; q|Q) _bvk_quit ;; esac
   name="$(_rl_clean_name "$raw")"
   if [ -z "$name" ]; then echo "🚫 Cancelled"; return 1; fi
   if ! _rule_valid_name "$name"; then echo "❌ Rule names: letters, digits, _ and - only"; return 1; fi
   if [ -e "$(_rl_dir "$kind" "$name")" ]; then echo "❌ A $kind rule called '$name' already exists"; return 1; fi
-  read -r -p "✏️  Expression (e.g. $head.ext png ; blank = open editor): " expr
+  read -e -r -p "✏️  Expression (e.g. $head.ext png ; blank = open editor): " expr
   case "$expr" in u|U) return 1 ;; q|Q) _bvk_quit ;; esac
-  read -r -p "📝 Description (optional): " desc
+  read -e -r -p "📝 Description (optional): " desc
   _rl_write_bundle "$kind" "$name" "$expr" "$desc" || { echo "❌ Could not create the rule"; return 1; }
   if [ -z "$expr" ]; then
     printf '# %s — %s rule.  Write ONE expression below; this file is the rule.\n# e.g.  %s.ext png,jpg    %s.size >3mb -r    %s.rule other_rule\n' \
@@ -430,7 +430,7 @@ _rl_cmd_delete() {
   for p in "${doomed[@]}"; do r=$(_rl_refs_to "$_rl_cur" "${p##*/}"); refs=$((refs + r)); done
   [ "$refs" -gt 0 ] && echo "⚠️  $refs other rule(s) refer to what you are deleting — they will become [broken rule]"
   local ans
-  read -r -p "Delete ${#doomed[@]} rule(s)? This can't be undone. (y/n): " ans
+  read -e -r -p "Delete ${#doomed[@]} rule(s)? This can't be undone. (y/n): " ans
   if [[ "$ans" != [yY] ]]; then echo "🚫 Deletion cancelled"; return 1; fi
   for p in "${doomed[@]}"; do rm -rf -- "$p"; done
   echo "✅ Deleted ${#doomed[@]} rule(s)"
@@ -443,11 +443,11 @@ _rl_cmd_rename() {
   fi
   if [ "${#items[@]}" -eq 0 ]; then echo "ℹ️  No rules here"; return 1; fi
   local num raw new
-  read -r -p "✏️  Rename which rule number? " num
+  read -e -r -p "✏️  Rename which rule number? " num
   case "$num" in u|U|"") return 1 ;; q|Q) _bvk_quit ;; esac
   _rl_pick "$num" || return 1
   _rl_is_bundle "$_rl_p" || { echo "🔒 Protected item"; return 1; }
-  read -r -p "📝 New name for '$_rl_n': " raw
+  read -e -r -p "📝 New name for '$_rl_n': " raw
   case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit ;; esac
   new="$(_rl_clean_name "$raw")"
   _rule_valid_name "$new" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
@@ -505,12 +505,12 @@ _rl_cmd_save_hist() {
     *) echo "❌ This expression mixes .s and .d clauses — it can't be one rule"; return 1 ;;
   esac
   echo "💾 $expr   → will be a $kind rule"
-  read -r -p "📄 Rule name (u = cancel): " raw
+  read -e -r -p "📄 Rule name (u = cancel): " raw
   case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit ;; esac
   name="$(_rl_clean_name "$raw")"
   _rule_valid_name "$name" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
   [ -e "$(_rl_dir "$kind" "$name")" ] && { echo "❌ A $kind rule called '$name' already exists"; return 1; }
-  read -r -p "📝 Description (optional): " desc
+  read -e -r -p "📝 Description (optional): " desc
   _rl_write_bundle "$kind" "$name" "$expr" "$desc" || { echo "❌ Could not save"; return 1; }
   local h tmp; h="$(_rl_hist_file)"; tmp="$h.tmp.$$"
   grep -vxF -- "$expr" "$h" > "$tmp" 2>/dev/null; mv -f -- "$tmp" "$h"
@@ -602,7 +602,7 @@ rules_menu() {
 
       clr)
         if [ "$_rl_tab" = last ]; then
-          local _a; read -r -p "Clear the last-used list? Your saved rules are not touched. (y/N): " _a
+          local _a; read -e -r -p "Clear the last-used list? Your saved rules are not touched. (y/N): " _a
           if [[ "$_a" == [yY] ]]; then : > "$(_rl_hist_file)"; echo "✅ Last-used list cleared"; else echo "🚫 Cancelled"; _rl_fresh=false; fi
         else echo "⚠️  clr works in the Last used tab"; _rl_fresh=false; fi ;;
 

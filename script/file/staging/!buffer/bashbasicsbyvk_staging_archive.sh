@@ -58,7 +58,7 @@ _compress_paths() {
     echo "📦 Compress as:"
     echo "   1) zip"
     echo "   2) tar.gz"
-    read -r -p "Choice [1-2]: " fmt_choice
+    read -e -r -p "Choice [1-2]: " fmt_choice
     fmt_choice="${fmt_choice%$'\r'}"
     case "$fmt_choice" in
     u|U) return ;;
@@ -82,9 +82,9 @@ _compress_paths() {
   # ── Archive name prompt ─────────────────────────────────────────────────
   echo ""
   if [ "$fmt" = "zip" ]; then
-    read -r -p "📦 Name for the archive (without .zip): " arc_name
+    read -e -r -p "📦 Name for the archive (without .zip): " arc_name
   else
-    read -r -p "📦 Name for the archive (without .tar.gz): " arc_name
+    read -e -r -p "📦 Name for the archive (without .tar.gz): " arc_name
   fi
   arc_name="${arc_name%$'\r'}"
   [ -z "$arc_name" ] && echo "🚫 Cancelled — no name given." && return
@@ -105,7 +105,7 @@ _compress_paths() {
   # ── Overwrite check ──────────────────────────────────────────────────────
   if [ -e "$arc_path" ]; then
     local ext; ext="${arc_path##*/}"
-    read -r -p "⚠️  '${ext}' already exists. Overwrite? [y/N]: " ow
+    read -e -r -p "⚠️  '${ext}' already exists. Overwrite? [y/N]: " ow
     ow="${ow%$'\r'}"
     [[ "$ow" =~ ^[Yy]$ ]] || { echo "🚫 Cancelled."; return; }
     rm -f "$arc_path"

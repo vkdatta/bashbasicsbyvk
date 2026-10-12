@@ -135,7 +135,7 @@ _bz_import() {
     echo "1) Keep existing   (skip the ${clash} file(s) that already exist)"
     echo "2) Overwrite       (replace the ${clash} file(s) that already exist)"
     echo "z) Cancel   u) Back"
-    read -r -p "Choice [1/2/z]: " ans
+    read -e -r -p "Choice [1/2/z]: " ans
     ans="${ans%$'\r'}"
     case "$ans" in
     u|U) return ;;

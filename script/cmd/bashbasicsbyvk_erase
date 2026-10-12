@@ -5,7 +5,7 @@ if [ -z "$1" ]; then
 fi
 if [ -f "$1" ]; then
   echo -n "Erase all contents of '$1'? (yes/no): "
-  read confirm
+  read -e confirm
   if [ "$confirm" = "yes" ]; then
     > "$1"
     echo "Contents of $1 erased."

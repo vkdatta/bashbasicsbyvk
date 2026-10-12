@@ -3,7 +3,7 @@
 set -euo pipefail
 
 echo "This script uses the external packages 'pyright' and 'openpyxl'."
-read -r -p "Do you want to proceed? (Y/N): " REPLY
+read -e -r -p "Do you want to proceed? (Y/N): " REPLY
 
 case "$REPLY" in
     [Yy]) ;;

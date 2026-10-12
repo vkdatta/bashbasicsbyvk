@@ -110,7 +110,7 @@ _sp_view_one_buffer() {
 
     echo
     echo "x) Remove item(s)   clr) Clear entire $label buffer   u) Back   q) Quit"
-    read -p "$label buffer: " bv_choice
+    read -e -p "$label buffer: " bv_choice
 
     case "$bv_choice" in
       x|X)
@@ -118,7 +118,7 @@ _sp_view_one_buffer() {
           echo "⚠️  Nothing to remove"
           continue
         fi
-        read -p "Item number(s) to remove (e.g. 1,3 or 2-4): " rm_input
+        read -e -p "Item number(s) to remove (e.g. 1,3 or 2-4): " rm_input
         local rm_indices
         rm_indices=($(parse_selection "$rm_input" "${#list[@]}"))
         if [ ${#rm_indices[@]} -eq 0 ]; then
@@ -141,7 +141,7 @@ _sp_view_one_buffer() {
         echo "✅ Removed ${#rm_indices[@]} item(s) from $label buffer"
         ;;
       clr|CLR)
-        read -p "Clear the entire $label buffer? (y/n): " confirm
+        read -e -p "Clear the entire $label buffer? (y/n): " confirm
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
           : > "$file"
           echo "🗑️  $label buffer cleared"
@@ -188,7 +188,7 @@ handle_staging_view() {
     echo "  8) Bookmark  once (-)         (${#bm_once[@]} item(s))"
     echo "  clr) Clear ALL buffers"
     echo "  u) Back   q) Quit"
-    read -p "View buffer: " v_choice
+    read -e -p "View buffer: " v_choice
 
     case "$v_choice" in
       1) _sp_view_one_buffer "Copy (persistent)"     "$_SP_CP_FILE" ;;
@@ -200,7 +200,7 @@ handle_staging_view() {
       7) _sp_view_one_buffer "Shortcut (once)"       "$_SP_SC_ONCE_FILE" ;;
       8) _sp_view_one_buffer "Bookmark (once)"       "$_SP_BM_ONCE_FILE" ;;
       clr|CLR)
-        read -p "Clear ALL eight buffers? This can't be undone. (y/n): " confirm
+        read -e -p "Clear ALL eight buffers? This can't be undone. (y/n): " confirm
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
           : > "$_SP_CP_FILE"
           : > "$_SP_MV_FILE"

@@ -32,7 +32,7 @@ _fx_adf_delete_by_ext() {
   done
   echo "Pick one or more: numbers/ranges (1,3 or 2-4), extension names (py,txt), or a = all"
   local reply
-  read -p "Choice: " reply
+  read -e -p "Choice: " reply
   [ -z "$reply" ] && { echo "🚫 Cancelled"; return; }
   case "${reply,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit ;; esac
 

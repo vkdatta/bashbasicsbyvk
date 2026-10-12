@@ -5,7 +5,7 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-read -p "Create as (d)irectory or (f)ile? [d/f]: " type
+read -e -p "Create as (d)irectory or (f)ile? [d/f]: " type
 
 case "$type" in
   d|D)

@@ -39,7 +39,7 @@ organise_by_ext() {
 echo "📁 Organise by extension:"
 echo "1) All files by ext"
 echo "2) Selected extension"
-read -p "Choice: " ech
+read -e -p "Choice: " ech
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
@@ -57,7 +57,7 @@ done
 _flush_buckets ext_buckets
 ;;
 2)
-read -p "Extension (e.g. py or .py): " inputext
+read -e -p "Extension (e.g. py or .py): " inputext
 local ext="${inputext#.}"
 [ -z "$ext" ] && ext="noext"
 local folder="$path/$ext"
@@ -139,7 +139,7 @@ organise_by_year() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -p "Number of years to group (1 = each year separate): " group_y
+read -e -p "Number of years to group (1 = each year separate): " group_y
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
 _batch_stat "$path"
 _year_range "${files[@]}"
@@ -157,9 +157,9 @@ organise_by_year_month() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -p "Number of years to group: " group_y
+read -e -p "Number of years to group: " group_y
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
-read -p "Number of months to group: " group_m
+read -e -p "Number of months to group: " group_m
 [[ $group_m =~ ^[0-9]+$ ]] || group_m=1
 _batch_stat "$path"
 _year_range "${files[@]}"
@@ -179,11 +179,11 @@ organise_by_year_month_date() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -p "Number of years to group: " group_y
+read -e -p "Number of years to group: " group_y
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
-read -p "Number of months to group: " group_m
+read -e -p "Number of months to group: " group_m
 [[ $group_m =~ ^[0-9]+$ ]] || group_m=1
-read -p "Number of days to group: " group_d
+read -e -p "Number of days to group: " group_d
 [[ $group_d =~ ^[0-9]+$ ]] || group_d=1
 _batch_stat "$path"
 _year_range "${files[@]}"
@@ -204,7 +204,7 @@ unorganise() {
 echo "🔄 Unorganise and bring to current location:"
 echo "1) Unorganise all"
 echo "2) Unorganise selected folders"
-read -p "Choice: " uch
+read -e -p "Choice: " uch
 case "$uch" in
 u|U) return ;;
 q|Q) _bvk_quit ;;
@@ -271,7 +271,7 @@ echo "3) Organise by year(s) > month(s) (metadata)"
 echo "4) Organise by year(s) > month(s) > date(s) (metadata)"
 echo "5) Unorganise and bring it to current location"
 echo "6) Organise A-Z"
-read -p "Enter choice [1-6]: " och
+read -e -p "Enter choice [1-6]: " och
 case "$och" in
 u|U) return ;;
 q|Q) _bvk_quit ;;

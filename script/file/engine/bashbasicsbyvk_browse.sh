@@ -523,6 +523,12 @@ _print_input_line() {
   builtin printf '\r\033[K'
   builtin printf "Select: %s" "$_buf"
   local back=$(( ${#_buf} - _pos ))
+  # recursive search is not run per keystroke: tell the user it runs on Enter
+  if declare -F _filter_deferred_buf >/dev/null 2>&1 && _filter_deferred_buf; then
+    local _hint="   (Enter = search sub-folders)"
+    builtin printf '%s' "$_hint"
+    back=$(( back + ${#_hint} ))
+  fi
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
 }
 
@@ -560,7 +566,10 @@ _sync_highlight_from_buf() {
   $_can_nav || return
   _vp_count
   (( _vp_n == 0 )) && return
-  if [[ "$_buf" =~ ^([A-Za-z]+-{1,2}|\.s[[:space:]]*|\.us[[:space:]]*|\.d[[:space:]]+)(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)$ ]]; then
+  # prefix = letters/digits then 1-2 dashes (ux- up- z- m- c2c- ...); a trailing " as <alias>" is ignored
+  local _hl_buf="$_buf"
+  [[ "$_hl_buf" == *" as "* || "$_hl_buf" == *" AS "* ]] && _hl_buf="${_hl_buf%% [aA][sS] *}"
+  if [[ "$_hl_buf" =~ ^([A-Za-z][A-Za-z0-9]*-{1,2}|\.s[[:space:]]*|\.us[[:space:]]*|\.d[[:space:]]+)(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)[[:space:]]*$ ]]; then
     local body="${BASH_REMATCH[2]}"
     local -A _old=()
     local k
@@ -702,7 +711,7 @@ _read_choice() {
     fi
 
     case "$key" in
-      "") break ;;
+      ""|$'\r') break ;;
       $'\x7f'|$'\x08')
         if ! _filter_on_backspace; then
           if [ "$_pos" -gt 0 ]; then

@@ -79,7 +79,7 @@ _sw_excl_add() {
   echo "  4) dirpath    — hide an entire directory tree"
   printf "Type (1-4) or Enter to cancel: "
   local t_choice
-  IFS= read -r t_choice
+  IFS= read -e -r t_choice
   local kind
   case "$t_choice" in
     u|U) echo "↩️  Back"; return 0 ;;
@@ -92,7 +92,7 @@ _sw_excl_add() {
   esac
   printf "Value: "
   local value
-  IFS= read -r value
+  IFS= read -e -r value
   value="${value// /}"          # strip leading/trailing spaces
   [ -z "$value" ] && { echo "Cancelled — empty value."; return 0; }
   # For filepath/dirpath: resolve ~ and make absolute if path-like
@@ -118,7 +118,7 @@ _sw_excl_remove() {
   [ "$total" -eq 0 ] && return 0
   printf "Remove rule number(s) (e.g. 1 or 1 3 5), or Enter to cancel: "
   local nums
-  IFS= read -r nums
+  IFS= read -e -r nums
   [ -z "$nums" ] && { echo "Cancelled."; return 0; }
   # Build list of 1-based indices to delete (sorted descending so sed line
   # numbers stay stable as we delete)
@@ -174,7 +174,7 @@ _sw_excl_menu() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     printf "Choice: "
     local xc
-    IFS= read -r xc
+    IFS= read -e -r xc
     case "${xc,,}" in
       a)  _sw_excl_add    ;;
       x)  _sw_excl_remove ;;
@@ -615,7 +615,7 @@ switch_menu() {
         if [ "$_sw_tab" = "recents" ]; then
           printf 'Clear all recents? This only clears the list, not your files. [y/N] '
           local _clr_ans
-          IFS= read -r _clr_ans
+          IFS= read -e -r _clr_ans
           if [[ "${_clr_ans,,}" == "y" ]]; then
             : > "$_SW_RECENTS_LIST"
             echo "✅ Recents list cleared."

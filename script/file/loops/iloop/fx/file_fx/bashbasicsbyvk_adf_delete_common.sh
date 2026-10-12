@@ -32,7 +32,7 @@ _fxdel_run_selected() {
   [ "$total" -eq 0 ] && { echo "❌ Nothing to delete"; return; }
 
   local confirm
-  read -p "Are you really sure you want to delete $total item(s)? This action can't be undone. (y/n): " confirm
+  read -e -p "Are you really sure you want to delete $total item(s)? This action can't be undone. (y/n): " confirm
   if [[ $confirm != "y" && $confirm != "Y" ]]; then
     echo "🚫 Deletion cancelled"
     return

@@ -94,7 +94,7 @@ _map_deliver() {
   echo
 
   local choice
-  read -p "Choose option [1-2]: " choice
+  read -e -p "Choose option [1-2]: " choice
 
   case "$choice" in
   u|U) return ;;
@@ -105,7 +105,7 @@ _map_deliver() {
       ;;
     2)
       local filename
-      read -p "Enter file name: " filename
+      read -e -p "Enter file name: " filename
       if [ -z "$filename" ]; then
         echo "🚫 Cancelled — no file name entered."
       else

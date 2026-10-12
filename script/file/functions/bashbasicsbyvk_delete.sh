@@ -14,7 +14,7 @@ delete_items() {
       echo "Note: shortcut(s) selected — only the shortcut pointer will be deleted, not the original file/folder."
     fi
 
-    read -p "Are you really sure you want to delete the selected files? This action can't be undone. (y/n): " confirm
+    read -e -p "Are you really sure you want to delete the selected files? This action can't be undone. (y/n): " confirm
     if [[ $confirm != "y" && $confirm != "Y" ]]; then
       echo "🚫 Deletion cancelled"
       return

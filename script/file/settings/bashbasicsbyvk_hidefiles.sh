@@ -72,7 +72,7 @@ _hidden_decide() {
     ask)
       _hid_inc=false
       _hidden_any "$@" || return 0            # nothing hidden in there: no need to ask
-      read -r -p "👁️  Include hidden files in $what? [y/N, u = cancel]: " a
+      read -e -r -p "👁️  Include hidden files in $what? [y/N, u = cancel]: " a
       a="${a%$'\r'}"
       case "${a,,}" in
         y|yes) _hid_inc=true ;;

@@ -76,7 +76,7 @@ install_gh() {
                 echo "  pkg install gh"
                 echo
 
-                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+                read -e -r -p "Install GitHub CLI now? [Y/n]: " answer
 
                 case "${answer:-Y}" in
                     y|Y|yes|YES|Yes)
@@ -101,7 +101,7 @@ install_gh() {
                 echo "GitHub's official APT repository will be configured."
                 echo
 
-                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+                read -e -r -p "Install GitHub CLI now? [Y/n]: " answer
 
                 case "${answer:-Y}" in
                     y|Y|yes|YES|Yes)
@@ -158,7 +158,7 @@ Install it with:
                 echo "GitHub's official RPM repository will be configured."
                 echo
 
-                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+                read -e -r -p "Install GitHub CLI now? [Y/n]: " answer
 
                 case "${answer:-Y}" in
                     y|Y|yes|YES|Yes)
@@ -194,7 +194,7 @@ Install it with:
                 echo "  sudo pacman -S github-cli"
                 echo
 
-                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+                read -e -r -p "Install GitHub CLI now? [Y/n]: " answer
 
                 case "${answer:-Y}" in
                     y|Y|yes|YES|Yes)
@@ -220,7 +220,7 @@ Install it with:
                 echo "  apk add github-cli"
                 echo
 
-                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+                read -e -r -p "Install GitHub CLI now? [Y/n]: " answer
 
                 case "${answer:-Y}" in
                     y|Y|yes|YES|Yes)
@@ -264,7 +264,7 @@ Official installation documentation:
                 echo "  brew install gh"
                 echo
 
-                read -r -p "Install GitHub CLI now? [Y/n]: " answer
+                read -e -r -p "Install GitHub CLI now? [Y/n]: " answer
 
                 case "${answer:-Y}" in
                     y|Y|yes|YES|Yes)
@@ -401,7 +401,7 @@ confirm_action() {
     echo "Confirmation code: $code"
     echo
 
-    read -r -p "Enter the confirmation code: " entered
+    read -e -r -p "Enter the confirmation code: " entered
 
     [[ "$entered" == "$code" ]] ||
         die "Confirmation failed."
@@ -528,7 +528,7 @@ ensure_git_root() {
         echo "  $TARGET"
         echo
 
-        read -r -p "Use the Git repository root instead? [y/N]: " answer
+        read -e -r -p "Use the Git repository root instead? [y/N]: " answer
 
         case "${answer:-N}" in
             y|Y|yes|YES|Yes)
@@ -577,7 +577,7 @@ select_version() {
     echo "4) None   (Skip version tag)"
     echo
 
-    read -r -p "Enter choice [1-4, Default: 1]: " choice
+    read -e -r -p "Enter choice [1-4, Default: 1]: " choice
 
     case "$choice" in
         2)
@@ -620,7 +620,7 @@ create_commit() {
     select_version
 
     echo
-    read -r -p \
+    read -e -r -p \
         "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " \
         user_msg
 
@@ -643,7 +643,7 @@ create_commit() {
     git status --short
     echo
 
-    read -r -p "Create this commit? [Y/n]: " answer
+    read -e -r -p "Create this commit? [Y/n]: " answer
 
     case "${answer:-Y}" in
         y|Y|yes|YES|Yes)
@@ -753,7 +753,7 @@ No force push was performed."
         echo "Any remote-only commits will no longer be reachable from $branch"
         echo "unless they are preserved elsewhere."
         echo
-        read -r -p "Do you want to override the remote with local version $local_version? [y/N]: " confirmation
+        read -e -r -p "Do you want to override the remote with local version $local_version? [y/N]: " confirmation
 
         case "$confirmation" in
             y|Y|yes|YES|Yes)
@@ -782,7 +782,7 @@ No force push was performed."
         echo
         echo "  $challenge"
         echo
-        read -r -p "Confirmation number: " typed
+        read -e -r -p "Confirmation number: " typed
 
         if [[ "$typed" != "$challenge" ]]; then
             die "Confirmation failed.
@@ -998,7 +998,7 @@ if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             echo "  $REPO_FULL"
             echo
 
-            read -r -p "Make repository private? [Y/n]: " private_answer
+            read -e -r -p "Make repository private? [Y/n]: " private_answer
 
             case "${private_answer:-Y}" in
                 n|N|no|NO|No)
@@ -1227,7 +1227,7 @@ else
 
         echo
 
-        read -r -p "Make repository private? [Y/n]: " private_answer
+        read -e -r -p "Make repository private? [Y/n]: " private_answer
 
         case "${private_answer:-Y}" in
             n|N|no|NO|No)

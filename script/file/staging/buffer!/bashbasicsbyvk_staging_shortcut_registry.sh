@@ -209,7 +209,7 @@ _scr_validate() {
     echo "   • $sf"
   done
 
-  read -p "Remove stale entries from registry? (y/n): " confirm
+  read -e -p "Remove stale entries from registry? (y/n): " confirm
   if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
     _scr_save kept
     echo "🗑️  Removed ${#stale[@]} stale entry/entries. Registry now holds ${#kept[@]}."
@@ -229,7 +229,7 @@ handle_scr_sync() {
   echo "  2) Validate (find & remove stale entries)"
   echo "  3) Full rebuild (rescan \$HOME — slow, use when in doubt)"
   echo "  q) Back"
-  read -p "Choice: " _scr_choice
+  read -e -p "Choice: " _scr_choice
 
   case "$_scr_choice" in
   u|U) return ;;
@@ -256,7 +256,7 @@ handle_scr_sync() {
       ;;
     2) _scr_validate ;;
     3)
-      read -p "Full rebuild will rescan all of \$HOME. Continue? (y/n): " confirm
+      read -e -p "Full rebuild will rescan all of \$HOME. Continue? (y/n): " confirm
       [[ "$confirm" == "y" || "$confirm" == "Y" ]] && _scr_rebuild || echo "🚫 Cancelled."
       ;;
     q|Q|"") return 0 ;;

@@ -20,7 +20,7 @@ infinity_stones_menu() {
   printf "fully tested and declared production-ready.\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 
-  read -p "Choice: " is_choice
+  read -e -p "Choice: " is_choice
 
   case "$is_choice" in
   u|U) return ;;

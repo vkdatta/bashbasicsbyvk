@@ -118,7 +118,7 @@ _view_selections_menu() {
     fi
     echo
     echo "c) Confirm   x) Remove   u) Back   q) Quit"
-    read -p "Selection view: " sv_choice
+    read -e -p "Selection view: " sv_choice
 
     case "$sv_choice" in
       c|C)
@@ -135,7 +135,7 @@ _view_selections_menu() {
           continue
         fi
         echo "Enter item number(s) to remove (e.g. 1,3 or 2-5):"
-        read -p "Remove: " rm_input
+        read -e -p "Remove: " rm_input
         local rm_indices
         rm_indices=($(parse_selection "$rm_input" "${#_sel_ref[@]}"))
         if [ ${#rm_indices[@]} -eq 0 ]; then
@@ -260,7 +260,7 @@ local_navigator() {
       echo "u) Up   n) New folder   c) Confirm destination   z) Cancel   q) Quit"
     fi
 
-    read -p "Nav: " nav_choice
+    read -e -p "Nav: " nav_choice
 
     case "$nav_choice" in
       q|Q) exit 0 ;;
@@ -277,7 +277,7 @@ local_navigator() {
         ;;
       n|N)
         if [ "$mode" == "dest" ]; then
-          read -p "📂 New folder name: " new_dir_name
+          read -e -p "📂 New folder name: " new_dir_name
           if [ -n "$new_dir_name" ]; then
             mkdir -p "$nav_path/$new_dir_name"
             echo "✅ Created: $nav_path/$new_dir_name"
@@ -452,7 +452,7 @@ gcloud_navigator() {
       echo "u) Up   n) New folder   c) Confirm destination   z) Cancel   q) Quit"
     fi
 
-    read -p "GCloud Nav: " gnav_choice
+    read -e -p "GCloud Nav: " gnav_choice
 
     case "$gnav_choice" in
       q|Q)
@@ -469,7 +469,7 @@ gcloud_navigator() {
         ;;
       n|N)
         if [ "$mode" == "dest" ]; then
-          read -p "📂 New remote folder name: " new_rdir
+          read -e -p "📂 New remote folder name: " new_rdir
           if [ -n "$new_rdir" ]; then
             _gcloud_cmd "mkdir -p '$remote_path/$new_rdir'"
             echo "✅ Created remote: $remote_path/$new_rdir"
@@ -824,7 +824,7 @@ transfer_menu() {
   echo "3) Current CLI To Drive (Via rclone)"
   echo "4) Local To GCloud (Run from Local)"
   echo "5) GCloud To Local (Run from Local)"
-  read -p "Mode [1-5]: " t_mode
+  read -e -p "Mode [1-5]: " t_mode
 
   case "$t_mode" in
   u|U) return ;;
@@ -933,7 +933,7 @@ transfer_menu() {
   else
     echo "c) Copy   m) Move"
   fi
-  read -p "Action: " t_action
+  read -e -p "Action: " t_action
 
   local t_op
   case "$t_action" in

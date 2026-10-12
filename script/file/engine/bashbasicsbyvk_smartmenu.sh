@@ -382,7 +382,7 @@ _sm_split_command() {
   local b="$1"
   _sm_cmd_prefix=""; _sm_sel_body="$b"
   # dashed form first: one or more letters then one/two dashes
-  if [[ "$b" =~ ^([A-Za-z]+-{1,2})([0-9].*)?$ ]]; then
+  if [[ "$b" =~ ^([A-Za-z][A-Za-z0-9]*-{1,2})([0-9].*)?$ ]]; then
     _sm_cmd_prefix="${BASH_REMATCH[1]}"
     _sm_sel_body="${BASH_REMATCH[2]}"
     return
@@ -792,12 +792,12 @@ read() {
         while [ -n "$__smr_rest" ]; do
           __smr_c="${__smr_rest:0:1}"; __smr_rest="${__smr_rest:1}"
           case "$__smr_c" in
-            r) ;;
+            r|e) ;;     # -e only matters for the builtin fallback (readline arrows)
             p)
               if [ -n "$__smr_rest" ]; then _sm_prompt="$__smr_rest"; __smr_rest=""
               else __smr_i=$(( __smr_i + 1 )); _sm_prompt="${__smr_a[$__smr_i]}"; fi
               ;;
-            *) _sm_ok=0; __smr_rest="" ;;    # -s -a -d -n -t -u -i -e ...
+            *) _sm_ok=0; __smr_rest="" ;;    # -s -a -d -n -t -u -i ...
           esac
         done
         ;;

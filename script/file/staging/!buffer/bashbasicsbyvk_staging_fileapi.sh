@@ -59,7 +59,7 @@ _bb_authed_put() {
 
     if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
       echo "⚠️  ${msg}" >&2
-      read -p "   Proceed at 1.2x credit cost? (y/n): " ans
+      read -e -p "   Proceed at 1.2x credit cost? (y/n): " ans
       if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
         confirmed=true
         continue
@@ -430,7 +430,7 @@ _bb_upload_init() {
 
     if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
       echo "⚠️  ${msg}" >&2
-      read -p "   Proceed at 1.2x credit cost? (y/n): " ans
+      read -e -p "   Proceed at 1.2x credit cost? (y/n): " ans
       if [[ "$ans" == "y" || "$ans" == "Y" ]]; then confirmed=true; continue; fi
       echo "🚫 Cancelled." >&2
       return 1
@@ -902,7 +902,7 @@ _c2c_paths() {
 handle_do_import() {
   _crypto_check || return 1
 
-  read -r -p "🔗 Paste link to import (include the #k=... part): " link
+  read -e -r -p "🔗 Paste link to import (include the #k=... part): " link
   [ -z "$link" ] && echo "🚫 Cancelled" && return
 
   if [[ "$link" != *://* ]]; then
@@ -938,7 +938,7 @@ handle_do_import() {
   local whost="${WORKER_URL#https://}"
   if [ "$lhost" != "$whost" ]; then
     echo "⚠️  This link points to '$lhost', not your configured server ($whost)."
-    local ans; read -r -p "   Continue anyway? (y/n): " ans
+    local ans; read -e -r -p "   Continue anyway? (y/n): " ans
     [[ "$ans" == "y" || "$ans" == "Y" ]] || { echo "🚫 Cancelled."; return 1; }
   fi
 
@@ -957,7 +957,7 @@ handle_do_import() {
     rm -f "$tmp_body"
 
     if [ -t 1 ] && [ -t 0 ]; then
-      read -r -p "💾 Save as filename in $path (blank = print to terminal): " fname
+      read -e -r -p "💾 Save as filename in $path (blank = print to terminal): " fname
     else
       fname=""
     fi

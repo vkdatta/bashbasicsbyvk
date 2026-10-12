@@ -24,7 +24,7 @@ handle_file() {
         echo "u) Back to Previous Menu"
         echo "q) Quit"
         echo "h) Home"
-        read -p "Enter choice: " action
+        read -e -p "Enter choice: " action
 
         case "$action" in
             0)
@@ -160,7 +160,7 @@ run_file() {
         return 1
     fi
     if [ -x "$file" ]; then
-        read -p "⚙️ File is executable. Run directly? (y/N): " yn
+        read -e -p "⚙️ File is executable. Run directly? (y/N): " yn
         if [[ $yn =~ ^[Yy]$ ]]; then
             "$file"
             return $?
@@ -172,7 +172,7 @@ run_file() {
         interpreter=$(echo "$firstline" | cut -c3- | awk '{print $1}')
         exe=$(basename "$interpreter")
         if command -v "$exe" >/dev/null 2>&1; then
-            read -p "⚙️ Run with shebang interpreter ($exe)? (y/N): " yn2
+            read -e -p "⚙️ Run with shebang interpreter ($exe)? (y/N): " yn2
             if [[ $yn2 =~ ^[Yy]$ ]]; then
                 "$exe" "$file"
                 return $?

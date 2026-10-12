@@ -1,5 +1,5 @@
 create_files() {
-  read -p "📄 Enter filenames (separated by ,): " filelist
+  read -e -p "📄 Enter filenames (separated by ,): " filelist
   IFS=',' read -ra files <<< "$filelist"
   for file in "${files[@]}"; do
     file=$(echo "$file" | xargs)
@@ -27,7 +27,7 @@ create_files() {
 }
 
 create_dirs() {
-  read -p "📂 Enter folder names (separated by ,): " dirlist
+  read -e -p "📂 Enter folder names (separated by ,): " dirlist
   IFS=',' read -ra dirs <<< "$dirlist"
   for dir in "${dirs[@]}"; do
     mkdir -p "$path/$dir"
@@ -41,7 +41,7 @@ handle_create() {
   echo "1) New folders"
   echo "2) New files"
   echo
-  read -r -p "Choice [1-2]: " cr
+  read -e -r -p "Choice [1-2]: " cr
 
   case "$cr" in
   u|U) return ;;
