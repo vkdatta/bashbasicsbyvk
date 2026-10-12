@@ -278,12 +278,17 @@ _vp_geometry() {
   _vp_hdr_show=$_vp_top_n
   _vp_ftr_show=$_vp_footer_n
 
+  # Select-prompt screens keep ONE spare row under the prompt: hints ("type to filter live")
+  # and the loading bar are drawn there, never on the line being typed on.
+  _vp_hint_row=0
+  [ "${_vp_input_fn:-}" = "_print_input_line" ] && _vp_hint_row=1
+
   min_rows=3
   (( _vp_n > 0 && _vp_n < min_rows )) && min_rows=$_vp_n
   (( min_rows < 1 )) && min_rows=1
 
   while :; do
-    chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 ))
+    chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_row ))
     (( rows - chrome >= min_rows )) && break
     if   (( _vp_ftr_show > 0 ));  then _vp_ftr_show=$(( _vp_ftr_show - 1 ))
     elif (( _vp_ind > 0 ));       then _vp_ind=0
@@ -294,7 +299,7 @@ _vp_geometry() {
 
   _vp_apply_chrome_budget
 
-  chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 ))
+  chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_row ))
   _vp_page=$(( rows - chrome ))
   (( _vp_page < 1 )) && _vp_page=1
   (( _vp_page > _vp_n )) && _vp_page=$_vp_n
@@ -469,6 +474,7 @@ _vp_rerender() {
 }
 
 _vp_render_fresh() {
+  _hint_cur="?"          # a fresh screen: whatever sits under the prompt is unknown, repaint the hint row
   _vp_build_chrome
   _vp_geometry
   _vp_ensure_visible "${_hl_index:-1}"
@@ -524,6 +530,7 @@ _vp_tab_repaint() {
   (( _up < 0 ))         && _up=0
   (( _up > 0 ))         && printf '\033[%dA' "$_up"
   printf '\r\033[J'
+  _hint_cur="?"
   _vp_build_chrome
   _vp_geometry
   _vp_ensure_visible "${_hl_index:-1}"

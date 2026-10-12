@@ -519,16 +519,29 @@ _render_items_with_highlight() {
   done
 }
 
+# The row UNDER the prompt (kept free by _vp_geometry) shows a dim hint for what is being typed:
+#   =   "type to filter live"  (browser terminals: "type, then press Enter to filter")
+#   ==  "Enter = search sub-folders"
+# The line being typed on is never touched.  _hint_cur = what is on screen now ("?" = unknown).
+_hint_cur=""
+_hint_want=""
+_input_hint_sync() {
+  _hint_want=""
+  if [ "${_vp_hint_row:-0}" = 1 ] && declare -F _filter_hint_text >/dev/null 2>&1; then _filter_hint_text; fi
+  [ "$_hint_want" = "$_hint_cur" ] && return 0
+  _hint_cur="$_hint_want"
+  if [ -n "$_hint_want" ]; then
+    builtin printf '\n\r\033[2K\033[2m%s\033[0m\033[1A\r' "$_hint_want"
+  else
+    builtin printf '\n\r\033[2K\033[1A\r'
+  fi
+}
+
 _print_input_line() {
+  _input_hint_sync
   builtin printf '\r\033[K'
   builtin printf "Select: %s" "$_buf"
   local back=$(( ${#_buf} - _pos ))
-  # recursive search is not run per keystroke: tell the user it runs on Enter
-  if declare -F _filter_deferred_buf >/dev/null 2>&1 && _filter_deferred_buf; then
-    local _hint="   (Enter = search sub-folders)"
-    builtin printf '%s' "$_hint"
-    back=$(( back + ${#_hint} ))
-  fi
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
 }
 
@@ -736,6 +749,10 @@ _read_choice() {
 
   trap - WINCH
   stty "$_orig_stty" 2>/dev/null
+  # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)
+  if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "$_hint_cur" ]; then
+    _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'
+  fi
   echo
 
   if [ -n "$_buf" ]; then choice="$_buf"

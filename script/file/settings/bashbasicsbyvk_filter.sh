@@ -110,6 +110,28 @@ _filter_deferred_buf() {
   [ "${filter_recursive:-false}" = "true" ]
 }
 
+# Which hint (if any) goes on the row under the prompt for the text typed so far → _hint_want.
+# Called by _input_hint_sync on every prompt redraw; cheap, no subshell.
+# A browser terminal (Cloud Shell in Chrome etc.) hands over typed letters only once Enter is
+# pressed, so there "=" cannot filter live — say so.  BVK_BROWSER_TERM=1|0 overrides the guess.
+_bvk_browser_term() {
+  case "${BVK_BROWSER_TERM:-}" in 1|true|yes) return 0 ;; 0|false|no) return 1 ;; esac
+  [ "${CLOUD_SHELL:-}" = "true" ] && [ -z "${SSH_CONNECTION:-}${SSH_CLIENT:-}${SSH_TTY:-}" ]
+}
+_filter_hint_text() {
+  _hint_want=""
+  [[ "$_buf" == =* ]] || return 0
+  if _filter_deferred_buf; then _hint_want="Enter = search sub-folders"; return 0; fi
+  [ "$_buf" = "=" ] || return 0
+  if _filter_rec_context && [ "${filter_recursive:-false}" = "true" ]; then
+    _hint_want="type, then press Enter = search sub-folders"
+  elif _bvk_browser_term; then
+    _hint_want="type, then press Enter to filter"
+  else
+    _hint_want="type to filter live"
+  fi
+}
+
 # Walk every sub-folder below $path (the navigation path) and print the full
 # paths whose NAME matches $1 (same partial/exact rule as the flat filter),
 # sorted like the folder view. Folder symlinks are not followed (no loops);
@@ -155,7 +177,13 @@ PYEOF
 _filter_rec_fill() {
   local f _tmp
   _tmp="$(_bvk_tmp)"
+  # back-and-forth loading bar on the row under the prompt; _filter_commit keeps the cursor
+  # hidden until the screen is redrawn (_filter_keep_hidden), so no stray cursor box appears
+  declare -F _lb_start >/dev/null 2>&1 && _lb_start --below "Searching sub-folders"
   _filter_rec_scan "$1" >"$_tmp" 2>/dev/null
+  if declare -F _lb_stop >/dev/null 2>&1; then
+    if [ "${_filter_keep_hidden:-0}" = 1 ]; then _lb_stop --keep-hidden; else _lb_stop; fi
+  fi
   mapfile -t items <"$_tmp"
   rm -f "$_tmp"
   _REC_LABEL=()
@@ -567,20 +595,26 @@ _filter_commit() {
     fi
   fi
   if $rec && [ -n "$q" ]; then
-    builtin printf '\033[1A\r'       # _read_choice left the cursor one row below the input line
+    # cursor hidden FIRST (no white box on the "S" of Select while searching), then back up to
+    # the prompt row — _read_choice left the cursor one row below the input line.  It is shown
+    # again once the screen has been redrawn.
+    builtin printf '\033[?25l\033[1A\r'
+    _filter_keep_hidden=1
     if ${imaginary_mode:-false} || ${_imag_filter_committed:-false}; then
       _imag_filter_query="$q"
       _imag_filter_apply             # redraws by itself
-      return 0
+    else
+      [ "${#_filter_src[@]}" -eq 0 ] && _filter_snapshot
+      _filter_query="$q"
+      _filter_apply
+      _hl_index=0
+      _vp_count
+      _vp_cache_reset
+      _vp_prime_rows
+      _vp_redraw_in_place
     fi
-    [ "${#_filter_src[@]}" -eq 0 ] && _filter_snapshot
-    _filter_query="$q"
-    _filter_apply
-    _hl_index=0
-    _vp_count
-    _vp_cache_reset
-    _vp_prime_rows
-    _vp_redraw_in_place
+    _filter_keep_hidden=0
+    builtin printf '\033[?25h'
     return 0
   fi
   _hl_index=0

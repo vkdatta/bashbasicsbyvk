@@ -187,11 +187,11 @@ _upg_build_items() {
   items=()
   _hl_index=0
   # the stable list is always needed (the Tags tab marks which tags are stable)
-  if [ "$_UPG_S_LOADED" -eq 0 ]; then echo "⏳ Fetching releases from GitHub…"; _upg_load_stable; fi
+  if [ "$_UPG_S_LOADED" -eq 0 ]; then _lb_run "Fetching stable releases from GitHub" _upg_load_stable; fi
   if [ "$_upg_tab" = stable ]; then
     items=("${_UPG_S_TAG[@]}")
   else
-    if [ "$_UPG_T_LOADED" -eq 0 ]; then echo "⏳ Fetching tags from GitHub…"; _upg_load_tags; fi
+    if [ "$_UPG_T_LOADED" -eq 0 ]; then _lb_run "Fetching tags from GitHub" _upg_load_tags; fi
     items=("${_UPG_T_TAG[@]}")
   fi
   _all_items=("${items[@]}")

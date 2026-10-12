@@ -62,8 +62,7 @@ _cfw_load() {
   local creds
   creds="$("$_CFW_PY" "$_CFW_MAIN" "$_CFW_NAV" --print-credentials)" || { echo "❌ No usable Cloudflare credentials."; return 1; }
   _CFW_TOK="${creds%%$'\n'*}"; _CFW_ACC="${creds#*$'\n'}"; creds=""
-  echo "☁️  Loading workers and pages…"
-  _cfw_fetch || { echo "❌ No workers or pages could be listed (see message above)."; _cfw_forget; return 1; }
+  _lb_run "Loading workers and pages from Cloudflare" _cfw_fetch || { echo "❌ No workers or pages could be listed (see message above)."; _cfw_forget; return 1; }
 }
 
 # ── drawer screen (xui) ─────────────────────────────────────────────────────
@@ -136,7 +135,7 @@ _cfw_export() {
 
 _cfw_cmd() {
   case "$1" in
-    rf) _cfw_fetch || echo "❌ Refresh failed."; return 0 ;;
+    rf) _lb_run "Refreshing workers and pages" _cfw_fetch || echo "❌ Refresh failed."; return 0 ;;
     e|e-*) _cfw_export "$1"; return 0 ;;
     r|r-*)
       _xui_select_rows "RECOVER" "☁️  Recover which workers / pages?" "$1" || return 1
