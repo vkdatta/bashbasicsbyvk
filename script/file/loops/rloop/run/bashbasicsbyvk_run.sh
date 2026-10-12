@@ -16,14 +16,13 @@ handle_file() {
         echo "1) View"
         echo "2) Edit"
         echo "3) Copy Content"
-        echo "4) Delete Content"
+        echo "4) Delete File"
         echo "5) Erase Content"
         echo "6) Replace With Clipboard Content"
         echo "7) Rename File"
         echo "8) Share"
-        echo "u) Back to Previous Menu"
-        echo "q) Quit"
-        echo "h) Home"
+        builtin printf "u) Up   q) Quit   h) Home\n"
+
         read -e -p "Enter choice: " action
 
         case "$action" in
