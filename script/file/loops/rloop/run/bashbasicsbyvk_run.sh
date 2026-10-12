@@ -10,21 +10,12 @@ handle_file() {
     local file="$1"
 
     while true; do
-        echo
-        echo "📄 File selected: $(basename "$file")"
-        echo "What would you like to do with the file?"
-        echo "0) Run"
-        echo "1) View"
-        echo "2) Edit"
-        echo "3) Copy Content"
-        echo "4) Delete File"
-        echo "5) Erase Content"
-        echo "6) Replace With Clipboard Content"
-        echo "7) Rename File"
-        echo "8) Share"
-
-        mapfile -t _fl < <(_menu_footer_lines)
-        printf '%s\n' "${_fl[@]}"
+        _mc_header "📄 File selected: $(basename "$file")" \
+                   "What would you like to do with the file?"
+        _mc_options 0 "Run" "View" "Edit" "Copy Content" "Delete File" \
+                      "Erase Content" "Replace With Clipboard Content" \
+                      "Rename File" "Share"
+        _mc_footer @file_menu
 
         read -e -p "Enter choice: " action
 
