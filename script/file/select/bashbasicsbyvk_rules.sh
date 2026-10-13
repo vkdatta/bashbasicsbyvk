@@ -386,7 +386,7 @@ _rl_cmd_create() {
       q|Q) _bvk_quit ;;
       1) kind=select ;;
       2) kind=display ;;
-      *) echo "Invalid choice"; return 1 ;;
+      *) _bvk_invalid; return 1 ;;
     esac
   fi
   local head=.s; [ "$kind" = display ] && head=.d
@@ -620,7 +620,7 @@ rules_menu() {
 
       *)
         if ! [[ "$_rl_choice" =~ ^[0-9]+$ ]] || [ "$_rl_choice" -lt 1 ] || [ "$_rl_choice" -gt "${#items[@]}" ]; then
-          echo "⚠️  Invalid selection"; _rl_fresh=false
+          _bvk_invalid _rl_fresh
         elif [ "$_rl_tab" = last ]; then
           _rl_cmd_save_hist "$_rl_choice" || _rl_fresh=false
         elif [ -z "$_rl_cur" ]; then

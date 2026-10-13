@@ -428,7 +428,7 @@ _sw_bookmarks_handle_selection() {
       [ -d "$t" ] && { path="$t"; group_prefix=""; force_show=false; return 0; }
       [ -f "$t" ] && handle_file "$t"
     else
-      echo "⚠️  Invalid: $choice"
+      _bvk_invalid
     fi
     return 0
   fi
@@ -463,7 +463,7 @@ _sw_bookmarks_handle_selection() {
         group_prefix="${group_prefix}${ch}"; force_show=false
       fi
     else
-      echo "⚠️  Invalid selection"
+      _bvk_invalid
     fi
     return 0
   fi
@@ -482,7 +482,7 @@ _sw_bookmarks_handle_selection() {
     fi
     [ -f "$selected" ] && handle_file "$selected"
   else
-    echo "⚠️  Invalid selection"
+    _bvk_invalid
   fi
   return 0
 }
@@ -492,7 +492,7 @@ _sw_bookmarks_handle_selection() {
 
 _sw_favourites_handle_selection() {
   local choice="$1"
-  [[ "$choice" =~ ^[0-9]+$ ]] || { echo "⚠️  Invalid"; return 0; }
+  [[ "$choice" =~ ^[0-9]+$ ]] || { _bvk_invalid; return 0; }
   [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ] || { echo "⚠️  Out of range"; return 0; }
   local t="${items[$((choice-1))]}"
   if [ ! -e "$t" ]; then
@@ -513,7 +513,7 @@ _sw_favourites_handle_selection() {
 
 _sw_recents_handle_selection() {
   local choice="$1"
-  [[ "$choice" =~ ^[0-9]+$ ]] || { echo "⚠️  Invalid"; return 0; }
+  [[ "$choice" =~ ^[0-9]+$ ]] || { _bvk_invalid; return 0; }
   [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ] || { echo "⚠️  Out of range"; return 0; }
   handle_file "${items[$((choice-1))]}"
 }

@@ -33,7 +33,7 @@ handle_file() {
             h|H) home_menu; return 1 ;;
             q|Q) exit 0 ;;
             *)
-                echo "❌ Invalid option. Try again."
+                _bvk_invalid
                 ;;
         esac
     done

@@ -162,7 +162,7 @@ _view_selections_menu() {
         exit 0
         ;;
       *)
-        echo "⚠️  Invalid choice"
+        _bvk_invalid
         ;;
     esac
   done
@@ -281,7 +281,7 @@ local_navigator() {
             nav_path="$nav_path/$new_dir_name"
           fi
         else
-          echo "⚠️  Invalid choice"
+          _bvk_invalid
         fi
         ;;
       v|V)
@@ -289,7 +289,7 @@ local_navigator() {
           _view_selections_menu nav_selected_items
           [ $? -eq 0 ] && return 0
         else
-          echo "⚠️  Invalid choice"
+          _bvk_invalid
         fi
         ;;
       c|C)
@@ -319,7 +319,7 @@ local_navigator() {
             [ "$ch" == "#" ] && nav_prefix="${nav_prefix}#" || nav_prefix="${nav_prefix}${ch,,}"
             nav_force_show=false
           else
-            echo "⚠️  Invalid selection"
+            _bvk_invalid
           fi
         else
           if [ "$mode" == "source" ]; then
@@ -372,7 +372,7 @@ local_navigator() {
                     fi
                   fi
                 else
-                  echo "⚠️  Invalid selection"
+                  _bvk_invalid
                 fi
               fi
             else
@@ -389,7 +389,7 @@ local_navigator() {
                 echo "⚠️  Select a folder (📁) to navigate into, or c) to confirm this location"
               fi
             else
-              echo "⚠️  Invalid selection"
+              _bvk_invalid
             fi
           fi
         fi
@@ -471,7 +471,7 @@ gcloud_navigator() {
             remote_path="$remote_path/$new_rdir"
           fi
         else
-          echo "⚠️  Invalid choice"
+          _bvk_invalid
         fi
         ;;
       v|V)
@@ -479,7 +479,7 @@ gcloud_navigator() {
           _view_selections_menu gcloud_nav_selected_items
           [ $? -eq 0 ] && return 0
         else
-          echo "⚠️  Invalid choice"
+          _bvk_invalid
         fi
         ;;
       c|C)
@@ -543,7 +543,7 @@ gcloud_navigator() {
                   fi
                 fi
               else
-                echo "⚠️  Invalid selection"
+                _bvk_invalid
               fi
             fi
           else
@@ -561,7 +561,7 @@ gcloud_navigator() {
               echo "⚠️  Select a folder (📁) to navigate into, or c) to confirm this location"
             fi
           else
-            echo "⚠️  Invalid selection"
+            _bvk_invalid
           fi
         fi
         ;;

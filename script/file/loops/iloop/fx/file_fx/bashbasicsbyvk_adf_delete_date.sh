@@ -18,7 +18,7 @@ _fx_adf_delete_by_date() {
   local lvl
   read -e -p "Select: " lvl
   case "${lvl,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit ;; esac
-  case "$lvl" in 1|2|3|4) ;; *) echo "❌ Invalid choice"; return ;; esac
+  case "$lvl" in 1|2|3|4) ;; *) _bvk_invalid; return ;; esac
 
   _batch_stat "$path"
   local -A count=() key_of=()

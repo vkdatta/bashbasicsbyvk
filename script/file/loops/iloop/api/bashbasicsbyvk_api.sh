@@ -656,7 +656,7 @@ api_menu() {
 
       *)
         if ! [[ "$_ap_choice" =~ ^[0-9]+$ ]] || [ "$_ap_choice" -lt 1 ] || [ "$_ap_choice" -gt "${#items[@]}" ]; then
-          echo "⚠️  Invalid selection"; _ap_fresh=false
+          _bvk_invalid _ap_fresh
         else
           _api_cmd_open "$_ap_choice" || true
         fi ;;

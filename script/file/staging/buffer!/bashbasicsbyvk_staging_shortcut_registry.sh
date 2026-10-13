@@ -256,6 +256,6 @@ handle_scr_sync() {
       [[ "$confirm" == "y" || "$confirm" == "Y" ]] && _scr_rebuild || echo "🚫 Cancelled."
       ;;
     q|Q|"") return 0 ;;
-    *) echo "⚠️  Invalid choice." ;;
+    *) _bvk_invalid ;;
   esac
 }

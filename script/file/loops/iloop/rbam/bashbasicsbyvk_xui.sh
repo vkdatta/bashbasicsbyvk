@@ -185,7 +185,7 @@ _xui_loop() {
             rc=2
           else echo "↩️  Go back with  u  first."; fi ;;
         _*|__sw_tab_*) ;;
-        *) echo "⚠️  Invalid selection" ;;
+        *) _bvk_invalid; rc=0 ;;     # rc 0 -> _xui_fresh redraws THIS menu
       esac
     fi
     case "$rc" in

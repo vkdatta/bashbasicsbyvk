@@ -545,9 +545,9 @@ _bvk_auth_user_menu() {  # $1=profile id
       "") ;;
       ux) _au_export_ids "$_AU_UID" ;;
       ui) _bvk_auth_import ;;
-      *[!0-9]*) echo "❓ Unknown option." ;;
+      *[!0-9]*) _bvk_invalid ;;
       *)  if _au_row "$choice"; then _au_user_action "$_AU_SLOT"
-          else echo "⚠️  Invalid selection"; fi ;;
+          else _bvk_invalid; fi ;;
     esac
     _au_fresh || break          # profile vanished -> back to the list
   done
@@ -589,12 +589,12 @@ auth_menu() {
         if _au_select_rows "EXPORT" "📤 Export users — which ones?" "$choice"; then
           _au_ids_of_sel; _au_export_ids "${_AU_SELIDS[@]}"
         fi ;;
-      *[!0-9]*) echo "❓ Unknown option." ;;
+      *[!0-9]*) _bvk_invalid ;;
       *)
         if _au_row "$choice"; then
           _bvk_auth_user_menu "${_BVK_AUTH_IDS[$_AU_SLOT]}"
           [ "$_AU_QUIT" = 1 ] && break
-        else echo "⚠️  Invalid selection"; fi ;;
+        else _bvk_invalid; fi ;;
     esac
     _au_fresh
   done

@@ -391,7 +391,7 @@ upgrade_menu() {
 
       *)
         if ! [[ "$_up_choice" =~ ^[0-9]+$ ]] || [ "$_up_choice" -lt 1 ] || [ "$_up_choice" -gt "${#items[@]}" ]; then
-          echo "⚠️  Invalid selection"; _up_fresh=false
+          _bvk_invalid _up_fresh
         else
           _upg_cmd_install "$_up_choice" || true
           _up_fresh=false

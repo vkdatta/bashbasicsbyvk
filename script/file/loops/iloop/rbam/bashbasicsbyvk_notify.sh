@@ -115,7 +115,7 @@ _nf_cmd() {
       for r in "${_XUI_SEL[@]}"; do _xui_slot "$r"; k=$_XUI_SLOT; _nf_dismiss "${_NF_ID[$k]}"; done
       echo "✅ Dismissed ${#_XUI_SEL[@]}."; _NF_LOADED=0; return 0 ;;
     [0-9]*)
-      _xui_row "$1" || { echo "⚠️  Invalid selection"; return 1; }
+      _xui_row "$1" || { _bvk_invalid; return 0; }
       _nf_open "$_XUI_SLOT"; _NF_LOADED=0; return 0 ;;
     *) return 9 ;;
   esac

@@ -26,22 +26,24 @@ _infinity_warning() {
 infinity_stones_menu() {
   _infinity_warning
 
-  _mc_menu "💎 Infinity Stones" -- \
-    "Extract Tables and Links from Web" "JavaScript Audit" "Python Audit" \
-    "Git Push" "Generate SQL" "LocalHost" -- @infinity
+  while true; do
+    _mc_menu "💎 Infinity Stones" -- \
+      "Extract Tables and Links from Web" "JavaScript Audit" "Python Audit" \
+      "Git Push" "Generate SQL" "LocalHost" -- @infinity
 
-  read -e -p "Select: " is_choice
+    read -e -p "Select: " is_choice
 
-  case "$is_choice" in
-  u|U) return ;;
-  q|Q) _bvk_quit ;;
-    1) python "$SCRIPT_DIR/_3bvk_xtract_core" "$path" ;;
-    2) python "$SCRIPT_DIR/_3bvk_js_audit_core" "$path" ;;
-    3) bash "$SCRIPT_DIR/_3bvk_py_audit_core" "$path" ;;
-    4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path" ;;
-    5) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path" ;;
-    6) bash "$SCRIPT_DIR/_3bvk_localhost_core" "$path" ;;
-    q|"") return ;;
-    *) printf '⚠️  Invalid choice\n'; return ;;
-  esac
+    case "$is_choice" in
+    u|U|"") return ;;
+    q|Q) _bvk_quit ;;
+      1) python "$SCRIPT_DIR/_3bvk_xtract_core" "$path" ;;
+      2) python "$SCRIPT_DIR/_3bvk_js_audit_core" "$path" ;;
+      3) bash "$SCRIPT_DIR/_3bvk_py_audit_core" "$path" ;;
+      4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path" ;;
+      5) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path" ;;
+      6) bash "$SCRIPT_DIR/_3bvk_localhost_core" "$path" ;;
+      *) _bvk_invalid; continue ;;      # redraw THIS menu, not the parent
+    esac
+    return
+  done
 }

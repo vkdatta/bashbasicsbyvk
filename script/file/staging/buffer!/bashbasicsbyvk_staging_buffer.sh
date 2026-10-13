@@ -155,7 +155,7 @@ _sp_view_one_buffer() {
         _bvk_quit
         ;;
       *)
-        echo "⚠️  Invalid choice"
+        _bvk_invalid
         ;;
     esac
   done
@@ -220,7 +220,7 @@ handle_staging_view() {
         _bvk_quit
         ;;
       *)
-        echo "⚠️  Invalid choice"
+        _bvk_invalid
         ;;
     esac
   done

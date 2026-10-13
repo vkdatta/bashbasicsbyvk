@@ -233,7 +233,7 @@ PYEOF
                                 echo "Invalid number."
                             fi
                             ;;
-                        *) echo "Invalid choice." ;;
+                        *) _bvk_invalid ;;
                     esac
                     return
                     ;;

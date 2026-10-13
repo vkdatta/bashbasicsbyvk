@@ -192,7 +192,7 @@ _rb_cmd() {
     rf)  _RB_LOADED=0; return 0 ;;
     sd|sd-*) _rb_senddinons "$1"; _RB_LOADED=0; return 0 ;;
     [0-9]*)
-      _xui_row "$1" || { echo "⚠️  Invalid selection"; return 1; }
+      _xui_row "$1" || { _bvk_invalid; return 0; }
       local k=$_XUI_SLOT
       if [ "${_RB_ST[$k]}" = pending ]; then
         if [ "${_RB_MINE[$k]}" = 1 ]; then echo "ℹ️  Waiting for ${_RB_MAIL[$k]} to answer."; return 1; fi
@@ -272,7 +272,7 @@ _ru_cmd() {
     r-*) _ru_remove "$1"; _RU_LOADED=0; return 0 ;;
     rf)  _RU_LOADED=0; return 0 ;;
     [0-9]*)
-      _xui_row "$1" || { echo "⚠️  Invalid selection"; return 1; }
+      _xui_row "$1" || { _bvk_invalid; return 0; }
       local k=$_XUI_SLOT
       if [ "$_RB_TAB" = 0 ]; then _cs_tree_open "${_RU_ID[$k]}" owner "$_RU_RID"
       elif [ "${_RU_ST[$k]}" = accepted ]; then _cs_tree_open "${_RU_ID[$k]}" receiver

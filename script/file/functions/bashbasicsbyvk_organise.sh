@@ -273,6 +273,6 @@ q|Q) _bvk_quit ;;
 4) organise_by_year_month_date ;;
 5) unorganise ;;
 6) organise_by_az ;;
-*) echo "❌ Invalid choice" ;;
+*) _bvk_invalid ;;
 esac
 }

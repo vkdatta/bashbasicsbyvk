@@ -415,7 +415,7 @@ handle_selection() {
         force_show=false
       fi
     else
-      echo "⚠️  Invalid selection"
+      _bvk_invalid
     fi
   else
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
@@ -442,7 +442,7 @@ handle_selection() {
         handle_file "$selected"
       fi
     else
-      echo "⚠️  Invalid selection"
+      _bvk_invalid
     fi
   fi
 }

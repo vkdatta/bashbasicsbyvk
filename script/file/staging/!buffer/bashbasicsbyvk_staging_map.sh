@@ -112,7 +112,7 @@ _map_deliver() {
       fi
       ;;
     *)
-      echo "⚠️  Invalid option"
+      _bvk_invalid
       ;;
   esac
 }

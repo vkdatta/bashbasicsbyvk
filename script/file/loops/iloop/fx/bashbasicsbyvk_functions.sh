@@ -338,7 +338,7 @@ _fx_build_items_for_tab() {
 _fx_adf_handle_selection() {
   local choice="$1"
   if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#items[@]}" ]; then
-    echo "⚠️  Invalid selection"
+    _bvk_invalid
     return 0
   fi
   local slot; slot=$(_filter_orig_slot "$choice")   # filtered row → original slot
@@ -393,7 +393,7 @@ _fx_udf_handle_selection() {
       (cd "$_fx_outer_path" && bash "$selected")
     fi
   else
-    echo "⚠️  Invalid selection"
+    _bvk_invalid
   fi
 }
 

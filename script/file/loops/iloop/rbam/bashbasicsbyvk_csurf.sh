@@ -111,7 +111,7 @@ _cs_nuke() {                                 # x-LIST
 _cs_expiry() {                               # e-N [spec]
   local rest="${1#[eE]-}" n spec secs cur sign="" base k
   n="${rest%% *}"; spec=""; [[ "$rest" == *" "* ]] && spec="${rest#* }"
-  _xui_row "$n" || { echo "⚠️  Invalid selection"; return 1; }
+  _xui_row "$n" || { _bvk_invalid; return 0; }
   k=$_XUI_SLOT
   cur=$(( (${_CG_EXP[$k]} - ${_CG_CREATED[$k]}) / 1000 ))
   echo "   “${_CG_ALIAS[$k]:-${_CG_ID[$k]}}” now lives $(_bb_fmt_duration "$cur") in total  ($(_xui_left "${_CG_EXP[$k]}"))."
@@ -155,7 +155,7 @@ _cs_cmd() {
     r-*) if [ "$_CS_TAB" = 1 ]; then _cs_drop "$1"; _CS_LOADED=0; return 0
          else echo "ℹ️  Open a share (N) to revoke people or files; x-N nukes it for everyone."; return 1; fi ;;
     [0-9]*)
-      _xui_row "$1" || { echo "⚠️  Invalid selection"; return 1; }
+      _xui_row "$1" || { _bvk_invalid; return 0; }
       local k=$_XUI_SLOT
       if [ "$_CS_TAB" = 0 ]; then _cs_people_open "$k"
       elif [ "${_CR_OFFER[$k]}" = accepted ]; then _cs_tree_open "${_CR_ID[$k]}" receiver
@@ -220,7 +220,7 @@ _pp_cmd() {
     g) _pp_grant; _PP_LOADED=0; return 0 ;;
     t) _cs_tree_open "$_PP_ID" owner ""; return 0 ;;
     [0-9]*)
-      _xui_row "$1" || { echo "⚠️  Invalid selection"; return 1; }
+      _xui_row "$1" || { _bvk_invalid; return 0; }
       local k=$_XUI_SLOT
       [ -n "${_PP_RID[$k]}" ] || { echo "ℹ️  The link to ${_PP_MAIL[$k]} was removed in RBAM."; return 1; }
       [ "${_PP_ST[$k]}" = accepted ] || echo "ℹ️  ${_PP_MAIL[$k]} has not accepted yet — this is what they would see."
@@ -392,7 +392,7 @@ _ct_cmd() {
     d-*) _ct_download "$1"; return 1 ;;
     r-*) _ct_revoke "$1" && _CT_LOADED=0; return 0 ;;
     [0-9]*)
-      _xui_row "$1" || { echo "⚠️  Invalid selection"; return 1; }
+      _xui_row "$1" || { _bvk_invalid; return 0; }
       local i="${_CT_ROWS[$_XUI_SLOT]}"
       if [ "${_CT_KIND[$i]}" = d ]; then
         _CT_STACK+=("$_CT_CUR"); _CT_CRUMB+=("${_CT_NAME[$i]}"); _CT_CUR="${_CT_IID[$i]}"; return 0

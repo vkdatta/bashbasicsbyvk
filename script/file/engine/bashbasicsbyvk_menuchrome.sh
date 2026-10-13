@@ -135,6 +135,21 @@ _mc_menu0() { _mc_menu_n 0 "$@"; }
 # prompt wrapper: answer lands in $REPLY
 _mc_ask() { read -e -p "${1:-Select: }" REPLY; }
 
+# ---- THE invalid-choice handler: every menu calls this, nobody prints its own ----------
+#   _bvk_invalid            one standard message (the caller's loop redraws, e.g. outer loop)
+#   _bvk_invalid VAR        message + VAR=true  -> the loop's "$VAR && redraw_fresh" redraws
+#                           the SAME menu (upgrade / api / rules use _xx_fresh flags)
+# The message is printed with echo (the smart-menu layer records it) and the menu is
+# always redrawn FRESH below it, exactly like the outer loop.  Never leave the menu
+# on screen with only a new "Select:" -- the extra line makes the viewport's block
+# height wrong, and every later in-place repaint / tick lands on the wrong rows.
+_BVK_MSG_INVALID="⚠️  Invalid selection"
+_bvk_invalid() {
+  echo "$_BVK_MSG_INVALID"
+  [ -n "${1:-}" ] && printf -v "$1" '%s' true
+  return 0
+}
+
 # ---- registered footers -------------------------------------------------
 _mc_footer_register file_menu    u:Up q:Quit h:Home
 _mc_footer_register browse_main  u:Up cd:Change_directory q:Quit '|' h:Home s:Settings -h:Help -u:Upgrade
