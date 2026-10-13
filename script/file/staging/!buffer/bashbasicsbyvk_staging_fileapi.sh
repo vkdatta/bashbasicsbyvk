@@ -173,6 +173,13 @@ _announce_link() {
 _crypto_stream_pack() {
   local outdir="$1" arcname="$2"
   BB_PACK_BYTES="${_BB_PACK_BYTES}" BB_ARC_NAME="$arcname" node -e '
+    // one way to draw a \r status line: clipped (auto-wrap OFF), never wider than the screen
+    const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, "")) { const c = ch.codePointAt(0);
+      if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
+      w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0x1F300 && c <= 0x1FAFF)) ? 2 : 1; } return w; };
+    const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
+    const live = (s) => process.stderr.write("\u001b[?7l\r\u001b[K" + s + "\u001b[?7h");
+    const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
     const fs = require("fs"), path = require("path"), crypto = require("crypto");
     const outdir = process.argv[1];
     const CHUNK = parseInt(process.env.BB_PACK_BYTES, 10) || 16 * 1024 * 1024;
@@ -195,7 +202,7 @@ _crypto_stream_pack() {
       if (!final && now - lastDraw < 150) return;
       lastDraw = now;
       const mb = (seen / 1048576).toFixed(1), s = Math.floor((now - t0) / 1000);
-      process.stderr.write("\r\u001b[K\u001b[36m\uD83D\uDCE6 Packing tar.gz \u2192 \uD83D\uDD10 Encrypting\u001b[0m  " + mb + " MB packed  (" + s + "s)");
+      live("\u001b[36m" + fitv(["\uD83D\uDCE6 Packing tar.gz \u2192 \uD83D\uDD10 Encrypting  " + mb + " MB packed  (" + s + "s)", "\uD83D\uDCE6 Packing \u2192 \uD83D\uDD10 Encrypting  " + mb + " MB (" + s + "s)", "\uD83D\uDCE6\u2192\uD83D\uDD10 " + mb + " MB (" + s + "s)", "\uD83D\uDCE6\u2192\uD83D\uDD10 " + mb + " MB"]) + "\u001b[0m");
       if (final) process.stderr.write("\n");
     }
 
@@ -244,6 +251,13 @@ _crypto_stream_pack() {
 _crypto_fetch_archive() {
   local link="$1" key="$2" outfile="$3"
   BB_KEY="$key" node -e '
+    // one way to draw a \r status line: clipped (auto-wrap OFF), never wider than the screen
+    const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, "")) { const c = ch.codePointAt(0);
+      if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
+      w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0x1F300 && c <= 0x1FAFF)) ? 2 : 1; } return w; };
+    const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
+    const live = (s) => process.stderr.write("\u001b[?7l\r\u001b[K" + s + "\u001b[?7h");
+    const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
     const fs = require("fs"), crypto = require("crypto");
     const link = process.argv[1], outfile = process.argv[2];
     const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
@@ -291,7 +305,7 @@ _crypto_fetch_archive() {
         if (pct === lastPct && done < n) return;
         lastPct = pct;
         const f = Math.floor(pct * COLS / 100);
-        process.stderr.write("\r\u001b[K" + (done >= n ? "\u001b[32m" : "\u001b[36m") + "[" + "\u2588".repeat(f) + "\u2591".repeat(COLS - f) + "] " +
+        live( (done >= n ? "\u001b[32m" : "\u001b[36m") + "[" + "\u2588".repeat(f) + "\u2591".repeat(COLS - f) + "] " +
           String(pct).padStart(3) + "%\u001b[0m  \uD83D\uDCE5 Downloading + \uD83D\uDD13 decrypting " + done + "/" + n);
         if (done >= n) process.stderr.write("\n");
       }
@@ -457,6 +471,13 @@ _bb_upload_init() {
 _bb_upload_blobs() {
   local id="$1" tmpdir="$2" nblobs="$3" token="$4"
   BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_UTOKEN="$token" node -e '
+    // one way to draw a \r status line: clipped (auto-wrap OFF), never wider than the screen
+    const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, "")) { const c = ch.codePointAt(0);
+      if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
+      w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0x1F300 && c <= 0x1FAFF)) ? 2 : 1; } return w; };
+    const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
+    const live = (s) => process.stderr.write("\u001b[?7l\r\u001b[K" + s + "\u001b[?7h");
+    const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
     const fs = require("fs");
     const path = require("path");
     const { Readable, Transform } = require("stream");
@@ -586,7 +607,7 @@ _bb_upload_blobs() {
       const filled = Math.floor(pct * barW / 100);
       const b = "\u2588".repeat(filled) + "\u2591".repeat(barW - filled);
       const color = finished ? "\u001b[32m" : "\u001b[36m";
-      process.stderr.write("\r\u001b[K" + color + "[" + b + "] " + info + "\u001b[0m");
+      live( color + "[" + b + "] " + info + "\u001b[0m");
       if (finished) {
         const secs = (Date.now() - t0) / 1000;
         process.stderr.write("\n  \u2705 " + fmtB(total) + " " + unit() + " in " + fmtT(secs) +

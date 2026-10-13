@@ -4,7 +4,6 @@
 #  Layout (the viewport draws the rules and the spacing; see _vp_build_chrome):
 #
 #      header
-#      <linebreak>
 #      ─────────────────────────────
 #      options
 #      ─────────────────────────────
@@ -57,7 +56,6 @@ _mc_header() {
   local l
   echo
   for l in "$@"; do echo "$l"; done
-  echo
 }
 
 # _mc_options START label...  — prints "N) label" lines, numbering from START
@@ -83,8 +81,8 @@ _mc_footer() {
   else
     items=("$@")
   fi
-  local cols=$(( ${_vp_cols_now:-${COLUMNS:-80}} - ${_vp_width_margin:-2} ))
-  (( cols < 18 )) && cols=78
+  _vp_usable; local cols=$_vp_usable_w          # the ONE width source (viewport)
+  (( cols < 18 )) && cols=18
   local it cell line="" out=()
   for it in "${items[@]}"; do
     if [ "$it" = "|" ]; then
@@ -98,7 +96,7 @@ _mc_footer() {
     (( unders )) && cell="${cell//_/ }"
     if [ -z "$line" ]; then
       line="$cell"
-    elif (( ${#line} + 3 + ${#cell} >= cols )); then
+    elif _vp_cells "$line"; local _lw=$_vp_w; _vp_cells "$cell"; (( _lw + 3 + _vp_w >= cols )); then
       out+=("$line"); line="$cell"
     else
       line+="   $cell"

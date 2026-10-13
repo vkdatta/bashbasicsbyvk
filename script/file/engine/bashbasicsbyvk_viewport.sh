@@ -68,7 +68,7 @@ _set_available_above() {
 _repaint_line_above() {
   local dist="$1" content="$2"
   [ "$dist" -gt "$_available_above" ] && return 1
-  builtin printf '\033[s\033[%dA\r\033[2K%s\033[u' "$dist" "$content"
+  builtin printf '\033[s\033[%dA\r\033[2K\033[?7l%s\033[?7h\033[u' "$dist" "$content"
 }
 
 declare -gA _vp_rowcache=()
@@ -111,16 +111,52 @@ _vp_strip_ansi() {
   _vp_plain="$out$s"
 }
 
+# ---- THE width helpers: every menu / footer / smart-menu measures through these ----
+# Display width of a string in terminal cells -> _vp_w.  ANSI is ignored, emoji and
+# CJK count 2, variation selectors / joiners / combining marks count 0.
+# (${#s} counts characters, not cells: a row with 📁 / 👤 is one cell wider than
+#  its length, which is how a "fitting" line still wrapped on a phone.)
+_vp_cells() {
+  local s="$1" i c cp w=0
+  _vp_strip_ansi "$s"; s="$_vp_plain"
+  if [[ "$s" != *[![:ascii:]]* ]]; then _vp_w=${#s}; return 0; fi
+  for ((i=0; i<${#s}; i++)); do
+    c="${s:i:1}"
+    if [[ "$c" == [[:ascii:]] ]]; then w=$(( w + 1 )); continue; fi
+    builtin printf -v cp '%d' "'$c" 2>/dev/null || cp=0
+    if   (( cp == 0xFE0F || cp == 0xFE0E || cp == 0x200D || (cp >= 0x300 && cp <= 0x36F) )); then :
+    elif (( (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) \
+         || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF00 && cp <= 0xFF60) \
+         || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1F64F) || (cp >= 0x1F680 && cp <= 0x1F6FF) \
+         || (cp >= 0x1F900 && cp <= 0x1F9FF) || (cp >= 0x1FA70 && cp <= 0x1FAFF) )); then w=$(( w + 2 ))
+    else w=$(( w + 1 )); fi
+  done
+  _vp_w=$w
+}
+
+# Usable width for ONE logical line: live terminal width minus the margin.
+# Always reads the size first, so nothing ever works from a stale / zero width.
+_vp_usable() {
+  [ "$_vp_cols_now" -gt 0 ] 2>/dev/null || _vp_probe_size
+  _vp_usable_w=$(( _vp_cols_now - _vp_width_margin ))
+  (( _vp_usable_w < 8 )) && _vp_usable_w=8
+}
+
 _vp_fit() {
-  local text="$1" limit
-  limit=$(( _vp_cols - _vp_width_margin ))
-  (( limit < 8 )) && limit=8
-  _vp_strip_ansi "$text"
-  if [ "${#_vp_plain}" -gt "$limit" ]; then
-    _vp_line="${_vp_plain:0:limit-1}…"
-  else
-    _vp_line="$text"
-  fi
+  local text="$1" limit s i c
+  _vp_usable; limit=$_vp_usable_w
+  _vp_cells "$text"
+  if (( _vp_w <= limit )); then _vp_line="$text"; return 0; fi
+  # too wide in CELLS: cut the plain text cell by cell and end with …
+  _vp_strip_ansi "$text"; s="$_vp_plain"
+  local out="" w=0
+  for ((i=0; i<${#s}; i++)); do
+    c="${s:i:1}"
+    _vp_cells "$c"
+    (( w + _vp_w > limit - 1 )) && break
+    out+="$c"; w=$(( w + _vp_w ))
+  done
+  _vp_line="${out}…"
 }
 
 _vp_count() {
@@ -234,7 +270,6 @@ _vp_mark_sel() {
 # Menu chrome layout (every screen that goes through the viewport):
 #
 #     header
-#     <linebreak>
 #     ───────────
 #     options
 #     ───────────
@@ -243,21 +278,21 @@ _vp_mark_sel() {
 #     <linebreak>
 #     Select:
 #
-# The two linebreaks around the options block and the one after the footer are
-# added HERE, so no menu has to print them and none can forget them:
-#   header : trailing blank lines are dropped, exactly one is appended
+# The linebreak above the footer and the one after it are added HERE, so no menu has
+# to print them and none can forget them (the header sits directly on the rule):
+#   header : trailing blank lines are dropped, nothing is appended
 #   footer : leading + trailing blank lines are dropped, one is put before and
 #            one after.  An empty header / footer adds nothing.
 _vp_build_chrome() {
   local _i _n
+  _vp_probe_size; _vp_cols="$_vp_cols_now"     # live width BEFORE header/footer wrap to it
   mapfile -t _vp_hdr_arr < <($_vp_header_fn)
   mapfile -t _vp_ftr_arr < <($_vp_footer_fn)
 
-  # header: drop trailing blanks, then add the one linebreak that separates it from the rule
+  # header: drop trailing blanks (the rule follows immediately, no linebreak between)
   _n=${#_vp_hdr_arr[@]}
   while (( _n > 0 )) && [ -z "${_vp_hdr_arr[$((_n-1))]// /}" ]; do _n=$(( _n - 1 )); done
   _vp_hdr_arr=("${_vp_hdr_arr[@]:0:_n}")
-  (( _n > 0 )) && _vp_hdr_arr+=("")
 
   # footer: drop blanks at both edges, then frame it with one linebreak above and one below
   _n=${#_vp_ftr_arr[@]}
@@ -444,7 +479,7 @@ _vp_play_carpet() {
   [ "$ack" = "k" ]
 }
 
-_vp_el() { _vp_frame+=$'\r\033[2K'"$1"$'\n'; }
+_vp_el() { _vp_frame+=$'\r\033[2K\033[?7l'"$1"$'\033[?7h\n'; }
 
 _vp_emit() {
   local i line

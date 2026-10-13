@@ -73,6 +73,19 @@ function cleanName(n) {          // anything that reaches the terminal or the di
 }
 const fmtMB = (b) => (b / 1048576).toFixed(1);
 
+// ---- ONE way to draw a \r-redrawn status line ------------------------------------------
+// dw(): display width in terminal cells (emoji / CJK = 2).  live(): erases the row and
+// writes with auto-wrap OFF (DECAWM), so a line that is wider than the screen -- or a
+// terminal that reports the wrong width (Cloud Shell Android app) -- is clipped instead
+// of wrapping, and every \r redraw lands on the SAME row.  fitv(): first variant that fits.
+const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, '')) { const c = ch.codePointAt(0);
+  if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
+  w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0x1F300 && c <= 0x1FAFF)) ? 2 : 1; } return w; };
+const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
+const live = (s) => process.stderr.write('\u001b[?7l\r\u001b[K' + s + '\u001b[?7h');
+const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
+
+
 // ---------------------------------------------------------------- sealing (RBAM dinons)
 function rawPub(keyObj) { const d = keyObj.export({ format: 'der', type: 'spki' }); return d.subarray(d.length - 32); }
 function pubFromRaw(raw) { return crypto.createPublicKey({ key: Buffer.concat([SPKI_X25519, raw]), format: 'der', type: 'spki' }); }
@@ -160,7 +173,7 @@ const CMD = {
     const status = (final) => {
       if (!TTY) return;
       const now = Date.now(); if (!final && now - lastDraw < 150) return; lastDraw = now;
-      process.stderr.write(`\r\u001b[K\u001b[36m🔐 Encrypting\u001b[0m  ${filesDone} file(s)  ${fmtMB(cipherTotal)} MB  (${Math.floor((now - t0) / 1000)}s)`);
+      live(`\u001b[36m🔐 Encrypting\u001b[0m  ${filesDone} file(s)  ${fmtMB(cipherTotal)} MB  (${Math.floor((now - t0) / 1000)}s)`);
       if (final) process.stderr.write('\n');
     };
     const newId = () => b64u(crypto.randomBytes(16));
@@ -234,7 +247,8 @@ const CMD = {
     const status = (final) => {
       if (!TTY) return;
       const now = Date.now(); if (!final && now - lastDraw < 150) return; lastDraw = now;
-      process.stderr.write(`\r\u001b[K\u001b[36m📦 Packing tar.gz → 🔐 Encrypting\u001b[0m  ${fmtMB(seen)} MB packed  (${Math.floor((now - t0) / 1000)}s)`);
+      const mb = fmtMB(seen), sec = Math.floor((now - t0) / 1000);
+      live('\u001b[36m' + fitv([`📦 Packing tar.gz → 🔐 Encrypting  ${mb} MB packed  (${sec}s)`, `📦 Packing → 🔐 Encrypting  ${mb} MB (${sec}s)`, `📦→🔐 ${mb} MB (${sec}s)`, `📦→🔐 ${mb} MB`]) + '\u001b[0m');
       if (final) process.stderr.write('\n');
     };
     const buf = Buffer.allocUnsafe(CHUNK);
@@ -294,7 +308,7 @@ const CMD = {
       const pct = Math.floor(done * 100 / n);
       if (pct === lastPct && done < n) return; lastPct = pct;
       const f = Math.floor(pct * 24 / 100);
-      process.stderr.write(`\r\u001b[K${done >= n ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(24 - f)}] ${String(pct).padStart(3)}%\u001b[0m  📥 Downloading + 🔓 decrypting ${done}/${n}`);
+      live(`${done >= n ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(24 - f)}] ${String(pct).padStart(3)}%\u001b[0m  📥 Downloading + 🔓 decrypting ${done}/${n}`);
       if (done >= n) process.stderr.write('\n');
     }
     async function worker() {
@@ -342,7 +356,7 @@ const CMD = {
       const secs = Math.max(0.001, (Date.now() - t0) / 1000);
       const cols = process.stderr.columns || 60, barW = Math.max(6, Math.min(22, cols - 40));
       const f = Math.floor(pct * barW / 100);
-      process.stderr.write(`\r\u001b[K${finished ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(barW - f)}] ${String(pct).padStart(3)}%  ${fmtMB(finished ? total : shown)}/${fmtMB(total)} MB  ${fmtMB(shown / secs)} MB/s  ${done}/${tasks.length}\u001b[0m`);
+      live(`${finished ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(barW - f)}] ${String(pct).padStart(3)}%  ${fmtMB(finished ? total : shown)}/${fmtMB(total)} MB  ${fmtMB(shown / secs)} MB/s  ${done}/${tasks.length}\u001b[0m`);
       if (finished) process.stderr.write('\n');
     }
     async function send(t) {
@@ -504,7 +518,7 @@ const CMD = {
       const pct = nChunks ? Math.floor(done * 100 / nChunks) : 100;
       if (pct === lastPct && done < nChunks) return; lastPct = pct;
       const f = Math.floor(pct * 24 / 100);
-      process.stderr.write(`\r\u001b[K${done >= nChunks ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(24 - f)}] ${String(pct).padStart(3)}%\u001b[0m  📥 Downloading + 🔓 decrypting ${done}/${nChunks}`);
+      live(`${done >= nChunks ? '\u001b[32m' : '\u001b[36m'}[${'█'.repeat(f)}${'░'.repeat(24 - f)}] ${String(pct).padStart(3)}%\u001b[0m  📥 Downloading + 🔓 decrypting ${done}/${nChunks}`);
       if (done >= nChunks) process.stderr.write('\n');
     }
     bar();

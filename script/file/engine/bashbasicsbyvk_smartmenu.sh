@@ -151,31 +151,14 @@ _sm_plain_len() {
 
 # Display width of a line in terminal cells (emoji / CJK count 2, variation
 # selectors and joiners 0).  Fast path: pure ASCII is just its length.
-_sm_cells() {
-  local s="$1" i c cp w=0
-  if declare -F _vp_strip_ansi >/dev/null 2>&1; then _vp_strip_ansi "$s"; s="$_vp_plain"; fi
-  if [[ "$s" != *[![:ascii:]]* ]]; then _sm_w=${#s}; return 0; fi
-  for ((i=0; i<${#s}; i++)); do
-    c="${s:i:1}"
-    if [[ "$c" == [[:ascii:]] ]]; then w=$(( w + 1 )); continue; fi
-    builtin printf -v cp '%d' "'$c" 2>/dev/null || cp=0
-    if   (( cp == 0xFE0F || cp == 0xFE0E || cp == 0x200D || (cp >= 0x300 && cp <= 0x36F) )); then :
-    elif (( (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) \
-         || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF00 && cp <= 0xFF60) \
-         || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1F64F) || (cp >= 0x1F680 && cp <= 0x1F6FF) \
-         || (cp >= 0x1F900 && cp <= 0x1F9FF) || (cp >= 0x1FA70 && cp <= 0x1FAFF) )); then w=$(( w + 2 ))
-    else w=$(( w + 1 )); fi
-  done
-  _sm_w=$w
-}
+_sm_cells() { _vp_cells "$1"; _sm_w=$_vp_w; }   # width logic lives ONLY in the viewport
 
 # physical rows a logical line occupies at the CURRENT terminal width.
 # (_vp_cols is only refreshed by the viewport geometry, i.e. AFTER the erase
 #  count is made, so it can be stale/default 80 — read the live size instead.)
 # A line of exactly `cols` cells still occupies ONE row (deferred wrap).
 _sm_phys_rows() {
-  local cols="${_vp_cols_now:-0}"
-  (( cols < 2 )) && cols=80
+  _vp_usable; local cols=$(( _vp_usable_w + _vp_width_margin ))   # live physical width
   _sm_cells "$1"
   if (( _sm_w <= 0 )); then _sm_rows_of=1
   else _sm_rows_of=$(( (_sm_w + cols - 1) / cols )); fi
