@@ -612,7 +612,7 @@ rules_menu() {
 
       p-*)  handle_staging_map "$_rl_choice" ;;
 
-      f)    find_menu; _rl_fresh=false ;;
+      # (no  f  here: find works on a folder, and this loop does not show one — falls through to Invalid selection)
       disk) df -h; _rl_fresh=false ;;
       ram)  free -h; _rl_fresh=false ;;
 

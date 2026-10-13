@@ -639,7 +639,9 @@ switch_menu() {
 
       u)
         if _sw_is_ro; then
-          _sw_recents_blocked; _sw_do_fresh=false
+          # Recents / Favourites are flat lists: there is nothing to go "up" into, so u leaves
+          # (it used to print the read-only warning and trap the user)
+          echo "↩️  Exiting switch mode"; break
         elif [ -n "$group_prefix" ]; then
           group_prefix="${group_prefix%?}"; force_show=false
         elif [ "$path" != "$_SW_DIR" ] && [ "$path" != "/" ]; then

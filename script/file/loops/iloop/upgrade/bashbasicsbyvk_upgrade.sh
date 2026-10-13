@@ -383,7 +383,7 @@ upgrade_menu() {
 
       p-*)  handle_staging_map "$_up_choice"; _up_fresh=false ;;
 
-      f)    find_menu; _up_fresh=false ;;
+      # (no  f  here: find is not part of the upgrade loop — falls through to Invalid selection)
       disk) df -h; _up_fresh=false ;;
       ram)  free -h; _up_fresh=false ;;
 

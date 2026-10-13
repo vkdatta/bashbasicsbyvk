@@ -818,7 +818,14 @@ _multi_adjust_number_at_cursor() {
   bounds=$(_multi_number_token_bounds)
   if [ -z "$bounds" ]; then
     if [ -z "$_buf" ]; then
-      _buf="1"; _pos=1
+      # same as the main menu: down -> first item, up -> last item
+      _vp_count
+      case "$dir" in
+        up|end) _buf="${_vp_n:-1}" ;;
+        *)      _buf="1" ;;
+      esac
+      [ "${_buf:-0}" -lt 1 ] 2>/dev/null && _buf="1"
+      _pos=${#_buf}
       _multi_sync
     fi
     return
@@ -828,12 +835,14 @@ _multi_adjust_number_at_cursor() {
   n=$((10#$num))
   _vp_count
   max="$_vp_n"
+  # Direction MUST match the main menu (browse.sh): down = next item (+1), up = previous (-1),
+  # both wrap; PgDn = +page, PgUp = -page, both clamp.
   case "$dir" in
-    up)   n=$((n+1)); [ "$n" -gt "$max" ] && n=1 ;;
-    down) n=$((n-1)); [ "$n" -lt 1 ] && n=$max ;;
+    down) n=$((n+1)); [ "$n" -gt "$max" ] && n=1 ;;
+    up)   n=$((n-1)); [ "$n" -lt 1 ] && n=$max ;;
     # page/home/end clamp rather than wrap
-    pgup) n=$(( n + _vp_page_step )); [ "$n" -gt "$max" ] && n=$max ;;
-    pgdn) n=$(( n - _vp_page_step )); [ "$n" -lt 1 ] && n=1 ;;
+    pgdn) n=$(( n + _vp_page_step )); [ "$n" -gt "$max" ] && n=$max ;;
+    pgup) n=$(( n - _vp_page_step )); [ "$n" -lt 1 ] && n=1 ;;
     home) n=1 ;;
     end)  n=$max ;;
   esac

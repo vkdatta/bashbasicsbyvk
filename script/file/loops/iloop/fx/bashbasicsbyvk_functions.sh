@@ -265,7 +265,18 @@ _fx_set_viewport_for_tab() {
 
 # ── Item builder per tab ──────────────────────────────────────────────────────
 
+_fx_udf_path="$_FX_EXEC_DIR"   # where the UDF tab currently is (root or a sub-folder of execute/)
+
 _fx_build_items_for_tab() {
+  # `path` is the UDF folder while on the UDF tab, and the user's outer folder on the ADF tab.
+  if [ "$_fx_tab" = "udf" ]; then
+    case "$path" in
+      "$_FX_EXEC_DIR"|"$_FX_EXEC_DIR"/*) _fx_udf_path="$path" ;;            # already inside execute/
+      *) path="${_fx_udf_path:-$_FX_EXEC_DIR}" ;;                          # coming from ADF / outer path
+    esac
+  else
+    path="$_fx_outer_path"
+  fi
   imaginary_mode=false
   _filter_reset_state
   items=()
@@ -278,9 +289,6 @@ _fx_build_items_for_tab() {
       ;;
 
     udf)
-      local _saved_path="$path"
-      path="$_FX_EXEC_DIR"
-
       local total
       total=$(count_items_in_path "$path")
       _has_group_view=false
@@ -321,7 +329,6 @@ _fx_build_items_for_tab() {
         fi
       fi
 
-      path="$_saved_path"
       ;;
   esac
 }
@@ -410,6 +417,7 @@ functions_menu() {
   local _fx_saved_force="$force_show"
 
   _fx_tab="adf"
+  _fx_udf_path="$_FX_EXEC_DIR"   # UDF tab always starts at the execute root
   _fx_adf_cur_staging=""   # always start at ADF root
   group_prefix=""
   force_show=false
@@ -486,7 +494,7 @@ functions_menu() {
         elif [ "$_fx_tab" = "udf" ] && [ -n "$group_prefix" ]; then
           group_prefix="${group_prefix%?}"; force_show=false
         elif [ "$_fx_tab" = "udf" ]; then
-          if [ "$path" != "$_FX_EXEC_DIR" ] && [ "$path" != "/" ]; then
+          if [ "$path" != "$_FX_EXEC_DIR" ] && [[ "$path" == "$_FX_EXEC_DIR"/* ]]; then
             path=$(dirname "$path"); group_prefix=""; force_show=false
           else
             echo "↩️  At execute root — exiting functions mode"; break
@@ -501,7 +509,7 @@ functions_menu() {
       c)
         if [ "$_fx_tab" = "udf" ]; then
           local _saved_path_c="$path"
-          path="$_FX_EXEC_DIR"
+          path="$_fx_udf_path"
           handle_create
           path="$_saved_path_c"
         else
@@ -511,7 +519,7 @@ functions_menu() {
 
       d)
         if [ "$_fx_tab" = "udf" ]; then
-          local _saved_path_d="$path"; path="$_FX_EXEC_DIR"
+          local _saved_path_d="$path"; path="$_fx_udf_path"
           delete_items
           path="$_saved_path_d"
         else
@@ -521,7 +529,7 @@ functions_menu() {
 
       t)
         if [ "$_fx_tab" = "udf" ]; then
-          local _saved_path_t="$path"; path="$_FX_EXEC_DIR"
+          local _saved_path_t="$path"; path="$_fx_udf_path"
           transfer_menu
           path="$_saved_path_t"
         else
@@ -531,7 +539,7 @@ functions_menu() {
 
       z)
         if [ "$_fx_tab" = "udf" ]; then
-          local _saved_path_x="$path"; path="$_FX_EXEC_DIR"
+          local _saved_path_x="$path"; path="$_fx_udf_path"
           organise_menu
           path="$_saved_path_x"
         else
@@ -541,7 +549,7 @@ functions_menu() {
 
       r)
         if [ "$_fx_tab" = "udf" ]; then
-          local _saved_path_r="$path"; path="$_FX_EXEC_DIR"
+          local _saved_path_r="$path"; path="$_fx_udf_path"
           handle_rename
           path="$_saved_path_r"
         else
@@ -556,7 +564,7 @@ functions_menu() {
 
       rf)
         if [ "$_fx_tab" = "udf" ]; then
-          local _saved_path_rf="$path"; path="$_FX_EXEC_DIR"
+          local _saved_path_rf="$path"; path="$_fx_udf_path"
           handle_refresh
           path="$_saved_path_rf"
         else
@@ -577,7 +585,7 @@ functions_menu() {
 
       c-*|m-*|s-*)
         if [ "$_fx_tab" = "udf" ]; then
-          local _saved_path_rs="$path"; path="$_FX_EXEC_DIR"
+          local _saved_path_rs="$path"; path="$_fx_udf_path"
           handle_staging_stage "$_fx_choice"
           path="$_saved_path_rs"
         else

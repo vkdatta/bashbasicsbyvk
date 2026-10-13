@@ -648,7 +648,7 @@ api_menu() {
       e-*) _api_cmd_edit "${_ap_choice#[eE]-}" || true ;;
       x-*) _api_cmd_nuke "${_ap_choice#[xX]-}" || true ;;
 
-      f)    find_menu; _ap_fresh=false ;;
+      # (no  f  here: find works on a folder, and this loop does not show one — falls through to Invalid selection)
       disk) df -h; _ap_fresh=false ;;
       ram)  free -h; _ap_fresh=false ;;
 
