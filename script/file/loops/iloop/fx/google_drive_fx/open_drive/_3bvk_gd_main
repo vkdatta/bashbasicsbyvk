@@ -1,0 +1,1131 @@
+#!/usr/bin/env python3
+"""
+_3bvk_gd_main - Google Drive for the file manager, on top of rclone (the ONLY file the drive screens talk to).
+
+How a Drive profile is shown
+    Every rclone remote of type "drive" is a profile.  Opening one builds a LOCAL MIRROR of the Drive in
+        <profile-dir>/tree/
+    Folders are real folders.  Files are zero-cost placeholders (sparse files of the right size and the right
+    modified time), so listing, sorting, sizes, dates, filters, find, select rules, c- m- z- uz- ... all work
+    on them like on any other folder.  Real content is downloaded ("hydrated") the moment something reads it,
+    and everything done to the mirror (create, delete, rename, move, edit, zip ...) is pushed back to Drive.
+
+    _3bvk_gd_main remotes                       TSV  name <TAB> type          (rclone remotes that are Google Drives)
+    _3bvk_gd_main sync   REL [--force] [--recursive]      list one Drive folder into the mirror (TTL cached)
+    _3bvk_gd_main push                           make Drive match what was done in the mirror
+    _3bvk_gd_main hydrate PATH...                download the real content of files / folders (absolute mirror paths)
+    _3bvk_gd_main copy   SRC DST                 server-side copy inside the Drive (no download), mirror updated
+    _3bvk_gd_main clean  [PATH...]               free the disk: downloaded, unchanged files become placeholders again
+    _3bvk_gd_main status | about | where PATH    information
+
+    Environment:  BVK_GD_PROFILE_DIR  BVK_GD_REMOTE  (set by the app)   BVK_GD_RCLONE  BVK_GD_TTL  BVK_GD_TYPES
+                  BVK_GD_FLAGS (extra rclone flags)  BVK_GD_CONFIRM_MB  BVK_GD_MAX_DELETE  BVK_GD_PERMANENT
+    Extra rclone flags per profile:  <profile-dir>/rclone.flags   (e.g. --drive-shared-with-me)
+Exit codes: 0 ok · 1 error · 3 nothing to do/not found · 4 cancelled by the person
+"""
+import argparse, calendar, contextlib, json, os, re, shlex, shutil, sqlite3, stat, subprocess, sys
+import tempfile, threading, time
+from concurrent.futures import ThreadPoolExecutor
+
+RCLONE = os.environ.get("BVK_GD_RCLONE") or shutil.which("rclone") or "rclone"
+TTL_DEFAULT = 120
+SPARSE_OK = True
+
+
+class GdError(Exception):
+    pass
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  loading bar  (same look as bashbasicsbyvk_loadingbar.sh:  [░░░████░░░░░] message  3s)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+class Bar:
+    def __init__(self, msg):
+        self.msg = msg
+        self.t0 = time.monotonic()
+        self.stop_ev = threading.Event()
+        self.pause_ev = threading.Event()
+        self.th = None
+        self.out = None
+        self.lock = threading.Lock()
+        if os.environ.get("BVK_GD_BAR") == "0":
+            return
+        for cand in (os.environ.get("BVK_GD_BAR_TTY") or "/dev/tty", ):
+            try:
+                self.out = open(cand, "w")
+                break
+            except OSError:
+                self.out = None
+        if self.out is None and sys.stderr.isatty():
+            self.out = sys.stderr
+
+    def cols(self):
+        try:
+            return os.get_terminal_size(self.out.fileno()).columns
+        except Exception:
+            try:
+                return shutil.get_terminal_size((60, 20)).columns
+            except Exception:
+                return 60
+
+    def _loop(self):
+        if self.stop_ev.wait(0.15):             # short grace period: instant work never flashes a bar
+            return
+        cols = self.cols()
+        room = max(12, cols - 14)
+        W = max(8, min(22, room - 4))
+        BW = max(2, min(5, W // 3))
+        maxmsg = max(0, cols - W - 14)
+        msg = self.msg
+        if len(msg) > maxmsg:
+            msg = msg[: max(0, maxmsg - 1)] + "…"
+        track, blk = "░" * W, "█" * BW
+        pos, d = 0, 1
+        while not self.stop_ev.is_set():
+            if not self.pause_ev.is_set():
+                el = int(time.monotonic() - self.t0)
+                t = f"  {el}s" if el >= 2 else ""
+                line = "\033[36m[" + track[:pos] + blk + track[: W - pos - BW] + "]\033[0m " + msg + t
+                with self.lock:
+                    try:
+                        self.out.write("\r\033[2K" + line)
+                        self.out.flush()
+                    except Exception:
+                        return
+                pos += d
+                if pos >= W - BW:
+                    pos, d = W - BW, -1
+                elif pos <= 0:
+                    pos, d = 0, 1
+            self.stop_ev.wait(0.1)
+
+    def start(self):
+        if self.out is None:
+            return self
+        try:
+            self.out.write("\033[?25l")
+            self.out.flush()
+        except Exception:
+            self.out = None
+            return self
+        self.th = threading.Thread(target=self._loop, daemon=True)
+        self.th.start()
+        return self
+
+    def _clear(self, cursor=True):
+        if self.out is None:
+            return
+        with self.lock:
+            try:
+                self.out.write("\r\033[2K" + ("\033[?25h" if cursor else ""))
+                self.out.flush()
+            except Exception:
+                pass
+
+    def stop(self):
+        self.stop_ev.set()
+        if self.th:
+            self.th.join(1)
+        self._clear()
+        if self.out not in (None, sys.stderr):
+            try:
+                self.out.close()
+            except Exception:
+                pass
+        self.out = None
+
+    @contextlib.contextmanager
+    def paused(self):
+        """Hide the bar while something else (rclone --progress, a question) draws on the terminal."""
+        self.pause_ev.set()
+        self._clear(cursor=True)
+        try:
+            yield
+        finally:
+            self.pause_ev.clear()
+            if self.out is not None:
+                try:
+                    self.out.write("\033[?25l")
+                    self.out.flush()
+                except Exception:
+                    pass
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, *a):
+        self.stop()
+
+
+class NoBar:
+    msg = ""
+
+    @contextlib.contextmanager
+    def paused(self):
+        yield
+
+
+def say(msg):
+    print(msg, file=sys.stderr, flush=True)
+
+
+def ask_yes(prompt):
+    """y/N on the terminal (works while stdin/stdout are pipes).  No terminal -> no."""
+    try:
+        with open("/dev/tty", "r+") as tty:
+            tty.write(prompt + " (y/N): ")
+            tty.flush()
+            return tty.readline().strip().lower() in ("y", "yes")
+    except OSError:
+        return False
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  helpers
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_TS = re.compile(r"^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)(?:\.(\d+))?(Z|[+-]\d\d:?\d\d)?$")
+
+
+def parse_ts(s):
+    m = _TS.match(s or "")
+    if not m:
+        return 0.0
+    y, mo, d, h, mi, se, frac, tz = m.groups()
+    t = calendar.timegm((int(y), int(mo), int(d), int(h), int(mi), int(se)))
+    if frac:
+        t += float("0." + frac)
+    if tz and tz != "Z":
+        sign = 1 if tz[0] == "+" else -1
+        hh, mm = int(tz[1:3]), int(tz[-2:])
+        t -= sign * (hh * 3600 + mm * 60)
+    return t
+
+
+def join(rel, name):
+    return f"{rel}/{name}" if rel else name
+
+
+def parent_of(rel):
+    return rel.rpartition("/")[0]
+
+
+def name_of(rel):
+    return rel.rpartition("/")[2]
+
+
+def bad_name(n):
+    return (not n) or n in (".", "..") or "/" in n or "\0" in n
+
+
+def fmt_size(b):
+    b = float(b)
+    for u in ("B", "KB", "MB", "GB", "TB"):
+        if b < 1024 or u == "TB":
+            return f"{int(b)} {u}" if u == "B" else f"{b:.1f} {u}"
+        b /= 1024
+
+
+class Ctx:
+    def __init__(self):
+        pd = os.environ.get("BVK_GD_PROFILE_DIR")
+        self.remote = os.environ.get("BVK_GD_REMOTE")
+        if not pd or not self.remote:
+            raise GdError("BVK_GD_PROFILE_DIR / BVK_GD_REMOTE are not set (the app sets them when a Drive is opened).")
+        self.pdir = os.path.abspath(pd)
+        self.tree = os.path.join(self.pdir, "tree")
+        self.tmp = os.path.join(self.pdir, "tmp")
+        os.makedirs(self.tree, exist_ok=True)
+        os.makedirs(self.tmp, exist_ok=True)
+        self.ttl = int(os.environ.get("BVK_GD_TTL") or TTL_DEFAULT)
+        self.flags = []
+        ff = os.path.join(self.pdir, "rclone.flags")
+        try:
+            with open(ff) as fh:
+                for line in fh:
+                    line = line.split("#", 1)[0].strip()
+                    if line:
+                        self.flags += shlex.split(line)
+        except OSError:
+            pass
+        self.flags += shlex.split(os.environ.get("BVK_GD_FLAGS", ""))
+        self.bar = NoBar()
+
+    def abs(self, rel):
+        return os.path.join(self.tree, *rel.split("/")) if rel else self.tree
+
+    def rel(self, path):
+        p = os.path.abspath(path)
+        if p == self.tree:
+            return ""
+        pre = self.tree + os.sep
+        if not p.startswith(pre):
+            raise GdError(f"not inside this Drive: {path}")
+        return p[len(pre):].replace(os.sep, "/")
+
+    def rpath(self, rel):
+        return f"{self.remote}:{rel}"
+
+
+def rclone(ctx, args, check=True, passthrough=False, quiet_ok=()):
+    cmd = [RCLONE, "--ask-password=false", *ctx.flags, *args]
+    try:
+        if passthrough:
+            p = subprocess.run(cmd, stdin=subprocess.DEVNULL)
+            out, err = "", ""
+        else:
+            p = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                               errors="replace")
+            out, err = p.stdout, p.stderr
+    except FileNotFoundError:
+        raise GdError("rclone is not installed (see README → Rclone).")
+    if check and p.returncode != 0 and p.returncode not in quiet_ok:
+        tail = [l for l in (err or "").strip().splitlines() if l.strip()][-3:]
+        raise GdError(f"rclone {args[0]} failed (exit {p.returncode}): " + " | ".join(tail))
+    return p.returncode, out, err
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  manifest  (what the mirror knew about Drive the last time we looked)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+class DB:
+    def __init__(self, ctx):
+        self.c = sqlite3.connect(os.path.join(ctx.pdir, "manifest.db"), timeout=30)
+        self.c.row_factory = sqlite3.Row
+        self.c.executescript("""
+            CREATE TABLE IF NOT EXISTS e(
+              rel TEXT PRIMARY KEY, parent TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL,
+              size INTEGER DEFAULT 0, mtime REAL DEFAULT 0, hyd INTEGER DEFAULT 0, gdoc INTEGER DEFAULT 0,
+              lsize INTEGER DEFAULT 0, lmt INTEGER DEFAULT 0, ino INTEGER DEFAULT 0, dev INTEGER DEFAULT 0,
+              listed REAL DEFAULT 0, dmt INTEGER DEFAULT 0);
+            CREATE INDEX IF NOT EXISTS e_parent ON e(parent);
+            CREATE INDEX IF NOT EXISTS e_hyd ON e(hyd);
+        """)
+        if self.get("") is None:
+            st = os.lstat(ctx.tree)
+            self.put(rel="", parent="", name="", kind="d", ino=st.st_ino, dev=st.st_dev, dmt=-1)
+        self.c.commit()
+
+    COLS = ("rel", "parent", "name", "kind", "size", "mtime", "hyd", "gdoc", "lsize", "lmt", "ino", "dev", "listed", "dmt")
+
+    def get(self, rel):
+        return self.c.execute("SELECT * FROM e WHERE rel=?", (rel,)).fetchone()
+
+    def children(self, rel):
+        return self.c.execute("SELECT * FROM e WHERE parent=? AND rel<>''", (rel,)).fetchall()
+
+    def dirs(self):
+        return self.c.execute("SELECT * FROM e WHERE kind='d' ORDER BY rel").fetchall()
+
+    def put(self, **kw):
+        """insert or update only the given columns"""
+        rel = kw["rel"]
+        cur = self.get(rel)
+        if cur is None:
+            row = {c: 0 for c in self.COLS}
+            row.update(parent=parent_of(rel), name=name_of(rel), kind="f", rel=rel)
+            row.update(kw)
+            self.c.execute("INSERT INTO e(%s) VALUES(%s)" % (",".join(self.COLS), ",".join("?" * len(self.COLS))),
+                           [row[c] for c in self.COLS])
+        else:
+            kw = {k: v for k, v in kw.items() if k != "rel"}
+            if kw:
+                self.c.execute("UPDATE e SET %s WHERE rel=?" % ",".join(f"{k}=?" for k in kw), [*kw.values(), rel])
+
+    def under(self, rel):
+        pre = rel + "/"
+        return self.c.execute("SELECT * FROM e WHERE substr(rel,1,?)=?", (len(pre), pre)).fetchall()
+
+    def delete_tree(self, rel):
+        pre = rel + "/"
+        self.c.execute("DELETE FROM e WHERE rel=? OR substr(rel,1,?)=?", (rel, len(pre), pre))
+
+    def rename_tree(self, old, new):
+        rows = self.c.execute("SELECT rel FROM e WHERE rel=? OR substr(rel,1,?)=?", (old, len(old) + 1, old + "/")).fetchall()
+        for r in rows:
+            o = r["rel"]
+            n = new + o[len(old):]
+            self.c.execute("DELETE FROM e WHERE rel=?", (n,))
+            self.c.execute("UPDATE e SET rel=?, parent=?, name=? WHERE rel=?", (n, parent_of(n), name_of(n), o))
+
+    def commit(self):
+        self.c.commit()
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  mirror <-> manifest primitives
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def make_placeholder(path, size, mtime):
+    """a file of the right size that takes (almost) no disk: sparse"""
+    global SPARSE_OK
+    with open(path, "wb") as f:
+        try:
+            f.truncate(size)
+        except OSError:
+            SPARSE_OK = False
+    os.utime(path, (mtime, mtime))
+
+
+def lst(path):
+    st = os.lstat(path)
+    return st
+
+
+def row_local_state(st):
+    return dict(lsize=st.st_size, lmt=st.st_mtime_ns, ino=st.st_ino, dev=st.st_dev)
+
+
+def is_placeholder_copy(st):
+    """regular file that claims a size but owns no disk blocks -> a copy of a placeholder, not real content"""
+    return st.st_size > 0 and getattr(st, "st_blocks", 1) == 0
+
+
+def list_remote(ctx, rel, recursive=False):
+    args = ["lsjson", ctx.rpath(rel), "--no-mimetype"]
+    if recursive:
+        args.append("-R")
+    rc, out, err = rclone(ctx, args, check=False)
+    if rc == 3:                                    # directory not found
+        raise GdError(f"__notfound__:{rel}")
+    if rc != 0:
+        tail = [l for l in (err or "").strip().splitlines() if l.strip()][-3:]
+        raise GdError(f"could not list '{rel or '/'}' (rclone exit {rc}): " + " | ".join(tail))
+    try:
+        data = json.loads(out or "[]")
+    except ValueError:
+        raise GdError("rclone returned something that is not JSON.")
+    res = []
+    for e in data:
+        p = e.get("Path") or e.get("Name") or ""
+        res.append(dict(path=p, name=e.get("Name") or name_of(p), dir=bool(e.get("IsDir")),
+                        size=int(e.get("Size", 0) or 0), mtime=parse_ts(e.get("ModTime", ""))))
+    return res
+
+
+def prune_known(ctx, db, rel):
+    """Drive no longer has <rel>: remove what the mirror holds for it, unless the person changed it locally."""
+    row = db.get(rel)
+    p = ctx.abs(rel)
+    if row is None:
+        return
+    if row["kind"] == "f":
+        try:
+            st = os.lstat(p)
+        except OSError:
+            db.delete_tree(rel)
+            return
+        if (st.st_size, st.st_mtime_ns) == (row["lsize"], row["lmt"]):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+        db.delete_tree(rel)                        # a locally changed file survives and is pushed as new
+        return
+    for r in sorted(db.under(rel), key=lambda r: -len(r["rel"])):
+        q = ctx.abs(r["rel"])
+        try:
+            st = os.lstat(q)
+        except OSError:
+            continue
+        if r["kind"] == "f" and (st.st_size, st.st_mtime_ns) == (r["lsize"], r["lmt"]):
+            with contextlib.suppress(OSError):
+                os.unlink(q)
+        elif r["kind"] == "d":
+            with contextlib.suppress(OSError):
+                os.rmdir(q)
+    with contextlib.suppress(OSError):
+        os.rmdir(p)
+    db.delete_tree(rel)
+
+
+def reconcile_dir(ctx, db, rel, remote, now, stats):
+    """Make folder <rel> of the mirror show exactly what Drive lists (remote = list of entries)."""
+    d_abs = ctx.abs(rel)
+    os.makedirs(d_abs, exist_ok=True)
+    rows = {r["name"]: r for r in db.children(rel)}
+    try:
+        local = {e.name for e in os.scandir(d_abs)}
+    except OSError:
+        local = set()
+    seen = set()
+    for ent in remote:
+        name = ent["name"]
+        if bad_name(name):
+            stats["skipped"] += 1
+            continue
+        if name in seen:
+            stats["dups"] += 1
+            continue
+        seen.add(name)
+        crel = join(rel, name)
+        row = rows.get(name)
+        p = os.path.join(d_abs, name)
+        exists = name in local
+        if ent["dir"]:
+            if exists and not stat.S_ISDIR(os.lstat(p).st_mode):
+                stats["skipped"] += 1
+                continue
+            if not exists:
+                os.mkdir(p)
+                os.utime(p, (ent["mtime"] or time.time(),) * 2)
+                stats["new"] += 1
+            st = os.lstat(p)
+            if row is None or row["kind"] != "d":
+                if row is not None:
+                    db.delete_tree(crel)
+                db.put(rel=crel, kind="d", mtime=ent["mtime"], ino=st.st_ino, dev=st.st_dev, dmt=st.st_mtime_ns, listed=0)
+            else:
+                db.put(rel=crel, mtime=ent["mtime"], ino=st.st_ino, dev=st.st_dev)
+            continue
+        # file
+        size = max(ent["size"], 0)
+        gdoc = 1 if ent["size"] < 0 else 0
+        if exists and not stat.S_ISREG(os.lstat(p).st_mode):
+            stats["skipped"] += 1
+            continue
+        if not exists:
+            if row is not None:
+                db.delete_tree(crel)
+            make_placeholder(p, size, ent["mtime"] or time.time())
+            st = os.lstat(p)
+            db.put(rel=crel, kind="f", size=size, mtime=ent["mtime"], hyd=0, gdoc=gdoc, **row_local_state(st))
+            stats["new"] += 1
+            continue
+        st = os.lstat(p)
+        if row is None or row["kind"] != "f":
+            # a local entry with the same name that Drive does not know yet: the local one wins (it is pushed later)
+            stats["skipped"] += 1
+            continue
+        local_modified = (st.st_size, st.st_mtime_ns) != (row["lsize"], row["lmt"])
+        remote_changed = (size != row["size"] and not gdoc) or abs((ent["mtime"] or 0) - (row["mtime"] or 0)) > 1.5
+        if local_modified:
+            db.put(rel=crel, gdoc=gdoc)
+            continue
+        if remote_changed or (not row["hyd"] and size != st.st_size):
+            make_placeholder(p, size, ent["mtime"] or time.time())     # stale download -> placeholder again
+            st = os.lstat(p)
+            db.put(rel=crel, size=size, mtime=ent["mtime"], hyd=0, gdoc=gdoc, **row_local_state(st))
+            stats["changed"] += 1
+    for name, row in rows.items():
+        if name in seen:
+            continue
+        prune_known(ctx, db, row["rel"])
+        stats["gone"] += 1
+    # the folder shows the modified time Drive has for it; remember what the folder looks like now
+    me = db.get(rel)
+    if rel and me is not None and me["mtime"]:
+        with contextlib.suppress(OSError):
+            os.utime(d_abs, (me["mtime"], me["mtime"]))
+    st = os.lstat(d_abs)
+    db.put(rel=rel, listed=now, dmt=st.st_mtime_ns, ino=st.st_ino, dev=st.st_dev)
+
+
+def sync_dir(ctx, db, rel, force=False, recursive=False):
+    now = time.time()
+    row = db.get(rel)
+    if row is None and rel:
+        # unknown folder (never listed through its parent): list the parent first
+        sync_dir(ctx, db, parent_of(rel), force=False)
+        row = db.get(rel)
+        if row is None:
+            raise GdError(f"__notfound__:{rel}")
+    if row is not None and row["kind"] != "d":
+        raise GdError(f"not a folder: {rel}")
+    if not force and not recursive and row is not None and row["listed"] and now - row["listed"] < ctx.ttl:
+        return {"cached": True}
+    stats = dict(new=0, changed=0, gone=0, dups=0, skipped=0, cached=False)
+    try:
+        if not recursive:
+            reconcile_dir(ctx, db, rel, list_remote(ctx, rel), now, stats)
+        else:
+            flat = list_remote(ctx, rel, recursive=True)
+            by_dir = {rel: []}
+            for e in flat:
+                full = join(rel, e["path"])
+                by_dir.setdefault(parent_of(full), []).append(e)
+                if e["dir"]:
+                    by_dir.setdefault(full, [])
+            for d in sorted(by_dir, key=lambda x: x.count("/")):       # parents first
+                reconcile_dir(ctx, db, d, by_dir[d], now, stats)
+    except GdError as ex:
+        if str(ex).startswith("__notfound__:"):
+            if not rel:
+                raise GdError(f"the top of '{ctx.remote}:' could not be listed — is the remote reachable and logged in? "
+                              f"(try: rclone lsd {ctx.remote}:)")
+            prune_known(ctx, db, rel)
+            db.commit()
+            raise GdError(f"'{rel}' no longer exists in Google Drive")
+        raise
+    db.commit()
+    return stats
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  hydrate / clean
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def pending_files(db, rels):
+    out = {}
+    for rel in rels:
+        row = db.get(rel)
+        if row is None:
+            continue
+        if row["kind"] == "f":
+            if not row["hyd"]:
+                out[rel] = row
+        else:
+            for r in db.under(rel):
+                if r["kind"] == "f" and not r["hyd"]:
+                    out[r["rel"]] = r
+    return out
+
+
+def cmd_hydrate(ctx, args):
+    db = DB(ctx)
+    rels = []
+    for p in args.paths:
+        rel = ctx.rel(p)
+        rels.append(rel)
+    bar = Bar("Preparing the list of files").start()
+    ctx.bar = bar
+    try:
+        for rel in rels:
+            row = db.get(rel)
+            if row is not None and row["kind"] == "d":
+                sync_dir(ctx, db, rel, force=True, recursive=True)          # know every file below the folder
+        todo = pending_files(db, rels)
+    finally:
+        bar.stop()
+    if not todo:
+        return 0
+    total = sum(max(r["size"], 0) for r in todo.values())
+    limit = int(os.environ.get("BVK_GD_CONFIRM_MB", "200")) * 1024 * 1024
+    if total > limit:
+        if not ask_yes(f"☁️  Download {len(todo)} file(s), {fmt_size(total)} from Google Drive first?"):
+            say("🚫 Cancelled — nothing downloaded.")
+            return 4
+    stage = tempfile.mkdtemp(prefix="dl-", dir=ctx.tmp)
+    listing = os.path.join(stage, ".files")
+    with open(listing, "w") as fh:
+        fh.write("\n".join(todo) + "\n")
+    show = f"Downloading {len(todo)} file(s) · {fmt_size(total)} from Google Drive"
+    bar = Bar(show).start()
+    try:
+        big = total >= 1 << 20 and sys.stderr.isatty()
+        args2 = ["copy", ctx.rpath(""), os.path.join(stage, "data"), "--files-from-raw", listing]
+        if big:
+            args2 += ["--progress"]
+            with bar.paused():
+                rc, _, err = rclone(ctx, args2, check=False, passthrough=True)
+        else:
+            rc, _, err = rclone(ctx, args2, check=False)
+        failed = []
+        touched = {}
+        for rel, row in todo.items():
+            src = os.path.join(stage, "data", *rel.split("/"))
+            dst = ctx.abs(rel)
+            if not os.path.isfile(src):
+                failed.append(rel)
+                continue
+            par = os.path.dirname(dst)
+            try:
+                pst = os.lstat(par)
+            except OSError:
+                failed.append(rel)
+                continue
+            if par not in touched:
+                prow = db.get(parent_of(rel))
+                touched[par] = (pst, prow is not None and prow["dmt"] == pst.st_mtime_ns)
+            try:
+                cur = os.lstat(dst)
+                if (cur.st_size, cur.st_mtime_ns) != (row["lsize"], row["lmt"]):
+                    failed.append(rel)                                    # changed locally meanwhile: leave it
+                    continue
+                os.replace(src, dst)
+            except OSError:
+                failed.append(rel)
+                continue
+            st = os.lstat(dst)
+            db.put(rel=rel, hyd=1, size=st.st_size if not row["gdoc"] else row["size"], mtime=st.st_mtime,
+                   **row_local_state(st))
+        for par, (pst, was_clean) in touched.items():                       # keep the folder's date and "clean" state
+            with contextlib.suppress(OSError):
+                os.utime(par, ns=(pst.st_atime_ns, pst.st_mtime_ns))
+        db.commit()
+    finally:
+        bar.stop()
+        shutil.rmtree(stage, ignore_errors=True)
+    if failed:
+        say(f"❌ Could not download {len(failed)} file(s):")
+        for f in failed[:10]:
+            say(f"   • {f}")
+        if rc != 0 and err:
+            say("   " + (err.strip().splitlines() or [""])[-1])
+        return 1
+    return 0
+
+
+def cmd_clean(ctx, args):
+    db = DB(ctx)
+    rels = [ctx.rel(p) for p in args.paths] if args.paths else [""]
+    freed = n = 0
+    for rel in rels:
+        rows = [db.get(rel)] if (db.get(rel) is not None and db.get(rel)["kind"] == "f") else db.under(rel) if rel else \
+            db.c.execute("SELECT * FROM e WHERE kind='f' AND rel<>''").fetchall()
+        for r in rows:
+            if r is None or r["kind"] != "f" or not r["hyd"] or r["gdoc"]:
+                continue
+            p = ctx.abs(r["rel"])
+            try:
+                st = os.lstat(p)
+            except OSError:
+                continue
+            if (st.st_size, st.st_mtime_ns) != (r["lsize"], r["lmt"]):
+                continue                                                    # edited, not pushed yet: never drop it
+            par = os.path.dirname(p)
+            pst = os.lstat(par)
+            make_placeholder(p, r["size"], r["mtime"] or st.st_mtime)
+            with contextlib.suppress(OSError):
+                os.utime(par, ns=(pst.st_atime_ns, pst.st_mtime_ns))
+            st2 = os.lstat(p)
+            db.put(rel=r["rel"], hyd=0, **row_local_state(st2))
+            freed += st.st_blocks * 512 if hasattr(st, "st_blocks") else st.st_size
+            n += 1
+    db.commit()
+    print(f"{n}\t{freed}")
+    return 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  push: make Drive match what was done to the mirror
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+class New:
+    def __init__(self, rel, st, isdir):
+        self.rel, self.st, self.isdir = rel, st, isdir
+
+
+def scan_changes(ctx, db):
+    news, gone, modified, scanned = [], [], [], []
+    for drow in db.dirs():
+        rel = drow["rel"]
+        p = ctx.abs(rel)
+        try:
+            st = os.lstat(p)
+        except OSError:
+            continue
+        if not stat.S_ISDIR(st.st_mode) or st.st_mtime_ns == drow["dmt"]:
+            continue
+        try:
+            ents = {e.name: e for e in os.scandir(p)}
+        except OSError:
+            continue
+        scanned.append(rel)
+        rows = {r["name"]: r for r in db.children(rel)}
+        for name, e in ents.items():
+            crel = join(rel, name)
+            try:
+                est = e.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            isdir, isfile = stat.S_ISDIR(est.st_mode), stat.S_ISREG(est.st_mode)
+            if not (isdir or isfile):
+                continue
+            r = rows.get(name)
+            if r is None:
+                news.append(New(crel, est, isdir))
+            elif (r["kind"] == "d") != isdir:
+                gone.append(r)
+                news.append(New(crel, est, isdir))
+            elif isfile and (est.st_size, est.st_mtime_ns) != (r["lsize"], r["lmt"]):
+                modified.append((r, est))
+        for name, r in rows.items():
+            e = ents.get(name)
+            if e is None:
+                gone.append(r)
+            else:
+                try:
+                    m = os.lstat(e.path).st_mode
+                except OSError:
+                    continue
+                if not (stat.S_ISDIR(m) or stat.S_ISREG(m)):
+                    gone.append(r)
+    # edited files in folders that did not change at all (an editor rewrote the file in place)
+    seen = {r["rel"] for r, _ in modified}
+    for r in db.c.execute("SELECT * FROM e WHERE kind='f' AND hyd=1").fetchall():
+        if r["rel"] in seen or parent_of(r["rel"]) in scanned:
+            continue
+        try:
+            est = os.lstat(ctx.abs(r["rel"]))
+        except OSError:
+            continue
+        if stat.S_ISREG(est.st_mode) and (est.st_size, est.st_mtime_ns) != (r["lsize"], r["lmt"]):
+            modified.append((r, est))
+    return news, gone, modified, scanned
+
+
+def walk_new(ctx, item):
+    """a new folder: everything inside it is new as well"""
+    out = [item]
+    if not item.isdir:
+        return out
+    for root, dirs, files in os.walk(ctx.abs(item.rel), followlinks=False):
+        rrel = ctx.rel(root)
+        for n in dirs:
+            try:
+                st = os.lstat(os.path.join(root, n))
+            except OSError:
+                continue
+            if stat.S_ISDIR(st.st_mode):
+                out.append(New(join(rrel, n), st, True))
+        for n in files:
+            try:
+                st = os.lstat(os.path.join(root, n))
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode):
+                out.append(New(join(rrel, n), st, False))
+    return out
+
+
+def run_levels(items, depth_of, fn, workers=4):
+    """run fn(item) in parallel, shallow items before deeper ones; returns [(item, error-or-None)]"""
+    res = []
+    for d in sorted({depth_of(i) for i in items}):
+        level = [i for i in items if depth_of(i) == d]
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = [(i, ex.submit(fn, i)) for i in level]
+            for i, f in futs:
+                try:
+                    f.result()
+                    res.append((i, None))
+                except GdError as e:
+                    res.append((i, str(e)))
+    return res
+
+
+def cmd_push(ctx, args=None):
+    db = DB(ctx)
+    if not os.path.isdir(ctx.tree):
+        raise GdError("the Drive mirror folder is missing — nothing was pushed.")
+    total = dict(up=0, mv=0, rm=0, mk=0, err=0, skipped=0)
+    bar = Bar("Syncing changes to Google Drive").start()
+    ctx.bar = bar
+    try:
+        for _round in range(3):
+            news, gone, modified, scanned = scan_changes(ctx, db)
+            if not (news or gone or modified):
+                for rel in scanned:
+                    with contextlib.suppress(OSError):
+                        db.put(rel=rel, dmt=os.lstat(ctx.abs(rel)).st_mtime_ns)
+                db.commit()
+                break
+            did = push_round(ctx, db, bar, news, gone, modified, scanned, total)
+            db.commit()
+            if not did:
+                break
+    finally:
+        bar.stop()
+    bits = []
+    if total["mk"]:
+        bits.append(f"📁 {total['mk']} folder(s) created")
+    if total["up"]:
+        bits.append(f"⬆️  {total['up']} uploaded")
+    if total["mv"]:
+        bits.append(f"⇄ {total['mv']} moved/renamed")
+    if total["rm"]:
+        bits.append(f"🗑️  {total['rm']} removed" + ("" if os.environ.get("BVK_GD_PERMANENT") == "1" else " (Drive trash)"))
+    if total["skipped"]:
+        bits.append(f"⚠️  {total['skipped']} placeholder copy(ies) not uploaded")
+    if bits:
+        say("☁️  Drive synced: " + " · ".join(bits))
+    if total["err"]:
+        say(f"❌ {total['err']} change(s) could not be pushed — they will be retried next time.")
+        return 1
+    return 0
+
+
+def push_round(ctx, db, bar, news, gone, modified, scanned, total):
+    # ── 1. moves: a vanished entry and a new entry that are the same inode ────────────────────────────
+    gone_by_ino = {}
+    for r in gone:
+        gone_by_ino.setdefault((r["dev"], r["ino"], r["kind"]), []).append(r)
+    moves, rest_new = [], []
+    claimed = set()
+    for n in news:
+        key = (n.st.st_dev, n.st.st_ino, "d" if n.isdir else "f")
+        cands = [r for r in gone_by_ino.get(key, []) if r["rel"] not in claimed and r["ino"]]
+        if not n.isdir:
+            # a file only counts as "moved" when it is still exactly what the mirror recorded; a recycled inode
+            # (rm a; touch b) or a moved-and-edited file is a delete + a new upload instead
+            cands = [r for r in cands if (n.st.st_size, n.st.st_mtime_ns) == (r["lsize"], r["lmt"])]
+        if cands:
+            r = cands[0]
+            claimed.add(r["rel"])
+            moves.append((r, n))
+        else:
+            rest_new.append(n)
+    gone = [r for r in gone if r["rel"] not in claimed]
+    # ── 2. folders and files that are really new ─────────────────────────────────────────────────────
+    expanded = []
+    for n in rest_new:
+        expanded += walk_new(ctx, n)
+    new_dirs = [n for n in expanded if n.isdir]
+    new_files = [n for n in expanded if not n.isdir]
+    uploads, skipped = [], 0
+    for n in new_files:
+        if is_placeholder_copy(n.st):
+            skipped += 1
+            say(f"⚠️  Not uploaded (looks like a copy of a not-downloaded file): {n.rel}")
+            continue
+        uploads.append((n.rel, n.st, None))
+    for r, est in modified:
+        if r["gdoc"]:
+            say(f"⚠️  '{r['rel']}' is a Google Docs file exported for you; edits to the export are not pushed back.")
+            continue
+        if is_placeholder_copy(est):
+            skipped += 1
+            say(f"⚠️  Not uploaded (looks like a not-downloaded placeholder): {r['rel']}")
+            continue
+        uploads.append((r["rel"], est, r))
+    total["skipped"] += skipped
+    # ── 3. safety net before removing things ─────────────────────────────────────────────────────────
+    max_del = int(os.environ.get("BVK_GD_MAX_DELETE", "100"))
+    if len(gone) > max_del:
+        with bar.paused():
+            ok = ask_yes(f"⚠️  {len(gone)} items are missing from the Drive mirror. Remove them from Google Drive too")
+        if not ok:
+            say("🚫 Nothing removed from Drive — the folder is listed again from Google Drive.")
+            for r in gone:
+                par = db.get(parent_of(r["rel"]))
+                db.delete_tree(r["rel"])
+                if par is not None:
+                    db.put(rel=par["rel"], listed=0)      # next visit re-creates the placeholders
+            gone = []
+    failed_dirs = set()
+    did = False
+
+    def fail(rel, why):
+        total["err"] += 1
+        failed_dirs.add(parent_of(rel))
+        say(f"❌ {rel}: {why}")
+
+    # ── 4. do it: mkdir -> move -> upload -> delete ───────────────────────────────────────────────────
+    ok_dirs = []
+    for it, err in run_levels(new_dirs, lambda n: n.rel.count("/"),
+                              lambda n: rclone(ctx, ["mkdir", ctx.rpath(n.rel)])):
+        if err:
+            fail(it.rel, err)
+        else:
+            ok_dirs.append(it)
+            total["mk"] += 1
+            did = True
+            db.put(rel=it.rel, kind="d", mtime=it.st.st_mtime, ino=it.st.st_ino, dev=it.st.st_dev,
+                   dmt=it.st.st_mtime_ns, listed=time.time())
+    for it, err in run_levels(moves, lambda m: m[1].rel.count("/"),
+                              lambda m: rclone(ctx, ["moveto", ctx.rpath(m[0]["rel"]), ctx.rpath(m[1].rel)])):
+        r, n = it
+        if err:
+            fail(n.rel, err)
+            continue
+        total["mv"] += 1
+        did = True
+        if r["kind"] == "d":
+            db.rename_tree(r["rel"], n.rel)
+            db.put(rel=n.rel, ino=n.st.st_ino, dev=n.st.st_dev)           # dmt stays: inner changes are re-scanned
+            scanned.append(parent_of(n.rel))
+        else:
+            db.delete_tree(n.rel)
+            db.rename_tree(r["rel"], n.rel)
+            db.put(rel=n.rel, ino=n.st.st_ino, dev=n.st.st_dev)           # lsize/lmt unchanged -> edits show as modified
+    if uploads:
+        listing = os.path.join(ctx.tmp, f"up-{os.getpid()}.list")
+        with open(listing, "w") as fh:
+            fh.write("\n".join(u[0] for u in uploads) + "\n")
+        size = sum(u[1].st_size for u in uploads)
+        bar.msg = f"Uploading {len(uploads)} file(s) · {fmt_size(size)} to Google Drive"
+        big = size >= 1 << 20 and sys.stderr.isatty()
+        args2 = ["copy", ctx.tree, ctx.rpath(""), "--files-from-raw", listing]
+        if big:
+            with bar.paused():
+                rc, _, err = rclone(ctx, args2 + ["--progress"], check=False, passthrough=True)
+        else:
+            rc, _, err = rclone(ctx, args2, check=False)
+        os.unlink(listing)
+        results = []
+        if rc == 0:
+            results = [(u, None) for u in uploads]
+        else:                                                              # find out which ones failed
+            def one(u):
+                rclone(ctx, ["copyto", ctx.abs(u[0]), ctx.rpath(u[0])])
+            results = run_levels(uploads, lambda u: 0, one)
+        for u, e in results:
+            rel, st, r = u
+            if e:
+                fail(rel, e)
+                continue
+            total["up"] += 1
+            did = True
+            db.put(rel=rel, kind="f", size=st.st_size, mtime=st.st_mtime, hyd=1, gdoc=0, **row_local_state(st))
+    file_rm = [r for r in gone if r["kind"] == "f"]
+    dir_rm = [r for r in gone if r["kind"] == "d"]
+    perm = os.environ.get("BVK_GD_PERMANENT") == "1"
+    extra = ["--drive-use-trash=false"] if perm else []
+    if file_rm:
+        listing = os.path.join(ctx.tmp, f"rm-{os.getpid()}.list")
+        with open(listing, "w") as fh:
+            fh.write("\n".join(r["rel"] for r in file_rm) + "\n")
+        bar.msg = f"Removing {len(file_rm)} file(s) from Google Drive"
+        rc, _, err = rclone(ctx, ["delete", ctx.rpath(""), "--files-from-raw", listing, *extra], check=False)
+        os.unlink(listing)
+        if rc != 0:
+            for r in file_rm:                                              # per file: tells which one failed
+                rc1, _, e1 = rclone(ctx, ["deletefile", ctx.rpath(r["rel"]), *extra], check=False)
+                if rc1 not in (0, 4):                                      # 4 = already gone
+                    fail(r["rel"], (e1.strip().splitlines() or ["delete failed"])[-1])
+                    continue
+                db.delete_tree(r["rel"]); total["rm"] += 1; did = True
+        else:
+            for r in file_rm:
+                db.delete_tree(r["rel"]); total["rm"] += 1; did = True
+    for it, err in run_levels(dir_rm, lambda r: r["rel"].count("/"), lambda r: _purge(ctx, r["rel"], extra)):
+        if err:
+            fail(it["rel"], err)
+        else:
+            db.delete_tree(it["rel"]); total["rm"] += 1; did = True
+    # ── 5. folders that were fully handled look "clean" again ─────────────────────────────────────────
+    for rel in set(scanned):
+        if rel in failed_dirs or db.get(rel) is None:
+            continue
+        with contextlib.suppress(OSError):
+            db.put(rel=rel, dmt=os.lstat(ctx.abs(rel)).st_mtime_ns)
+    return did
+
+
+def _purge(ctx, rel, extra):
+    rc, out, err = rclone(ctx, ["purge", ctx.rpath(rel), *extra], check=False)
+    if rc not in (0, 3, 4):
+        raise GdError((err.strip().splitlines() or ["purge failed"])[-1])
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  server-side copy
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def cmd_copy(ctx, args):
+    db = DB(ctx)
+    src, dst = ctx.rel(args.src), ctx.rel(args.dst)
+    row = db.get(src)
+    if row is None:
+        raise GdError(f"unknown in Drive: {src}")
+    bar = Bar(f"Copying inside Google Drive · {name_of(src)}").start()
+    ctx.bar = bar
+    try:
+        if row["kind"] == "f":
+            rclone(ctx, ["copyto", ctx.rpath(src), ctx.rpath(dst)])
+        else:
+            rclone(ctx, ["copy", ctx.rpath(src), ctx.rpath(dst)])
+        sync_dir(ctx, db, parent_of(dst), force=True)
+        d2 = db.get(dst)
+        if d2 is not None and d2["kind"] == "d":
+            sync_dir(ctx, db, dst, force=True, recursive=True)
+    finally:
+        bar.stop()
+    return 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  small commands
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def cmd_remotes(args):
+    types = {t.strip() for t in os.environ.get("BVK_GD_TYPES", "drive").split(",") if t.strip()}
+    cmd = [RCLONE, "--ask-password=false", "config", "dump"]
+    try:
+        p = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except FileNotFoundError:
+        say("rclone is not installed")
+        return 2
+    if p.returncode != 0:
+        say("rclone config could not be read: " + ((p.stderr or "").strip().splitlines() or ["?"])[-1])
+        return 2
+    try:
+        data = json.loads(p.stdout or "{}")
+    except ValueError:
+        say("rclone config dump is not JSON")
+        return 2
+    for name in sorted(data, key=str.lower):
+        t = (data[name] or {}).get("type", "")
+        if t in types:
+            print(f"{name}\t{t}")
+    return 0
+
+
+def cmd_sync(ctx, args):
+    db = DB(ctx)
+    rel = ctx.rel(args.path) if args.path else ""
+    bar = Bar(f"Loading {ctx.remote}:/{rel} from Google Drive").start()
+    ctx.bar = bar
+    try:
+        st = sync_dir(ctx, db, rel, force=args.force, recursive=args.recursive)
+    finally:
+        bar.stop()
+    if st.get("dups"):
+        say(f"⚠️  {st['dups']} item(s) share a name with another item in this Drive folder and are hidden "
+            f"(rclone dedupe {ctx.remote}:{rel} fixes that).")
+    return 0
+
+
+def cmd_status(ctx, args):
+    db = DB(ctx)
+    q = lambda s: db.c.execute(s).fetchone()[0] or 0
+    print(f"remote\t{ctx.remote}")
+    print(f"folders\t{q('SELECT COUNT(*) FROM e WHERE kind=\"d\" AND listed>0')}")
+    print(f"files\t{q('SELECT COUNT(*) FROM e WHERE kind=\"f\"')}")
+    print(f"downloaded\t{q('SELECT COUNT(*) FROM e WHERE kind=\"f\" AND hyd=1')}")
+    print(f"downloaded_bytes\t{q('SELECT SUM(lsize) FROM e WHERE kind=\"f\" AND hyd=1')}")
+    print(f"known_bytes\t{q('SELECT SUM(size) FROM e WHERE kind=\"f\"')}")
+    return 0
+
+
+def cmd_about(ctx, args):
+    rc, out, err = rclone(ctx, ["about", ctx.rpath("")], check=False)
+    if rc != 0:
+        say("could not read the storage quota: " + ((err or "").strip().splitlines() or ["?"])[-1])
+        return 1
+    print(out.strip())
+    return 0
+
+
+def cmd_where(ctx, args):
+    print(ctx.rel(args.path))
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="_3bvk_gd_main")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("remotes")
+    s = sub.add_parser("sync"); s.add_argument("path", nargs="?", default=""); s.add_argument("--force", action="store_true")
+    s.add_argument("--recursive", action="store_true")
+    sub.add_parser("push")
+    h = sub.add_parser("hydrate"); h.add_argument("paths", nargs="+")
+    c = sub.add_parser("copy"); c.add_argument("src"); c.add_argument("dst")
+    cl = sub.add_parser("clean"); cl.add_argument("paths", nargs="*")
+    sub.add_parser("status"); sub.add_parser("about")
+    w = sub.add_parser("where"); w.add_argument("path")
+    args = ap.parse_args(argv)
+    try:
+        if args.cmd == "remotes":
+            return cmd_remotes(args)
+        ctx = Ctx()
+        return {"sync": cmd_sync, "push": cmd_push, "hydrate": cmd_hydrate, "copy": cmd_copy, "clean": cmd_clean,
+                "status": cmd_status, "about": cmd_about, "where": cmd_where}[args.cmd](ctx, args)
+    except GdError as e:
+        msg = str(e)
+        if msg.startswith("__notfound__:"):
+            msg = f"'{msg.split(':', 1)[1] or '/'}' was not found in Google Drive"
+        say(f"❌ {msg}")
+        return 1
+    except KeyboardInterrupt:
+        say("🚫 Interrupted.")
+        return 4
+
+
+if __name__ == "__main__":
+    sys.exit(main())

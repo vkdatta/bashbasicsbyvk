@@ -355,6 +355,39 @@ sudo pip uninstall bashbasicsbyvk
 </details>
 
 
+## Google Drive (`fx` → `google_drive_fx` → `open google drive`)
+
+Opens a Google Drive as the main screen, with every native command working on it.
+
+1. Make a Drive profile once: `rclone config` → `n` → name → *Google Drive* (several profiles = several accounts).
+2. `fx` → `google_drive_fx` → `open google drive` lists your rclone profiles (`n` creates one). Pick a number.
+3. Your Drive appears like a folder (header `☁️ work:/Docs`), folders first like drive.google.com. Browse with numbers and `u`.
+   `c  d  r  c-  m-  s-  d-  z-  uz-  t  f  up-  ux-` and the rest behave as in any folder; changes are pushed to Drive right after.
+
+| Command | Meaning |
+|---|---|
+| `gd` | Drive menu: status, quota, commands |
+| `gdx` | leave Google Drive (back to where you were) |
+| `rf` / `gd.rf` | list this Drive folder again from Google |
+| `gd.scan` | list the whole Drive below here (folder item counts become real) |
+| `gd.clean` | free disk: downloaded, unchanged files become placeholders again |
+| `gd.push`, `gd.sw` | push pending changes now, switch profile |
+
+**How it works.** A profile is mirrored into `~/.bashbasicsbyvk/gdrive/<profile>/tree/`: folders are real folders, files are
+free placeholders (sparse, right size and date). Content is downloaded the moment something reads it (open, copy out, zip, upload
+link, `rclone` transfer); copying inside the Drive is a server-side copy. Create, delete (to the Drive **trash**), rename, move
+(a real server-side move), edit and zip are pushed back afterwards. Over 100 removals at once asks first; a copy of a
+not-downloaded file is never uploaded as zeros.
+
+**Per-profile state.** Each profile has its own settings, buffers, selection and rules, favourites, locks, bookmarks, shortcut
+registry, search index and link keys in `~/.bashbasicsbyvk/gdrive/<profile>/`. They are swapped in when the Drive opens and
+back when you leave. `d-` inside a Drive offers to apply buffers you staged outside it. Upgrades, UDF scripts and the recents daemon stay global.
+
+**Notes.** Folders you have not opened yet show no item count until listed (`gd.scan`). Google Docs/Sheets appear as their
+exported files and are read-only. Content search (`f`) only sees downloaded files. Extra rclone flags per profile go in
+`~/.bashbasicsbyvk/gdrive/<profile>/rclone.flags` (e.g. `--drive-shared-with-me`). Environment: `BVK_GD_TTL` (list cache seconds, 120),
+`BVK_GD_CONFIRM_MB` (ask before downloading more, 200), `BVK_GD_MAX_DELETE` (100), `BVK_GD_PERMANENT=1` (skip the Drive trash).
+
 ## Upgrade (`-u`) and `health`
 
 `-u` opens the upgrade loop (arrow keys `←/→` switch tabs):

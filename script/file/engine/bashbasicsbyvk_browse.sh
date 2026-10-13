@@ -449,7 +449,8 @@ handle_selection() {
 
 _menu_header() {
   echo
-  local _hdr_loc="📂 Location: $path${group_prefix:+ [group: ${group_prefix^^}*]}"
+  _gd_view_path "$path"      # Google Drive open: show the Drive path, not the mirror folder
+  local _hdr_loc="📂 Location: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
   _bvk_src_tag_v; _hdr_loc+="$_bst_out"
   if [ -n "$_filter_query" ]; then
     if ${imaginary_mode:-false}; then
@@ -498,7 +499,7 @@ _menu_body_flat() {
 }
 
 _menu_footer_lines() {
-  _mc_footer @browse_main
+  if [ "${_GD_ACTIVE:-0}" = 1 ]; then _mc_footer @browse_gd; else _mc_footer @browse_main; fi
  if [ "${total:-0}" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press fs to enable grouped display"
   fi

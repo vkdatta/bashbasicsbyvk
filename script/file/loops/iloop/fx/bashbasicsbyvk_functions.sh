@@ -160,6 +160,7 @@ source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_text_csv.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_import_link.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selection.sh"
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selected.sh"
+source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_gdrive.sh"     # google_drive_fx/open google drive — rclone profiles → the Drive as the main screen (bashbasicsbyvk_gdrive.sh, _3bvk_gd_main)
 source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_cfwp.sh"      # cloudflare_fx/workers and pages — single button: list · export · recover (python: _3bvk_cfwp_*, _3bvk_recover_*)
 
 # UDF tab extras: e-N (edit item), ux / ui (export / import all UDFs as a zip)
@@ -636,6 +637,9 @@ functions_menu() {
     esac
 
     shopt -u nocasematch
+
+    # a Google Drive was just opened: leave fx so the main screen shows it
+    if [ "${_GD_FX_LEAVE:-0}" = 1 ]; then _GD_FX_LEAVE=0; break; fi
 
     if $_fx_do_fresh; then
       declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
