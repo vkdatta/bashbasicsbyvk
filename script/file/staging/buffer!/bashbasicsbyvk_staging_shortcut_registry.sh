@@ -108,52 +108,93 @@ _scr_remove() {
 # those specific files.
 # ---------------------------------------------------------------------------
 _scr_rename_sync() {
-  local old_path="$1"
-  local new_path="$2"
+  local -a _po=("$1") _pn=("$2")
+  _scr_sync_pairs _po _pn
+}
 
+# _scr_map <path> <old> <new>  → _scr_mp  (old→new for the path itself or anything below it; no forks)
+_scr_mp=""
+_scr_map() {
+  _scr_mp="$1"
+  if [ "$1" = "$2" ]; then _scr_mp="$3"
+  elif [[ "$1" == "$2/"* ]]; then _scr_mp="$3/${1#"$2/"}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# _scr_sync_pairs <olds-array> <news-array>
+# THE shortcut carry engine. Replays path changes (old[i] → new[i], in order) over
+# the whole registry in ONE pass. For every shortcut it carries BOTH
+#   • its TARGET   (the item it points to moved/renamed → SHORTCUT_TARGET rewritten)
+#   • its OWN PATH (the .shortcut file, or a folder holding it, moved/renamed →
+#                   registry row follows)
+# Used by rename, move, organise / unorganise, find-and-replace renames, ...
+# ---------------------------------------------------------------------------
+_scr_sync_pairs() {
+  local -n _spo="$1" _spn="$2"
+  [ "${#_spo[@]}" -gt 0 ] || return 0
   [ -f "$_SCR_FILE" ] || return 0
 
-  local -a entries=() updated_entries=()
+  local -a entries=() out=()
   _scr_load entries
-
-  local updated=0
-  local e sc_file old_target new_target tmp_file
+  local e sc target new_sc new_t i tmp esc updated=0 dirty=0
   for e in "${entries[@]}"; do
-    sc_file="${e%%${_SCR_SEP}*}"
-    old_target="${e#*${_SCR_SEP}}"
-
-    new_target=""
-    if [ "$old_target" = "$old_path" ]; then
-      new_target="$new_path"
-    elif [[ "$old_target" == "${old_path}/"* ]]; then
-      new_target="${new_path}/${old_target#"${old_path}/"}"
-    fi
-
-    if [ -n "$new_target" ]; then
-      if [ -f "$sc_file" ]; then
-        tmp_file=$(mktemp) || { updated_entries+=("$e"); continue; }
-        if sed "s|^SHORTCUT_TARGET=.*|SHORTCUT_TARGET=${new_target}|" \
-               "$sc_file" > "$tmp_file" \
-           && mv -- "$tmp_file" "$sc_file"; then
-          updated=$((updated + 1))
-          echo "  🔗 Shortcut synced: $(basename "$sc_file") → $new_target"
-          updated_entries+=("${sc_file}${_SCR_SEP}${new_target}")
-        else
-          rm -f "$tmp_file"
-          updated_entries+=("$e")   # keep old entry; rewrite failed
-        fi
+    sc="${e%%${_SCR_SEP}*}"; target="${e#*${_SCR_SEP}}"
+    new_sc="$sc"; new_t="$target"
+    for i in "${!_spo[@]}"; do
+      _scr_map "$new_sc" "${_spo[$i]}" "${_spn[$i]}"; new_sc="$_scr_mp"
+      _scr_map "$new_t"  "${_spo[$i]}" "${_spn[$i]}"; new_t="$_scr_mp"
+    done
+    if [ "$new_sc" = "$sc" ] && [ "$new_t" = "$target" ]; then out+=("$e"); continue; fi
+    dirty=1
+    if [ ! -f "$new_sc" ]; then continue; fi          # shortcut file is gone — lazy cleanup
+    if [ "$new_t" != "$target" ]; then
+      esc="${new_t//\\/\\\\}"; esc="${esc//&/\\&}"; esc="${esc//|/\\|}"
+      tmp=$(mktemp) || { out+=("${new_sc}${_SCR_SEP}${target}"); continue; }
+      if sed "s|^SHORTCUT_TARGET=.*|SHORTCUT_TARGET=${esc}|" "$new_sc" > "$tmp" && mv -- "$tmp" "$new_sc"; then
+        updated=$((updated + 1))
+        [ "${#_spo[@]}" -eq 1 ] && echo "  🔗 Shortcut synced: ${new_sc##*/} → $new_t"
       else
-        # .shortcut file is gone — drop this entry (lazy cleanup)
-        : # intentionally omit from updated_entries
+        rm -f "$tmp"; new_t="$target"
       fi
-    else
-      updated_entries+=("$e")
     fi
+    out+=("${new_sc}${_SCR_SEP}${new_t}")
   done
-
-  _scr_save updated_entries
-  [ "$updated" -gt 0 ] && echo "  📎 $updated shortcut(s) updated to reflect new path."
+  [ "$dirty" -eq 1 ] && _scr_save out
+  [ "$updated" -gt 0 ] && echo "  📎 $updated shortcut(s) updated to reflect the new path(s)."
   return 0
+}
+
+# _scr_forget_under <path> — drop registry rows of shortcut files at/below a deleted path
+_scr_forget_under() {
+  [ -f "$_SCR_FILE" ] || return 0
+  local -a entries=() kept=(); _scr_load entries
+  local e sc dirty=0
+  for e in "${entries[@]}"; do
+    sc="${e%%${_SCR_SEP}*}"
+    if [ "$sc" = "$1" ] || [[ "$sc" == "$1/"* ]]; then dirty=1; else kept+=("$e"); fi
+  done
+  [ "$dirty" -eq 1 ] && _scr_save kept
+  return 0
+}
+
+# _scr_add_tree <path> — register every .shortcut at/below path (a copy of a shortcut / of a folder of shortcuts)
+_scr_add_tree() {
+  local p="$1" sc t
+  local -a fresh=() entries=() kept=() files=()
+  if [ -f "$p" ] && [[ "$p" == *.shortcut ]]; then files=("$p")
+  elif [ -d "$p" ]; then
+    while IFS= read -r -d '' sc; do files+=("$sc"); done < <(find "$p" -type f -name '*.shortcut' -print0 2>/dev/null)
+  fi
+  [ "${#files[@]}" -gt 0 ] || return 0
+  _scr_ensure; _scr_load entries
+  local -A _is=(); for sc in "${files[@]}"; do _is["$sc"]=1; done
+  local e
+  for e in "${entries[@]}"; do [ -n "${_is[${e%%${_SCR_SEP}*}]+x}" ] || kept+=("$e"); done
+  for sc in "${files[@]}"; do
+    t=$(_shortcut_read_field "$sc" "SHORTCUT_TARGET"); [ -n "$t" ] && kept+=("${sc}${_SCR_SEP}${t}")
+  done
+  _scr_save kept
 }
 
 # ---------------------------------------------------------------------------

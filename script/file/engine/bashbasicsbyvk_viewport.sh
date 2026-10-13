@@ -209,6 +209,7 @@ declare -g _vp_meta_primed=false   # true while display_items runs in the prime 
 
 _vp_prime_rows() {
   [ "$_vp_mode" == "items" ] || return 0
+  declare -F _lk_load >/dev/null 2>&1 && _lk_load     # 🔒 suffix needs the lock registry
   # If a custom row-text function is set it owns every row — display_items
   # must not pre-fill the cache or the custom icons are overwritten.
   [ -n "${_vp_rowtext_fn:-}" ] && return 0

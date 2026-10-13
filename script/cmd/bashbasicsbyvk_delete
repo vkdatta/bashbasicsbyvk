@@ -1,20 +1,48 @@
 #!/usr/bin/env bash
+# bashbasicsbyvk_delete <file or folder>
+# Used by the file menu's "Delete File". Honours locks (l-N): a locked item
+# needs the normal confirmation AND the 6-digit action key.
 
-if [ -z "$1" ]; then
+source "bashbasicsbyvk_lock.sh"        # also loads action_confirm_key.sh
+source "bashbasicsbyvk_staging_shortcut_registry.sh"
+
+_bvk_delete_main() {
+  local target="$1" confirm
+  if [ -z "$target" ]; then
     echo "Usage: delete <filename or folder>"
     return 1
   fi
 
-  if [ ! -e "$1" ]; then
-    echo "File or directory not found: $1"
+  if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+    echo "File or directory not found: $target"
     return 1
   fi
 
-  echo "Are you sure you want to delete '$1'? You may not recover this."
+  _lk_load
+  echo "Are you sure you want to delete '$target'? You may not recover this."
   read -e -p "Type 'yes' to confirm: " confirm
-  if [ "$confirm" = "yes" ]; then
-    rm -rf "$1"
-    echo "Deleted: $1"
-  else
+  if [ "$confirm" != "yes" ]; then
     echo "Deletion cancelled."
+    return 0
   fi
+
+  if _lk_is_protected "$target"; then
+    local -a detail=()
+    if _lk_is_locked "$target"; then
+      detail+=("🔒 You selected a LOCKED $( [ -d "$target" ] && echo folder || echo file ): ${target##*/}")
+    else
+      _lk_count_inside "$target"
+      detail+=("🔒 This folder holds $_lk_inside locked item(s): ${target##*/}")
+    fi
+    detail+=("Deleting it will erase its content PERMANENTLY if a backup has not been taken.")
+    action_confirm_key "LOCKED ITEM — confirmation required" "${detail[@]}" || {
+      echo "🚫 Deletion cancelled — locked item kept"
+      return 0
+    }
+  fi
+
+  rm -rf -- "$target" && { _lk_forget "$target"; _scr_forget_under "$target"; }
+  echo "Deleted: $target"
+}
+
+_bvk_delete_main "$@"

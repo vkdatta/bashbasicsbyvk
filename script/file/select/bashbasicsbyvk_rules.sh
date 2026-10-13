@@ -202,8 +202,9 @@ _rule_save_as() {
 _rule_delete_bundle() {          # _rule_delete_bundle <kind> <name>   (asks y/n)
   local kind="$1" name="$2" ans dir; dir="$(_rl_dir "$kind" "$name")"
   _rl_is_bundle "$dir" || { echo "❌ $kind rule '$name' not found"; return 1; }
-  read -e -r -p "Delete $kind rule '$name'? (y/n): " ans
-  if [[ "$ans" == [yY] ]]; then rm -rf -- "$dir"; echo "🗑️  Deleted rule '$name'"; else echo "🚫 Cancelled"; fi
+  selected_items=("$dir")
+  _lk_confirm_delete "Delete $kind rule '$name'? (y/n): " || return 1
+  rm -rf -- "$dir" && _carry_forget "$dir"; echo "🗑️  Deleted rule '$name'"
 }
 
 # ── last used (unsaved) ──────────────────────────────────────────────────────
@@ -256,6 +257,7 @@ _rl_rowtext() {
   fi
   name="${p##*/}"; key="$_rl_cur/$name"
   local line; printf -v line " %2d) %s %s" "$i" "$_RL_ICON" "$name"
+  _lk_suffix_v "$p"; line+="$_lk_suffix"                 # 🔒 locked (l-N)
   [ "${_RL_ST[$key]:-broken}" = broken ] && line+="  [broken rule]"
   [ -n "${_RL_EX[$key]:-}" ] && line+="   $(_rl_trunc "${_RL_EX[$key]}" 36)"
   [ -n "${_RL_DS[$key]:-}" ] && line+="  — $(_rl_trunc "${_RL_DS[$key]}" 28)"
@@ -409,6 +411,12 @@ _rl_cmd_create() {
   _rl_report "$kind" "$name"
 }
 
+_rl_cmd_lock() {                 # l-N / ul-N on the rules of the open folder
+  if [ "$_rl_tab" != rules ]; then echo "⚠️  Not available in the Last used tab"; return 1; fi
+  if [ -z "$_rl_cur" ]; then echo "⚠️  Open the 'select' or 'display' folder first, then use l-N / ul-N on its rules"; return 1; fi
+  _lk_cmd "$([[ "$1" == [uU][lL]-* ]] && echo unlock || echo lock)" "$1"
+}
+
 _rl_cmd_delete() {
   if [ "$_rl_tab" != rules ]; then echo "⚠️  Not available in the Last used tab"; return 1; fi
   if [ -z "$_rl_cur" ]; then
@@ -425,11 +433,10 @@ _rl_cmd_delete() {
   local refs=0 r
   for p in "${doomed[@]}"; do r=$(_rl_refs_to "$_rl_cur" "${p##*/}"); refs=$((refs + r)); done
   [ "$refs" -gt 0 ] && echo "⚠️  $refs other rule(s) refer to what you are deleting — they will become [broken rule]"
-  local ans
-  read -e -r -p "Delete ${#doomed[@]} rule(s)? This can't be undone. (y/n): " ans
-  if [[ "$ans" != [yY] ]]; then echo "🚫 Deletion cancelled"; return 1; fi
-  for p in "${doomed[@]}"; do rm -rf -- "$p"; done
-  echo "✅ Deleted ${#doomed[@]} rule(s)"
+  selected_items=("${doomed[@]}")
+  _lk_confirm_delete "Delete ${#doomed[@]} rule(s)? This can't be undone. (y/n): " || return 1
+  for p in "${selected_items[@]}"; do rm -rf -- "$p" && _carry_forget "$p"; done
+  echo "✅ Deleted ${#selected_items[@]} rule(s)"
 }
 
 _rl_cmd_rename() {
@@ -452,6 +459,7 @@ _rl_cmd_rename() {
   local refs; refs=$(_rl_refs_to "$_rl_cur" "$_rl_n")
   local old="$_rl_p" dst; dst="$(_rl_dir "$_rl_cur" "$new")"
   mv -- "$old" "$dst" || { echo "❌ Rename failed"; return 1; }
+  _carry_begin; _carry_move "$old" "$dst"; _carry_end          # a locked rule stays locked under its new name
   local ext
   for ext in rule meta; do
     [ -f "$dst/$_rl_n.$ext" ] && mv -- "$dst/$_rl_n.$ext" "$dst/$new.$ext"
@@ -541,6 +549,7 @@ handle_rule_cmd() {
 # ── the loop ──────────────────────────────────────────────────────────────────
 rules_menu() {
   _rl_ensure_store
+  _lk_load
 
   local _rl_saved_prefix="$group_prefix" _rl_saved_force="$force_show"
   local _rl_saved_all=("${_all_items[@]}")
@@ -590,6 +599,7 @@ rules_menu() {
         else echo "⚠️  Not available in the Last used tab — type a number to save an expression"; _rl_fresh=false; fi ;;
 
       d)  _rl_cmd_delete || _rl_fresh=false ;;
+      l-*|ul-*) _rl_cmd_lock "$_rl_choice" || _rl_fresh=false ;;
       r)  _rl_cmd_rename || _rl_fresh=false ;;
 
       e-*)  _rl_cmd_edit rule "${_rl_choice#[eE]-}" || _rl_fresh=false ;;

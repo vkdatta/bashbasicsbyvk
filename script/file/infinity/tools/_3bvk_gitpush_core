@@ -38,6 +38,17 @@ cleanup() {
 
 trap cleanup EXIT
 
+# Shared "type this 6-digit number" gate (also used when deleting locked items).
+# Installed flat next to this file; in the repo it lives in ../../functions/.
+_ack_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _ack in "$_ack_dir/action_confirm_key.sh" \
+            "$_ack_dir/../../functions/action_confirm_key.sh" \
+            "${SCRIPT_DIR:-/nonexistent}/action_confirm_key.sh"; do
+    [[ -f "$_ack" ]] && { source "$_ack"; break; }
+done
+declare -F action_confirm_key >/dev/null ||
+    die "action_confirm_key.sh not found - cannot ask for confirmation."
+
 # ============================================================
 # Requirements / Automatic GitHub CLI Installation
 # ============================================================
@@ -388,25 +399,9 @@ Run:
 
 confirm_action() {
     local description="$1"
-    local code
-    local entered
 
-    code="$(printf '%06d' "$(( RANDOM % 1000000 ))")"
-
-    echo
-    echo "============================================================"
-    echo "$description"
-    echo "============================================================"
-    echo
-    echo "Confirmation code: $code"
-    echo
-
-    read -e -r -p "Enter the confirmation code: " entered
-
-    [[ "$entered" == "$code" ]] ||
+    action_confirm_key "$description" ||
         die "Confirmation failed."
-
-    ok "Confirmation accepted."
 }
 
 # ============================================================
@@ -672,8 +667,6 @@ push_repository() {
     local remote_commit
     local remote_author
     local confirmation
-    local challenge
-    local typed
 
     echo
     echo "============================================================"
@@ -766,25 +759,8 @@ No force push was performed."
                 ;;
         esac
 
-        if command -v shuf >/dev/null 2>&1; then
-            challenge="$(shuf -i 100000-999999 -n 1)"
-        else
-            challenge="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ' | tail -n 1)"
-            challenge="${challenge:0:6}"
-            [[ "$challenge" =~ ^[0-9]{6}$ ]] || challenge="$(date +%s | tail -c 7)"
-        fi
-
-        echo
-        echo "⚠️  FINAL FORCE-PUSH CONFIRMATION"
-        echo
-        echo "This is a destructive operation."
-        echo "Type this number exactly to continue:"
-        echo
-        echo "  $challenge"
-        echo
-        read -e -r -p "Confirmation number: " typed
-
-        if [[ "$typed" != "$challenge" ]]; then
+        if ! action_confirm_key "FINAL FORCE-PUSH CONFIRMATION" \
+            "This is a destructive operation."; then
             die "Confirmation failed.
 
 The local commit remains intact.

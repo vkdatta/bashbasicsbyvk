@@ -51,7 +51,7 @@ PYEOF
                         # os.rename() is a single syscall; no subprocess per file.
                         # Estimated speedup: 3-5× over the bash loop.
                         local count
-                        count=$(python3 - "$pat" "$rep" "${results[@]}" <<'PYEOF'
+                        local _mvlog; _mvlog=$(mktemp); count=$(BVK_MV_LOG="$_mvlog" python3 - "$pat" "$rep" "${results[@]}" <<'PYEOF'
 import sys, os
 pat, rep = sys.argv[1], sys.argv[2]
 count = 0
@@ -63,11 +63,14 @@ for f in sys.argv[3:]:
         try:
             os.rename(f, os.path.join(d, newname))
             count += 1
+            if os.environ.get("BVK_MV_LOG"):
+                with open(os.environ["BVK_MV_LOG"], "a") as _l: _l.write(f + "\t" + os.path.join(d, newname) + "\n")
         except OSError:
             pass
 print(count)
 PYEOF
 )
+                        _carry_apply_mv_log "$_mvlog"       # locks + shortcuts follow the renamed files
                         echo "✅ Renamed $count item(s)."
                     else
                         echo "Aborted."
@@ -122,7 +125,7 @@ PYEOF
                         # os.rename() is a single syscall; collision check via os.path.exists().
                         # Estimated speedup: 3-5× per CSV row.
                         local renamed
-                        renamed=$(python3 - "$row_find" "$row_rep" "${row_matches[@]}" <<'PYEOF'
+                        local _mvlog; _mvlog=$(mktemp); renamed=$(BVK_MV_LOG="$_mvlog" python3 - "$row_find" "$row_rep" "${row_matches[@]}" <<'PYEOF'
 import sys, os
 find_str, rep = sys.argv[1], sys.argv[2]
 renamed = 0
@@ -135,11 +138,14 @@ for f in sys.argv[3:]:
         try:
             os.rename(f, dest)
             renamed += 1
+            if os.environ.get("BVK_MV_LOG"):
+                with open(os.environ["BVK_MV_LOG"], "a") as _l: _l.write(f + "\t" + dest + "\n")
         except OSError:
             pass
 print(renamed)
 PYEOF
 )
+                        _carry_apply_mv_log "$_mvlog"       # locks + shortcuts follow the renamed files
                         echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ✅ $renamed renamed"
                         nr_counts+=("$renamed")
                     done

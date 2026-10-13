@@ -938,6 +938,15 @@ _build_suffix() { local _bs_out; _build_suffix_v "$1"; printf '%s' "$_bs_out"; }
 _resolve_display_parts_v() {
   local f="$1"
   _rdp_bn="${f##*/}"
+  _resolve_display_parts_core "$f"
+  # 🔒 suffix for items locked with l-N (never 🔐 — that is only in the unlock message)
+  if [ "${#_LK_SET[@]}" -gt 0 ] && declare -F _lk_suffix_v >/dev/null; then
+    _lk_suffix_v "$f"; _rdp_bn+="$_lk_suffix"
+  fi
+}
+
+_resolve_display_parts_core() {
+  local f="$1"
   if [[ "$_rdp_bn" == *.shortcut ]]; then
     _shortcut_display_parts "$f"
     _rdp_icon="$_sc_icon"
@@ -1087,6 +1096,7 @@ _display_grouped() {
 # ── display_items — public entry point ────────────────────────────────────────
 
 display_items() {
+  declare -F _lk_load >/dev/null && _lk_load      # lock registry → 🔒 suffix
   if [ ${#items[@]} -eq 0 ]; then
     echo "🛑 This directory is empty"
     return

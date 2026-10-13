@@ -160,6 +160,8 @@ while true; do
     c)           handle_create ;;
     t)           transfer_menu ;;
     d)           delete_items ;;
+    l-*)         handle_lock_items "$choice" ;;
+    ul-*)        handle_unlock_items "$choice" ;;
     f)           find_menu ;;
     z)           organise_menu ;;
     s)           settings_menu ;;

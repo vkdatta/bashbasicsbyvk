@@ -31,7 +31,11 @@ local -a batch=()
 while IFS= read -r item; do
 [ -n "$item" ] && batch+=("$item")
 done <<< "${_bkts[$dest]}"
-[ ${#batch[@]} -gt 0 ] && mv "${batch[@]}" "$dest/"
+if [ ${#batch[@]} -gt 0 ]; then
+_lk_load
+mv "${batch[@]}" "$dest/"
+_carry_move_batch "$dest" "${batch[@]}"     # locks move with the files
+fi
 done
 }
 
@@ -71,7 +75,9 @@ done
 fi
 if [ ${#batch[@]} -gt 0 ]; then
 mkdir -p "$folder"
+_lk_load
 mv "${batch[@]}" "$folder/"
+_carry_move_batch "$folder" "${batch[@]}"   # locks move with the files
 fi
 ;;
 esac
@@ -206,15 +212,13 @@ u|U) return ;;
 q|Q) _bvk_quit ;;
 esac
 if [ "$uch" = "1" ]; then
-find "$path" -mindepth 2 -type f -exec mv -t "$path/" {} +
-find "$path" -mindepth 1 -type d -empty -delete
+_carry_flatten_into "$path" "$path" 2   # locks + shortcuts follow; a locked empty folder is kept
 echo "✅ All files brought to current location. Empty folders removed."
 else
 if select_items_common "UNORGANISE (folders only)"; then
 for dir in "${selected_items[@]}"; do
 [ -d "$dir" ] || continue
-find "$dir" -type f -exec mv -t "$path/" {} +
-find "$dir" -type d -empty -delete
+_carry_flatten_into "$path" "$dir" 1
 done
 echo "✅ Selected folders unorganised."
 fi

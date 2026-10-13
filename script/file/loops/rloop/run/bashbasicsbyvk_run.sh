@@ -14,7 +14,7 @@ handle_file() {
                    "What would you like to do with the file?"
         _mc_options 0 "Run" "View" "Edit" "Copy Content" "Delete File" \
                       "Erase Content" "Replace With Clipboard Content" \
-                      "Rename File" "Share"
+                      "Rename File" "Share" "Lock File" "Unlock File"
         _mc_footer @file_menu
 
         read -e -p "Select: " action
@@ -29,6 +29,8 @@ handle_file() {
             6) bashbasicsbyvk_overwrite "$file"; return 1 ;;
             7) rename_item "$file"; return 1 ;;
             8) force_share "$file"; return 1 ;;
+            9) _lk_file_cmd lock   "$file"; return 1 ;;
+            10) _lk_file_cmd unlock "$file"; return 1 ;;
             u|U) return 1 ;;
             h|H) home_menu; return 1 ;;
             q|Q) exit 0 ;;

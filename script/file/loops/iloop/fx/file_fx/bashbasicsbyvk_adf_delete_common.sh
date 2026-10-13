@@ -31,18 +31,15 @@ _fxdel_run_selected() {
   local total=${#selected_items[@]}
   [ "$total" -eq 0 ] && { echo "❌ Nothing to delete"; return; }
 
-  local confirm
-  read -e -p "Are you really sure you want to delete $total item(s)? This action can't be undone. (y/n): " confirm
-  if [[ $confirm != "y" && $confirm != "Y" ]]; then
-    echo "🚫 Deletion cancelled"
-    return
-  fi
+  # lock gate (l-N): plain y/n when nothing is locked; extra confirmations otherwise
+  _lk_confirm_delete "Are you really sure you want to delete $total item(s)? This action can't be undone. (y/n): " || return
+  total=${#selected_items[@]}
 
   local ok=0 item err
   local -a failed=()
   for item in "${selected_items[@]}"; do
     if err=$(rm -rf -- "$item" 2>&1); then
-      ok=$((ok+1))
+      ok=$((ok+1)); _carry_forget "$item"
     else
       failed+=("${item##*/} — ${err:-rm failed}")
     fi

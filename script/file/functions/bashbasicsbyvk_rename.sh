@@ -31,50 +31,8 @@ _rn_defer_begin() { _RN_DEFER=1; _RN_DEF_OLD=(); _RN_DEF_NEW=(); }
 
 _rn_flush_deferred() {
   _RN_DEFER=0
-  if [ "${#_RN_DEF_OLD[@]}" -eq 0 ] || [ ! -f "$_SCR_FILE" ]; then
-    _RN_DEF_OLD=(); _RN_DEF_NEW=(); return 0
-  fi
-  local -A _pold=()
-  local i
-  for i in "${!_RN_DEF_OLD[@]}"; do _pold["k:${_RN_DEF_OLD[$i]}"]=1; done
-
-  local -a entries=() out=()
-  _scr_load entries
-  local e sc_file old_target cur new_target o nw tmp_file hit updated=0 dirty=0
-  for e in "${entries[@]}"; do
-    sc_file="${e%%${_SCR_SEP}*}"
-    old_target="${e#*${_SCR_SEP}}"
-    hit=0; cur="$old_target"
-    while [ -n "$cur" ]; do
-      if [ -n "${_pold["k:$cur"]+x}" ]; then hit=1; break; fi
-      [[ "$cur" == */* ]] || break
-      cur="${cur%/*}"
-    done
-    if [ "$hit" -eq 0 ]; then out+=("$e"); continue; fi
-
-    new_target="$old_target"
-    for i in "${!_RN_DEF_OLD[@]}"; do
-      o="${_RN_DEF_OLD[$i]}"; nw="${_RN_DEF_NEW[$i]}"
-      if [ "$new_target" = "$o" ]; then new_target="$nw"
-      elif [[ "$new_target" == "${o}/"* ]]; then new_target="${nw}/${new_target#"${o}/"}"
-      fi
-    done
-    if [ "$new_target" = "$old_target" ]; then out+=("$e"); continue; fi
-
-    dirty=1
-    if [ -f "$sc_file" ]; then
-      tmp_file=$(mktemp) || { out+=("$e"); continue; }
-      if sed "s|^SHORTCUT_TARGET=.*|SHORTCUT_TARGET=${new_target}|" "$sc_file" > "$tmp_file" \
-         && mv -- "$tmp_file" "$sc_file"; then
-        updated=$((updated + 1)); out+=("${sc_file}${_SCR_SEP}${new_target}")
-      else
-        rm -f "$tmp_file"; out+=("$e")
-      fi
-    fi
-  done
-  [ "$dirty" -eq 1 ] && _scr_save out
+  _scr_sync_pairs _RN_DEF_OLD _RN_DEF_NEW
   _RN_DEF_OLD=(); _RN_DEF_NEW=()
-  [ "$updated" -gt 0 ] && echo "📎 $updated shortcut(s) updated to reflect new paths."
   return 0
 }
 # ---------------------------------------------------------------------------
@@ -106,6 +64,7 @@ _do_rename_mv() {
     # Two-step rename: old → temp → new  (avoids "same file" rejection).
     local _tmp="${old_path%/*}/.$$_caseswap"
     if mv -- "$old_path" "$_tmp" && mv -- "$_tmp" "$new_path"; then
+      _lk_load; _lk_move "$old_path" "$new_path"
       _sync_shortcuts_for_rename "$old_path" "$new_path"
       return 0
     else
@@ -116,6 +75,7 @@ _do_rename_mv() {
   fi
 
   if mv -- "$old_path" "$new_path"; then
+    _lk_load; _lk_move "$old_path" "$new_path"
     _sync_shortcuts_for_rename "$old_path" "$new_path"
     return 0
   fi
@@ -190,6 +150,7 @@ _rename_single_mutation() {
   _scr_remove "$item"
   mv -- "$item" "$new_sc_path"
   _scr_add "$new_sc_path"
+  _lk_load; _lk_move "$item" "$new_sc_path"      # a locked shortcut stays locked
 fi
 echo "✅ Shortcut renamed: $cur_name → $new_name"
       continue

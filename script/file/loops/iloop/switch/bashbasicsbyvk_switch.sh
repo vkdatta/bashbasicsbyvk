@@ -682,6 +682,14 @@ switch_menu() {
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || delete_items
         ;;
 
+      l-*)
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_lock_items "$_sw_choice"
+        ;;
+
+      ul-*)
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_unlock_items "$_sw_choice"
+        ;;
+
       t)
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || transfer_menu
         ;;

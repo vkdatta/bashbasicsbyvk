@@ -14,13 +14,10 @@ delete_items() {
       echo "Note: shortcut(s) selected — only the shortcut pointer will be deleted, not the original file/folder."
     fi
 
-    read -e -p "Are you really sure you want to delete the selected files? This action can't be undone. (y/n): " confirm
-    if [[ $confirm != "y" && $confirm != "Y" ]]; then
-      echo "🚫 Deletion cancelled"
-      return
-    fi
+    # lock gate (l-N): plain y/n when nothing is locked; extra confirmations otherwise
+    _lk_confirm_delete "Are you really sure you want to delete the selected files? This action can't be undone. (y/n): " || return
     for item in "${selected_items[@]}"; do
-      rm -rf -- "$item"
+      rm -rf -- "$item" && _carry_forget "$item"
     done
     echo "✅ Selected items deleted. I can feel the space 🚀"
   fi

@@ -527,6 +527,16 @@ functions_menu() {
         fi
         ;;
 
+      l-*|ul-*)
+        if [ "$_fx_tab" = "udf" ]; then
+          local _saved_path_l="$path"; path="$_fx_udf_path"
+          if [[ "$_fx_choice" == [uU][lL]-* ]]; then handle_unlock_items "$_fx_choice"; else handle_lock_items "$_fx_choice"; fi
+          path="$_saved_path_l"
+        else
+          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+        fi
+        ;;
+
       t)
         if [ "$_fx_tab" = "udf" ]; then
           local _saved_path_t="$path"; path="$_fx_udf_path"

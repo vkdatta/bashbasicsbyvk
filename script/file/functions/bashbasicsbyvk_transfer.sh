@@ -591,6 +591,7 @@ perform_copy() {
   local total=${#src_items[@]} ok=0
   local -a failed=()
   local item err
+  _lk_load
   for item in "${src_items[@]}"; do
     if [ ! -e "$item" ]; then
       failed+=("$(basename -- "$item") — not found")
@@ -613,6 +614,7 @@ perform_copy() {
     done
     if err=$(cp -r -- "$item" "$dest/$newbase" 2>&1); then
       ok=$((ok+1))
+      _carry_copy "$item" "$dest/$newbase"    # copy of a locked item is locked; copied shortcuts are indexed
     else
       failed+=("$base — ${err:-cp returned $?}")
     fi
@@ -626,18 +628,27 @@ perform_move() {
   local src_items=("$@")
   local total=${#src_items[@]} ok=0
   local -a failed=()
-  local item err
+  local item err tgt
+  _carry_begin                              # locks + shortcuts: synced once after the loop
   for item in "${src_items[@]}"; do
     if [ ! -e "$item" ]; then
       failed+=("$(basename -- "$item") — not found")
       continue
     fi
+    tgt="$dest/$(basename -- "$item")"
+    # mv would silently overwrite an existing destination — never a locked one
+    if { [ -e "$tgt" ] || [ -L "$tgt" ]; } && _lk_is_protected "$tgt"; then
+      failed+=("$(basename -- "$item") — 🔒 a locked item of that name is at the destination, not overwritten")
+      continue
+    fi
     if err=$(mv -- "$item" "$dest/" 2>&1); then
       ok=$((ok+1))
+      _carry_move "$item" "$tgt"              # lock moves; shortcuts to it re-point
     else
       failed+=("$(basename -- "$item") — ${err:-mv returned $?}")
     fi
   done
+  _carry_end
   _transfer_report "Moved" "$ok" "$total" "$dest" "${failed[@]}"
 }
 
@@ -673,6 +684,7 @@ _shortcut_write() {
     printf 'SHORTCUT_CREATED=%s\n' "$(date +%s)"
   } > "$sc_path"
 
+  _scr_add "$sc_path"            # index it, so later renames / moves of the target are carried
   printf '%s' "$sc_path"
 }
 
@@ -1045,6 +1057,7 @@ if __name__ == "__main__":
 MAPPER_EOF
       chmod +x "$_mapper_script"
 
+      _lk_load
       for item in "${selected_items[@]}"; do
         local base
         base=$(basename "$item")
@@ -1057,8 +1070,12 @@ MAPPER_EOF
             echo "⚠️  Skipping $base — a file with this name already exists at destination, refusing to nest."
             continue
           fi
-          echo "📤 rclone $t_op (dir, single call): $base → $dir_root/"
-          if [ "$t_op" == "copy" ]; then
+          local _op="$t_op"
+          if [ "$_op" == "move" ] && _lk_is_protected "$item"; then
+            _op=copy; echo "🔒 $base is locked (or holds locked items) — copying, local original kept"
+          fi
+          echo "📤 rclone $_op (dir, single call): $base → $dir_root/"
+          if [ "$_op" == "copy" ]; then
             rclone copy "$item" "$dir_root" --progress \
               --metadata \
               --metadata-mapper "python3 $_mapper_script"
@@ -1073,8 +1090,12 @@ MAPPER_EOF
             echo "⚠️  Skipping $base — a folder with this exact name already exists at destination."
             continue
           fi
-          echo "📤 rclone $t_op (file): $base → $target_path"
-          if [ "$t_op" == "copy" ]; then
+          local _op="$t_op"
+          if [ "$_op" == "move" ] && _lk_is_protected "$item"; then
+            _op=copy; echo "🔒 $base is locked — copying, local original kept"
+          fi
+          echo "📤 rclone $_op (file): $base → $target_path"
+          if [ "$_op" == "copy" ]; then
             rclone copyto "$item" "$target_path" --progress \
               --metadata \
               --metadata-mapper "python3 $_mapper_script"
@@ -1097,8 +1118,13 @@ MAPPER_EOF
         echo "📤 Sending $base → GCloud:$final_dest/"
         gcloud cloud-shell scp --recurse "localhost:$item" "cloudshell:$final_dest/"
         if [ $? -eq 0 ] && [ "$t_op" == "move" ]; then
-          rm -rf -- "$item"
-          echo "  🗑️  Removed local: $item"
+          _lk_load
+          if _lk_is_protected "$item"; then
+            echo "  🔒 Kept local (locked, or holds locked items): $item  — copied, not moved"
+          else
+            rm -rf -- "$item" && _carry_forget "$item"
+            echo "  🗑️  Removed local: $item"
+          fi
         fi
       done
       echo "✅ Transfer to GCloud complete"
