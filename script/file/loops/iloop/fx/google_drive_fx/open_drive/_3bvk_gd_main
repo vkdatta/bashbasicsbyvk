@@ -296,16 +296,20 @@ class DB:
               rel TEXT PRIMARY KEY, parent TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL,
               size INTEGER DEFAULT 0, mtime REAL DEFAULT 0, hyd INTEGER DEFAULT 0, gdoc INTEGER DEFAULT 0,
               lsize INTEGER DEFAULT 0, lmt INTEGER DEFAULT 0, ino INTEGER DEFAULT 0, dev INTEGER DEFAULT 0,
-              listed REAL DEFAULT 0, dmt INTEGER DEFAULT 0);
+              listed REAL DEFAULT 0, dmt INTEGER DEFAULT 0, did TEXT DEFAULT '');
             CREATE INDEX IF NOT EXISTS e_parent ON e(parent);
             CREATE INDEX IF NOT EXISTS e_hyd ON e(hyd);
         """)
+        try:                                           # older manifests: add the Drive-ID column
+            self.c.execute("ALTER TABLE e ADD COLUMN did TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
         if self.get("") is None:
             st = os.lstat(ctx.tree)
             self.put(rel="", parent="", name="", kind="d", ino=st.st_ino, dev=st.st_dev, dmt=-1)
         self.c.commit()
 
-    COLS = ("rel", "parent", "name", "kind", "size", "mtime", "hyd", "gdoc", "lsize", "lmt", "ino", "dev", "listed", "dmt")
+    COLS = ("rel", "parent", "name", "kind", "size", "mtime", "hyd", "gdoc", "lsize", "lmt", "ino", "dev", "listed", "dmt", "did")
 
     def get(self, rel):
         return self.c.execute("SELECT * FROM e WHERE rel=?", (rel,)).fetchone()
@@ -322,7 +326,7 @@ class DB:
         cur = self.get(rel)
         if cur is None:
             row = {c: 0 for c in self.COLS}
-            row.update(parent=parent_of(rel), name=name_of(rel), kind="f", rel=rel)
+            row.update(parent=parent_of(rel), name=name_of(rel), kind="f", rel=rel, did="")
             row.update(kw)
             self.c.execute("INSERT INTO e(%s) VALUES(%s)" % (",".join(self.COLS), ",".join("?" * len(self.COLS))),
                            [row[c] for c in self.COLS])
@@ -379,11 +383,17 @@ def is_placeholder_copy(st):
     return st.st_size > 0 and getattr(st, "st_blocks", 1) == 0
 
 
-def list_remote(ctx, rel, recursive=False):
-    args = ["lsjson", ctx.rpath(rel), "--no-mimetype"]
-    if recursive:
-        args.append("-R")
-    rc, out, err = rclone(ctx, args, check=False)
+def list_remote(ctx, rel, recursive=False, did=""):
+    """List one Drive folder.  With the folder's Drive ID this is ONE API call at any depth (rclone otherwise
+    resolves a/b/c/... one level at a time, every call, because its folder cache dies with the process)."""
+    extra = ["--no-mimetype"] + (["-R"] if recursive else [])
+    rc = None
+    if did:
+        rc, out, err = rclone(ctx, ["lsjson", f"{ctx.remote}:", "--drive-root-folder-id", did, *extra], check=False)
+        if rc != 0:
+            did = ""                                   # stale / inaccessible ID -> fall back to the path walk
+    if not did:
+        rc, out, err = rclone(ctx, ["lsjson", ctx.rpath(rel), *extra], check=False)
     if rc == 3:                                    # directory not found
         raise GdError(f"__notfound__:{rel}")
     if rc != 0:
@@ -396,7 +406,7 @@ def list_remote(ctx, rel, recursive=False):
     res = []
     for e in data:
         p = e.get("Path") or e.get("Name") or ""
-        res.append(dict(path=p, name=e.get("Name") or name_of(p), dir=bool(e.get("IsDir")),
+        res.append(dict(path=p, name=e.get("Name") or name_of(p), dir=bool(e.get("IsDir")), id=e.get("ID") or "",
                         size=int(e.get("Size", 0) or 0), mtime=parse_ts(e.get("ModTime", ""))))
     return res
 
@@ -472,9 +482,9 @@ def reconcile_dir(ctx, db, rel, remote, now, stats):
             if row is None or row["kind"] != "d":
                 if row is not None:
                     db.delete_tree(crel)
-                db.put(rel=crel, kind="d", mtime=ent["mtime"], ino=st.st_ino, dev=st.st_dev, dmt=st.st_mtime_ns, listed=0)
+                db.put(rel=crel, kind="d", mtime=ent["mtime"], ino=st.st_ino, dev=st.st_dev, dmt=st.st_mtime_ns, listed=0, did=ent.get("id", ""))
             else:
-                db.put(rel=crel, mtime=ent["mtime"], ino=st.st_ino, dev=st.st_dev)
+                db.put(rel=crel, mtime=ent["mtime"], ino=st.st_ino, dev=st.st_dev, did=ent.get("id", "") or row["did"])
             continue
         # file
         size = max(ent["size"], 0)
@@ -535,9 +545,9 @@ def sync_dir(ctx, db, rel, force=False, recursive=False):
     stats = dict(new=0, changed=0, gone=0, dups=0, skipped=0, cached=False)
     try:
         if not recursive:
-            reconcile_dir(ctx, db, rel, list_remote(ctx, rel), now, stats)
+            reconcile_dir(ctx, db, rel, list_remote(ctx, rel, did=(row["did"] if row is not None else "")), now, stats)
         else:
-            flat = list_remote(ctx, rel, recursive=True)
+            flat = list_remote(ctx, rel, recursive=True, did=(row["did"] if row is not None else ""))
             by_dir = {rel: []}
             for e in flat:
                 full = join(rel, e["path"])
