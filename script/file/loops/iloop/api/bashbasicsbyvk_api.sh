@@ -67,12 +67,14 @@ _api_fail() {            # prints the server's reason for the last call
 }
 
 # ── loading ───────────────────────────────────────────────────────────────────
+# _API_SVC: "" = the Links screen · backup = Backup · saved = Saved Surf.  They share this whole loop (alias, expiry, nuke).
+_API_SVC="${_API_SVC:-}"
 _api_load() {
   _API_ID=(); _API_KIND=(); _API_ALIAS=(); _API_BYTES=(); _API_CREATED=(); _API_EXPIRES=()
   _API_PAID=(); _API_RFND=(); _API_RFND_D=(); _API_PUB=()
   _API_ERR=""; _API_LOADED=1; _API_BAL=""
   if ! _crypto_check >/dev/null 2>&1; then _API_ERR="node is required (used to read the server's answer)"; return 1; fi
-  _api_http GET /links || { _API_ERR="no active user — run  -auth  inside 'o'"; return 1; }
+  _api_http GET "/links${_API_SVC:+?svc=$_API_SVC}" || { _API_ERR="no active user — run  -auth  inside 'o'"; return 1; }
   if [ "$_API_STATUS" != "200" ]; then _API_ERR="$(_api_fail | head -n 1 | sed 's/^❌ //')"; return 1; fi
   local out
   out=$(node -e '
@@ -397,19 +399,38 @@ _api_tick() {
 
 _api_menu_header() {
   echo
-  printf '🔗 LINKS (api)   💳 balance: %s credits\n' "${_API_BAL:-?}"
-  printf '   soonest expiry first · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine\n'
+  case "$_API_SVC" in
+    backup)
+      printf '🗄️  BACKUP (bk)   💳 balance: %s credits\n' "${_API_BAL:-?}"
+      printf '   copies taken just before you deleted something · soonest expiry first · r-N restores here · c-N copies its link\n' ;;
+    saved)
+      printf '💾 SAVED SURF (sv)   💳 balance: %s credits\n' "${_API_BAL:-?}"
+      printf '   things you stored with  save-  · no link exists · opens from any device with your e-mail, diseps and API key · r-N restores here\n' ;;
+    *)
+      printf '🔗 LINKS (api)   💳 balance: %s credits\n' "${_API_BAL:-?}"
+      printf '   soonest expiry first · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine\n' ;;
+  esac
   [ -n "$_API_ERR" ] && printf '   ⚠️  %s — rf to retry\n' "$_API_ERR"
   if [ -z "$_API_ERR" ] && [ "${#items[@]}" -eq 0 ]; then
-    printf '   No active links. Make one with  up-1-3 as notes  or  c2c-2 as snippet.\n'
+    case "$_API_SVC" in
+      backup) printf '   No backups. They are made automatically when you delete (Settings → File API → Backup).\n' ;;
+      saved)  printf '   Nothing saved yet. Try  save-1-3  or  save-2 as notes.\n' ;;
+      *)      printf '   No active links. Make one with  up-1-3 as notes  or  c2c-2 as snippet.\n' ;;
+    esac
   fi
   _vp_filter_header_line
 }
 
 _api_menu_footer() {
-  _mc_footer "#[Links]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
-    "N:Open" "c-N:Copy link (c-1,3-5)" "g-N:New address" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" \
-    "rf:Refresh" "u:Exit" "api:Close"
+  case "$_API_SVC" in
+    backup) _mc_footer "#[Backup]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+      "N:Open" "r-N:Restore here" "c-N:Copy link" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf:Refresh" "u:Exit" "bk:Close" ;;
+    saved)  _mc_footer "#[Saved]  ${#items[@]} saved   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+      "N:Open" "r-N:Restore here" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf:Refresh" "u:Exit" "sv:Close" ;;
+    *)      _mc_footer "#[Links]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+      "N:Open" "c-N:Copy link (c-1,3-5)" "g-N:New address" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" \
+      "rf:Refresh" "u:Exit" "api:Close" ;;
+  esac
 }
 
 _api_set_viewport() {
@@ -455,7 +476,11 @@ _api_pick() {            # _api_pick <N>  → _api_k (0-based index)
 
 _api_show() {            # details of link idx
   local k="$1"
-  echo "$( [ "${_API_KIND[$k]}" = copy ] && echo 📄 || echo 📦 ) $(_api_name "$k")   ($( [ "${_API_KIND[$k]}" = copy ] && echo 'text paste' || echo 'file upload' ), $(_api_hsize "${_API_BYTES[$k]}"))"
+  local _kind_txt='file upload' _kind_ico=📦
+  [ "${_API_KIND[$k]}" = copy ] && { _kind_txt='text paste'; _kind_ico=📄; }
+  [ "$_API_SVC" = backup ] && { _kind_txt='backup'; _kind_ico=🗄️; }
+  [ "$_API_SVC" = saved ]  && { _kind_txt='saved item'; _kind_ico=💾; }
+  echo "$_kind_ico $(_api_name "$k")   ($_kind_txt, $(_api_hsize "${_API_BYTES[$k]}"))"
   echo "   created : $(_bb_fmt_when "${_API_CREATED[$k]}")"
   echo "   expires : $(_bb_fmt_when "${_API_EXPIRES[$k]}")   ($(_bb_fmt_duration "$(_api_left "$k")") left)"
   echo "   life    : $(_bb_fmt_duration $(( (${_API_EXPIRES[$k]} - ${_API_CREATED[$k]}) / 1000 ))) in total · $(_bb_fmt_duration $(( (_API_NOW - ${_API_CREATED[$k]}) / 1000 ))) used · paid for ${_API_PAID[$k]} hour(s)"
@@ -470,11 +495,16 @@ _api_cmd_open() {
   _api_pick "$1" || return 1
   _api_show "$_api_k"
   local ans
-  read -e -r -p "   c) copy link   g) regenerate link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans
+  case "$_API_SVC" in
+    backup) read -e -r -p "   r) restore here   c) copy link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans ;;
+    saved)  read -e -r -p "   r) restore here   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans ;;
+    *)      read -e -r -p "   c) copy link   g) regenerate link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans ;;
+  esac
   case "${ans,,}" in
-    c) _api_cmd_copy "$((_api_k + 1))" ;;
-    g) _api_cmd_regen "$((_api_k + 1))" ;;
-    k) _api_cmd_key "$((_api_k + 1))" ;;
+    r) [ -n "$_API_SVC" ] && _api_cmd_restore "$((_api_k + 1))" ;;
+    c) [ "$_API_SVC" = saved ] || _api_cmd_copy "$((_api_k + 1))" ;;
+    g) [ -z "$_API_SVC" ] && _api_cmd_regen "$((_api_k + 1))" ;;
+    k) [ -z "$_API_SVC" ] && _api_cmd_key "$((_api_k + 1))" ;;
     a) _api_do_alias "$_api_k" "" ;;
     e) _api_do_edit "$_api_k" "" ;;
     x) _api_do_nuke "$_api_k" ;;
@@ -522,7 +552,29 @@ _api_do_edit() {         # _api_do_edit <idx> [spec]
   local nexp=$(( ${_API_CREATED[$k]} + total * 1000 )) dir="extends"
   [ "$nexp" -lt "${_API_EXPIRES[$k]}" ] && dir="shortens"
   [ "$nexp" -eq "${_API_EXPIRES[$k]}" ] && dir="keeps"
-  read -e -r -p "   $(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it. Continue? (y/N): " ans
+  local costnote=""
+  if [ "$dir" = extends ] && [ "$(_bb_cfg_val credit_prompts show)" != skip ]; then
+    _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total,\"dryRun\":true}" || return 1
+    if [ "$_API_STATUS" = 200 ]; then
+      local ch0 bal0 mx0
+      ch0=$(_bb_json_get "$_API_BODY" charge); bal0=$(_bb_json_get "$_API_BODY" balance); mx0=$(_bb_json_get "$_API_BODY" maxTotalSeconds)
+      if [[ "$ch0" =~ ^[0-9]+$ && "$bal0" =~ ^[0-9]+$ ]]; then
+        if [ "$ch0" -gt "$bal0" ]; then
+          local cur0=$(( (${_API_EXPIRES[$k]} - ${_API_CREATED[$k]}) / 1000 ))
+          if [[ "$mx0" =~ ^[0-9]+$ ]] && [ "$mx0" -gt "$cur0" ]; then
+            echo "💳 Not enough credits: that extension costs $ch0, you have $bal0."
+            read -e -r -p "   Longest you can afford: total life $(_bb_fmt_duration "$mx0"). Use that instead? (y/N): " ans
+            case "$ans" in [yY]|[yY][eE][sS]) total="$mx0"; nexp=$(( ${_API_CREATED[$k]} + total * 1000 )) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+          else
+            echo "❌ Not enough credits: that extension costs $ch0, you have $bal0 — and there is nothing you can afford to add."; return 1
+          fi
+        else
+          costnote=" Costs $ch0 credit(s) (balance $bal0 → $((bal0 - ch0)))."
+        fi
+      fi
+    fi
+  fi
+  read -e -r -p "   $(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it.$costnote Continue? (y/N): " ans
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total}" || return 1
   if [ "$_API_STATUS" != "200" ]; then _api_fail; return 1; fi
@@ -575,6 +627,11 @@ _api_cmd_edit() {        # e-N [spec]
   _api_do_edit "$_api_k" "$spec"
 }
 
+_api_cmd_restore() {     # r-N
+  _api_pick "$1" || return 1
+  _svc_restore "$_API_SVC" "${_API_ID[$_api_k]}" "$(_api_name "$_api_k")"
+}
+
 _api_cmd_nuke() {        # x-LIST
   local list="$1" idx
   local -a ks=()
@@ -584,6 +641,24 @@ _api_cmd_nuke() {        # x-LIST
 }
 
 _api_help() {
+  case "$_API_SVC" in
+    backup) cat <<'HLP'
+🗄️  BACKUP  (bk)
+ A copy of what you deleted, taken just before it was deleted (Settings → File API → Backup). Named DDMMYYYY HHMM NAME.
+ N open · r-N restore into the current folder (never overwrites: "name (1)") · c-N copy its link · a-N [name] rename · e-N [time] extend / shorten · x-N nuke
+ time rules, credits and refunds are exactly those of Links (api). Default keep time: Settings → File API → Backup.
+ The key of a backup stays on THIS computer (~/.bashbasicsbyvk/backup_keys): restore it here.
+HLP
+      return ;;
+    saved) cat <<'HLP'
+💾 SAVED SURF  (sv)
+ Things stored with  save-1-3  or  save-2 as tax papers  — no link exists. Named DDMMYYYY HHMM NAME.
+ N open · r-N restore into the current folder · a-N [name] rename · e-N [time] extend / shorten · x-N nuke
+ Open from any device with your e-mail + diseps + API key + dinons. Client-side encrypted (like ux-): the key is wrapped with your
+ FEK on your computer, so the server never holds a key it can open. The data is served to you alone; the wrapped key is destroyed when the item expires.
+HLP
+      return ;;
+  esac
   cat <<'HLP'
 🔗 LINKS  (api)
  Every active link you made with up- / c2c-, soonest expiry first. Shown by ALIAS:
@@ -628,7 +703,7 @@ api_menu() {
 
     _ap_fresh=true
     case "$_ap_choice" in
-      api|u) echo "↩️  Closing the links loop"; break ;;
+      api|bk|sv|u) echo "↩️  Closing the $( [ "$_API_SVC" = backup ] && echo backup || { [ "$_API_SVC" = saved ] && echo saved || echo links; } ) loop"; break ;;
 
       fx) _inner_next=fx;  break ;;
       sw) _inner_next=sw;  break ;;
@@ -641,9 +716,10 @@ api_menu() {
 
       rf) _API_LOADED=0 ;;                       # rebuilt (and re-fetched) below
 
-      c-*) _api_cmd_copy "${_ap_choice#[cC]-}" || true ;;
-      g-*) _api_cmd_regen "${_ap_choice#[gG]-}" || true ;;
-      k-*) _api_cmd_key "${_ap_choice#[kK]-}" || true ;;
+      r-*) if [ -n "$_API_SVC" ]; then _api_cmd_restore "${_ap_choice#[rR]-}" || true; else echo "⚠️  r-N restores a Backup / Saved item — open them with  bk  or  sv."; _ap_fresh=false; fi ;;
+      c-*) if [ "$_API_SVC" = saved ]; then echo "ℹ️  Saved items have no link — that is the point. Use r-N to restore."; _ap_fresh=false; else _api_cmd_copy "${_ap_choice#[cC]-}" || true; fi ;;
+      g-*) if [ -n "$_API_SVC" ]; then echo "ℹ️  Only plain links can get a new address."; _ap_fresh=false; else _api_cmd_regen "${_ap_choice#[gG]-}" || true; fi ;;
+      k-*) if [ -n "$_API_SVC" ]; then echo "ℹ️  Keys of Backup / Saved items are managed for you."; _ap_fresh=false; else _api_cmd_key "${_ap_choice#[kK]-}" || true; fi ;;
       a-*) _api_cmd_alias "${_ap_choice#[aA]-}" || true ;;
       e-*) _api_cmd_edit "${_ap_choice#[eE]-}" || true ;;
       x-*) _api_cmd_nuke "${_ap_choice#[xX]-}" || true ;;
@@ -676,3 +752,9 @@ api_menu() {
   force_show="$_ap_saved_force"
   _all_items=("${_ap_saved_all[@]}")
 }
+
+
+# Backup (bk) and Saved Surf (sv): the same list manager, filtered by service.
+# Backup keys live in their own file so the Links screen never prunes them (and vice versa).
+backup_menu() { local _API_SVC=backup _BB_KEY_FILE="${HOME}/.bashbasicsbyvk/backup_keys"; api_menu; }
+saved_menu()  { local _API_SVC=saved; api_menu; }

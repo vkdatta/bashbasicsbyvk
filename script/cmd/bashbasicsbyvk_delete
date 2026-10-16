@@ -5,6 +5,7 @@
 
 source "bashbasicsbyvk_lock.sh"        # also loads action_confirm_key.sh
 source "bashbasicsbyvk_staging_shortcut_registry.sh"
+source "bashbasicsbyvk_backup.sh"        # Backup service: copy to the cloud before deleting
 
 _bvk_delete_main() {
   local target="$1" confirm
@@ -40,6 +41,9 @@ _bvk_delete_main() {
       return 0
     }
   fi
+
+  # Backup service (Settings → File API → Backup): a failed backup asks before deleting
+  _bk_before_delete "$target" || return 0
 
   rm -rf -- "$target" && { _lk_forget "$target"; _scr_forget_under "$target"; }
   echo "Deleted: $target"

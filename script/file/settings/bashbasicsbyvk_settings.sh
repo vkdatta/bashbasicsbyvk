@@ -25,6 +25,14 @@ DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw): rows roll in top to bott
 DEFAULT_NUKE_TIME_SECONDS=3600   # up- / c2c-: how long a new link lives (1 hour). 60 s .. 30 days
 DEFAULT_UX_NUKE_TIME_SECONDS=2592000   # ux-: how long a new share lives (30 days). 60 s .. 30 days
 DEFAULT_APP_TIMEZONE=""          # "" = follow the system clock; else an IANA name, e.g. Asia/Kolkata
+# ── fileapi services ─────────────────────────────────────────────────────────
+DEFAULT_CREDIT_PROMPTS="show"             # show = price check before every upload (cost 1 stays silent) · skip = never ask, just go
+DEFAULT_BACKUP_MODE="yes"                 # back up to the cloud before a delete:  yes | no | ask
+DEFAULT_BACKUP_NUKE_TIME_SECONDS=2592000  # how long a backup is kept (30 days). 60 s .. 30 days
+DEFAULT_SAVED_NUKE_TIME_SECONDS=2592000   # save-: how long a saved item is kept (30 days). 60 s .. 30 days
+DEFAULT_SNAPSHOT_ENABLED="on"             # background snapshots while o runs:  on | off
+DEFAULT_SNAPSHOT_INTERVAL_SECONDS=3600    # how often (1 hour). 1 minute .. 30 days
+DEFAULT_SNAPSHOT_KEEP_SECONDS=604800      # how long each snapshot is kept (7 days). 60 s .. 30 days
 
 unset show_hidden_files
 unset index_mode_threshold
@@ -47,6 +55,13 @@ unset anim_inner
 unset nuke_time_seconds
 unset ux_nuke_time_seconds
 unset app_timezone
+unset credit_prompts
+unset backup_mode
+unset backup_nuke_time_seconds
+unset saved_nuke_time_seconds
+unset snapshot_enabled
+unset snapshot_interval_seconds
+unset snapshot_keep_seconds
 
 [ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
 
@@ -75,6 +90,29 @@ unset app_timezone
 : "${nuke_time_seconds:=$DEFAULT_NUKE_TIME_SECONDS}"
 : "${ux_nuke_time_seconds:=$DEFAULT_UX_NUKE_TIME_SECONDS}"
 : "${app_timezone=$DEFAULT_APP_TIMEZONE}"
+: "${credit_prompts:=$DEFAULT_CREDIT_PROMPTS}"
+: "${backup_mode:=$DEFAULT_BACKUP_MODE}"
+: "${backup_nuke_time_seconds:=$DEFAULT_BACKUP_NUKE_TIME_SECONDS}"
+: "${saved_nuke_time_seconds:=$DEFAULT_SAVED_NUKE_TIME_SECONDS}"
+: "${snapshot_enabled:=$DEFAULT_SNAPSHOT_ENABLED}"
+: "${snapshot_interval_seconds:=$DEFAULT_SNAPSHOT_INTERVAL_SECONDS}"
+: "${snapshot_keep_seconds:=$DEFAULT_SNAPSHOT_KEEP_SECONDS}"
+[[ "$credit_prompts" =~ ^(show|skip)$ ]] || credit_prompts=$DEFAULT_CREDIT_PROMPTS
+[[ "$backup_mode" =~ ^(yes|no|ask)$ ]] || backup_mode=$DEFAULT_BACKUP_MODE
+[[ "$snapshot_enabled" =~ ^(on|off)$ ]] || snapshot_enabled=$DEFAULT_SNAPSHOT_ENABLED
+for _sv in backup_nuke_time_seconds saved_nuke_time_seconds snapshot_keep_seconds; do
+  if ! [[ "${!_sv}" =~ ^[0-9]{1,9}$ ]] || [ "${!_sv}" -lt 60 ] || [ "${!_sv}" -gt 2592000 ]; then
+    case "$_sv" in
+      backup_nuke_time_seconds) backup_nuke_time_seconds=$DEFAULT_BACKUP_NUKE_TIME_SECONDS ;;
+      saved_nuke_time_seconds)  saved_nuke_time_seconds=$DEFAULT_SAVED_NUKE_TIME_SECONDS ;;
+      snapshot_keep_seconds)    snapshot_keep_seconds=$DEFAULT_SNAPSHOT_KEEP_SECONDS ;;
+    esac
+  fi
+done
+unset _sv
+if ! [[ "$snapshot_interval_seconds" =~ ^[0-9]{1,9}$ ]] || [ "$snapshot_interval_seconds" -lt 60 ] || [ "$snapshot_interval_seconds" -gt 2592000 ]; then
+  snapshot_interval_seconds=$DEFAULT_SNAPSHOT_INTERVAL_SECONDS
+fi
 if ! [[ "$nuke_time_seconds" =~ ^[0-9]{1,9}$ ]] || [ "$nuke_time_seconds" -lt 60 ] || [ "$nuke_time_seconds" -gt 2592000 ]; then
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
 fi
@@ -177,6 +215,13 @@ save_settings() {
     echo "nuke_time_seconds=$nuke_time_seconds"
     echo "ux_nuke_time_seconds=$ux_nuke_time_seconds"
     echo "app_timezone=\"$app_timezone\""
+    echo "credit_prompts=$credit_prompts"
+    echo "backup_mode=$backup_mode"
+    echo "backup_nuke_time_seconds=$backup_nuke_time_seconds"
+    echo "saved_nuke_time_seconds=$saved_nuke_time_seconds"
+    echo "snapshot_enabled=$snapshot_enabled"
+    echo "snapshot_interval_seconds=$snapshot_interval_seconds"
+    echo "snapshot_keep_seconds=$snapshot_keep_seconds"
   } > "$SETTINGS_FILE"
 }
 
@@ -196,61 +241,7 @@ _BOLD='\033[1m'
 _ST_SORT_MODES=(az za new old big small)
 _ST_SORT_LABELS=("A → Z" "Z → A" "Newest first" "Oldest first" "Largest first" "Smallest first")
 
-_st_top_build() {
-  local i sl="$sort_mode" gv="off" dv="off" sx="${display_suffix_set:-none}"
-  for i in "${!_ST_SORT_MODES[@]}"; do
-    [ "${_ST_SORT_MODES[$i]}" = "$sort_mode" ] && sl="${_ST_SORT_LABELS[$i]}"
-  done
-  (( ${#group_view_levels[@]} > 0 )) && gv="${group_view_levels[*]}"
-  if declare -F _disp_load >/dev/null 2>&1 && _disp_load; then dv="on"; fi
-  _st_reset
-  local hf="hide" _tzabbr; [ "$show_hidden_files" = true ] && hf="show"
-  printf -v _tzabbr '%(%Z)T' -1
-  _st_add a "Hidden files"        0 "$hf"                               hidden
-  _st_add a "Sort order"          0 "$sl"                               sort
-  _st_add a "File details"        0 "$sx"                               details
-  _st_add a "Group by"            0 "$gv"                               group
-  _st_add a "Display filter (.d)" 0 "$dv"                               dfilter
-  local fv="$filter_mode"; [ "$filter_recursive" = true ] && fv="$filter_mode · recursive"
-  _st_add a "Search filter (=)"   0 "$fv"                               filter
-  _st_add a "Compress format"     0 "$compress_format"                  compress
-  _st_add a "Upload hidden (up-)" 0 "$(_hidden_mode_label "$upload_hidden_mode")" uphidden
-  _st_add a "Upload hidden (ux-)" 0 "$(_hidden_mode_label "$ux_hidden_mode")"     uxhidden
-  _st_add a "Zip hidden (z-)"     0 "$(_hidden_mode_label "$zip_hidden_mode")"    ziphidden
-  _st_add a "Nuke time (up-/c2c-)" 0 "$(_bb_fmt_duration "$nuke_time_seconds")" nuke
-  _st_add a "Nuke time (ux-)"     0 "$(_bb_fmt_duration "$ux_nuke_time_seconds")" uxnuke
-  _st_add a "Timezone"            0 "${app_timezone:-system} · $_tzabbr"  timezone
-  _st_add a "Animation"           0 "$anim_outer / $anim_inner"         anim
-  _st_add a "Big-folder limit"    0 "$index_mode_threshold"             index
-  _st_add a "Background color"    0 "#$terminal_bg_color"               bg
-  _st_add a "Text color"          0 "#$terminal_text_color"             fg
-  _st_add a "Import nano settings" 0 ""                                 nano
-  _st_add a "Reset all settings"  0 ""                                  reset
-}
-
-_st_top_act() {
-  case "${_st_tag[$1]}" in
-    hidden)   hidden_file_settings ;;
-    sort)     sort_order_settings ;;
-    details)  display_suffix_settings ;;
-    group)    group_view_settings ;;
-    dfilter)  display_filter_settings ;;
-    filter)   filter_mode_settings ;;
-    compress) compress_format_settings ;;
-    uphidden) upload_hidden_settings ;;
-    uxhidden) ux_hidden_settings ;;
-    ziphidden) zip_hidden_settings ;;
-    nuke)     nuke_time_settings ;;
-    uxnuke)   ux_nuke_time_settings ;;
-    timezone) timezone_settings ;;
-    anim)     animation_settings ;;
-    index)    index_mode_threshold_settings ;;
-    bg)       terminal_bg_color_settings ;;
-    fg)       terminal_text_color_settings ;;
-    nano)     import_nanorc_settings; _st_note "✅ nano settings added" ;;
-    reset)    restore_all_defaults ;;
-  esac
-}
+# (the top-level menu is built from groups: see bashbasicsbyvk_settings_groups.sh)
 
 settings_menu() {
   builtin printf '\n'          # breathing space between the main menu and Settings
@@ -494,6 +485,13 @@ _st_reset_act() {
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
   ux_nuke_time_seconds=$DEFAULT_UX_NUKE_TIME_SECONDS
   app_timezone=$DEFAULT_APP_TIMEZONE; _apply_timezone
+  credit_prompts=$DEFAULT_CREDIT_PROMPTS
+  backup_mode=$DEFAULT_BACKUP_MODE
+  backup_nuke_time_seconds=$DEFAULT_BACKUP_NUKE_TIME_SECONDS
+  saved_nuke_time_seconds=$DEFAULT_SAVED_NUKE_TIME_SECONDS
+  snapshot_enabled=$DEFAULT_SNAPSHOT_ENABLED
+  snapshot_interval_seconds=$DEFAULT_SNAPSHOT_INTERVAL_SECONDS
+  snapshot_keep_seconds=$DEFAULT_SNAPSHOT_KEEP_SECONDS
   _items_presorted=false
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "${_st_tag[$1]}" in

@@ -42,6 +42,10 @@ _ux_core() {
 
 # the ux- nuke time (Settings), falling back to the config file, then 30 days
 _bb_ux_nuke_seconds() {
+  # one-shot time picked at the credit prompt wins for this share
+  if [[ "${_BB_TTL_OVERRIDE:-}" =~ ^[0-9]{1,9}$ ]] && [ "$_BB_TTL_OVERRIDE" -ge "$_BB_NUKE_MIN" ] && [ "$_BB_TTL_OVERRIDE" -le "$_BB_NUKE_MAX" ]; then
+    printf '%s' "$_BB_TTL_OVERRIDE"; return
+  fi
   local v="${ux_nuke_time_seconds:-}"
   if [ -z "$v" ]; then
     local cf="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/config"
@@ -235,6 +239,7 @@ _ux_pick_people() {
 _ux_init() {
   local est="$1" confirmed=false cfg response status body err msg ans
   _bb_get_credentials || return 1
+  [ -n "${_BB_OVERSIZE_OK:-}" ] && confirmed=true     # the price prompt already covered the 1.2x rate
   while :; do
     cfg=$({ _bb_auth_cfg
             _bb_cfg_header X-Estimated-Size "$est"
@@ -355,9 +360,10 @@ _ux_do_share() {
     echo "ℹ️  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
   fi
 
-  # 4) init (auth + credit precheck) → parallel blob uploads → commit
+  # 4) price check → init (auth + credit precheck) → parallel blob uploads → commit
+  _bb_get_credentials >/dev/null 2>&1 && { _bb_credit_gate "$total_size" "This share" ux || { _ux_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }; }
   local init_out id token
-  init_out=$(_ux_init "$total_size") || { _ux_cleanup; return 1; }
+  init_out=$(_ux_init "$total_size") || { _ux_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }
   id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
   if [ -z "$id" ] || [ -z "$token" ]; then
     echo "❌ Upload init failed (no id returned)"; _ux_cleanup; return 1
@@ -404,6 +410,6 @@ handle_ux_upload() {
   local itemlist="$_BB_ITEMLIST" rc
   _sp_guard_and_resolve "$itemlist" "ux-" || { _BB_LINK_ALIAS=""; return; }
   _ux_do_share "${sp_resolved[@]}"; rc=$?
-  _BB_LINK_ALIAS=""
+  _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
   return $rc
 }

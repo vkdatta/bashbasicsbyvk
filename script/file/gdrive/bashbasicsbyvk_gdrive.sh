@@ -45,7 +45,8 @@ _GD_TTL="${BVK_GD_TTL:-120}"
 _GD_SET_VARS=(show_hidden_files index_mode_threshold terminal_bg_color terminal_text_color sort_mode display_suffix_set
   display_time_format group_view_levels_str compress_format upload_hidden_mode zip_hidden_mode ux_hidden_mode filter_mode
   filter_hidden_mode filter_recursive display_filter_persist anim_outer anim_inner nuke_time_seconds
-  ux_nuke_time_seconds app_timezone)
+  ux_nuke_time_seconds app_timezone credit_prompts backup_mode backup_nuke_time_seconds saved_nuke_time_seconds
+  snapshot_enabled snapshot_interval_seconds snapshot_keep_seconds)
 
 # state kept GLOBAL on purpose (not swapped per profile): upgrades, UDF scripts, the recents daemon, logs
 _GD_GLOBAL_TOPS="gdrive upgrade execute recents.list recents.pid recents.log recents_exclude.conf daemon.version daemon.status lastdir health.log index_roots.conf .watchdog_install_attempted"

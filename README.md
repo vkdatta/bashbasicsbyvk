@@ -416,10 +416,41 @@ Same feel as the main menu — no numbers to type:
 | `u` | back one level (sub-screen → Settings → main menu) |
 | `q` | close Settings completely and return to the main menu |
 
-Screens: Show hidden files · Sort order · File details · Group by · Display filter · Search filter · Compress format · Timezone · Animation · Big-folder limit · Background color · Text color · Import nano settings · Reset all settings.
+Settings are grouped: **Display** (hidden files · sort order · file details · group by · big-folder limit · animation) · **Filters** (display filter · search filter) · **Colors** (background · text) · **Files & archives** (compress format · zip hidden) · **File API** (see below) · **System** (timezone · import nano settings) · **Reset all settings**. Type `=` and a word of a name to find a group (`=nuke`, `=sort`, `=snapshot`).
 
 ### Timezone
 
 `s` → **Timezone** sets one timezone for the whole app: link expiry times in `api`, file times, logs, exported file names and the helper scripts (the background daemon follows it too). Times that show a clock time now carry the zone, e.g. `until 2026-10-10 02:20 IST`.
 
 Every zone in the machine's tz database is listed with its abbreviation and current offset (`Asia/Kolkata  IST  UTC+05:30`). Type `=` and part of a name, abbreviation or offset to search: `=kolkata`, `=ist`, `=new york`, `=+05:30`. Pick **System default** to follow the computer's clock again. Stored machine stamps (`CREATED=…Z`, telemetry day) stay in UTC on purpose.
+
+
+## File API services: price check, Backup, Saved Surf, Snapshots
+
+All of these use the same encrypted pipeline as `up-` (packed as tar.gz, AES-256-GCM per 16 MiB chunk) and the same credit rules. Their settings live in `s` → **File API**: *Credits · Links (up-/c2c-) · Cloud Surf shares (ux-) · Backup · Saved Surf (save-) · Snapshots*.
+
+### Price check before spending credits
+Before `up-`, `ux-`, a backup, a save, and before extending an item, the packed size is priced by the server (nothing is charged yet):
+- cost **1** credit and you have enough → it just goes;
+- cost **above 1** → *"costs X credits — [c] continue · [r] reduce time · [i] increase time · [s] stop"*. Time is entered the way `e-N` in `api` takes it (`12h`, `2d`, `+1d`, `-6h`);
+- **not enough credits** → *stop*, or *reduce time*: it suggests the longest time your credits cover (cost ≈ your balance). If even 1 hour is too dear, it says so and stops.
+
+`s` → File API → **Credits** → *Don't ask* skips the price check entirely (the server still refuses when your balance is too low).
+
+### Backup (`bk`, Home → Backup)
+Every delete (`d`, the file menu's Delete, the fx delete functions) first copies what is about to go to the cloud, like `up-`, kept 30 days by default. You are asked for a name (Enter = none): the backup is called `DDMMYYYY HHMM NAME` or just `DDMMYYYY HHMM`. If a backup was wanted but fails or is stopped, you are asked whether to delete anyway. In **Backup**: `r-N` restores into the current folder (never overwrites), `a-N` renames, `e-N` extends/shortens, `x-N` nukes — the same controls as Links. Settings: *Backup before delete* (yes · no · ask every time, default **yes**) and *Default nuke time* (default 30 days).
+Not backed up: symlinks (only the link is removed), Google Drive placeholders (they are empty), rule bundles of the `.r` rule book, and "move" operations (the data lives on at the destination). Each backup costs credits like any upload (at least 1).
+
+### `save-` and Saved Surf (`sv`, Home → Saved Surf)
+`save-1-3` or `save-2 as tax papers` works like `up-` but **no link is ever shown**. It is client-side encrypted exactly like `ux-` (dinons → FEK → a fresh key per item): the item key is wrapped with your FEK on your computer and the server stores only that wrapped key, which it has no way to open, so the backend operator cannot read it. The data and the wrapped key are only served to their owner, and the key is destroyed when the item expires or is nuked. Open it from any device with your e-mail + diseps + API key **and your dinons**. Named like backups.
+
+### Snapshots (`snap-`, `sn`, Home → Snapshots)
+`snap-1-3` puts files/folders on this computer's snapshot list. While `o` is running, a background process snapshots every path **that changed** every *interval* (`s` → File API → Snapshots: 1 minute … 30 days, default 1 hour; *Keep time* default 7 days; on/off). Rules:
+- it only runs while `o` runs; reopen after 10 days with a 10-minute interval and you get **one** snapshot of that moment, not 1440;
+- each path is first copied to a temporary folder (cheap on copy-on-write disks), and the archive is packed from the copy, so editing or deleting a 5 GB file mid-sync cannot corrupt it;
+- the background process never prompts; when your credits are not enough a one-line notice shows in the main screen and snapshots pause;
+- a snapshot is named `AS ON DDMMYYYY HHMM` and cannot be renamed.
+
+**Home → Snapshots** lists every device that has a snapshot list (devices are told apart by the telemetry uuid), the paths on each, and their snapshots. You can view and restore snapshots of any device, nuke or extend them, and remove a path from another device's list (that device stops on its next sync). Paths and device names are stored encrypted.
+
+**Telemetry:** the telemetry uuid is the device id for snapshots, so there is no switch to turn telemetry off any more, and the app never deletes or regenerates the uuid. Once you use Snapshots the uuid is tied, on the server, to your account.

@@ -271,10 +271,12 @@ _crypto_fetch_archive() {
       d.setAAD(Buffer.from(aad, "utf8"));
       return Buffer.concat([d.update(buf.subarray(12, buf.length - 16)), d.final()]);
     }
+    // owner-only items (Saved Surf / Snapshots) are fetched with the account headers; public links need none
+    const AUTH = process.env.BB_FETCH_AUTH === "1" ? { "X-User-Email": process.env.BB_EMAIL || "", "X-User-Diseps": process.env.BB_DISEPS || "", "X-User-Key": process.env.BB_APIKEY || "" } : {};
     async function get(url) {
       for (let a = 0; a < 4; a++) {
         try {
-          const res = await fetch(url, { redirect: "error", credentials: "omit" });
+          const res = await fetch(url, { redirect: "error", credentials: "omit", headers: AUTH });
           if (res.ok) return Buffer.from(await res.arrayBuffer());
           if (res.status === 404) return null;
         } catch (e) {}
@@ -406,6 +408,7 @@ _bb_upload_init() {
   _bb_get_credentials || return 1
 
   local attempt=0 confirmed=false
+  [ -n "${_BB_OVERSIZE_OK:-}" ] && confirmed=true     # the price prompt already covered the 1.2x rate
   while :; do
     attempt=$((attempt + 1))
     local cfg
@@ -686,12 +689,15 @@ _bb_upload_blobs() {
 }
 
 # Phase 3: upload the manifest, settle credits, return the link + credit headers.
+_BB_COMMIT_HDRS=()        # extra commit headers (X-Vault-Kdk, X-Snap-*) set by the Backup / Saved / Snapshot services
 _bb_upload_commit() {
   local id="$1" fcount="$2" mpath="$3" token="$4"
   local cfg
+  local h
   cfg=$({ _bb_cfg_header X-User-Email "$FILEAPI_BASHBASICS_EMAIL"
           _bb_cfg_header X-Upload-Token "$token"
-          _bb_cfg_header X-File-Count "$fcount"; })
+          _bb_cfg_header X-File-Count "$fcount"
+          for h in "${_BB_COMMIT_HDRS[@]}"; do _bb_cfg_header "${h%%:*}" "${h#*: }"; done; })
 
   local hdrfile response http_status body
   hdrfile=$(mktemp)
@@ -798,9 +804,12 @@ _up_do_multipart_upload() {
     echo "ℹ️  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
   fi
 
+  # ---- price check: cost 1 → silent; more → continue / reduce time / increase time / stop ----
+  _bb_get_credentials >/dev/null 2>&1 && { _bb_credit_gate "$total_size" "This upload" || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }; }
+
   # ---- Phase 1: init (auth + credit precheck) ----
   local init_out id token
-  init_out=$(_bb_upload_init "$total_size") || { _up_cleanup; return 1; }
+  init_out=$(_bb_upload_init "$total_size") || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }
   id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
   if [ -z "$id" ] || [ -z "$token" ]; then
     echo "❌ Upload init failed (no id returned)"; _up_cleanup; return 1
@@ -840,7 +849,7 @@ handle_up_upload() {
   local itemlist="$_BB_ITEMLIST" rc
   _sp_guard_and_resolve "$itemlist" "up-" || { _BB_LINK_ALIAS=""; return; }
   _up_do_multipart_upload "${sp_resolved[@]}"; rc=$?
-  _BB_LINK_ALIAS=""
+  _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
   return $rc
 }
 

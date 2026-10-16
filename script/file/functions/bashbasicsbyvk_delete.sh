@@ -16,6 +16,8 @@ delete_items() {
 
     # lock gate (l-N): plain y/n when nothing is locked; extra confirmations otherwise
     _lk_confirm_delete "Are you really sure you want to delete the selected files? This action can't be undone. (y/n): " || return
+    # Backup service: a copy goes to the cloud first (Settings → File API → Backup); a failed backup asks before deleting
+    _bk_before_delete "${selected_items[@]}" || return
     for item in "${selected_items[@]}"; do
       rm -rf -- "$item" && _carry_forget "$item"
     done

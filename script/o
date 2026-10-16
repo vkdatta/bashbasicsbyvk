@@ -3,6 +3,7 @@
 source "_3bvk_import_engine.sh"
 source "_3bvk_import_functions.sh"
 source "_3bvk_import_staging.sh"
+source "_3bvk_import_services.sh"
 source "_3bvk_import_select.sh"
 
 source "bashbasicsbyvk_run.sh"
@@ -25,7 +26,7 @@ source "bashbasicsbyvk_csurf.sh"
 source "bashbasicsbyvk_ai.sh"
 source "bashbasicsbyvk_gdrive.sh"     # Google Drive (fx → google_drive_fx): session layer, wraps the native read/copy functions
 
-# Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
+# Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), bk (Backup), sv (Saved Surf), sn (Snapshots), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
 _inner_next=""
 _inner_run() {
@@ -38,6 +39,9 @@ _inner_run() {
       r)  rules_menu ;;
       upg) upgrade_menu ;;
       api) api_menu ;;
+      bk)  backup_menu ;;
+      sv)  saved_menu ;;
+      sn)  snapshot_menu ;;
       rbam) rbam_menu ;;
       nf)  notify_menu ;;
       cs)  csurf_menu ;;
@@ -52,6 +56,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _bvk_wake_recents_daemon
 _bvk_telemetry_start
+_snap_daemon_start          # Snapshots: background sync while  o  runs (does nothing until a path is on the list)
 _disp_startup
 
 trap '_gd_on_exit 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
@@ -183,6 +188,8 @@ while true; do
     c2c-*)       handle_c2c_upload "$choice" ;;
     up-*)        handle_up_upload "$choice" ;;
     ux-*)        handle_ux_upload "$choice" ;;
+    save-*)      handle_save_upload "$choice" ;;
+    snap-*)      handle_snap_add "$choice" ;;
     uz-*)        handle_decompress_items "$choice" ;;
     z-*)         handle_compress_items "$choice" ;;
     clear)       hash -r ;;
@@ -202,6 +209,9 @@ while true; do
     sw)          _inner_run sw ;;
     fx)          _inner_run fx ;;
     api)         _inner_run api ;;
+    bk)          _inner_run bk ;;
+    sv)          _inner_run sv ;;
+    sn)          _inner_run sn ;;
     rbam)        _inner_run rbam ;;
     nf)          _inner_run nf ;;
     cs)          _inner_run cs ;;

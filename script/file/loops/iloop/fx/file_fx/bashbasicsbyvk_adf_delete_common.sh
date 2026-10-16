@@ -34,6 +34,8 @@ _fxdel_run_selected() {
   # lock gate (l-N): plain y/n when nothing is locked; extra confirmations otherwise
   _lk_confirm_delete "Are you really sure you want to delete $total item(s)? This action can't be undone. (y/n): " || return
   total=${#selected_items[@]}
+  # Backup service: a copy goes to the cloud first (Settings → File API → Backup); a failed backup asks before deleting
+  _bk_before_delete "${selected_items[@]}" || return
 
   local ok=0 item err
   local -a failed=()

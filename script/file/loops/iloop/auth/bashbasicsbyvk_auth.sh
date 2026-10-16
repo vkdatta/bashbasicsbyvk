@@ -12,8 +12,9 @@
 #   SEALKEY private X25519 key (base64url), made on first use of rbam / ux-. Its public half is registered on the
 #           server so a sender can SEAL their dinons for you; only this private half can open them.
 # The 64-hex file-encryption-key (FEK) is created locally, wrapped with DINONS (scrypt + AES-256-GCM)
-# and only the wrapped form is uploaded.  DINONS/FEK/SEALKEY serve rbam + ux- (client-side encrypted shares);
-# up-/c2c-/do-/copy do not use them.
+# and only the wrapped form is uploaded.  DINONS/FEK/SEALKEY serve rbam + ux- (client-side encrypted shares), and
+# the FEK/DINONS also protect save- and snap- items (their keys are wrapped with the FEK, never held by the server);
+# up-/c2c-/do-/copy and backups use a per-item key kept on the computer instead.
 
 _BVK_AUTH_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/auth"
 _BVK_AUTH_URL="${BVK_AUTH_URL:-https://fileapi.bashbasics.workers.dev}"

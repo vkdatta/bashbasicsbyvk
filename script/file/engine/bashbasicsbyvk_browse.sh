@@ -474,6 +474,7 @@ _menu_header() {
 
 _menu_header_flat() {
   _menu_header
+  [ -s "${_SNAP_NOTICE:-}" ] && cat "$_SNAP_NOTICE"        # Snapshots paused: not enough credits
   [ -n "${_sel_banner:-}" ] && echo "$_sel_banner"
   [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"
   [ -n "${_disp_banner:-}" ] && echo "$_disp_banner"
