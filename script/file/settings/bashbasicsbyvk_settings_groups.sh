@@ -1,12 +1,12 @@
 # bashbasicsbyvk_settings_groups.sh — the Settings menu, grouped
 # ════════════════════════════════════════════════════════════════════════════
 #     ⚙️ Settings
-#      1) Display            hidden · sort · details · group · animation
-#      2) Filters            display filter · search filter
-#      3) Colors             background · text
-#      4) Files & archives   compress · zip hidden
-#      5) File API           credits · links · shares · backup · saved · snapshots
-#      6) System             timezone · nano settings
+#      1) Display
+#      2) Filters
+#      3) Colors
+#      4) Files & archives
+#      5) File API          
+#      6) System
 #      7) Reset all settings
 #
 #  Every group is one more screen of the same kind (_st_run); the leaf screens (sort order, nuke time, …) are the
@@ -248,17 +248,16 @@ system_group_settings() { _st_run "System" _st_grp_system_build _st_grp_system_a
 
 # ── top level ────────────────────────────────────────────────────────────────────────────────────────────
 _st_top_build() {
-  local hf="hide"; [ "$show_hidden_files" = true ] && hf="show"
   _st_reset
-  # the words in a group's name are what the "=" filter matches
-  _st_add a "Display (hidden · sort · details · group · animation)"   0 ""                                                     display
-  _st_add a "Filters (display filter · search filter)"                0 ""                                                     filters
-  _st_add a "Colors (background · text)"                              0 "#$terminal_bg_color / #$terminal_text_color"          colors
-  _st_add a "Files & archives (compress · zip hidden)"                0 "$compress_format"                                     files
-  _st_add a "File API (credits · links · shares · backup · saved · snapshots)" 0 "$backup_mode · $snapshot_enabled"            fileapi
-  _st_add a "System (timezone · nano)"                                0 "${app_timezone:-system}"                              system
-  _st_add a "Reset all settings"                                      0 ""                                                     reset
+  _st_add a "Display"             0 "" display
+  _st_add a "Filters"             0 "" filters
+  _st_add a "Colors"              0 "" colors
+  _st_add a "Files & archives"    0 "" files
+  _st_add a "File API"            0 "" fileapi
+  _st_add a "System"              0 "" system
+  _st_add a "Reset all settings"  0 "" reset
 }
+
 _st_top_act() {
   case "${_st_tag[$1]}" in
     display) display_group_settings ;;
