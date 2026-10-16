@@ -1,1 +1,5 @@
 Visit https://drive.google.com/drive/folders/1SpbH4qV1FpwUem5gw-Fv-chuuaFdXefr for Contact, GDPR Notice, Legal Notice, Licence and Third Party Notices, pricing, Privacy Policy, Terms and Conditions, and Commands.
+
+### Any device, names, and reporting abuse
+Links, Backup, Saved Surf, Snapshots and Cloud Surf are managed from any device you log in on (needs your dinons). Only up- links are end-to-end; the rest is client-side encrypted. New up- links are also kept in Links as ciphertext, so c-N copies them on any device. Names are stored encrypted (e1.…).
+Every link page shows who shared it (mail + d3) with a Copy button and a Report abuse link to <your worker>/help. Reports about pirated, adult, illegal or harmful content go to the admin, who can restrict the link or suspend the account.

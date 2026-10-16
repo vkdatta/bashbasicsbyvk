@@ -3,8 +3,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  api   opens the link manager (also: Home → Links).   Every ACTIVE link you made with up- / c2c- is
 #  listed, soonest expiry first. A link is shown by its ALIAS (up-1-3 as user data); without one you see
-#  the start of its id. The full link is shown only on request (c-N). Its decryption key is kept on this
-#  computer, never on the server.
+#  the start of its id. The full link is shown only on request (c-N). The link (with its key) is kept in the cloud
+#  ONLY as ciphertext made with your label key (dinons → FEK → label key), so c-N works on every device you log in on and the
+#  server cannot read it; names are encrypted the same way. The key also stays on this computer as a cache.
 #
 #  Commands
 #    N          open link N (details, then  e  edit  /  x  nuke)
@@ -31,7 +32,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 
 declare -ga _API_ID=() _API_KIND=() _API_ALIAS=() _API_BYTES=() _API_CREATED=() _API_EXPIRES=()
-declare -ga _API_PAID=() _API_RFND=() _API_RFND_D=() _API_PUB=()
+declare -ga _API_PAID=() _API_RFND=() _API_RFND_D=() _API_PUB=() _API_LENC=()
 _API_BAL=""
 _API_NOW=0           # server clock (ms) at the last refresh
 _API_LOCAL=0         # this computer's clock (s) at the same moment → server "now" stays live between refreshes
@@ -71,35 +72,60 @@ _api_fail() {            # prints the server's reason for the last call
 _API_SVC="${_API_SVC:-}"
 _api_load() {
   _API_ID=(); _API_KIND=(); _API_ALIAS=(); _API_BYTES=(); _API_CREATED=(); _API_EXPIRES=()
-  _API_PAID=(); _API_RFND=(); _API_RFND_D=(); _API_PUB=()
+  _API_PAID=(); _API_RFND=(); _API_RFND_D=(); _API_PUB=(); _API_LENC=()
   _API_ERR=""; _API_LOADED=1; _API_BAL=""
   if ! _crypto_check >/dev/null 2>&1; then _API_ERR="node is required (used to read the server's answer)"; return 1; fi
   _api_http GET "/links${_API_SVC:+?svc=$_API_SVC}" || { _API_ERR="no active user — run  -auth  inside 'o'"; return 1; }
   if [ "$_API_STATUS" != "200" ]; then _API_ERR="$(_api_fail | head -n 1 | sed 's/^❌ //')"; return 1; fi
+  # names and stored links are encrypted (label key ← FEK ← dinons): open it once per session so they can be shown
+  if [ -z "$_API_SVC" ] || [[ "$_API_BODY" == *'"alias":"e1.'* ]]; then _bb_labelkey_load 2>/dev/null || true; fi
   local out
-  out=$(node -e '
+  out=$(BB_LK="$_BB_LK" node -e '
     let d = ""; process.stdin.on("data", c => d += c);
     process.stdin.on("end", () => {
       const US = "\x1f";
       let o; try { o = JSON.parse(d); } catch (e) { process.exit(2); }
       if (!o || !Array.isArray(o.links)) process.exit(2);
       const clean = (v) => String(v ?? "").replace(/[\x00-\x1f\x7f]/g, " ");
+      const dec = (a) => {              // "e1." names are AES-GCM under the label key; older names are plain
+        if (!/^e1\./.test(a)) return a;
+        if (!process.env.BB_LK) return "🔒 (open with your dinons)";
+        try { const c = require("crypto"); const k = Buffer.from(process.env.BB_LK, "base64url"); const b = Buffer.from(a.slice(3), "base64url");
+          const x = c.createDecipheriv("aes-256-gcm", k, b.subarray(0, 12)); x.setAuthTag(b.subarray(b.length - 16)); x.setAAD(Buffer.from("bbvk6|label"));
+          return Buffer.concat([x.update(b.subarray(12, b.length - 16)), x.final()]).toString("utf8").replace(/\n$/, ""); } catch (e) { return "🔒 (cannot decrypt)"; }
+      };
       console.log(["META", o.balance, o.now].join(US));
       for (const l of o.links) {
-        console.log(["L", l.id, l.kind, clean(l.alias), l.bytes, l.createdAt, l.expiresAt, l.paidHours, l.nukeRefund, l.nukeRefundDays, l.publicId || l.id].join(US));
+        console.log(["L", l.id, l.kind, clean(dec(String(l.alias ?? ""))), l.bytes, l.createdAt, l.expiresAt, l.paidHours, l.nukeRefund, l.nukeRefundDays, l.publicId || l.id, l.linkEnc || ""].join(US));
       }
     });' <<<"$_API_BODY") || { _API_ERR="the server answered, but not with a link list"; return 1; }
-  local tag a b c d e f g h i j
-  while IFS="$_API_US" read -r tag a b c d e f g h i j; do
+  local tag a b c d e f g h i j k
+  while IFS="$_API_US" read -r tag a b c d e f g h i j k; do
     case "$tag" in
       META) _API_BAL="$a"; _API_NOW="$b"; _API_LOCAL="${EPOCHSECONDS:-$(date +%s)}"; _API_PRE=(); _API_POST=() ;;
       L)    _API_ID+=("$a"); _API_KIND+=("$b"); _API_ALIAS+=("$c"); _API_BYTES+=("$d")
-            _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i"); _API_PUB+=("${j:-$a}") ;;
+            _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i"); _API_PUB+=("${j:-$a}"); _API_LENC+=("$k") ;;
     esac
   done <<<"$out"
   _api_sync_local_aliases
   _api_prune_keys
   _api_apply_aliases
+  _api_backfill_secrets
+  return 0
+}
+
+# Links made before links were kept in the cloud (or while no dinons were on hand): their key is on this computer, so store
+# them (encrypted) now — then every other device can copy them too. A few per refresh, silently.
+_api_backfill_secrets() {
+  [ -z "$_API_SVC" ] && [ -n "$_BB_LK" ] || return 0
+  [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" = "0" ] && return 0
+  local i n=0 key
+  for i in "${!_API_ID[@]}"; do
+    [ -z "${_API_LENC[$i]:-}" ] || continue
+    key=$(_bb_key_get "${_API_ID[$i]}") || continue
+    _bb_link_secret_put "${_API_ID[$i]}" "${WORKER_URL%/}/${_API_PUB[$i]:-${_API_ID[$i]}}#k=$key" && _API_LENC[$i]="$_BB_LAST_SECRET_ENC"
+    n=$((n + 1)); [ "$n" -ge 10 ] && break
+  done
   return 0
 }
 
@@ -115,7 +141,14 @@ _API_ALIAS_PUSH_MAX=25      # at most this many pending names are pushed per ref
 # _api_alias_push <id> <alias|"">   ""/null removes the alias.  Sets _API_STATUS.
 _api_alias_push() {
   local id="$1" al="$2" body
-  if [ -n "$al" ]; then body="{\"alias\":\"$al\"}"; else body='{"alias":null}'; fi   # alias charset has no quotes/backslashes
+  if [ -n "$al" ]; then
+    _BB_LINK_ALIAS="$al"; _bb_alias_prepare 2>/dev/null; _BB_LINK_ALIAS=""
+    if [ -z "$_BB_LINK_ALIAS_WIRE" ]; then   # never send a name in clear
+      _API_STATUS=409; _API_BODY='{"error":"no_dinons","message":"Names are stored encrypted — this computer has no usable dinons (or the server is unreachable)."}'
+      return 1
+    fi
+    body="{\"alias\":\"$_BB_LINK_ALIAS_WIRE\"}"       # "e1." + base64url: no quotes/backslashes
+  else body='{"alias":null}'; fi
   _api_http POST "/links/$id/alias" "$body" || return 1
   [ "$_API_STATUS" = "200" ]
 }
@@ -221,8 +254,23 @@ _api_prune_keys() {
 # _api_link_url <idx>  → full link on stdout, status 1 when the key is unknown
 _api_link_url() {
   local id="${_API_ID[$1]}" key
-  key=$(_bb_key_get "$id") || return 1
+  key=$(_bb_key_get "$id") || key=$(_api_key_from_server "$1") || return 1
   printf '%s/%s#k=%s' "${WORKER_URL%/}" "${_API_PUB[$1]:-$id}" "$key"
+}
+
+# no key on this computer (a link made on another device): open the copy the server keeps — ciphertext it cannot read —
+# with the label key (dinons), and remember the key here. The address is rebuilt from the CURRENT public id, so regenerating
+# a link never makes the stored copy stale.
+_api_key_from_server() {
+  local enc="${_API_LENC[$1]:-}" full key
+  [ -n "$enc" ] || return 1
+  [ -n "$_BB_LK" ] || _bb_labelkey_load 2>/dev/null || return 1
+  full=$(_bb_label_dec "$_BB_LK" "$enc")
+  [[ "$full" == *"#k="* ]] || return 1
+  key="${full#*#k=}"
+  [[ "$key" =~ $_BB_KEY_RE ]] || return 1
+  _bb_key_store "${_API_ID[$1]}" "$key" 2>/dev/null || true
+  printf '%s' "$key"
 }
 
 # can this machine copy more than ~1 KB without bashbasicsbyvk_copy falling back to uploading it?
@@ -243,7 +291,7 @@ _api_cmd_copy() {
     if url=$(_api_link_url "$k"); then
       out+="${url}"$'\n'; shown+=("$url"); got=$((got + 1))
     else
-      echo "❌ $(_api_name "$k"): key not stored on this computer — attach it with  k-$((k + 1))  (paste the old link once)"
+      echo "❌ $(_api_name "$k"): no key on this computer and none kept in the cloud (needs your dinons) — attach it with  k-$((k + 1))  (paste the old link once)"
       missing=$((missing + 1))
     fi
   done
@@ -320,6 +368,9 @@ _api_cmd_key() {
   if [[ ! "$key" =~ $_BB_KEY_RE ]]; then echo "⚠️  Not a valid key (43 characters: letters, digits, - and _)."; return 1; fi
   _bb_key_store "$id" "$key" || { echo "❌ Could not save"; return 1; }
   echo "✅ Key saved on this computer — c-$((k + 1)) now copies this link."
+  if [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" != "0" ] && _bb_link_secret_put "$id" "${WORKER_URL%/}/${_API_PUB[$_api_k]:-$id}#k=$key"; then
+    _API_LENC[$_api_k]="$_BB_LAST_SECRET_ENC"; echo "☁️  Also kept (encrypted) in the cloud — other devices can copy it too."
+  fi
 }
 
 _api_cmd_alias() {       # a-N [alias]      a-1-3 and a-1,3 not supported here: one link at a time
@@ -647,7 +698,7 @@ _api_help() {
  A copy of what you deleted, taken just before it was deleted (Settings → File API → Backup). Named DDMMYYYY HHMM NAME.
  N open · r-N restore into the current folder (never overwrites: "name (1)") · c-N copy its link · a-N [name] rename · e-N [time] extend / shorten · x-N nuke
  time rules, credits and refunds are exactly those of Links (api). Default keep time: Settings → File API → Backup.
- The key of a backup stays on THIS computer (~/.bashbasicsbyvk/backup_keys): restore it here.
+ Backups are client-side encrypted like Saved Surf: restore them from ANY device where you have your dinons.
 HLP
       return ;;
     saved) cat <<'HLP'

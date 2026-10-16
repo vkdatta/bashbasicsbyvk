@@ -180,7 +180,8 @@ _bb_split_alias() {
 # Per-link headers for an upload: how long it lives, and its alias.
 _bb_link_cfg() {
   _bb_cfg_header X-Nuke-Seconds "$(_bb_svc_ttl "${_BB_SVC:-}")"
-  [ -n "$_BB_LINK_ALIAS" ] && _bb_cfg_header X-Link-Alias "$_BB_LINK_ALIAS"
+  # names are sent ENCRYPTED ("e1." + AES-GCM under your label key, made by _bb_alias_prepare) — the server never sees them
+  [ -n "${_BB_LINK_ALIAS_WIRE:-}" ] && _bb_cfg_header X-Link-Alias "$_BB_LINK_ALIAS_WIRE"
   # Backup / Saved Surf / Snapshots tag their upload so the server files it under the right menu
   if [ -n "${_BB_SVC:-}" ]; then
     _bb_cfg_header X-Service "$_BB_SVC"
@@ -438,3 +439,76 @@ _bb_label_dec() {
       const d=c.createDecipheriv("aes-256-gcm",k,b.subarray(0,12)); d.setAuthTag(b.subarray(b.length-16)); d.setAAD(Buffer.from("bbvk6|label"));
       process.stdout.write(Buffer.concat([d.update(b.subarray(12,b.length-16)),d.final()]).toString("utf8").replace(/\n$/,"")); } catch(e) {}' 2>/dev/null
 }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Client-side encryption of names and stored links (works from any device that has e-mail + diseps + apikey + dinons)
+#
+#  One LABEL KEY per user: made here on first use, kept on the server only wrapped with your FEK (dinons → FEK → label key).
+#  It encrypts
+#    • every name you type (up-… as <name>, backup / save- names, a-N renames)     →  sent as "e1.<ciphertext>"
+#    • the full address of each up- link (so Links can copy it again on any device) →  stored as ciphertext in /links/<id>/secret
+#  The server stores only ciphertext it cannot open. Without the dinons a name is NOT sent (never sent in clear) and a link is
+#  simply not kept in the cloud.
+# ════════════════════════════════════════════════════════════════════════════
+_BB_LK=""; _BB_LK_FOR=""; _BB_LINK_ALIAS_WIRE=""; _BB_LAST_SECRET_ENC=""
+
+# _bb_labelkey_load  → sets _BB_LK (cached per account); returns 1 when it cannot be opened (no dinons / offline).
+# Call it directly (not inside $( )) so the cache survives.
+_bb_labelkey_load() {
+  if [ -n "$_BB_LK" ] && [ "$_BB_LK_FOR" = "${FILEAPI_BASHBASICS_DISEPS:-}" ]; then return 0; fi
+  local kdk k nk
+  _BB_LK=""; _BB_CALL_HDRS=()
+  _ux_self_fek || return 1
+  _bb_call GET /vault/labelkey || return 1
+  if [ "$_BB_STATUS" = 404 ]; then
+    nk=$(_ux_core newkey) && [[ "$nk" =~ $_BB_KEY_RE ]] || return 1
+    kdk=$(BB_FEK="$_UX_FEK" BB_K="$nk" _ux_core dk-wrap 2>/dev/null)
+    [[ "$kdk" =~ ^[A-Za-z0-9_-]{60,200}$ ]] || return 1
+    _bb_call PUT /vault/labelkey "{\"kdk\":\"$kdk\"}" || return 1     # first writer wins: the answer is the stored one
+  fi
+  [ "$_BB_STATUS" = 200 ] || { echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" >&2; return 1; }
+  kdk=$(_bb_json_get "$_BB_BODY" kdk)
+  [[ "$kdk" =~ ^[A-Za-z0-9_-]{60,200}$ ]] || return 1
+  k=$(printf '%s' "$kdk" | BB_FEK="$_UX_FEK" _ux_core dk-unwrap) && [[ "$k" =~ $_BB_KEY_RE ]] || return 1
+  _BB_LK="$k"; _BB_LK_FOR="${FILEAPI_BASHBASICS_DISEPS:-}"
+}
+
+# _bb_alias_prepare : _BB_LINK_ALIAS → _BB_LINK_ALIAS_WIRE ("e1.…"). Never falls back to sending the name in clear.
+_bb_alias_prepare() {
+  _BB_LINK_ALIAS_WIRE=""
+  [ -n "${_BB_LINK_ALIAS:-}" ] || return 0
+  if _bb_labelkey_load 2>/dev/null; then
+    local e; e=$(_bb_label_enc "$_BB_LK" "$_BB_LINK_ALIAS")
+    if [[ "$e" =~ ^[A-Za-z0-9_-]{40,180}$ ]]; then _BB_LINK_ALIAS_WIRE="e1.$e"; return 0; fi
+  fi
+  echo "⚠️  The name '$_BB_LINK_ALIAS' was NOT stored: names are kept encrypted and that needs your dinons on this computer." >&2
+  return 0
+}
+
+# _bb_alias_show <stored name> → readable name ("e1." names are decrypted; older plain names pass through)
+_bb_alias_show() {
+  local a="$1" p
+  case "$a" in
+    e1.*) if [ -n "$_BB_LK" ]; then p=$(_bb_label_dec "$_BB_LK" "${a#e1.}"); [ -n "$p" ] && { printf '%s' "$p"; return 0; }; fi
+          printf '🔒 (open with your dinons)' ;;
+    *)    printf '%s' "$a" ;;
+  esac
+}
+
+# _bb_link_secret_put <id> <full link with #k=…>   → keeps the link, encrypted, on the server (Links on any device)
+_bb_link_secret_put() {
+  local id="$1" url="$2" enc
+  _BB_LAST_SECRET_ENC=""
+  [[ "$id" =~ ^[A-Za-z0-9_-]{43}$ ]] || return 1
+  _bb_labelkey_load 2>/dev/null || return 1
+  enc=$(_bb_label_enc "$_BB_LK" "$url")
+  [[ "$enc" =~ ^[A-Za-z0-9_-]{60,1500}$ ]] || return 1
+  _BB_CALL_HDRS=()
+  _bb_call PUT "/links/$id/secret" "{\"enc\":\"$enc\"}" || return 1
+  [ "$_BB_STATUS" = 200 ] || return 1
+  _BB_LAST_SECRET_ENC="$enc"
+}
+
+# the three codes other people see next to your mail (positions 13, 24 and 7 of the diseps) — same as RBAM's d3
+_bb_d3() { printf '%s' "$1" | awk -F- 'NF==27 { printf "%s-%s-%s", $13, $24, $7 }'; }

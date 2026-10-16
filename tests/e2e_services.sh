@@ -42,6 +42,9 @@ HAVE_DINONS=1
 _bb_get_credentials() { export FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" FILEAPI_BASHBASICS_KEY="$APIKEY"; P_DINONS=""; [ "$HAVE_DINONS" = 1 ] && P_DINONS="$DINONS"; return 0; }
 _SNAP_DIR="$XDG_CONFIG_HOME/bashbasicsbyvk/snapshots"   # (same value; explicit for the reader)
 
+# a name as the owner sees it (decrypted with the label key: dinons → FEK → label key); the server only ever holds "e1.…"
+shown() { ( _bb_labelkey_load >/dev/null 2>&1; _bb_alias_show "$1" ); }
+
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); echo "  ✓ $1"; }
 bad()  { FAIL=$((FAIL+1)); echo "  ✗ $1"; }
@@ -79,10 +82,13 @@ backup_mode=yes
 out=$(_bk_before_delete "$T/work/proj" <<<"my notes" 2>&1); rc=$?
 chk "backup before delete → go ahead" "$rc" "0"
 has "…tells you the name" "$out" "my notes"
-alias=$(q1 "select alias from links where svc='backup'"); has "alias is DDMMYYYY HHMM NAME" "$alias" " my notes"
+raw=$(q1 "select alias from links where svc='backup'"); chk "the server holds the name only as ciphertext (e1.…)" "${raw:0:3}" "e1."
+hasnt "…and the typed name is nowhere in it" "$raw" "notes"
+alias=$(shown "$raw"); has "alias is DDMMYYYY HHMM NAME (after decrypting)" "$alias" " my notes"
 chk "alias starts with the date" "$(date '+%d%m%Y %H%M' | cut -c1-8)" "${alias:0:8}"
 id=$(q1 "select id from links where svc='backup'")
-[ -f "$HOME/.bashbasicsbyvk/backup_keys" ] && ok "backup key stored on this computer" || bad "backup key file missing"
+[ ! -f "$HOME/.bashbasicsbyvk/backup_keys" ] && ok "no backup key is kept on this computer any more" || bad "a local backup key was written"
+chk "the backup key is held by the server only as kdk (CSE)" "$(q1 "select scheme from vault_keys where link_id='$id'")" "cse1"
 chk "ttl is the 30-day default" "$(q1 "select (expires_at-created_at)/1000 from links where svc='backup'")" "2592000"
 chk "ordinary links list excludes it" "$(_bb_call GET /links; _bb_json_get "$_BB_BODY" ok)" "true"
 _bb_call GET /links; has "…Links screen is empty of it" "$_BB_BODY" '"links":[]'
@@ -284,6 +290,51 @@ sid2=$(q1 "select id from links where svc='saved' and status='active' limit 1")
 _bb_call POST "/links/$sid2/alias" '{"alias":"renamed item"}'; chk "alias edit on a saved item" "$_BB_STATUS" "200"
 _bb_call POST "/links/$sid2/expiry" '{"totalSeconds":2592000,"dryRun":true}'; has "extension is priced first (dry run)" "$_BB_BODY" '"dryRun":true'
 
+echo "── 7b. any device: backups, links, names ──"
+# (a) an OLDER backup (its key only on the computer that made it) still restores there — and says so elsewhere
+bid=$(q1 "select id from links where svc='backup' and status='active' limit 1")
+okey=$(_svc_vault_key "$bid")
+sql "delete from vault_keys where link_id='$bid'" >/dev/null
+rm -rf "$T/restoreL"; mkdir -p "$T/restoreL"
+out=$(_svc_restore backup "$bid" legacy "$T/restoreL" 2>&1); has "older backup without its local key → explained, not a crash" "$out" "older version"
+( _BB_KEY_FILE="$HOME/.bashbasicsbyvk/backup_keys"; _bb_key_store "$bid" "$okey" )
+out=$(_svc_restore backup "$bid" legacy "$T/restoreL" 2>&1); [ -n "$(ls -A "$T/restoreL" 2>/dev/null)" ] && ok "older backup restores with the key from the computer that made it" || bad "legacy restore failed: $out"
+# (b) an up- style link: keep it encrypted in the cloud, then read it back as a brand-new device would
+lid=$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url"))'); lkey=$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url"))')
+now=$(( $(date +%s) * 1000 ))
+sql "insert into links (id, owner_id, kind, alias, bytes, mb, oversized, created_at, expires_at, paid_hours, paid_credits, status) values ('$lid', (select id from users limit 1), 'upload', NULL, 1000, 1, 0, $now, $((now+3600000)), 1, 1, 'active')" >/dev/null
+_BB_LINK_ALIAS="tax papers"; _bb_alias_prepare; wire="$_BB_LINK_ALIAS_WIRE"; _BB_LINK_ALIAS=""
+chk "a typed name is turned into e1.<ciphertext> before sending" "${wire:0:3}" "e1."
+hasnt "…without the words in it" "$wire" "tax"
+_api_alias_push "$lid" "tax papers"; chk "a-N rename sends only the encrypted name" "$_API_STATUS" "200"
+chk "…server holds ciphertext" "$(q1 "select substr(alias,1,3) from links where id='$lid'")" "e1."
+LINK="$BASE/$lid#k=$lkey"
+_bb_link_secret_put "$lid" "$LINK" && ok "up- link kept in the cloud, encrypted" || bad "link secret not stored"
+hasnt "the key is not readable in the database" "$(sql "select enc from link_secrets")" "$lkey"
+# "another device": no key file, no cached label key / FEK in memory — only e-mail, diseps, apikey and dinons
+( rm -f "$HOME/.bashbasicsbyvk/link_keys"; _BB_LK=""; _BB_LK_FOR=""; _UX_FEK_SELF=""; _UX_FEK_SELF_FOR=""; _UX_FEK=""
+  _API_SVC=""; _api_load >/dev/null 2>&1
+  i=-1; for j in "${!_API_ID[@]}"; do [ "${_API_ID[$j]}" = "$lid" ] && i=$j; done
+  echo "$i" > "$T/idx_dev2"; echo "${_API_ALIAS[$i]}" > "$T/alias_dev2"; _api_link_url "$i" > "$T/url_dev2" 2>/dev/null )
+chk "other device: Links lists the link by its (decrypted) name" "$(cat "$T/alias_dev2")" "tax papers"
+chk "other device: c-N rebuilds the full link, key included" "$(cat "$T/url_dev2")" "$LINK"
+# without the dinons the same device sees a locked name and cannot rebuild the link
+HAVE_DINONS=0
+( rm -f "$HOME/.bashbasicsbyvk/link_keys"; _BB_LK=""; _BB_LK_FOR=""; _UX_FEK_SELF=""; _UX_FEK_SELF_FOR=""; _UX_FEK=""
+  _API_SVC=""; _api_load >/dev/null 2>&1
+  i=-1; for j in "${!_API_ID[@]}"; do [ "${_API_ID[$j]}" = "$lid" ] && i=$j; done
+  echo "${_API_ALIAS[$i]}" > "$T/alias_nd"; _api_link_url "$i" > "$T/url_nd" 2>/dev/null; echo $? > "$T/rc_nd" )
+has "no dinons: the name stays locked" "$(cat "$T/alias_nd")" "🔒"
+chk "no dinons: the link cannot be rebuilt" "$(cat "$T/url_nd")" ""
+_BB_LK=""; _BB_LK_FOR=""; _UX_FEK_SELF=""; _UX_FEK_SELF_FOR=""; _UX_FEK=""      # a fresh process on a machine without dinons
+_BB_LINK_ALIAS="secret name"; _bb_alias_prepare 2>/dev/null; chk "no dinons: a name is NOT sent in clear" "$_BB_LINK_ALIAS_WIRE" ""; _BB_LINK_ALIAS=""
+HAVE_DINONS=1
+# the identity recipients will see
+d3=$(_bb_d3 "$DISEPS"); chk "d3 = codes 13, 24, 7 of the diseps" "$d3" "$(printf '%s' "$DISEPS" | cut -d- -f13,24,7 --output-delimiter=- | awk -F- -v d="$DISEPS" 'BEGIN{split(d,p,"-")}{printf "%s-%s-%s",p[13],p[24],p[7]}')"
+out=$(FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" _bb_link_store_and_explain "$LINK" 2>&1)
+has "after up-: tells who recipients will see (mail)" "$out" "$EMAIL"; has "…the d3" "$out" "$d3"; has "…and where to report" "$out" "/help"
+hasnt "…never the full diseps" "$out" "$DISEPS"
+
 echo "── 8. commands: save- and snap- ──"
 source "bashbasicsbyvk_hidefiles.sh" 2>/dev/null
 sp_resolved=(); _sp_guard_and_resolve() { sp_resolved=("$ITEM"); return 0; }     # (the numbered-item resolver is existing code)
@@ -292,13 +343,14 @@ ITEM="$T/work/docs"
 upload_hidden_mode=never
 out=$(handle_save_upload "save-1 as docs" 2>&1); rc=$?
 chk "save-1 as docs works" "$rc" "0"; has "…says no link exists" "$out" "no link exists"
-sid=$(q1 "select id from links where svc='saved' order by created_at desc limit 1"); has "…alias carries the name" "$(q1 "select alias from links where id='$sid'")" " docs"
+sid=$(q1 "select id from links where svc='saved' order by created_at desc limit 1"); has "…alias carries the name (decrypted)" "$(shown "$(q1 "select alias from links where id='$sid'")")" " docs"
 rm -rf "$T/r7"; mkdir -p "$T/r7"; _svc_restore saved "$sid" x "$T/r7" >/dev/null 2>&1
 [ -f "$T/r7/docs/v.txt" ] && [ ! -e "$T/r7/docs/.secret" ] && ok "Settings 'upload hidden = never' → hidden file left out of the save" || bad "hidden-file rule not applied"
 upload_hidden_mode=always; handle_save_upload "save-1" >/dev/null 2>&1
 sid=$(q1 "select id from links where svc='saved' order by created_at desc limit 1"); rm -rf "$T/r7"; mkdir -p "$T/r7"; _svc_restore saved "$sid" x "$T/r7" >/dev/null 2>&1
 [ -f "$T/r7/docs/.secret" ] && ok "…'always' → hidden file included" || bad "hidden file missing"
-chk "no name → alias is just the date and time" "$(q1 "select length(alias) from links where id='$sid'")" "13"
+nn=$(shown "$(q1 "select alias from links where id='$sid'")")
+chk "no name → alias is just the date and time" "${#nn}" "13"
 n=$(q1 "select count(*) from links where svc='saved'"); out=$(handle_save_upload "save-1 as bad/name" 2>&1); rc=$?
 chk "a name with forbidden characters is refused, nothing uploaded" "$rc:$(q1 "select count(*) from links where svc='saved'")" "1:$n"
 snapshot_enabled=off; rm -rf "$_SNAP_DIR"

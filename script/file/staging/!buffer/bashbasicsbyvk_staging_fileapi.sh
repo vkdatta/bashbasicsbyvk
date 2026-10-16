@@ -18,6 +18,7 @@ _bb_authed_put() {
 
   _bb_get_credentials || return 1
 
+  _bb_alias_prepare
   local attempt=0 confirmed=false
   while :; do
     attempt=$((attempt + 1))
@@ -137,6 +138,23 @@ _crypto_decrypt_stdin() {
   '
 }
 
+# After a new link: keep it (encrypted, for any device) and tell the sender what recipients will see.
+_bb_link_store_and_explain() {
+  local url="$1" base id d3 mail="${FILEAPI_BASHBASICS_EMAIL:-}"
+  if [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" != "0" ]; then
+    base="${url%%#*}"; base="${base%/}"; id="${base##*/}"
+    if _bb_link_secret_put "$id" "$url"; then
+      echo "☁️  Kept (encrypted — the server cannot read it) in Home → Links: copy it again with  c-N  from any device."
+    else
+      echo "ℹ️  Not kept in the cloud (needs your dinons on this computer, or the server was unreachable). It is still saved on this computer."
+    fi
+  fi
+  d3=$(_bb_d3 "${FILEAPI_BASHBASICS_DISEPS:-}")
+  echo "🪪 Anyone who opens this link sees WHO shared it:  ${mail:-?}${d3:+  ·  $d3}   (+ Copy and Report-abuse → ${WORKER_URL%/}/help)"
+  echo "   Links are encrypted so nobody can look inside; reports about pirated, adult or illegal content go to the admin and can"
+  echo "   restrict the link and suspend the account. Only share what you may share."
+}
+
 _announce_link() {
   local final_url="$1"
   local url_payload
@@ -153,6 +171,7 @@ _announce_link() {
   echo "-------------------------------------------"
   echo "Link: $final_url"
   echo "-------------------------------------------"
+  _bb_link_store_and_explain "$final_url"
 
   if [ "${FILEAPI_BASHBASICS_OPEN:-0}" = "1" ]; then
     ( open "$final_url" || xdg-open "$final_url" || termux-open-url "$final_url" ) &> /dev/null &
@@ -407,6 +426,7 @@ _bb_upload_init() {
   local est_size="$1"
   _bb_get_credentials || return 1
 
+  _bb_alias_prepare
   local attempt=0 confirmed=false
   [ -n "${_BB_OVERSIZE_OK:-}" ] && confirmed=true     # the price prompt already covered the 1.2x rate
   while :; do

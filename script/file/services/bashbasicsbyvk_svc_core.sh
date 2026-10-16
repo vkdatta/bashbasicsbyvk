@@ -7,13 +7,15 @@
 #
 # Same pipeline, same encryption and the same server rules as up-; the differences are only
 #   • the item is filed under a service (X-Service), so it shows in its own menu and never in Links
-#   • backup   : end-to-end like up- — the key K stays on THIS computer (backup_keys), the server never sees it
-#   • saved / snapshot : client-side encryption (CSE), the same key chain as ux-:   dinons → FEK → K
+#   • backup / saved / snapshot : client-side encryption (CSE), the same key chain as ux-:   dinons → FEK → K
+#     (a backup used to keep K in ~/.bashbasicsbyvk/backup_keys on one computer; now it works from every device like the others;
+#      backups made before this change are still restored with that local key)
 #       K     fresh random key per item; encrypts the data
 #       kdk   K wrapped with your FEK on this computer — the ONLY thing about K the server keeps
 #     The server holds no key it can open (no Worker-secret wrapping), so the operator — even with the database, the
 #     bucket and every Worker secret — cannot read an item. No link is ever shown; the data and kdk are served to the
 #     owner only. To open an item on another device you need e-mail + diseps + API key AND the dinons.
+#     Names are CSE too: sent as "e1.<ciphertext>" under the per-user label key (see _bb_alias_prepare).
 # Sourced by: o (via _3bvk_import_services.sh) and the stand-alone bashbasicsbyvk_delete command.
 
 source "bashbasicsbyvk_staging_fileapi.sh"     # also pulls in _3bvk_fileapi_lib.sh
@@ -38,10 +40,10 @@ _svc_upload() {
     echo "❌ 'tar' and 'gzip' are required (pkg install tar gzip)."; return 1
   fi
   _bb_get_credentials || return 1
-  # saved / snapshot are client-side encrypted: open the FEK (dinons) BEFORE packing, so a missing key chain fails fast
-  if [ "$svc" = saved ] || [ "$svc" = snapshot ]; then
+  # backup / saved / snapshot are client-side encrypted: open the FEK (dinons) BEFORE packing, so a missing key chain fails fast
+  if [ "$svc" = backup ] || [ "$svc" = saved ] || [ "$svc" = snapshot ]; then
     if [ "$_SVC_QUIET" = 1 ]; then _ux_self_fek 2>/dev/null; else _ux_self_fek; fi \
-      || { [ "$_SVC_QUIET" = 1 ] || echo "❌ Nothing was uploaded: save- and snap- encrypt with your FEK, which needs the dinons on this computer." >&2; return 1; }
+      || { [ "$_SVC_QUIET" = 1 ] || echo "❌ Nothing was uploaded: backups, save- and snap- encrypt with your FEK, which needs the dinons on this computer." >&2; return 1; }
   fi
   local -a gz=(gzip)
   command -v pigz &>/dev/null && gz=(pigz)
@@ -134,7 +136,7 @@ _svc_upload() {
 
   # K → kdk (wrapped with the FEK, here). The server is only ever given kdk.
   local kdk=""
-  if [ "$svc" = saved ] || [ "$svc" = snapshot ]; then
+  if [ "$svc" = backup ] || [ "$svc" = saved ] || [ "$svc" = snapshot ]; then
     kdk=$(BB_FEK="$_UX_FEK" BB_K="$key" _ux_core dk-wrap 2>/dev/null)
     if [[ ! "$kdk" =~ ^[A-Za-z0-9_-]{60,200}$ ]]; then
       echo "❌ Could not wrap the item key — nothing was finalized."; _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1
@@ -142,7 +144,7 @@ _svc_upload() {
   fi
   _BB_COMMIT_HDRS=()
   case "$svc" in
-    saved)    _BB_COMMIT_HDRS=("X-Vault-Kdk: $kdk") ;;
+    backup|saved) _BB_COMMIT_HDRS=("X-Vault-Kdk: $kdk") ;;
     snapshot) _BB_COMMIT_HDRS=("X-Vault-Kdk: $kdk" "X-Snap-Target: $_SVC_SNAP_TGT" "X-Snap-Sig: ${_SVC_SNAP_SIG:-0}") ;;
   esac
   local result
@@ -156,19 +158,15 @@ _svc_upload() {
   _SVC_ID="$id"; _SVC_KEY="$key"; _SVC_BYTES="$total_size"
   _SVC_DEDUCTED=$(printf '%s' "$result" | sed -n '2p'); _SVC_BALANCE=$(printf '%s' "$result" | sed -n '3p'); _SVC_EXPIRES=$(printf '%s' "$result" | sed -n '4p')
   _SVC_TTL="$_ttl_used"
-  # a backup behaves like a link made with up-: its key stays on this computer (own file, so the Links screen never prunes it)
-  if [ "$was_svc" = backup ]; then
-    ( _BB_KEY_FILE="${HOME}/.bashbasicsbyvk/backup_keys"; _bb_key_store "$id" "$key" ) 2>/dev/null || \
-      echo "⚠️  Could not store the backup key on this computer — the backup cannot be restored!" >&2
-  fi
   return 0
 }
 
-# the item key K of a Saved / Snapshot item: the server returns kdk (opaque to it), this computer opens it with the FEK
+# the item key K of a Backup / Saved / Snapshot item: the server returns kdk (opaque to it), this computer opens it with the FEK
 _svc_vault_key() {
   local id="$1" kdk k
   _ux_self_fek || return 1
   _bb_call GET "/vault/$id/key" || return 1
+  [ "$_BB_STATUS" = 404 ] && [ "$(_bb_json_get "$_BB_BODY" error)" = no_key ] && return 3   # made before backups were CSE
   [ "$_BB_STATUS" = 200 ] || { echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" >&2; return 1; }
   kdk=$(_bb_json_get "$_BB_BODY" kdk)
   [[ "$kdk" =~ ^[A-Za-z0-9_-]{60,200}$ ]] || { echo "❌ The server returned no usable key." >&2; return 1; }
@@ -183,12 +181,14 @@ _svc_restore() {
   _crypto_check || return 1
   _bb_get_credentials || return 1
   case "$svc" in
-    backup)
-      key=$( _BB_KEY_FILE="${HOME}/.bashbasicsbyvk/backup_keys"; _bb_key_get "$id" ) || {
-        echo "❌ This computer does not hold the key of that backup (it was made on another computer, or the key file was lost)."; return 1; }
-      link="$WORKER_URL/$id" ;;
-    saved|snapshot)
-      key=$(_svc_vault_key "$id") || return 1
+    backup|saved|snapshot)
+      key=$(_svc_vault_key "$id"); local krc=$?
+      if [ "$krc" = 3 ] && [ "$svc" = backup ]; then
+        # an older backup: its key was only ever kept on the computer that made it
+        key=$( _BB_KEY_FILE="${HOME}/.bashbasicsbyvk/backup_keys"; _bb_key_get "$id" ) || {
+          echo "❌ That backup was made by an older version: its key exists only on the computer that made it (not this one, or the file was lost)."; return 1; }
+      elif [ "$krc" != 0 ]; then return 1
+      fi
       link="$WORKER_URL/vault/$id"; auth=1 ;;
     *) echo "❌ Unknown service."; return 1 ;;
   esac

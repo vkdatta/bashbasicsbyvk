@@ -104,22 +104,9 @@ _snap_dev_hdrs() {         # sets _BB_CALL_HDRS from the device id files; return
   [ -n "$id" ] && [ -n "$sg" ] || return 1
   _BB_CALL_HDRS=("X-Telemetry-Id: $id" "X-Telemetry-Sig: $sg")
 }
-_snap_labelkey() {         # → the per-user label key on stdout (made here on first use, stored on the server wrapped with the FEK only)
-  local kdk k nk
-  _BB_CALL_HDRS=()
-  _ux_self_fek || return 1
-  _bb_call GET /vault/labelkey || return 1
-  if [ "$_BB_STATUS" = 404 ]; then
-    nk=$(_ux_core newkey) && [[ "$nk" =~ $_BB_KEY_RE ]] || return 1
-    kdk=$(BB_FEK="$_UX_FEK" BB_K="$nk" _ux_core dk-wrap 2>/dev/null)
-    [[ "$kdk" =~ ^[A-Za-z0-9_-]{60,200}$ ]] || return 1
-    _bb_call PUT /vault/labelkey "{\"kdk\":\"$kdk\"}" || return 1     # first writer wins: the answer is the stored one
-  fi
-  [ "$_BB_STATUS" = 200 ] || { echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" >&2; return 1; }
-  kdk=$(_bb_json_get "$_BB_BODY" kdk)
-  [[ "$kdk" =~ ^[A-Za-z0-9_-]{60,200}$ ]] || return 1
-  k=$(printf '%s' "$kdk" | BB_FEK="$_UX_FEK" _ux_core dk-unwrap) && [[ "$k" =~ $_BB_KEY_RE ]] || return 1
-  printf '%s' "$k"
+_snap_labelkey() {         # → the per-user label key on stdout (shared with link names / stored links: _bb_labelkey_load)
+  _bb_labelkey_load || return 1
+  printf '%s' "$_BB_LK"
 }
 _snap_json_tsv() {         # stdin JSON → TSV by mode (targets | devices | snaps)
   node -e '

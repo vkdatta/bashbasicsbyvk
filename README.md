@@ -454,3 +454,11 @@ Not backed up: symlinks (only the link is removed), Google Drive placeholders (t
 **Home → Snapshots** lists every device that has a snapshot list (devices are told apart by the telemetry uuid), the paths on each, and their snapshots. You can view and restore snapshots of any device, nuke or extend them, and remove a path from another device's list (that device stops on its next sync). Paths and device names are stored encrypted.
 
 **Telemetry:** the telemetry uuid is the device id for snapshots, so there is no switch to turn telemetry off any more, and the app never deletes or regenerates the uuid. Once you use Snapshots the uuid is tied, on the server, to your account.
+
+### Any device, encrypted names, and who shared a link
+Everything you hold is managed from **any device you log in on** (e-mail + diseps + API key + dinons): Links, Backup, Saved Surf, Snapshots, Cloud Surf. Only `up-` / `c2c-` links are end-to-end (the key lives only in the link). Everything else is client-side encrypted (CSE): dinons → FEK → keys.
+- **Links tab:** each new `up-` link is also stored *encrypted* with a per-user label key, so `c-N` copies it again on any device. The server cannot open it. Older links are added a few per refresh. With `FILEAPI_BASHBASICS_STORE_KEYS=0` nothing is kept in the cloud.
+- **Names** (up-, backup, save-, `a-N`) are sent as `e1.<ciphertext>`. Without your dinons a name is not sent at all. Size, expiry and timing stay readable to the server (billing/expiry need them); `ux-` names stay readable to the receivers.
+- **Backups** are CSE and owner-only now (restore from any device). Older backups restore only on the computer that made them.
+- **Who shared it:** every link page shows the uploader's mail and `d3` (codes 13, 24, 7 of the diseps) with a Copy button and a **Report abuse** link to `/help`. Nobody can look inside a link, so this is how pirated, adult, illegal or harmful sharing is curbed: reports go to the admin, who can restrict the link or suspend the account.
+- **Admin** (`Authorization: Bearer $ADMIN_TOKEN`): `GET /admin/reports`, `POST /admin/restrict|unrestrict|suspend|unsuspend|dismiss`.
