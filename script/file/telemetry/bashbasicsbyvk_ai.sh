@@ -2,6 +2,8 @@
 #
 #   .ai "delete all python files"        -> suggests a file command, e.g.  .s.ext py     (5 credits)
 #   .ai -ledger 01102026 07102026        -> your credit ledger for the period            (free)
+#   .ai -revenue FROM 01102026 TO 07102026 -> money received in the period (payments + admin invoices), SUPER USER only (free)
+#                                        (the words FROM / TO are optional: .ai -revenue 01102026 07102026 works too)
 #   .ai -report 01102026 07102026 xlsx "top countries"
 #                                        -> telemetry report, SUPER USER only            (free)
 #
@@ -119,6 +121,30 @@ if len(rows) > 100: print(f"… {len(rows)-100} more entries")
 PY
 }
 
+_bvk_ai_revenue_render() {  # $1=response file
+  python3 - "$1" <<'PY'
+import sys, json
+try: d = json.load(open(sys.argv[1]))
+except Exception: print("❌ Unexpected response from the server."); sys.exit(2)
+if not d.get("ok"):
+    err = d.get("error", "failed")
+    print("⛔ -revenue is for the super user only." if err == "not_super_user" else "❌ " + str(d.get("message") or err)); sys.exit(1)
+rows = d.get("rows", [])
+iso = lambda x: f"{x[8:10]}-{x[5:7]}-{x[0:4]}"
+print(f"💰 Revenue {iso(d['from'])} → {iso(d['to'])}")
+if rows:
+    cols = ["date", "source", "method", "currency", "count", "amount"]
+    w = [max(len(c), *(len(str(iso(r['date']) if c == 'date' else r.get(c, ''))) for r in rows)) for c in cols]
+    cell = lambda r, c: str(iso(r["date"]) if c == "date" else r.get(c, ""))
+    print("  ".join(c.ljust(w[i]) for i, c in enumerate(cols))); print("  ".join("-" * x for x in w))
+    for r in rows: print("  ".join(cell(r, c).rjust(w[i]) if c in ("count", "amount") else cell(r, c).ljust(w[i]) for i, c in enumerate(cols)))
+else:
+    print("ℹ️  No revenue in this period.")
+print("\nTOTAL  " + "   ".join(f"{c} {v}" for c, v in d.get("totals", {}).items()))
+print("(admin MODIFIED invoices are listed but not added; credit notes are subtracted)")
+PY
+}
+
 _bvk_ai_ext_summary() {  # extension -> count for the current dir (lets the model pick real extensions)
   local dir="${path:-$PWD}"
   ls -1A "$dir" 2>/dev/null | head -2000 | awk -F. 'NF>1 && $1!="" {c[tolower($NF)]++} END{for(e in c) printf "%s:%d,", e, c[e]}' | head -c 600
@@ -136,6 +162,13 @@ handle_ai_cmd() {
       if ! { _bvk_ai_date_ok "$from" && _bvk_ai_date_ok "$to"; }; then
         echo '💡 Usage: .ai -ledger 01102026 07102026   (ddmmyyyy ddmmyyyy)'; return 0; fi
       q="" ;;
+    -revenue|-revenue\ *)
+      mode=revenue; set -f; set -- ${q#-revenue}; set +f
+      [ "${1,,}" = from ] && shift; from="$1"; shift 2>/dev/null
+      [ "${1,,}" = to ] && shift; to="$1"
+      if ! { _bvk_ai_date_ok "$from" && _bvk_ai_date_ok "$to"; }; then
+        echo '💡 Usage: .ai -revenue FROM 01102026 TO 07102026   (ddmmyyyy; super user only)'; return 0; fi
+      q="" ;;
     -report|-report\ *)
       mode=report; set -f; set -- ${q#-report}; set +f; from="$1"; to="$2"; fmt="${3,,}"
       if ! { _bvk_ai_date_ok "$from" && _bvk_ai_date_ok "$to"; } || [ -z "$fmt" ]; then
@@ -147,7 +180,7 @@ handle_ai_cmd() {
       # the renderer decides xlsx/csv from the question text; make the chosen format explicit
       case "$fmt" in xlsx) q="$q in excel" ;; csv) q="$q as csv" ;; esac ;;
     "")
-      echo '💡 Usage: .ai "delete all python files"   |   .ai -ledger ddmmyyyy ddmmyyyy   |   .ai -report ddmmyyyy ddmmyyyy fmt "question"'
+      echo '💡 Usage: .ai "delete all python files"   |   .ai -ledger ddmmyyyy ddmmyyyy   |   .ai -revenue FROM ddmmyyyy TO ddmmyyyy   |   .ai -report ddmmyyyy ddmmyyyy fmt "question"'
       return 0 ;;
     *) case "$q" in \"*\") q="${q:1:${#q}-2}" ;; \'*\') q="${q:1:${#q}-2}" ;; esac ;;
   esac
@@ -176,6 +209,7 @@ PY
 
   case "$mode" in
     ledger) _bvk_ai_ledger_render "$resp" ;;
+    revenue) _bvk_ai_revenue_render "$resp" ;;
     report) _bvk_ai_render "$resp" "$q" "${path:-$PWD}" ;;
     query)
       python3 - "$resp" > "$body" <<'PY'

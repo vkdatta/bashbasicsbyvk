@@ -18,6 +18,7 @@
 
 _BVK_AUTH_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/auth"
 _BVK_AUTH_URL="${BVK_AUTH_URL:-https://fileapi.bashbasics.workers.dev}"
+_BVK_PAY_URL="${BVK_PAY_URL:-https://payments.bashbasics.workers.dev}"
 _BVK_SUPPORT_MAIL="vkd.codes@gmail.com"
 _BVK_DISEPS_N=27; _BVK_DINONS_N=29; _BVK_CODE_LEN=16
 
@@ -112,14 +113,14 @@ _bvk_auth_fek_unwrap() { # $1=blob $2=dinons -> fek(hex), non-zero on wrong dino
 # ---------------------------------------------------------------- server calls
 # _bvk_auth_call METHOD PATH JSON [with-creds]   -> _AUTH_HTTP, _AUTH_BODY.  Secrets only via curl -K stdin.
 _bvk_auth_call() {
-  local method="$1" path="$2" json="$3" withcreds="${4:-}" body resp
+  local method="$1" path="$2" json="$3" withcreds="${4:-}" base="${5:-$_BVK_AUTH_URL}" body resp
   body=$(mktemp) || return 1; chmod 600 "$body"; printf '%s' "$json" > "$body"
   local cfg; cfg=$({
     [ -n "$withcreds" ] && { _bb_cfg_header X-User-Email "$P_MAIL"; _bb_cfg_header X-User-Diseps "$P_DISEPS"; _bb_cfg_header X-User-Key "$P_APIKEY"; }
     _bb_cfg_header X-Telemetry-Id "$(cat "$_BVK_TELEMETRY_DIR/uuid" 2>/dev/null)"
     _bb_cfg_header X-Telemetry-Sig "$(cat "$_BVK_TELEMETRY_DIR/sig" 2>/dev/null)"; })
   resp=$(curl -s --max-time 30 "${_BB_CURL_OPTS[@]}" -K - -w '\n%{http_code}' -X "$method" \
-          -H 'Content-Type: application/json' --data-binary @"$body" "$_BVK_AUTH_URL$path" <<<"$cfg" 2>/dev/null)
+          -H 'Content-Type: application/json' --data-binary @"$body" "$base$path" <<<"$cfg" 2>/dev/null)
   rm -f "$body"
   _AUTH_HTTP="${resp##*$'\n'}"; _AUTH_BODY="${resp%$'\n'*}"
   [[ "$_AUTH_HTTP" =~ ^[0-9]{3}$ ]] || { _AUTH_HTTP=0; _AUTH_BODY=""; return 1; }
@@ -401,12 +402,202 @@ _au_list_build() {
   _hl_index=0
 }
 
+# ================================================================ billing · recharge · sponsorship
+# Payments go through a magic link (30 minutes, or until it is paid). Nothing is charged from here:
+# this only asks the payments worker for a link. Credits reach an account only after the payment
+# is confirmed server-side. US$1 = 1,000 credits, minimum US$1 per account.
+#
+# Billing details live on THIS device (per user, mode 600) and travel only when a link is created.
+_BVK_BILL_DIR="$_BVK_AUTH_DIR/billing"
+_AU_BILL_LABELS=("NAME" "ADDRESS" "MOBILE" "EMAIL" "TAX ID")
+_AU_BILL_KEYS=(name address mobile email tax_id)
+
+_bvk_bill_get() {  # $1=key -> value of the CURRENT user ($_AU_UID)
+  local f="$_BVK_BILL_DIR/$_AU_UID" k v
+  [ -f "$f" ] || return 0
+  while IFS='=' read -r k v || [ -n "$k" ]; do [ "$k" = "$1" ] && { printf '%s' "$v"; return 0; }; done < "$f"
+}
+_bvk_bill_set() {  # $1=key $2=value (one line, control chars stripped)
+  local f="$_BVK_BILL_DIR/$_AU_UID" key val i out=""
+  val=$(printf '%s' "$2" | tr -d '\000-\037\177')
+  ( umask 077; mkdir -p "$_BVK_BILL_DIR" ) || return 1
+  for i in "${!_AU_BILL_KEYS[@]}"; do
+    key="${_AU_BILL_KEYS[$i]}"
+    if [ "$key" = "$1" ]; then out+="$key=$val"$'\n'; else out+="$key=$(_bvk_bill_get "$key")"$'\n'; fi
+  done
+  ( umask 077; printf '%s' "$out" > "$f" )
+}
+_bvk_bill_valid() {  # $1=key $2=value ; prints the reason and returns 1 when invalid
+  local v="$2" n=${#2}
+  case "$1" in
+    name)    [ "$n" -ge 1 ] && [ "$n" -le 160 ] || { echo "   NAME must be 1-160 characters."; return 1; } ;;
+    address) [ "$n" -le 800 ] || { echo "   ADDRESS is too long (max 800)."; return 1; } ;;
+    mobile)  [ "$n" -eq 0 ] || [[ "$v" =~ ^\+?[0-9][0-9\ ()-]{4,22}$ ]] || { echo "   MOBILE: digits with optional +, spaces, ( ) or -."; return 1; } ;;
+    email)   _bvk_auth_mail_ok "$v" && [[ "$v" == *@*.* ]] || { echo "   EMAIL is not valid."; return 1; } ;;
+    tax_id)  [ "$n" -eq 0 ] || [[ "$v" =~ ^[A-Za-z0-9][A-Za-z0-9\ ./-]{0,39}$ ]] || { echo "   TAX ID: letters, digits, space . / - (max 40)."; return 1; } ;;
+  esac
+}
+_au_pause() { echo; builtin read -rsn1 -p "↵ press any key to return" _ </dev/tty 2>/dev/null; echo; }
+_au_trunc() { local s="$1" n="$2"; [ "${#s}" -gt "$n" ] && s="${s:0:$((n-1))}…"; printf '%s' "$s"; }
+
+_au_sub_header() {
+  echo; echo "👤 Acting as: $_AU_MAIL"
+  case "$_AU_SCREEN" in
+    billing)  echo "🧾 Billing details — printed on your invoice (stored on this device)" ;;
+    recharge) echo "💳 Recharge — US\$1 = 1,000 credits · minimum US\$1 per account" ;;
+  esac
+  _vp_filter_header_line
+}
+_au_sub_footer() { _mc_footer "=:Filter" "|" "u:Back" "q:Close"; }
+
+_au_billing_build() {
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
+  _AU_MAIL="$P_MAIL"; _filter_reset_state
+  items=(); local i v
+  for i in "${!_AU_BILL_KEYS[@]}"; do
+    v=$(_bvk_bill_get "${_AU_BILL_KEYS[$i]}")
+    [ -n "$v" ] && v=$(_au_trunc "$v" 44) || v="(not set)"
+    items+=("$(printf '%-8s %s' "${_AU_BILL_LABELS[$i]}" "$v")")
+  done
+  _hl_index=0
+}
+_au_billing_action() {  # $1 = 0-based slot
+  local i="$1" key="${_AU_BILL_KEYS[$1]}" label="${_AU_BILL_LABELS[$1]}" cur new
+  cur=$(_bvk_bill_get "$key")
+  [ -z "$cur" ] && [ "$key" = email ] && cur="$P_MAIL"
+  echo; builtin read -e -r -i "$cur" -p "   $label: " new </dev/tty || return 0
+  new="${new#"${new%%[![:space:]]*}"}"; new="${new%"${new##*[![:space:]]}"}"
+  [ "$new" = "$cur" ] && [ -n "$(_bvk_bill_get "$key")" ] && return 0
+  if _bvk_bill_valid "$key" "$new"; then _bvk_bill_set "$key" "$new" && echo "   ✅ $label saved."; else _au_pause; fi
+}
+
+_au_recharge_build() {
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
+  _AU_MAIL="$P_MAIL"; _filter_reset_state
+  items=("Recharge your account" "Recharge others' accounts"); _hl_index=0
+}
+_au_recharge_action() {  # $1 = 0-based slot
+  case "$1" in
+    0) _bvk_pay_recharge self ;;
+    1) _bvk_pay_recharge others ;;
+  esac
+}
+
+# ---- talking to the payments worker
+_bvk_pay_amount() {  # prompts; sets _PAY_AMOUNT (validated, >= 1) ; returns 1 on cancel
+  local a
+  while :; do
+    builtin read -e -r -p "   Amount in US\$ (min 1, blank = cancel): " a </dev/tty || return 1
+    [ -z "$a" ] && return 1
+    if [[ "$a" =~ ^[0-9]{1,5}(\.[0-9]{1,2})?$ ]] && awk "BEGIN{exit !($a>=1)}"; then _PAY_AMOUNT="$a"; return 0; fi
+    echo "   ❌ Enter a number of at least 1 (up to 2 decimals)."
+  done
+}
+_bvk_pay_accounts_json() {  # $1=file -> JSON array on stdout ; reasons on stderr ; rc 2 on bad file
+  node -e '
+    const fs = require("fs"); const out = []; const seen = new Set();
+    const mailRe = /^[^\s@<>"\x27`$\\;|&(){}\/]+@[^\s@]+\.[^\s@]+$/, dRe = /^[A-Za-z0-9]{16}(-[A-Za-z0-9]{16}){26}$/;
+    fs.readFileSync(process.argv[1], "utf8").split(/\r?\n/).forEach((raw, i) => {
+      const l = raw.replace(/#.*$/, "").trim(); if (!l || /^"?e?-?mail"?[\s,;]+"?diseps/i.test(l)) return;
+      const p = l.split(/[\s,;]+/).filter(Boolean).map((x) => x.replace(/^"|"$/g, ""));
+      if (p.length !== 2 || !mailRe.test(p[0]) || !dRe.test(p[1]) || new Set(p[1].split("-")).size !== 27) { console.error("line " + (i + 1) + ": expected  email,diseps  (27 codes)"); process.exit(2); }
+      const k = p[0].toLowerCase() + "|" + p[1]; if (seen.has(k)) { console.error("line " + (i + 1) + ": listed twice"); process.exit(2); }
+      seen.add(k); out.push({ mail: p[0].toLowerCase(), diseps: p[1] });
+    });
+    if (!out.length) { console.error("no accounts found in the file"); process.exit(2); }
+    if (out.length > 100) { console.error("at most 100 accounts per link (found " + out.length + ")"); process.exit(2); }
+    process.stdout.write(JSON.stringify(out));' "$1"
+}
+_bvk_pay_build() {  # $1=kind $2=amount $3=accounts-json-or-empty -> JSON body
+  B_NAME="$(_bvk_bill_get name)" B_ADDRESS="$(_bvk_bill_get address)" B_MOBILE="$(_bvk_bill_get mobile)" \
+  B_EMAIL="$(_bvk_bill_get email)" B_TAXID="$(_bvk_bill_get tax_id)" \
+  node -e '
+    const e = process.env, o = { kind: process.argv[1], amount: process.argv[2],
+      bill_to: { name: e.B_NAME, address: e.B_ADDRESS, mobile: e.B_MOBILE, email: e.B_EMAIL, tax_id: e.B_TAXID } };
+    if (process.argv[3]) o.accounts = JSON.parse(process.argv[3]);
+    process.stdout.write(JSON.stringify(o));' "$1" "$2" "${3:-}"
+}
+_bvk_pay_open() {  # best-effort browser open
+  if   command -v termux-open-url >/dev/null 2>&1; then termux-open-url "$1" >/dev/null 2>&1
+  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$1" >/dev/null 2>&1 &
+  elif command -v open >/dev/null 2>&1; then open "$1" >/dev/null 2>&1
+  else return 1; fi
+}
+_bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary line
+  local kind="$1" amount="$2" accts="${3:-}" ans body link exp total
+  [ -n "$(_bvk_bill_get name)" ] && [ -n "$(_bvk_bill_get email)" ] || {
+    echo "   ⚠️  Fill Billing details first (at least NAME and EMAIL), then try again."; return 1; }
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
+  body=$(_bvk_pay_build "$kind" "$amount" "$accts") || { echo "   ❌ Could not build the request (node is required)."; return 1; }
+  echo "   $4"; builtin read -r -p "   Create the payment link? (y/n): " ans </dev/tty
+  [[ "${ans,,}" == y* ]] || { echo "   Cancelled."; return 1; }
+  echo "   ⏳ Creating link…"
+  if ! _bvk_auth_call POST /api/orders "$body" creds "$_BVK_PAY_URL"; then _bvk_auth_err; return 1; fi
+  link=$(_bb_json_get "$_AUTH_BODY" link); exp=$(_bb_json_get "$_AUTH_BODY" expires_at); total=$(_bb_json_get "$_AUTH_BODY" total)
+  [ -n "$link" ] || { echo "   ❌ Unexpected server response."; return 1; }
+  echo; echo "   ✅ Payment link ready — total US\$$total · valid for 30 minutes, or until it is paid"
+  echo "   🔗 $link"
+  echo "   Open it, choose Razorpay or PayPal, and pay. Credits are added once the payment is confirmed."
+  builtin read -r -p "   Open in browser now? (y/n): " ans </dev/tty
+  [[ "${ans,,}" == y* ]] && { _bvk_pay_open "$link" || echo "   (no browser opener found — copy the link)"; }
+  return 0
+}
+_bvk_pay_recharge() {  # $1=self|others
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 0
+  local f accts n n_ct
+  echo
+  if [ "$1" = self ]; then
+    echo "   Recharging: $P_MAIL"
+    _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
+    _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "US\$$_PAY_AMOUNT → $(awk "BEGIN{printf \"%d\", $_PAY_AMOUNT*1000}") credits to $P_MAIL"
+  else
+    echo "   File (.csv / .txt): one account per line, as  email,diseps"
+    builtin read -e -r -p "   Path (blank = cancel): " f </dev/tty; f="${f/#\~/$HOME}"
+    [ -z "$f" ] && { echo "   Cancelled."; _au_pause; return 0; }
+    [ -f "$f" ] && [ -r "$f" ] || { echo "   ❌ Cannot read: $f"; _au_pause; return 0; }
+    [ "$(wc -c < "$f")" -le 1048576 ] || { echo "   ❌ File is larger than 1 MB."; _au_pause; return 0; }
+    accts=$(_bvk_pay_accounts_json "$f") || { echo "   ❌ $f"; _au_pause; return 0; }
+    n=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).length))' "$accts")
+    echo "   Found $n account(s). The SAME amount is credited to each."
+    _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
+    n_ct=$(awk "BEGIN{printf \"%.2f\", $_PAY_AMOUNT*$n}")
+    _bvk_pay_create recharge_others "$_PAY_AMOUNT" "$accts" "$n account(s) × US\$$_PAY_AMOUNT = US\$$n_ct total ($(awk "BEGIN{printf \"%d\", $_PAY_AMOUNT*1000}") credits each)"
+  fi
+  _au_pause
+}
+_bvk_pay_sponsorship() {
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 0
+  echo; echo "   Sponsor bashbasicsbyvk. No account is recharged; you receive an invoice."
+  _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
+  _bvk_pay_create sponsorship "$_PAY_AMOUNT" "" "Sponsorship of US\$$_PAY_AMOUNT"
+  _au_pause
+}
+
+_bvk_auth_sub_menu() {  # $1 = billing | recharge
+  local prev="$_AU_SCREEN"; _AU_SCREEN="$1"
+  _au_fresh || { _AU_SCREEN="$prev"; return 0; }
+  while :; do
+    _read_choice_filtered
+    case "${choice,,}" in
+      u) break ;;
+      q) _AU_QUIT=1; break ;;
+      "") ;;
+      *[!0-9]*) _bvk_invalid ;;
+      *) if _au_row "$choice"; then
+           case "$1" in billing) _au_billing_action "$_AU_SLOT" ;; recharge) _au_recharge_action "$_AU_SLOT" ;; esac
+         else _bvk_invalid; fi ;;
+    esac
+    _au_fresh || break
+  done
+  _AU_SCREEN="$prev"
+}
+
 # ---- user screen
-_AU_ACTIONS=("Change Mail ID" "Regenerate diseps" "Regenerate apikey" "Regenerate dinons" "Report Issue" "Recharge" "Set as active user")
+_AU_ACTIONS=("Change Mail ID" "Regenerate diseps" "Regenerate apikey" "Regenerate dinons" "Report Issue" "Billing details" "Recharge" "Sponsorship" "Set as active user")
 _au_user_rowtext() {
   _au_slot "$1"
   local mark=""
-  [ "$_AU_SLOT" -eq 6 ] && [ "$_AU_UID" = "$_BVK_AUTH_ACTIVE" ] && mark="  ★ active"
+  [ "$_AU_SLOT" -eq 8 ] && [ "$_AU_UID" = "$_BVK_AUTH_ACTIVE" ] && mark="  ★ active"
   printf -v _vp_line ' %2d) %s%s' "$1" "${items[$(( $1 - 1 ))]}" "$mark"
 }
 _au_plain_rowtext() { printf -v _vp_line ' %2d) %s' "$1" "${items[$(( $1 - 1 ))]}"; }
@@ -437,6 +628,7 @@ _au_set_viewport() {
   case "$_AU_SCREEN" in
     user)   _vp_rowtext_fn=_au_user_rowtext; _vp_header_fn=_au_user_header; _vp_footer_fn=_au_user_footer ;;
     fields) _vp_rowtext_fn=_au_plain_rowtext; _vp_header_fn=_au_user_header; _vp_footer_fn=_au_user_footer ;;
+    billing|recharge) _vp_rowtext_fn=_au_plain_rowtext; _vp_header_fn=_au_sub_header; _vp_footer_fn=_au_sub_footer ;;
     *)    _vp_rowtext_fn=_au_list_rowtext; _vp_header_fn=_au_list_header; _vp_footer_fn=_au_list_footer ;;
   esac
   _vp_cache_reset
@@ -448,6 +640,8 @@ _au_fresh() {
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   case "$_AU_SCREEN" in
     user) _au_user_build || return 1 ;;
+    billing)  _au_billing_build || return 1 ;;
+    recharge) _au_recharge_build || return 1 ;;
     *)    _au_list_build ;;
   esac
   _au_set_viewport
@@ -533,10 +727,10 @@ _au_user_action() {  # $1 = 0-based action slot
     2) _bvk_auth_regen apikey "$file" ;;
     3) _bvk_auth_regen dinons "$file" ;;
     4) _bvk_auth_mailto "bashbasicsbyvk: support" "mail: $P_MAIL" ;;
-    5) _bvk_auth_mailto "bashbasicsbyvk: recharge" "mail: $P_MAIL
-diseps: $P_DISEPS
-(see -h → pricing for the charge break-up)" ;;
-    6) printf '%s' "$_AU_UID" > "$_BVK_AUTH_DIR/active"; echo "★ Active user set." ;;
+    5) _bvk_auth_sub_menu billing ;;
+    6) _bvk_auth_sub_menu recharge ;;
+    7) _bvk_pay_sponsorship ;;
+    8) printf '%s' "$_AU_UID" > "$_BVK_AUTH_DIR/active"; echo "★ Active user set." ;;
   esac
 }
 
@@ -552,7 +746,7 @@ _bvk_auth_user_menu() {  # $1=profile id
       ux) _au_export_ids "$_AU_UID" ;;
       ui) _bvk_auth_import ;;
       *[!0-9]*) _bvk_invalid ;;
-      *)  if _au_row "$choice"; then _au_user_action "$_AU_SLOT"
+      *)  if _au_row "$choice"; then _au_user_action "$_AU_SLOT"; [ "$_AU_QUIT" = 1 ] && break
           else _bvk_invalid; fi ;;
     esac
     _au_fresh || break          # profile vanished -> back to the list
