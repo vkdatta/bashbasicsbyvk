@@ -34,11 +34,16 @@ jobs:
 
       - name: Determine requested version bump
         id: bump
+        env:
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
         shell: bash
         run: |
-          COMMIT_MESSAGE="$(git log -1 --format=%B)"
+          git fetch origin "$TRIGGER_SHA"
 
-          echo "Latest commit message:"
+          COMMIT_MESSAGE="$(git log -1 --format=%B "$TRIGGER_SHA")"
+
+          echo "Build-triggering commit: $TRIGGER_SHA"
+          echo "Commit message:"
           echo "$COMMIT_MESSAGE"
 
           if grep -qE '(^|[[:space:]])#major([[:space:]]|$)' <<< "$COMMIT_MESSAGE"; then
@@ -116,10 +121,7 @@ jobs:
 
           path.write_text(updated)
 
-          print(
-              f"Updated setup.cfg version to "
-              f"{os.environ['NEW_VERSION']}"
-          )
+          print(f"Updated setup.cfg version to {os.environ['NEW_VERSION']}")
           PY
 
           grep -n '^version[[:space:]]*=' setup.cfg
