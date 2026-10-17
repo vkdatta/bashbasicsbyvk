@@ -40,6 +40,19 @@ jobs:
         run: |
           git fetch origin main --tags
 
+          # Automated version commits carry this marker; never treat them
+          # as a source of version bumps.
+          is_auto() {
+            grep -qE '^(chore: update package version to |Auto-Version: )' <<< "$1"
+          }
+
+          # Subject of the commit that triggered the build. The version
+          # commit reuses it so the latest commit on main keeps the
+          # author's message.
+          SUBJECT="$(git log -1 --format=%s "$TRIGGER_SHA" 2>/dev/null || true)"
+          if is_auto "$SUBJECT"; then SUBJECT=""; fi
+          echo "subject=${SUBJECT}" >> "$GITHUB_OUTPUT"
+
           BUMP=""
           COMMIT_MESSAGE=""
           COMMIT_SHA=""
@@ -48,7 +61,7 @@ jobs:
           if git cat-file -e "${TRIGGER_SHA}^{commit}" 2>/dev/null; then
             MESSAGE="$(git log -1 --format=%B "$TRIGGER_SHA")"
 
-            if ! grep -qE '^chore: update package version to ' <<< "$MESSAGE"; then
+            if ! is_auto "$MESSAGE"; then
               if grep -qE '(^|[[:space:]])#major([[:space:]]|$)' <<< "$MESSAGE"; then
                 BUMP="major"
               elif grep -qE '(^|[[:space:]])#minor([[:space:]]|$)' <<< "$MESSAGE"; then
@@ -70,7 +83,7 @@ jobs:
             while IFS= read -r SHA; do
               MESSAGE="$(git log -1 --format=%B "$SHA")"
 
-              if grep -qE '^chore: update package version to ' <<< "$MESSAGE"; then
+              if is_auto "$MESSAGE"; then
                 continue
               fi
 
@@ -166,13 +179,16 @@ jobs:
         if: ${{ steps.version.outputs.new_tag != '' }}
         env:
           NEW_VERSION: ${{ steps.version.outputs.new_version }}
+          ORIGINAL_SUBJECT: ${{ steps.bump.outputs.subject }}
         run: |
           git add setup.cfg
 
           if git diff --cached --quiet; then
             echo "setup.cfg already contains the calculated version."
           else
-            git commit -m "chore: update package version to ${NEW_VERSION}"
+            git commit \
+              -m "${ORIGINAL_SUBJECT:-chore: update package version to ${NEW_VERSION}}" \
+              -m "Auto-Version: ${NEW_VERSION}"
           fi
 
           git push origin HEAD:main
