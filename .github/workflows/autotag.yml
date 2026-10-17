@@ -34,34 +34,71 @@ jobs:
 
       - name: Determine requested version bump
         id: bump
+        shell: bash
         env:
           TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
-        shell: bash
         run: |
-          git fetch origin "$TRIGGER_SHA"
+          git fetch origin main --tags
 
-          COMMIT_MESSAGE="$(git log -1 --format=%B "$TRIGGER_SHA")"
+          BUMP=""
+          COMMIT_MESSAGE=""
+          COMMIT_SHA=""
 
-          echo "Build-triggering commit: $TRIGGER_SHA"
-          echo "Commit message:"
-          echo "$COMMIT_MESSAGE"
+          # Prefer the exact commit that triggered the build.
+          if git cat-file -e "${TRIGGER_SHA}^{commit}" 2>/dev/null; then
+            MESSAGE="$(git log -1 --format=%B "$TRIGGER_SHA")"
 
-          if grep -qE '(^|[[:space:]])#major([[:space:]]|$)' <<< "$COMMIT_MESSAGE"; then
-            BUMP="major"
-          elif grep -qE '(^|[[:space:]])#minor([[:space:]]|$)' <<< "$COMMIT_MESSAGE"; then
-            BUMP="minor"
-          elif grep -qE '(^|[[:space:]])#patch([[:space:]]|$)' <<< "$COMMIT_MESSAGE"; then
-            BUMP="patch"
-          else
-            BUMP=""
+            if ! grep -qE '^chore: update package version to ' <<< "$MESSAGE"; then
+              if grep -qE '(^|[[:space:]])#major([[:space:]]|$)' <<< "$MESSAGE"; then
+                BUMP="major"
+              elif grep -qE '(^|[[:space:]])#minor([[:space:]]|$)' <<< "$MESSAGE"; then
+                BUMP="minor"
+              elif grep -qE '(^|[[:space:]])#patch([[:space:]]|$)' <<< "$MESSAGE"; then
+                BUMP="patch"
+              fi
+            fi
+
+            if [[ -n "$BUMP" ]]; then
+              COMMIT_SHA="$TRIGGER_SHA"
+              COMMIT_MESSAGE="$MESSAGE"
+            fi
           fi
+
+          # Fallback: find the latest explicit marker, ignoring
+          # automated version-update commits.
+          if [[ -z "$BUMP" ]]; then
+            while IFS= read -r SHA; do
+              MESSAGE="$(git log -1 --format=%B "$SHA")"
+
+              if grep -qE '^chore: update package version to ' <<< "$MESSAGE"; then
+                continue
+              fi
+
+              if grep -qE '(^|[[:space:]])#major([[:space:]]|$)' <<< "$MESSAGE"; then
+                BUMP="major"
+              elif grep -qE '(^|[[:space:]])#minor([[:space:]]|$)' <<< "$MESSAGE"; then
+                BUMP="minor"
+              elif grep -qE '(^|[[:space:]])#patch([[:space:]]|$)' <<< "$MESSAGE"; then
+                BUMP="patch"
+              else
+                continue
+              fi
+
+              COMMIT_SHA="$SHA"
+              COMMIT_MESSAGE="$MESSAGE"
+              break
+            done < <(git log origin/main -n 30 --format='%H')
+          fi
+
+          echo "Selected commit: ${COMMIT_SHA:-none}"
+          echo "Selected message: ${COMMIT_MESSAGE:-none}"
 
           if [[ -n "$BUMP" ]]; then
             echo "Explicit version bump: $BUMP"
             echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
             echo "rules=*:${BUMP}:Release" >> "$GITHUB_OUTPUT"
           else
-            echo "No explicit version marker. Using existing commit-message rules."
+            echo "No explicit version marker found."
             echo "bump=" >> "$GITHUB_OUTPUT"
             echo "rules=" >> "$GITHUB_OUTPUT"
           fi
@@ -115,13 +152,11 @@ jobs:
 
           if count != 1:
               raise SystemExit(
-                  "ERROR: Could not find exactly one version assignment "
-                  "in setup.cfg."
+                  "ERROR: Could not find a version assignment in setup.cfg."
               )
 
           path.write_text(updated)
-
-          print(f"Updated setup.cfg version to {os.environ['NEW_VERSION']}")
+          print(f"Updated setup.cfg to version {os.environ['NEW_VERSION']}")
           PY
 
           grep -n '^version[[:space:]]*=' setup.cfg
