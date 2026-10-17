@@ -203,9 +203,7 @@ _st_draw() {
     *) f2="Type 1-$_st_cnt, then enter to choose" ;;
   esac
   if [ -z "${fq:-}" ] && (( _st_cnt > 1 )); then f2="$f2   =) Filter"; fi
-  if [[ "$hint" == *"←/→"* ]]; then
-    case "$_st_cnt" in 0|1) ;; *) f2="Type 1-$_st_cnt + enter   ←/→) Reorder" ;; esac
-  fi
+  if [[ "$hint" == *"←/→"* ]]; then f2="clr) Clear all"; fi
 
   # move back to the first line of the previous block
   if (( prev > 1 )); then out+=$'\r\033['"$(( prev - 1 ))"$'A'; fi
@@ -280,9 +278,10 @@ _st_follow() {
   return 0
 }
 
-# _st_run "Title" build_fn act_fn ["legacy hint"]
+# _st_run "Title" build_fn act_fn ["legacy hint"] [cmd_fn]
+#   cmd_fn BUF — optional: gets typed text before the number/command rules; return 0 = handled
 _st_run() {
-  local title="$1" build="$2" act="$3" hint="${4:-}"
+  local title="$1" build="$2" act="$3" hint="${4:-}" cmdfn="${5:-}"
   local cur=-1 top=0 prev=0 n buf="" num path_title fq="" need=1 page="${_vp_page_step:-10}"
   local parent_title="${_st_title_now:-}"
   _st_depth=$(( _st_depth + 1 ))
@@ -335,6 +334,7 @@ _st_run() {
           buf=""; cur=-1; top=0
           continue
         fi
+        if [ -n "$cmdfn" ] && "$cmdfn" "${buf,,}"; then buf=""; continue; fi
         case "${buf,,}" in
           u) if [ -n "$fq" ]; then fq=""; buf=""; cur=-1; top=0; continue; fi
              break ;;                       # buf keeps "u" so the prompt line can stay

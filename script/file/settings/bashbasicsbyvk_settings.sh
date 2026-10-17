@@ -346,8 +346,27 @@ _st_gv_act() {
   group_view_levels_str="${group_view_levels[*]}"
   save_settings
 }
+# typed commands:  clr = clear all levels · "3,4,2" (or "3 4 2") = use exactly these levels in this order
+_st_gv_cmd() {
+  local t="${1//,/ }" x
+  local -a new=()
+  if [ "$1" = clr ]; then
+    group_view_levels=()
+  elif [[ "$1" == *[,\ ]* && "$t" =~ ^[0-9\ ]+$ ]]; then
+    for x in $t; do
+      (( 10#$x >= 1 && 10#$x <= ${#_ST_GV_LEVELS[@]} )) || return 1
+      [[ " ${new[*]} " == *" ${_ST_GV_LEVELS[$((10#$x-1))]} "* ]] || new+=("${_ST_GV_LEVELS[$((10#$x-1))]}")
+    done
+    group_view_levels=("${new[@]}")
+  else
+    return 1
+  fi
+  group_view_levels_str="${group_view_levels[*]}"
+  save_settings
+  return 0
+}
 group_view_settings() {
-  _st_run "Group by" _st_gv_build _st_gv_act "←/→ change order"
+  _st_run "Group by" _st_gv_build _st_gv_act "←/→ change order" _st_gv_cmd
 }
 
 # ── animation ────────────────────────────────────────────────────────────────
