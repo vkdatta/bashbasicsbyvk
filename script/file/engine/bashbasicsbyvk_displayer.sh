@@ -66,12 +66,13 @@ _bvk_go_bin() {
 # Set BVK_SHOW_SRC=0 to hide the tag.
 declare -g _BVK_LOAD_SRC=""
 declare -g _BVK_META_SRC=""
+declare -g _BVK_GROUP_SRC=""         # who grouped the rows (Group by): c | py | "" (not grouped)
 
 _bvk_src_tag_v() {
   _bst_out=""
   [ "${BVK_SHOW_SRC:-1}" = "1" ] || return 0
   [ -n "$_BVK_LOAD_SRC" ] || return 0
-  if [ "$_BVK_LOAD_SRC" = c ] && [ "${_BVK_META_SRC:-c}" = c ]; then
+  if [ "$_BVK_LOAD_SRC" = c ] && [ "${_BVK_META_SRC:-c}" = c ] && [ "${_BVK_GROUP_SRC:-c}" = c ]; then
     _bst_out=" [loaded by c]"
   else
     _bst_out=" [loaded by py]"
@@ -755,10 +756,7 @@ _needs_metadata() {
   [[ " ${display_suffix_set:-} " == *" time "* ]] && return 0
   [[ " ${display_suffix_set:-} " == *" children "* ]] && return 0
   case "${sort_mode:-az}" in new|old|big|small) return 0 ;; esac
-  for lvl in "${group_view_levels[@]}"; do
-    case "$lvl" in year|month|date) return 0 ;; esac
-  done
-  return 1
+  return 1          # Group by needs none: the C / Python grouper stats the files itself
 }
 
 _needs_dir_size() {
@@ -1026,71 +1024,163 @@ _display_items_flat() {
   done
 }
 
-# ── Grouped display ───────────────────────────────────────────────────────────
+# ── Group by (Settings → Display → Group by) ─────────────────────────────────
+# The grouping itself is done by the C helper (bvk-ls group); _py_group_python is its
+# exact Python twin, used only when the binary is missing / too old / fails.  Bash does
+# NO per-file work here: it writes the path list, calls the helper once, and reads three
+# files back with mapfile.
+#
+#   items[]      re-ordered so every group is contiguous (so "number N" = items[N-1] still holds)
+#   _gv_row[]    one entry per screen row:  "H<header text>"  or the item number
+#   _gv_irow[]   item number -> screen row
+# The viewport (bashbasicsbyvk_viewport.sh) draws from these.
+declare -ga _gv_row=()
+declare -ga _gv_irow=()
+declare -g  _gv_on=false _gv_n=0 _gv_R=0 _gv_depth=0 _gv_first="" _gv_last="" _gv_pad=""
 
-_gk_ext()   {
-  local bn="${1##*/}"
-  [[ "$bn" == *.shortcut ]] && { printf '[shortcut]'; return; }
-  [ -d "$1" ] && { printf '[dir]'; return; }
-  [[ "$bn" == *.* ]] && printf '.%s' "${bn##*.}" || printf '(no ext)'
-}
-_gk_year()  { local _ft_out; _fmt_time_v "${item_mtime[$1]:-0}" year;  printf '%s' "$_ft_out"; }
-_gk_month() { local _ft_out; _fmt_time_v "${item_mtime[$1]:-0}" month; printf '%s' "$_ft_out"; }
-_gk_date()  { local _ft_out; _fmt_time_v "${item_mtime[$1]:-0}" date;  printf '%s' "$_ft_out"; }
-
-_composite_key() {
-  local f="$1" key=""
-  for lvl in "${group_view_levels[@]}"; do
-    case "$lvl" in
-      ext)   key+="$(_gk_ext   "$f")|" ;;
-      year)  key+="$(_gk_year  "$f")|" ;;
-      month) key+="$(_gk_month "$f")|" ;;
-      date)  key+="$(_gk_date  "$f")|" ;;
-    esac
-  done
-  printf '%s' "$key"
+_gv_off() {
+  _gv_on=false; _gv_n=0; _gv_R=0; _gv_depth=0; _gv_first=""; _gv_last=""; _gv_pad=""
+  _gv_row=(); _gv_irow=()
+  _BVK_GROUP_SRC=""
 }
 
-_display_grouped() {
-  local depth="${#group_view_levels[@]}"
-  [ "$depth" -eq 0 ] && { _display_items_flat; return; }
+# Which screens group: the main folder view only (not the imaginary A-Z index, not the
+# inner fx / sw loops, not screens that draw their own rows).
+_gv_want() {
+  [ "${#group_view_levels[@]}" -gt 0 ] || return 1
+  [ "${#items[@]}" -gt 0 ] || return 1
+  [ "${imaginary_mode:-false}" = true ] && return 1
+  [ "${_vp_mode:-items}" = items ] || return 1
+  [ -z "${_vp_rowtext_fn:-}" ] && [ -z "${_vp_count_fn:-}" ] || return 1
+  [ "${_sw_in_mode:-0}" = 1 ] && return 1
+  [ "${_fx_in_mode:-0}" = 1 ] && return 1
+  return 0
+}
 
-  local -a all_keys=()
-  declare -A key_seen=()
-  declare -A key_items=()
-  for f in "${items[@]}"; do
-    local ck; ck=$(_composite_key "$f")
-    [ -z "${key_seen[$ck]+x}" ] && { all_keys+=("$ck"); key_seen["$ck"]=1; }
-    key_items["$ck"]+="$f"$'\n'
-  done
+# _py_group_python PATHS_FILE LEVELS HL OUT_PREFIX — same files, same stdout as `bvk-ls group`.
+_py_group_python() {
+python3 - "$@" <<'PYEOF'
+import os, sys, time
+paths_file, levels, hl, prefix = sys.argv[1], sys.argv[2], int(sys.argv[3] or 0), sys.argv[4]
+MON = ("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+NAME = {"ext":"EXT","year":"YEAR","month":"MONTH","date":"DATE"}
+lv = []
+for t in levels.split(","):
+    if t in NAME and t not in lv: lv.append(t)
+d = len(lv)
+with open(paths_file, encoding="utf-8", errors="surrogateescape") as fh:
+    paths = [l.rstrip("\n") for l in fh]
+paths = [p for p in paths if p != ""]
+n = len(paths)
 
-  local global_idx=1 ck f indent indent_items lvl_idx lvl part line
-  local -a parts
-  local _rdp_icon _rdp_bn _sc_icon _sc_display _bs_out
+def ascii_lower(s):
+    return "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in s)
 
-  for ck in "${all_keys[@]}"; do
-    IFS='|' read -ra parts <<< "$ck"
-    lvl_idx=0
-    for lvl in "${group_view_levels[@]}"; do
-      indent=$(printf '%*s' "$(( lvl_idx * 2 ))" '')
-      printf "%s── %s: %s\n" "$indent" "${lvl^^}" "${parts[$lvl_idx]:-?}"
-      lvl_idx=$(( lvl_idx + 1 ))
-    done
-    indent_items=$(printf '%*s' "$(( depth * 2 ))" '')
-    while IFS= read -r f; do
-      [ -z "$f" ] && continue
-      _resolve_display_parts_v "$f"
-      if [ -n "${display_suffix_set:-}" ]; then _build_suffix_v "$f"; else _bs_out=""; fi
-      printf -v line "%s%2d) %s %s%s" "$indent_items" "$global_idx" "$_rdp_icon" "$_rdp_bn" "$_bs_out"
-      if [ "$global_idx" -eq "${_hl_index:-0}" ]; then
-        _highlight_v "$line"; printf '%s\n' "$_hl_out"
-      else
-        printf '%s\n' "$line"
-      fi
-      global_idx=$(( global_idx + 1 ))
-    done <<< "${key_items[$ck]}"
-    echo
-  done
+info = []
+for p in paths:
+    isdir = False; mt = 0
+    if d:
+        try:
+            st = os.stat(p); isdir = (st.st_mode & 0o170000) == 0o040000; mt = int(st.st_mtime)
+        except OSError:
+            pass
+    try: tm = time.localtime(mt)
+    except (OverflowError, OSError, ValueError): tm = time.localtime(0)
+    info.append((p.rsplit("/", 1)[-1], isdir, tm.tm_year, tm.tm_mon - 1, tm.tm_mday))
+
+def label(l, x):
+    bn, isdir, y, m, dd = x
+    if l == "year":  return "%d" % y
+    if l == "month": return "%d-%s" % (y, MON[m])
+    if l == "date":  return "%d-%s-%02d" % (y, MON[m], dd)
+    if len(bn) >= 9 and bn.endswith(".shortcut"): return "[shortcut]"
+    if isdir: return "[dir]"
+    if "." not in bn: return "(no ext)"
+    return "." + ascii_lower(bn[bn.rindex(".") + 1:])
+
+def keyof(l, x):
+    if l == "ext":   return label("ext", x)
+    if l == "year":  return (x[2],)
+    if l == "month": return (x[2], x[3])
+    return (x[2], x[3], x[4])
+
+rank = [[0] * max(d, 1) for _ in range(n)]
+nuniq = []
+for k in range(d):
+    seen = {}
+    for i in range(n):
+        key = (rank[i][k - 1] if k else 0, keyof(lv[k], info[i]))
+        r = seen.get(key)
+        if r is None:
+            r = seen[key] = len(seen)
+        rank[i][k] = r
+    nuniq.append(len(seen))
+order = sorted(range(n), key=lambda i: rank[i][:d]) if d else list(range(n))
+gsz = []
+for k in range(d):
+    c = [0] * (nuniq[k] + 1)
+    for i in range(n): c[rank[i][k]] += 1
+    gsz.append(c)
+
+rows = 0
+newhl = 0 if 1 <= hl <= n else max(hl, 0)
+fi = open(prefix + ".items", "w", encoding="utf-8", errors="surrogateescape", newline="\n")
+fr = open(prefix + ".rows",  "w", encoding="utf-8", errors="surrogateescape", newline="\n")
+fw = open(prefix + ".irow",  "w", encoding="utf-8", newline="\n")
+for j, i in enumerate(order):
+    fd = 0
+    if j:
+        p = order[j - 1]; fd = d
+        for k in range(d):
+            if rank[i][k] != rank[p][k]:
+                fd = k; break
+    for k in range(fd, d):
+        fr.write("H%s\u2500\u2500 %s: %s (%d)\n" % (" " * (2 * k), NAME[lv[k]], label(lv[k], info[i]), gsz[k][rank[i][k]]))
+        rows += 1
+    fr.write("%d\n" % (j + 1)); rows += 1
+    fw.write("%d\n" % rows)
+    fi.write(paths[i] + "\n")
+    if hl >= 1 and hl == i + 1: newhl = j + 1
+fi.close(); fr.close(); fw.close()
+print(n, rows, newhl, d)
+PYEOF
+}
+
+# _gv_build — group the CURRENT items[].  Returns 0 with items[] re-ordered and
+# _gv_row / _gv_irow filled, or returns 1 and leaves everything untouched (flat list).
+_gv_build() {
+  _gv_off
+  _gv_want || return 1
+  local n="${#items[@]}" lv="${group_view_levels[*]}" hl="${_hl_index:-0}" pfx res="" src=c
+  lv="${lv// /,}"
+  pfx="$(_bvk_tmp)" || return 1
+  printf '%s\n' "${items[@]}" >"$pfx.in"
+  if _bvk_go_bin && res="$("$_BVK_GO_BIN" group "$pfx.in" "$lv" "$hl" "$pfx" 2>/dev/null)" && [ -n "$res" ]; then
+    :
+  else
+    src=py
+    res="$(_py_group_python "$pfx.in" "$lv" "$hl" "$pfx" 2>/dev/null)" || res=""
+  fi
+  local rn="" rr="" rh="" rd=""
+  read -r rn rr rh rd <<<"$res"
+  if [ "$rn" != "$n" ] || [ -z "$rr" ]; then rm -f "$pfx" "$pfx".*; return 1; fi
+  local -a _t=() _r=() _i=()
+  mapfile -t _t <"$pfx.items"
+  mapfile -t _r <"$pfx.rows"
+  mapfile -t _i <"$pfx.irow"
+  rm -f "$pfx" "$pfx".*
+  if [ "${#_t[@]}" -ne "$n" ] || [ "${#_r[@]}" -ne "$rr" ] || [ "${#_i[@]}" -ne "$n" ]; then return 1; fi
+  items=("${_t[@]}")
+  _gv_row=("${_r[@]}")
+  _gv_irow=("${_i[@]}")
+  _gv_n=$n; _gv_R=$rr; _gv_depth=$rd
+  _gv_first="${items[0]}"; _gv_last="${items[n-1]}"
+  printf -v _gv_pad '%*s' $(( rd * 2 )) ''
+  (( hl >= 1 && hl <= n )) && _hl_index="$rh"
+  _win_lo=0; _win_hi=0; _meta_loaded=false        # the metadata window is by position, and positions just changed
+  _BVK_GROUP_SRC="$src"
+  _gv_on=true
+  return 0
 }
 
 # ── display_items — public entry point ────────────────────────────────────────
@@ -1104,9 +1194,7 @@ display_items() {
   if _needs_metadata && ! ${_vp_meta_primed:-false}; then
     _ensure_meta
   fi
-  local use_group=false
-  [ "${#group_view_levels[@]}" -gt 0 ] && ! ${imaginary_mode:-false} && use_group=true
-  if $use_group; then _display_grouped; else _display_items_flat; fi
+  _display_items_flat
 }
 
 # ── Multi-select parser ───────────────────────────────────────────────────────

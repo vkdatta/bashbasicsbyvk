@@ -21,7 +21,7 @@ DEFAULT_FILTER_HIDDEN_MODE="respect"
 DEFAULT_FILTER_RECURSIVE=false      # = filter looks only in the folder you are viewing
 DEFAULT_DISPLAY_FILTER_PERSIST=false
 DEFAULT_ANIM_OUTER="pop"       # outer loop: whole screen appears at once
-DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw): rows roll in top to bottom
+DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw)  (draws instantly, same as pop)
 DEFAULT_NUKE_TIME_SECONDS=3600   # up- / c2c-: how long a new link lives (1 hour). 60 s .. 30 days
 DEFAULT_UX_NUKE_TIME_SECONDS=2592000   # ux-: how long a new share lives (30 days). 60 s .. 30 days
 DEFAULT_APP_TIMEZONE=""          # "" = follow the system clock; else an IANA name, e.g. Asia/Kolkata
@@ -355,10 +355,10 @@ _st_anim_build() {
   _st_reset
   _st_add h "Main screens"
   _st_eq "$anim_outer" pop;    _st_add r "pop      (appears at once)"   "$_o" "" o:pop
-  _st_eq "$anim_outer" carpet; _st_add r "carpet   (rows roll in)"      "$_o" "" o:carpet
+  _st_eq "$anim_outer" carpet; _st_add r "carpet   (instant too — no delay)" "$_o" "" o:carpet
   _st_add h "Inner loops  (fx / sw)"
   _st_eq "$anim_inner" pop;    _st_add r "pop      (appears at once)"   "$_o" "" i:pop
-  _st_eq "$anim_inner" carpet; _st_add r "carpet   (rows roll in)"      "$_o" "" i:carpet
+  _st_eq "$anim_inner" carpet; _st_add r "carpet   (instant too — no delay)" "$_o" "" i:carpet
 }
 _st_anim_act() {
   case "${_st_tag[$1]}" in

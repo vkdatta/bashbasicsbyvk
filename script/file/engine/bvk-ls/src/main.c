@@ -10,6 +10,7 @@
  *   bvk-ls groups   DIR HIDDEN PREFIX             "CH<TAB>count" per next-char group
  *   bvk-ls hashscan DIR HIDDEN PREFIX             paths whose next-char group is '#'
  *   bvk-ls gfilter  DIR HIDDEN PREFIX QUERY MODE  "G<TAB>ch<TAB>n" lines, then "F<TAB>path" lines
+ *   bvk-ls group    PATHS_FILE LEVELS HL OUT_PREFIX  Group-by view: writes OUT_PREFIX.items/.rows/.irow
  *
  * Exit code 3 (groups/hashscan) = "needs Unicode rules, ask Python".
  *
@@ -21,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static const char *g_argv0cmd;
 static char **g_a;
@@ -119,7 +121,7 @@ static void cmd_window(FILE *out) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) bvk_fatal("usage: bvk-ls scan|meta|dsize|count|window|groups|hashscan|gfilter ...");
+    if (argc < 2) bvk_fatal("usage: bvk-ls scan|meta|dsize|count|window|groups|hashscan|gfilter|group ...");
     g_argv0cmd = argv[1];
     g_a = argv + 2;
     g_na = argc - 2;
@@ -137,6 +139,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(g_argv0cmd, "groups")) rc = groups_cmd(out, arg(0), !strcmp(arg(1), "1"), arg(2));
     else if (!strcmp(g_argv0cmd, "gfilter"))
         rc = gfilter_cmd(out, arg(0), !strcmp(arg(1), "1"), arg(2), arg(3), arg(4));
+    else if (!strcmp(g_argv0cmd, "group")) { tzset(); rc = group_cmd(arg(0), arg(1), to_int(arg(2)), arg(3)); }
     else if (!strcmp(g_argv0cmd, "hashscan")) rc = hashscan_cmd(out, arg(0), !strcmp(arg(1), "1"), arg(2));
     else bvk_fatal("unknown command \"%s\"", g_argv0cmd);
 

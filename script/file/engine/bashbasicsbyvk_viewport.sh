@@ -159,16 +159,64 @@ _vp_fit() {
   _vp_line="${out}…"
 }
 
+# Row model.  _vp_n = number of ITEMS (what the user numbers and selects).
+#              _vp_R = number of screen ROWS (what scrolls / pages).
+# They are equal except in Group by view (_vp_gv=1), where group header rows sit between
+# the items: row -> item comes from _gv_row[], item -> row from _gv_irow[] (built by
+# _gv_build in bashbasicsbyvk_displayer.sh, by the C helper).  Every caller outside this
+# file keeps talking in ITEM numbers (_vp_ensure_visible, _vp_repaint_row, _hl_index …).
+declare -g _vp_R=0 _vp_gv=0
+
+# Group by only applies while the row map still matches items[] (cheap sanity check).
+_vp_gv_check() {
+  _vp_gv=0
+  [ "${_gv_on:-false}" = true ] || return 0
+  [ "$_vp_mode" == "items" ] || return 0
+  [ -z "${_vp_rowtext_fn:-}" ] && [ -z "${_vp_count_fn:-}" ] || return 0
+  [ "${imaginary_mode:-false}" = true ] && return 0
+  [ "${_sw_in_mode:-0}" = 1 ] && return 0
+  [ "${_fx_in_mode:-0}" = 1 ] && return 0
+  local n=${#items[@]}
+  (( n > 0 && n == _gv_n )) || return 0
+  [ "${items[0]}" = "$_gv_first" ] && [ "${items[n-1]}" = "$_gv_last" ] || return 0
+  _vp_gv=1
+  return 0
+}
+
 _vp_count() {
-if [ -n "${_vp_count_fn:-}" ]; then
+  _vp_gv=0
+  if [ -n "${_vp_count_fn:-}" ]; then
     $_vp_count_fn
+    _vp_R=$_vp_n
     return 0
   fi
   if [ "$_vp_mode" == "imaginary" ]; then
     _vp_n=${#imaginary_map[@]}
   else
     _vp_n=${#items[@]}
+    [ "${_gv_on:-false}" = true ] && _vp_gv_check
   fi
+  _vp_R=$_vp_n
+  (( _vp_gv )) && _vp_R=${#_gv_row[@]}
+  return 0
+}
+
+# Items hidden above / below the visible rows (Group by view): _vp_ab / _vp_bl.
+_vp_gv_hidden() {
+  local r v
+  _vp_ab=$_vp_n; _vp_bl=$_vp_n
+  r=$_vp_start
+  while (( r <= _vp_R )); do
+    v="${_gv_row[$((r-1))]}"
+    [[ "$v" == H* ]] || { _vp_ab=$(( v - 1 )); break; }
+    r=$(( r + 1 ))
+  done
+  r=$_vp_end
+  while (( r >= 1 )); do
+    v="${_gv_row[$((r-1))]}"
+    [[ "$v" == H* ]] || { _vp_bl=$(( _vp_n - v )); break; }
+    r=$(( r - 1 ))
+  done
 }
 _vp_row_text() {
   local i="$1" t
@@ -187,6 +235,7 @@ _vp_row_text() {
       _load_window "$i"      # keep the metadata window under the rows being drawn
     fi
     if declare -F _item_line_text_v >/dev/null 2>&1; then _item_line_text_v "$i"; t="$_ilt_out"; else t="$(_item_line_text "$i")"; fi
+    (( _vp_gv )) && t="$_gv_pad$t"
   fi
   _vp_fit "$t"
   _vp_rowcache[$i]="$_vp_line"
@@ -208,6 +257,7 @@ declare -g _vp_lazy_rows=false
 declare -g _vp_meta_primed=false   # true while display_items runs in the prime subshell
 
 _vp_prime_rows() {
+  declare -F _gv_off >/dev/null 2>&1 && _gv_off
   [ "$_vp_mode" == "items" ] || return 0
   declare -F _lk_load >/dev/null 2>&1 && _lk_load     # 🔒 suffix needs the lock registry
   # If a custom row-text function is set it owns every row — display_items
@@ -216,6 +266,15 @@ _vp_prime_rows() {
   declare -F display_items >/dev/null 2>&1 || return 0
   _vp_count
   (( _vp_n == 0 )) && return 0
+  # Group by: re-order items[] into groups + build the header rows (C helper, Python
+  # twin as backup).  Rows are then drawn on demand like a big list, from _gv_row.
+  if declare -F _gv_build >/dev/null 2>&1 && _gv_build; then
+    _vp_count
+    _vp_lazy_rows=true
+    _vp_disp_ok=false
+    declare -F _ensure_meta >/dev/null 2>&1 && _ensure_meta
+    return 0
+  fi
   _vp_lazy_rows=false
   if (( _vp_n > ${BVK_PRIME_MAX:-1500} )); then
     _vp_lazy_rows=true
@@ -356,7 +415,7 @@ _vp_geometry() {
   [ "${_vp_input_fn:-}" = "_print_input_line" ] && _vp_hint_row=1
 
   min_rows=3
-  (( _vp_n > 0 && _vp_n < min_rows )) && min_rows=$_vp_n
+  (( _vp_R > 0 && _vp_R < min_rows )) && min_rows=$_vp_R
   (( min_rows < 1 )) && min_rows=1
 
   while :; do
@@ -374,47 +433,47 @@ _vp_geometry() {
   chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_row ))
   _vp_page=$(( rows - chrome ))
   (( _vp_page < 1 )) && _vp_page=1
-  (( _vp_page > _vp_n )) && _vp_page=$_vp_n
+  (( _vp_page > _vp_R )) && _vp_page=$_vp_R
   _vp_rows_printed=$_vp_page
   (( _vp_n == 0 )) && _vp_rows_printed=1
   _blk_h=$(( _vp_hdr_show + _vp_ind + _vp_rows_printed + _vp_ind + _vp_ftr_show + 1 ))
 }
 
 _vp_ensure_visible() {
-  local sel="$1" old="$_vp_start" max_start
+  local sel="$1" old="$_vp_start" max_start top
   (( _vp_n == 0 )) && { _vp_start=1; return 1; }
   (( sel < 1 )) && sel=1
   (( sel > _vp_n )) && sel=$_vp_n
-  if (( sel < _vp_start )); then
-    _vp_start=$sel
+  top=$sel
+  if (( _vp_gv )); then
+    sel="${_gv_irow[$((sel-1))]}"           # item number -> screen row
+    top=$sel
+    # scrolling UP to the first item of a group brings its header rows into view too
+    # (but never so far that the item itself would fall off the bottom of a short screen)
+    while (( top > 1 && sel - top + 1 < _vp_page )) && [[ "${_gv_row[$((top-2))]}" == H* ]]; do top=$(( top - 1 )); done
+  fi
+  if (( top < _vp_start )); then
+    _vp_start=$top
   elif (( sel > _vp_start + _vp_page - 1 )); then
     _vp_start=$(( sel - _vp_page + 1 ))
   fi
-  max_start=$(( _vp_n - _vp_page + 1 ))
+  max_start=$(( _vp_R - _vp_page + 1 ))
   (( max_start < 1 )) && max_start=1
   (( _vp_start > max_start )) && _vp_start=$max_start
   (( _vp_start < 1 )) && _vp_start=1
   _vp_end=$(( _vp_start + _vp_page - 1 ))
-  (( _vp_end > _vp_n )) && _vp_end=$_vp_n
+  (( _vp_end > _vp_R )) && _vp_end=$_vp_R
   [ "$_vp_start" -ne "$old" ]
 }
 
 # Frame buffering: every line of a screen is appended to _vp_frame and the whole
-# screen is written in ONE write at the end of _vp_emit.  Computing the rows is
-# never slowed down by the animation — the animation only decides how the
-# finished frame is PLAYED:
-#   pop    — one write, the screen appears at once
-#   carpet — a small Python writer (started once, in the background) plays the
-#            finished frame row by row with exact timing and a fixed total
-#            time (~_VP_CARPET_MS), however tall the terminal is.
+# screen is written in ONE write at the end of _vp_emit (pop).  There is no timer, no
+# sleep and no helper process in the draw path: "carpet" is kept as a setting value
+# for old config files but draws exactly like pop — nothing is ever delayed.
 _vp_frame=""
-_vp_force_pop=0         # 1 = never animate this draw (in-place refreshes, scrolling)
-_vp_carpet_now=0
-_VP_CARPET_MS=110       # whole carpet roll-in takes at most this long
-_VP_CARPET_ROW_MS=4     # …and no row waits longer than this
+_vp_force_pop=0         # kept for old callers; every draw is instant now
 
-# Which animation applies to a fresh screen: inner loops (fx/sw) use anim_inner,
-# everything else uses anim_outer.  Sets _vp_am to pop|carpet (no subshell).
+# Kept so Settings / old callers that ask for an animation keep working.
 _vp_anim_pick() {
   if [ "${_sw_in_mode:-0}" = "1" ] || [ "${_fx_in_mode:-0}" = "1" ]; then
     _vp_am="${anim_inner:-carpet}"
@@ -422,63 +481,8 @@ _vp_anim_pick() {
     _vp_am="${anim_outer:-pop}"
   fi
 }
-_vp_anim_mode() { _vp_anim_pick; echo "$_vp_am"; }   # kept for old callers
-
-_VP_CARPET_PY='
-import os, sys, time
-tty = None
-try:
-    tty = os.open("/dev/tty", os.O_WRONLY)
-except OSError:
-    pass
-total = float(sys.argv[1]) / 1000.0
-cap = float(sys.argv[2]) / 1000.0
-inp = sys.stdin.buffer
-out = sys.stdout.buffer
-buf = b""
-while True:
-    chunk = inp.read1(65536)
-    if not chunk:
-        break
-    buf += chunk
-    while b"\x1e" in buf:
-        frame, buf = buf.split(b"\x1e", 1)
-        if tty is None:
-            out.write(b"!\n"); out.flush(); continue
-        lines = [l + b"\n" for l in frame.split(b"\n")]
-        if lines and lines[-1] == b"\n":
-            lines.pop()
-        n = max(len(lines), 1)
-        d = min(cap, total / n)
-        t = time.perf_counter()
-        for ln in lines:
-            os.write(tty, ln)
-            t += d
-            w = t - time.perf_counter()
-            if w > 0:
-                time.sleep(w)
-        out.write(b"k\n"); out.flush()
-'
-
-# Start the carpet writer in the background (once).  Called when a menu opens
-# or the animation setting changes; costs nothing when both loops use pop.
-_vp_anim_start() {
-  [ "${anim_outer:-pop}" = carpet ] || [ "${anim_inner:-carpet}" = carpet ] || return 0
-  [ -n "${_VPW_PID:-}" ] && kill -0 "$_VPW_PID" 2>/dev/null && return 0
-  command -v python3 >/dev/null 2>&1 || return 0
-  [ -t 1 ] || return 0
-  coproc _VPW { exec python3 -u -c "$_VP_CARPET_PY" "$_VP_CARPET_MS" "$_VP_CARPET_ROW_MS"; } 2>/dev/null
-}
-
-# Play _vp_frame as a carpet.  Returns 1 if the writer is not available
-# (caller then writes the frame in one go).
-_vp_play_carpet() {
-  local ack=""
-  [ -n "${_VPW_PID:-}" ] && kill -0 "$_VPW_PID" 2>/dev/null || return 1
-  builtin printf '%s\x1e' "$_vp_frame" >&"${_VPW[1]}" 2>/dev/null || return 1
-  read -r -t 1 -u "${_VPW[0]}" ack 2>/dev/null
-  [ "$ack" = "k" ]
-}
+_vp_anim_mode() { _vp_anim_pick; echo "$_vp_am"; }
+_vp_anim_start() { :; }     # the old background carpet writer no longer exists
 
 _vp_el() { _vp_frame+=$'\r\033[2K\033[?7l'"$1"$'\033[?7h\n'; }
 
@@ -486,19 +490,26 @@ _vp_emit() {
   local i line
   _vp_count
   _vp_end=$(( _vp_start + _vp_page - 1 ))
-  (( _vp_end > _vp_n )) && _vp_end=$_vp_n
+  (( _vp_end > _vp_R )) && _vp_end=$_vp_R
 
-  local _carpet=$_vp_carpet_now
-  _vp_carpet_now=0
   _vp_frame=""
+  local _it _lo=$_vp_start _hi=$_vp_end
+  if (( _vp_gv )); then
+    _vp_gv_hidden                              # items above / below the visible rows
+    _lo=$(( _vp_ab + 1 )); _hi=$(( _vp_n - _vp_bl ))
+  fi
   # one grep for all visible rows instead of one per row (selection marks)
-  declare -F _sel_prewarm >/dev/null 2>&1 && _sel_prewarm "$_vp_start" "$_vp_end"
+  declare -F _sel_prewarm >/dev/null 2>&1 && _sel_prewarm "$_lo" "$_hi"
 
   for line in "${_vp_hdr_out[@]}"; do _vp_fit "$line"; _vp_el "$_vp_line"; done
 
   if (( _vp_ind > 0 )); then
     if (( _vp_start > 1 )); then
-      _vp_el "   ▲ $(( _vp_start - 1 )) more above"
+      if (( _vp_gv )); then
+        if (( _vp_ab > 0 )); then _vp_el "   ▲ ${_vp_ab} more above"; else _vp_el "   ▲ group headers above"; fi
+      else
+        _vp_el "   ▲ $(( _vp_start - 1 )) more above"
+      fi
     else
       _vp_el "$_vp_rule"
     fi
@@ -508,17 +519,26 @@ _vp_emit() {
     _vp_el "   (no items)"
   else
     for ((i=_vp_start; i<=_vp_end; i++)); do
-      _vp_row_text "$i"
+      _it=$i
+      if (( _vp_gv )); then
+        _it="${_gv_row[$((i-1))]}"
+        if [[ "$_it" == H* ]]; then               # group header row (not selectable)
+          _vp_fit "${_it:1}"
+          _vp_el $'\033[1m'"$_vp_line"$'\033[0m'
+          continue
+        fi
+      fi
+      _vp_row_text "$_it"
       line="$_vp_line"
-      _vp_mark_sel "$i" && line="$_smk_out"
-      if _vp_is_hl "$i"; then _highlight_v "$line"; line="$_hl_out"; fi
+      _vp_mark_sel "$_it" && line="$_smk_out"
+      if _vp_is_hl "$_it"; then _highlight_v "$line"; line="$_hl_out"; fi
       _vp_el "$line"
     done
   fi
 
   if (( _vp_ind > 0 )); then
-    if (( _vp_end < _vp_n )); then
-      _vp_el "   ▼ $(( _vp_n - _vp_end )) more below"
+    if (( _vp_end < _vp_R )); then
+      if (( _vp_gv )); then _vp_el "   ▼ ${_vp_bl} more below"; else _vp_el "   ▼ $(( _vp_n - _vp_end )) more below"; fi
     else
       _vp_el "$_vp_rule"
     fi
@@ -526,13 +546,8 @@ _vp_emit() {
 
   for line in "${_vp_ftr_out[@]}"; do _vp_fit "$line"; _vp_el "$_vp_line"; done
 
-  # frame is complete — now just play it
-  if [ "$_carpet" = 1 ] && _vp_play_carpet; then
-    :
-  else
-    # single write; ?2026 = synchronized output (terminals that lack it ignore it)
-    builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
-  fi
+  # frame is complete — one write; ?2026 = synchronized output (terminals that lack it ignore it)
+  builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
   _vp_frame=""
   _set_available_above "$_blk_h"
   return 0
@@ -550,16 +565,6 @@ _vp_render_fresh() {
   _vp_build_chrome
   _vp_geometry
   _vp_ensure_visible "${_hl_index:-1}"
-  # a fresh screen follows the Settings → Animation choice (outer vs inner loop);
-  # in-place refreshes (resize, size poll) and scrolling never animate
-  _vp_carpet_now=0
-  if [ "$_vp_force_pop" != 1 ]; then
-    _vp_anim_pick
-    if [ "$_vp_am" = carpet ]; then
-      _vp_carpet_now=1
-      [ -n "${_VPW_PID:-}" ] || _vp_anim_start
-    fi
-  fi
   _vp_emit
   $_vp_input_fn
 }
@@ -618,13 +623,14 @@ _vp_filter_header_line() {
 _vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + 1 )); }
 
 _vp_repaint_row() {
-  local i="$1" line
-  (( i < _vp_start || i > _vp_end )) && return 1
+  local i="$1" r="$1" line
+  (( _vp_gv )) && r="${_gv_irow[$((i-1))]:-0}"       # item number -> screen row
+  (( r < _vp_start || r > _vp_end )) && return 1
   _vp_row_text "$i"
   line="$_vp_line"
   _vp_mark_sel "$i" && line="$_smk_out"
   _vp_is_hl "$i" && line="$(_highlight "$line")"
-  _repaint_line_above "$(_vp_dist "$i")" "$line"
+  _repaint_line_above "$(_vp_dist "$r")" "$line"
   return 0
 }
 

@@ -223,6 +223,8 @@ _hl_subcommands() {
   _hl_run groups   0or3  groups  "$d" 0 ""
   _hl_run hashscan 0or3  hashscan "$d" 0 ""
   _hl_run gfilter  0or3  gfilter "$d" 0 "" "a" partial
+  printf '%s\n' "$d/a.txt" "$d/B.txt" "$d/sub" > "$d/.gpaths"
+  _hl_run group    0     group   "$d/.gpaths" year,month,date,ext 1 "$d/.gout"
   _hl_info "scratch folder (with Unicode names): $u"
   _hl_run groups   0or3  groups  "$u" 0 ""
   _hl_run gfilter  0or3  gfilter "$u" 0 "" "e" partial

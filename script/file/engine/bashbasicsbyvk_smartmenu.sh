@@ -787,7 +787,7 @@ read() {
   # nested menus (a submenu opened from a menu) re-entrant
   local _sm_prompt="" _sm_var="" _sm_ok=1 _sm_rc=0
   local _buf _pos _hl_index _can_nav _esc _kname
-  local _vp_mode _vp_start _vp_end _vp_n _vp_page
+  local _vp_mode _vp_start _vp_end _vp_n _vp_page _vp_R _vp_gv
   local _vp_count_fn _vp_rowtext_fn _vp_header_fn _vp_footer_fn
   local _vp_hl_fn _vp_input_fn _blk_h _vp_erase
   local -a _sm_hdr=() _sm_ftr=() _sm_rows_text=() _sm_rows_token=()

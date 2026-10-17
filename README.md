@@ -58,7 +58,7 @@ It has two parts:
 - **Project maps:** `p-` generates a text map of any path.
 - **Functions (`fx`):** built-in CSV-driven operations plus your own scripts, exportable and importable.
 - **Transfer (`t`):** local copy/move, and Google Drive or Cloud Shell through your own `rclone` / `gcloud` login.
-- **Interface:** sort, group, file details, colours, timezone, pop and carpet animations, settings that reset cleanly.
+- **Interface:** sort, group (Settings → Group by: year → month → date → ext, drawn as a tree of headers; grouped natively by the C helper), file details, colours, timezone, instant pop / carpet draws (no animation delay), settings that reset cleanly.
 - **Native speed:** a C helper (`bvk-ls`) lists large folders quickly; `health` tells you exactly what is active on your machine.
 
 <details>

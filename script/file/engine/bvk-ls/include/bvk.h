@@ -8,6 +8,7 @@
  *   icon.c   file-kind label (archive/image/plugin/exec/...)
  *   meta.c   "path|size|mtime|children|icon" rows
  *   dsize.c  recursive directory size
+ *   group.c  Group-by view: group ordering + header rows
  *   groups.c group menu (groups/hashscan) with Unicode -> Python fallback
  *   main.c   command dispatch (scan/meta/dsize/count/window/groups/hashscan)
  */
@@ -103,6 +104,9 @@ int groups_cmd(FILE *out, const char *dir, bool hidden, const char *pfx);
 int hashscan_cmd(FILE *out, const char *dir, bool hidden, const char *pfx);
 int gfilter_cmd(FILE *out, const char *dir, bool hidden, const char *pfx, const char *q,
                 const char *mode);
+
+/* ---- group.c: "Group by" view (see the header comment in group.c) ------- */
+int group_cmd(const char *paths_file, const char *levels, long hl, const char *prefix);
 
 /* ---- icon.c / meta.c / dsize.c --------------------------------------- */
 
