@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: universal-auto-tag
+  cancel-in-progress: false
+
 jobs:
   tag:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
@@ -21,11 +25,154 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create and Push SemVer Tag
+      - name: Configure Git
+        run: |
+          git config user.name "BashBasics Builder"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine requested version bump
+        id: bump
+        shell: bash
+        run: |
+          COMMIT_MESSAGE="$(git log -1 --format=%B)"
+
+          echo "Latest commit message:"
+          echo "$COMMIT_MESSAGE"
+
+          if grep -qE '(^|[[:space:]])#major([[:space:]]|$)' <<< "$COMMIT_MESSAGE"; then
+            BUMP="major"
+          elif grep -qE '(^|[[:space:]])#minor([[:space:]]|$)' <<< "$COMMIT_MESSAGE"; then
+            BUMP="minor"
+          elif grep -qE '(^|[[:space:]])#patch([[:space:]]|$)' <<< "$COMMIT_MESSAGE"; then
+            BUMP="patch"
+          else
+            BUMP=""
+          fi
+
+          if [[ -n "$BUMP" ]]; then
+            echo "Explicit version bump: $BUMP"
+            echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+            echo "rules=*:${BUMP}:Release" >> "$GITHUB_OUTPUT"
+          else
+            echo "No explicit version marker. Using existing commit-message rules."
+            echo "bump=" >> "$GITHUB_OUTPUT"
+            echo "rules=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Calculate next semantic version
+        id: version
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
           initial_version: 0.0.1
           release_branches: main
+          dry_run: true
+          custom_release_rules: ${{ steps.bump.outputs.rules }}
+
+      - name: Display calculated version
+        if: ${{ steps.version.outputs.new_tag != '' }}
+        env:
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+          PREVIOUS_TAG: ${{ steps.version.outputs.previous_tag }}
+        run: |
+          echo "Previous tag: $PREVIOUS_TAG"
+          echo "New tag: $NEW_TAG"
+          echo "New version: $NEW_VERSION"
+
+      - name: Update remote setup.cfg
+        if: ${{ steps.version.outputs.new_tag != '' }}
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("setup.cfg")
+
+          if not path.is_file():
+              raise SystemExit("ERROR: setup.cfg was not found.")
+
+          text = path.read_text()
+          pattern = r"(?m)^(\s*version\s*=\s*).*$"
+
+          updated, count = re.subn(
+              pattern,
+              lambda match: match.group(1) + os.environ["NEW_VERSION"],
+              text,
+              count=1,
+          )
+
+          if count != 1:
+              raise SystemExit(
+                  "ERROR: Could not find exactly one version assignment "
+                  "in setup.cfg."
+              )
+
+          path.write_text(updated)
+
+          print(
+              f"Updated setup.cfg version to "
+              f"{os.environ['NEW_VERSION']}"
+          )
+          PY
+
+          grep -n '^version[[:space:]]*=' setup.cfg
+
+      - name: Commit and push updated version
+        id: commit
+        if: ${{ steps.version.outputs.new_tag != '' }}
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          git add setup.cfg
+
+          if git diff --cached --quiet; then
+            echo "setup.cfg already contains the calculated version."
+          else
+            git commit -m "chore: update package version to ${NEW_VERSION}"
+          fi
+
+          git push origin HEAD:main
+
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag on updated commit
+        if: ${{ steps.version.outputs.new_tag != '' }}
+        env:
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
+          COMMIT_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          git fetch origin main --tags
+
+          REMOTE_SHA="$(git rev-parse origin/main)"
+
+          if [[ "$REMOTE_SHA" != "$COMMIT_SHA" ]]; then
+            echo "ERROR: main advanced after the version commit."
+            echo "Expected: $COMMIT_SHA"
+            echo "Remote:   $REMOTE_SHA"
+            echo "Refusing to create a tag on an unexpected commit."
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${NEW_TAG}" >/dev/null 2>&1; then
+            echo "ERROR: Tag ${NEW_TAG} already exists remotely."
+            exit 1
+          fi
+
+          git tag -a "$NEW_TAG" "$COMMIT_SHA" -m "Release $NEW_TAG"
+          git push origin "$NEW_TAG"
+
+          echo "Successfully created $NEW_TAG"
+          echo "Tag points to commit $COMMIT_SHA"
+
+      - name: No new version required
+        if: ${{ steps.version.outputs.new_tag == '' }}
+        run: |
+          echo "No new version was calculated."
+          echo "No version change or tag was created."

@@ -1,51 +1,119 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL-black?style=for-the-badge&logo=gnubash&logoColor=white&labelColor=%23272727&color=%23171717"/>
+# bashbasicsbyvk
+
+**Interactive terminal file manager with FileAPI services**
+
+Browse, select, move, rename, search and organise files from one interactive command, `o`. Send files between servers, containers and teammates without leaving the shell.
+
+<img src="https://img.shields.io/badge/Platform-Linux%20%7C%20WSL%20%7C%20Termux-black?style=for-the-badge&logo=gnubash&logoColor=white&labelColor=%23272727&color=%23171717"/>
 <img src="https://img.shields.io/badge/Python-3.8%2B-black?style=for-the-badge&logo=python&logoColor=white&labelColor=%23272727&color=%23171717"/>
 <img src="https://img.shields.io/badge/Shell-Bash-black?style=for-the-badge&logo=gnu-bash&logoColor=white&labelColor=%23272727&color=%23171717"/>
-<img src="https://img.shields.io/badge/License-MIT-black?style=for-the-badge&logoColor=white&labelColor=%23272727&color=%23171717"/>
-<img src="https://img.shields.io/badge/Install-pip-black?style=for-the-badge&logo=pypi&logoColor=white&labelColor=%23272727&color=%23171717"/>
+<img src="https://img.shields.io/badge/License-MIT-black?style=for-the-badge&labelColor=%23272727&color=%23171717"/>
+<img src="https://img.shields.io/badge/Encryption-AES--256--GCM-black?style=for-the-badge&labelColor=%23272727&color=%23171717"/>
+
+[Documentation and Pricing](https://drive.google.com/drive/folders/1SpbH4qV1FpwUem5gw-Fv-chuuaFdXefr) ·
+[Security Policy](SECURITY.md) ·
+[Report a Bug](https://github.com/vkdatta/bashbasicsbyvk/issues) ·
+[llms.txt](llms.txt)
 
 </div>
 
-### bashbasicsbyvk
+---
 
-**bashbasicsbyvk** is a lightweight file manager for your shell environment. From running, copying, renaming, and moving files to organising, indexing, and scraping web data — it's designed to make shell life simpler.
+## Overview
+
+`bashbasicsbyvk` is a terminal file manager for Linux, WSL, Termux (Android), Docker, macOS and cloud shells, with MIT-licensed source. 
+
+It has two parts:
+
+1. **A free, fully offline, open-source file manager.** Navigate with numbers instead of paths, select with a query language, stage copy/move/shortcut operations, bookmark, batch-edit, organise and compress. No account, no network. (Visit  [documentation](https://drive.google.com/drive/folders/1SpbH4qV1FpwUem5gw-Fv-chuuaFdXefr))
+2. **An optional paid hosted service (FileAPI), not part of the open-source licence.** Files are encrypted on your device before they leave it. Share by link, share directly with another user, back up before every delete, and snapshot important files. Credit-based pricing starts at **US$1**.
 
 ---
 
-### Commands
+## Why it exists
 
-| Command | Purpose |
-|---|---|
-| `o` | Omni file manager — run, copy, erase, delete, overwrite, rename, move, batch-create, batch-delete, organise, find |
+| Problem in the terminal                                              | What bashbasicsbyvk does                                                                    |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Long paths and `ls`/`cd`/`mv` chains for routine work                | Number-based navigation, breadcrumb jumps, bookmarks, recents and favourites                |
+| Selecting "all PNGs under 3 MB from last month"                      | One expression: `.s.ext png & .s.size <3mb & .s.time last30d`                               |
+| Moving files between your laptop, a VPS, a container and Cloud Shell | `up-` uploads an encrypted, expiring link; `do-` pulls it down on the other side            |
+| Sending a file to a colleague without pasting links around           | `ux-` shares directly between users, with revocable access, directly from terminal          |
+| Deleting the wrong thing                                             | Paid backup keeps a recoverable encrypted copy of anything removed with the built-in delete |
+| Beginners who do not want to memorise Linux commands                 | Everything is a menu; power users keep the grammar                                          |
 
 ---
 
-### `o` — Omni File Manager
+## Free: the local file manager
 
-```bash
-o
-```
-
-A single interactive call to manage everything in your shell. No flags, no paths.
+- **Navigate:** directories, breadcrumb jumps, bookmarks, recents, per-folder favourites, name filter, index mode for very large folders.
+- **Act:** run, view, edit (nano), copy contents to clipboard, delete, erase, overwrite from clipboard, rename, share.
+- **Stage:** `c-` copy, `m-` move, `s-` shortcut, `b-` bookmark, applied with `d-` at the destination. Persistent buffers (`c--`, `m--`) for repeated use.
+- **Select with expressions:** by extension, size, date, name, duplicates, empty items, CSV lists. Combine with `&`, `|`, `!` and grouping.
+- **Display rules:** show only what you care about in a given folder (`.d.ext py`), saved as presets.
+- **Batch:** create or delete many files and folders, find and replace in names and contents, CSV-driven rename, delete by date or extension.
+- **Organise:** by year, month, date, extension or alphabet, and undo it.
+- **Compress:** `z-` and `uz-` for zip and unzip of multiple items.
+- **Project maps:** `p-` generates a text map of any path.
+- **Functions (`fx`):** built-in CSV-driven operations plus your own scripts, exportable and importable.
+- **Transfer (`t`):** local copy/move, and Google Drive or Cloud Shell through your own `rclone` / `gcloud` login.
+- **Interface:** sort, group, file details, colours, timezone, pop and carpet animations, settings that reset cleanly.
+- **Native speed:** a C helper (`bvk-ls`) lists large folders quickly; `health` tells you exactly what is active on your machine.
 
 <details>
-<summary>Supported Operations</summary>
+<summary><strong>Selection and filter examples</strong></summary>
 
-<br/>
+```text
+.s.ext png,jpg & .s.size <3mb           small images
+.s.dup -r                               duplicate files in all subfolders
+.s.empty & .s.d -r                      empty folders, deep
+.s.time last30d                         modified in the last 30 days
+.s.csv                                  names listed in a CSV file
+( .s.ext png | .s.ext py ) & !.s.sw a   grouping and negation
+.d.ext py                               display only Python files here
+```
 
-| Category | Operations |
-|---|---|
-| **Files** | Run, Copy, Erase, Delete, Overwrite, Rename, Move |
-| **Batch** | Batch-create, Batch-delete |
-| **Navigate** | Find, Organise |
+Full grammar and every command are in the [documentation](https://drive.google.com/drive/folders/1SpbH4qV1FpwUem5gw-Fv-chuuaFdXefr).
 
 </details>
 
 ---
 
-### Installation
+## Paid: FileAPI (end-to-end encrypted transfer, backup, AI help)
+
+The local tool is free. The hosted services are metered with simple credits. Receivers never pay.
+
+| Feature | Command | What you get |
+|---|---|---|
+| **Encrypted link sharing** | `up-` / `do-` | Files are packed, encrypted on your device and uploaded. You get a link; the decryption key lives only in the link. Recipients do not need the tool. Expiry is yours to set, and links can be extended, shortened or deleted in bulk from `api`. |
+| **Text to clipboard anywhere** | `c2c-` | Merge selected text files into one encrypted paste you can open on another machine. |
+| **RBAM direct sharing** | `ux-` | Share user-to-user with client-side encryption and no public link. Sender controls and can revoke access at any level. |
+| **Backup before delete** | internal delete | Paid users get an encrypted backup taken before each delete, recoverable for a limited window. |
+| **Snapshots** | startup / schedule | Selected files upload automatically as part of your routine. |
+| **Save to Cloud Surf** | Save | Same pipeline as upload, delivered to your own cloud arena instead of a shared link. |
+| **AI Command Help** | `.ai` | Ask how to do something and get command-specific guidance. |
+
+Pricing is pay-as-you-go: US$1 buys credits, and cost scales with data size and how long it stays alive. Small text and files up to 5 MB are priced at about one credit per month of retention. See **Pricing** in the documentation for current rates and examples.
+
+**To get started:** email **vkd.codes@gmail.com** for API access, then run `-auth` inside `o`.
+
+---
+
+## Security at a glance
+
+- Encryption happens **on your device**. The service stores ciphertext it has no key for.
+- Per-transfer random 256-bit key, AES-256-GCM, TLS in transit.
+- Account identity is not your email address. It is an email plus 27 random identifiers (DISEPs); API keys are stored server-side only as hashes.
+- Keys are kept in a mode-600 environment file, never on a command line, never in Git. `-auth` rotates them and the old ones stop working immediately.
+
+- No ads, no cookies, no tracking, no sale of data.
+
+Read the [Security Policy](SECURITY.md) for the full model, limits and responsible disclosure.
+
+---
+
+## Installation
 
 <details>
 <summary><strong>Termux for Android</strong></summary>
@@ -354,111 +422,28 @@ sudo pip uninstall bashbasicsbyvk
 
 </details>
 
+---
 
-## Google Drive (`fx` → `google_drive_fx` → `open google drive`)
+## Use with care
 
-Opens a Google Drive as the main screen, with every native command working on it.
+File-management tools can permanently delete data and there is no recycle bin for local operations. Review bulk operations before confirming, and keep independent backups. `kl` force-ends every process owned by your user. The **Infinity Stones** menu (`i`: web table extraction, JavaScript and Python audit, Git Push, SQL generation, LocalHost) is in development and should be used only on data you can afford to lose.
 
-1. Make a Drive profile once: `rclone config` → `n` → name → *Google Drive* (several profiles = several accounts).
-2. `fx` → `google_drive_fx` → `open google drive` lists your rclone profiles (`n` creates one). Pick a number.
-3. Your Drive appears like a folder (header `☁️ work:/Docs`), folders first like drive.google.com. Browse with numbers and `u`.
-   `c  d  r  c-  m-  s-  d-  z-  uz-  t  f  up-  ux-` and the rest behave as in any folder; changes are pushed to Drive right after.
+---
 
-| Command | Meaning |
-|---|---|
-| `gd` | Drive menu: status, quota, commands |
-| `gdx` | leave Google Drive (back to where you were) |
-| `rf` / `gd.rf` | list this Drive folder again from Google |
-| `gd.scan` | list the whole Drive below here (folder item counts become real) |
-| `gd.clean` | free disk: downloaded, unchanged files become placeholders again |
-| `gd.push`, `gd.sw` | push pending changes now, switch profile |
+## Documentation
 
-**How it works.** A profile is mirrored into `~/.bashbasicsbyvk/gdrive/<profile>/tree/`: folders are real folders, files are
-free placeholders (sparse, right size and date). Content is downloaded the moment something reads it (open, copy out, zip, upload
-link, `rclone` transfer); copying inside the Drive is a server-side copy. Create, delete (to the Drive **trash**), rename, move
-(a real server-side move), edit and zip are pushed back afterwards. Over 100 removals at once asks first; a copy of a
-not-downloaded file is never uploaded as zeros.
+Always current, maintained in one place: **[Drive documentation folder](https://drive.google.com/drive/folders/1SpbH4qV1FpwUem5gw-Fv-chuuaFdXefr)**
 
-**Per-profile state.** Each profile has its own settings, buffers, selection and rules, favourites, locks, bookmarks, shortcut
-registry, search index and link keys in `~/.bashbasicsbyvk/gdrive/<profile>/`. They are swapped in when the Drive opens and
-back when you leave. `d-` inside a Drive offers to apply buffers you staged outside it. Upgrades, UDF scripts and the recents daemon stay global.
+About · Commands · Pricing · Security Architecture · Privacy Policy · Terms and Conditions · GDPR Notice · Legal Notice · Licence and Third-Party Notices · Contact
 
-**Notes.** Folders you have not opened yet show no item count until listed (`gd.scan`). Google Docs/Sheets appear as their
-exported files and are read-only. Content search (`f`) only sees downloaded files. Extra rclone flags per profile go in
-`~/.bashbasicsbyvk/gdrive/<profile>/rclone.flags` (e.g. `--drive-shared-with-me`). Environment: `BVK_GD_TTL` (list cache seconds, 120),
-`BVK_GD_CONFIRM_MB` (ask before downloading more, 200), `BVK_GD_MAX_DELETE` (100), `BVK_GD_PERMANENT=1` (skip the Drive trash).
+In the app, `-h` opens the same link.
 
-## Upgrade (`-u`) and `health`
+## Contact and support
 
-`-u` opens the upgrade loop (arrow keys `←/→` switch tabs):
+Maintainer: Vk Datta. API access, bugs and anything private: **vkd.codes@gmail.com**. Public, non-sensitive issues and suggestions: [GitHub Issues](https://github.com/vkdatta/bashbasicsbyvk/issues). Never post keys, DISEPs, DINONs or links in public.
 
-- **📦 Stable** — published GitHub releases, newest first
-- **🧪 Tags (beta)** — every git tag, newest first (`✓ stable` = also a release)
+## License
 
-Type a number to install that exact version (it asks first), `i-N` to read its description,
-`m` for the latest `main`, `rf` to refresh, `u` to leave. `★ installed` marks the last version
-installed from this menu.
+Source code: [MIT](LICENSE) © 2026 Vk Datta. The hosted FileAPI service and web viewer are governed by the Terms and Conditions and Privacy Policy. "bashbasicsbyvk" is a project name; please do not present modified builds as endorsed. Independent of and not endorsed by Google, GitHub, Cloudflare or any other third party named in the docs.
 
-`health` explains why the file list is loaded by Python (`[loaded by py]`) instead of the native
-C helper `bvk-ls`: it checks the CPU/OS match, the binary's ELF header, exec permission, noexec
-mounts and a real run, then exercises every `bvk-ls` sub-command. The report is also saved to
-`~/.bashbasicsbyvk/health.log`.
-
-## Settings (`s`)
-
-Same feel as the main menu — no numbers to type:
-
-| Key | Does |
-|---|---|
-| `↑` `↓` | move |
-| `space` / `enter` | switch a `[x]` on/off, pick an option, or open a sub-screen |
-| `←` `→` | (Group by) move a level earlier/later in the chain |
-| `u` | back one level (sub-screen → Settings → main menu) |
-| `q` | close Settings completely and return to the main menu |
-
-Settings are grouped: **Display** (hidden files · sort order · file details · group by · big-folder limit · animation) · **Filters** (display filter · search filter) · **Colors** (background · text) · **Files & archives** (compress format · zip hidden) · **File API** (see below) · **System** (timezone · import nano settings) · **Reset all settings**. Type `=` and a word of a name to find a group (`=nuke`, `=sort`, `=snapshot`).
-
-### Timezone
-
-`s` → **Timezone** sets one timezone for the whole app: link expiry times in `api`, file times, logs, exported file names and the helper scripts (the background daemon follows it too). Times that show a clock time now carry the zone, e.g. `until 2026-10-10 02:20 IST`.
-
-Every zone in the machine's tz database is listed with its abbreviation and current offset (`Asia/Kolkata  IST  UTC+05:30`). Type `=` and part of a name, abbreviation or offset to search: `=kolkata`, `=ist`, `=new york`, `=+05:30`. Pick **System default** to follow the computer's clock again. Stored machine stamps (`CREATED=…Z`, telemetry day) stay in UTC on purpose.
-
-
-## File API services: price check, Backup, Saved Surf, Snapshots
-
-All of these use the same encrypted pipeline as `up-` (packed as tar.gz, AES-256-GCM per 16 MiB chunk) and the same credit rules. Their settings live in `s` → **File API**: *Credits · Links (up-/c2c-) · Cloud Surf shares (ux-) · Backup · Saved Surf (save-) · Snapshots*.
-
-### Price check before spending credits
-Before `up-`, `ux-`, a backup, a save, and before extending an item, the packed size is priced by the server (nothing is charged yet):
-- cost **1** credit and you have enough → it just goes;
-- cost **above 1** → *"costs X credits — [c] continue · [r] reduce time · [i] increase time · [s] stop"*. Time is entered the way `e-N` in `api` takes it (`12h`, `2d`, `+1d`, `-6h`);
-- **not enough credits** → *stop*, or *reduce time*: it suggests the longest time your credits cover (cost ≈ your balance). If even 1 hour is too dear, it says so and stops.
-
-`s` → File API → **Credits** → *Don't ask* skips the price check entirely (the server still refuses when your balance is too low).
-
-### Backup (`bk`, Home → Backup)
-Every delete (`d`, the file menu's Delete, the fx delete functions) first copies what is about to go to the cloud, like `up-`, kept 30 days by default. You are asked for a name (Enter = none): the backup is called `DDMMYYYY HHMM NAME` or just `DDMMYYYY HHMM`. If a backup was wanted but fails or is stopped, you are asked whether to delete anyway. In **Backup**: `r-N` restores into the current folder (never overwrites), `a-N` renames, `e-N` extends/shortens, `x-N` nukes — the same controls as Links. Settings: *Backup before delete* (yes · no · ask every time, default **yes**) and *Default nuke time* (default 30 days).
-Not backed up: symlinks (only the link is removed), Google Drive placeholders (they are empty), rule bundles of the `.r` rule book, and "move" operations (the data lives on at the destination). Each backup costs credits like any upload (at least 1).
-
-### `save-` and Saved Surf (`sv`, Home → Saved Surf)
-`save-1-3` or `save-2 as tax papers` works like `up-` but **no link is ever shown**. It is client-side encrypted exactly like `ux-` (dinons → FEK → a fresh key per item): the item key is wrapped with your FEK on your computer and the server stores only that wrapped key, which it has no way to open, so the backend operator cannot read it. The data and the wrapped key are only served to their owner, and the key is destroyed when the item expires or is nuked. Open it from any device with your e-mail + diseps + API key **and your dinons**. Named like backups.
-
-### Snapshots (`snap-`, `sn`, Home → Snapshots)
-`snap-1-3` puts files/folders on this computer's snapshot list. While `o` is running, a background process snapshots every path **that changed** every *interval* (`s` → File API → Snapshots: 1 minute … 30 days, default 1 hour; *Keep time* default 7 days; on/off). Rules:
-- it only runs while `o` runs; reopen after 10 days with a 10-minute interval and you get **one** snapshot of that moment, not 1440;
-- each path is first copied to a temporary folder (cheap on copy-on-write disks), and the archive is packed from the copy, so editing or deleting a 5 GB file mid-sync cannot corrupt it;
-- the background process never prompts; when your credits are not enough a one-line notice shows in the main screen and snapshots pause;
-- a snapshot is named `AS ON DDMMYYYY HHMM` and cannot be renamed.
-
-**Home → Snapshots** lists every device that has a snapshot list (devices are told apart by the telemetry uuid), the paths on each, and their snapshots. You can view and restore snapshots of any device, nuke or extend them, and remove a path from another device's list (that device stops on its next sync). Paths and device names are stored encrypted.
-
-**Telemetry:** the telemetry uuid is the device id for snapshots, so there is no switch to turn telemetry off any more, and the app never deletes or regenerates the uuid. Once you use Snapshots the uuid is tied, on the server, to your account.
-
-### Any device, encrypted names, and who shared a link
-Everything you hold is managed from **any device you log in on** (e-mail + diseps + API key + dinons): Links, Backup, Saved Surf, Snapshots, Cloud Surf. Only `up-` / `c2c-` links are end-to-end (the key lives only in the link). Everything else is client-side encrypted (CSE): dinons → FEK → keys.
-- **Links tab:** each new `up-` link is also stored *encrypted* with a per-user label key, so `c-N` copies it again on any device. The server cannot open it. Older links are added a few per refresh. With `FILEAPI_BASHBASICS_STORE_KEYS=0` nothing is kept in the cloud.
-- **Names** (up-, backup, save-, `a-N`) are sent as `e1.<ciphertext>`. Without your dinons a name is not sent at all. Size, expiry and timing stay readable to the server (billing/expiry need them); `ux-` names stay readable to the receivers.
-- **Backups** are CSE and owner-only now (restore from any device). Older backups restore only on the computer that made them.
-- **Who shared it:** every link page shows the uploader's mail and `d3` (codes 13, 24, 7 of the diseps) with a Copy button and a **Report abuse** link to `/help`. Nobody can look inside a link, so this is how pirated, adult, illegal or harmful sharing is curbed: reports go to the admin, who can restrict the link or suspend the account.
-- **Admin** (`Authorization: Bearer $ADMIN_TOKEN`): `GET /admin/reports`, `POST /admin/restrict|unrestrict|suspend|unsuspend|dismiss`.
+<sub>Keywords: terminal file manager, bash file manager, TUI file manager, Termux file manager, command line file manager, encrypted file sharing CLI, end-to-end encrypted file transfer, send files between servers, share files from terminal, safe delete with backup, batch rename, find and replace in files, organise files by date, duplicate file finder, Linux, WSL, Docker, Cloud Shell.</sub>
