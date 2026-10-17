@@ -386,6 +386,15 @@ handle_force_show() {
 
 handle_selection() {
   local choice="$1"
+  # Group view crumb menu: a number picks that crumb (drill one level down)
+  if ${_gv_crumb_menu:-false} && $imaginary_mode; then
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( 10#$choice >= 1 && 10#$choice <= ${#imaginary_map[@]} )); then
+      _gv_crumbs+=("${imaginary_map[$((10#$choice-1))]}")
+    else
+      _bvk_invalid
+    fi
+    return
+  fi
   if $imaginary_mode; then
     local matched=false
     local ch=""
@@ -479,8 +488,7 @@ _menu_header_flat() {
   [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"
   [ -n "${_disp_banner:-}" ] && echo "$_disp_banner"
   if $_has_group_view; then
-    _gv_chain="${group_view_levels[*]}"
-    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → Group by)"
+    _gv_banner_line; echo
   fi
 }
 
@@ -493,8 +501,7 @@ _menu_header_imaginary() {
 
 _menu_body_flat() {
   if $_has_group_view; then
-    _gv_chain="${group_view_levels[*]}"
-    echo "🗂️  Group view: ${_gv_chain// / → }  (change in Settings → Group by)"
+    _gv_banner_line; echo
   fi
   display_items
 }

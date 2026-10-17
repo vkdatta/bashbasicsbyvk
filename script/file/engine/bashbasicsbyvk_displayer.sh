@@ -20,7 +20,7 @@ _bvk_go_bin() {
     if [ "${BVK_NO_GO:-0}" = "1" ]; then
       _BVK_GO_WHY="BVK_NO_GO=1 is set — the C engine is switched off on purpose"
     else
-      local _m _os _b _o _d
+      local _m _os _b _o _d _old=""
       local -a _cand=()
       case "$(uname -m)" in
         aarch64|arm64) _m=arm64 ;;
@@ -51,8 +51,14 @@ _bvk_go_bin() {
         # Android denies apps access to the filesystem root, so "count /" fails
         # even for a perfectly working binary.
         "$_b" count "${HOME:-.}" 0 >/dev/null 2>&1 || { _BVK_GO_WHY="$_b failed its self-test (run: health)"; continue; }
+        # a stale copy (e.g. an old bvk-ls left in $PREFIX/bin) has no `group` command: keep it
+        # only as a last resort and keep looking for a current one
+        case "$("$_b" group 2>&1 </dev/null)" in
+          *'unknown command'*) [ -n "$_old" ] || _old="$_b"; _BVK_GO_WHY="$_b is out of date (no 'group' command)"; continue ;;
+        esac
         _BVK_GO_BIN="$_b"; _BVK_GO_WHY=""; break
       done
+      [ -z "$_BVK_GO_BIN" ] && [ -n "$_old" ] && _BVK_GO_BIN="$_old"
     fi
   fi
   [ -n "$_BVK_GO_BIN" ]
@@ -1050,6 +1056,7 @@ _gv_want() {
   [ "${#group_view_levels[@]}" -gt 0 ] || return 1
   [ "${#items[@]}" -gt 0 ] || return 1
   [ "${imaginary_mode:-false}" = true ] && return 1
+  [ "${_gv_leaf:-false}" = true ] && return 1       # drilled to the last crumb: plain list
   [ "${_vp_mode:-items}" = items ] || return 1
   [ -z "${_vp_rowtext_fn:-}" ] && [ -z "${_vp_count_fn:-}" ] || return 1
   [ "${_sw_in_mode:-0}" = 1 ] && return 1
@@ -1146,6 +1153,96 @@ print(n, rows, newhl, d)
 PYEOF
 }
 
+# _gv_group_raw PFX LEVELS HL — run the grouper (C, else Python twin) on PFX.in.
+# Sets _gv_res (stdout line) and _gv_src (c|py).
+_gv_group_raw() {
+  local pfx="$1" lv="$2" hl="$3"
+  _gv_src=c; _gv_res=""
+  if _bvk_go_bin && _gv_res="$("$_BVK_GO_BIN" group "$pfx.in" "$lv" "$hl" "$pfx" 2>/dev/null)" && [ -n "$_gv_res" ]; then
+    :
+  else
+    _gv_src=py
+    _gv_res="$(_py_group_python "$pfx.in" "$lv" "$hl" "$pfx" 2>/dev/null)" || _gv_res=""
+  fi
+}
+
+# ── Group view = breadcrumb drill (view only, nothing on disk changes) ───────
+# _gv_crumbs = labels picked so far (2026, then 2026-Oct, ...).  Fewer crumbs than levels →
+# the screen is a menu of the next level's groups ("1) 📁 2026 (21)"); all levels picked →
+# the plain file list of that group.  `u` pops one crumb.
+declare -ga _gv_crumbs=()
+declare -g  _gv_crumb_path="" _gv_crumb_menu=false _gv_leaf=false
+
+_gv_banner_line() {
+  local s
+  if [ "${#_gv_crumbs[@]}" -gt 0 ]; then
+    s="${_gv_crumbs[*]}"; s="${s// / → }"
+    printf '🗂️  Group view: %s' "$s"
+  else
+    s="${group_view_levels[*]}"; s="${s// / → }"
+    printf '🗂️  Group view: %s  (change in Settings → Group by)' "$s"
+  fi
+}
+
+_gv_crumb_apply() {
+  _gv_crumb_menu=false; _gv_leaf=false
+  if [ "${#group_view_levels[@]}" -eq 0 ]; then _gv_crumbs=(); return 0; fi
+  [ "${#items[@]}" -gt 0 ] || return 0
+  [ "$_gv_crumb_path" = "$path" ] || { _gv_crumbs=(); _gv_crumb_path="$path"; }
+  local n="${#items[@]}" lv pfx
+  lv="${group_view_levels[*]}"; lv="${lv// /,}"
+  pfx="$(_bvk_tmp)" || return 0
+  printf '%s\n' "${items[@]}" >"$pfx.in"
+  _gv_group_raw "$pfx" "$lv" 0
+  local rn="" rr="" rh="" rd=""
+  read -r rn rr rh rd <<<"$_gv_res"
+  local -a _t=() _r=()
+  if [ "$rn" = "$n" ]; then mapfile -t _t <"$pfx.items"; mapfile -t _r <"$pfx.rows"; fi
+  rm -f "$pfx" "$pfx".*
+  [ "${#_t[@]}" -eq "$n" ] && [ "${rd:-0}" -gt 0 ] || return 0      # grouping failed: leave the flat list
+  _BVK_GROUP_SRC="$_gv_src"
+  local c="${#_gv_crumbs[@]}"
+  (( c > rd )) && { _gv_crumbs=(); c=0; }
+  local -a cur=() keep=() order=()
+  local -A cnt=()
+  local row r sp k t x ok lab
+  for row in "${_r[@]}"; do
+    if [[ "$row" == H* ]]; then
+      r="${row#H}"; sp="${r%%[! ]*}"; k=$(( ${#sp} / 2 ))
+      t="${r:${#sp}}"; t="${t#── }"; t="${t#*: }"; t="${t% (*}"
+      cur[k]="$t"
+    else
+      ok=1
+      for (( x=0; x<c; x++ )); do [ "${cur[x]}" = "${_gv_crumbs[x]}" ] || { ok=0; break; }; done
+      (( ok )) || continue
+      keep+=("${_t[$((row-1))]}")
+      if (( c < rd )); then
+        lab="${cur[c]}"
+        [ -n "${cnt[$lab]+x}" ] || { order+=("$lab"); cnt[$lab]=0; }
+        cnt[$lab]=$(( cnt[$lab] + 1 ))
+      fi
+    fi
+  done
+  if [ "${#keep[@]}" -eq 0 ]; then                                   # crumbs no longer match (folder changed)
+    if (( c > 0 )); then _gv_crumbs=(); _gv_crumb_apply; fi
+    return 0
+  fi
+  if (( c < rd )); then
+    imaginary_mode=true; _gv_crumb_menu=true
+    imaginary_map=(); imaginary_lines=()
+    local i=1
+    for lab in "${order[@]}"; do
+      imaginary_lines+=("$(builtin printf ' %2d) 📁 %s (%d)' "$i" "$lab" "${cnt[$lab]}")")
+      imaginary_map+=("$lab"); i=$(( i + 1 ))
+    done
+    _imag_banner="$(_gv_banner_line)"
+  else
+    items=("${keep[@]}"); _gv_leaf=true
+    _hl_index=0; _win_lo=0; _win_hi=0; _meta_loaded=false
+  fi
+  return 0
+}
+
 # _gv_build — group the CURRENT items[].  Returns 0 with items[] re-ordered and
 # _gv_row / _gv_irow filled, or returns 1 and leaves everything untouched (flat list).
 _gv_build() {
@@ -1155,12 +1252,7 @@ _gv_build() {
   lv="${lv// /,}"
   pfx="$(_bvk_tmp)" || return 1
   printf '%s\n' "${items[@]}" >"$pfx.in"
-  if _bvk_go_bin && res="$("$_BVK_GO_BIN" group "$pfx.in" "$lv" "$hl" "$pfx" 2>/dev/null)" && [ -n "$res" ]; then
-    :
-  else
-    src=py
-    res="$(_py_group_python "$pfx.in" "$lv" "$hl" "$pfx" 2>/dev/null)" || res=""
-  fi
+  _gv_group_raw "$pfx" "$lv" "$hl"; res="$_gv_res"; src="$_gv_src"
   local rn="" rr="" rh="" rd=""
   read -r rn rr rh rd <<<"$res"
   if [ "$rn" != "$n" ] || [ -z "$rr" ]; then rm -f "$pfx" "$pfx".*; return 1; fi
