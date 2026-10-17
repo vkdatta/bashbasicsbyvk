@@ -200,6 +200,7 @@ jobs:
         env:
           NEW_TAG: ${{ steps.version.outputs.new_tag }}
           COMMIT_SHA: ${{ steps.commit.outputs.sha }}
+          ORIGINAL_SUBJECT: ${{ steps.bump.outputs.subject }}
         run: |
           git fetch origin main --tags
 
@@ -218,7 +219,12 @@ jobs:
             exit 1
           fi
 
-          git tag -a "$NEW_TAG" "$COMMIT_SHA" -m "Release $NEW_TAG"
+          if [[ -n "$ORIGINAL_SUBJECT" ]]; then
+            git tag -a "$NEW_TAG" "$COMMIT_SHA" \
+              -m "Release $NEW_TAG" -m "$ORIGINAL_SUBJECT"
+          else
+            git tag -a "$NEW_TAG" "$COMMIT_SHA" -m "Release $NEW_TAG"
+          fi
           git push origin "$NEW_TAG"
 
           echo "Successfully created $NEW_TAG"
