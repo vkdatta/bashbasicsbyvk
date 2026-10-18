@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+[ -n "${_BVK_LOADED_SVC_CORE:-}" ] && return 0     # sourced by several modules: parse it once
+_BVK_LOADED_SVC_CORE=1
 # bashbasicsbyvk_svc_core.sh — shared engine of the fileapi services built on top of up-:
 #     Backup (copies taken before a delete) · Saved Surf (save-) · Snapshots
 #

@@ -61,13 +61,36 @@ _fav_mtime() {
     || stat -f '%m:%z' -- "$1" 2>/dev/null || echo 0
 }
 
-_fav_hash() {
+_fav_hash_calc() {
   if   command -v sha1sum >/dev/null 2>&1; then printf '%s' "$1" | sha1sum | cut -c1-16
   elif command -v md5sum  >/dev/null 2>&1; then printf '%s' "$1" | md5sum  | cut -c1-16
   else printf '%s' "$1" | cksum | tr ' ' '_'; fi
 }
+# The hash of a folder path costs three processes (printf | sha1sum | cut), so every answer is
+# remembered — in memory and in $_FAV_DIR/.hashmemo ("<hash> <path>" per line, in the main shell:
+# no subshell).  _fav_hash_v sets _fh_out;  _fav_hash is the old $( )-style wrapper.
+declare -gA _FAV_H=()
+_fh_out=""
+_fav_hash_v() {
+  local k="$1" l h p
+  if [ -n "${_FAV_H[$k]+x}" ]; then _fh_out="${_FAV_H[$k]}"; return 0; fi
+  if [ -r "$_FAV_DIR/.hashmemo" ]; then
+    while IFS= read -r l; do h="${l%% *}"; p="${l#* }"; _FAV_H["$p"]="$h"; done <"$_FAV_DIR/.hashmemo"
+    if [ -n "${_FAV_H[$k]+x}" ]; then _fh_out="${_FAV_H[$k]}"; return 0; fi
+  fi
+  _fh_out="$(_fav_hash_calc "$k")"
+  _FAV_H["$k"]="$_fh_out"
+  [ -d "$_FAV_DIR" ] && printf '%s %s\n' "$_fh_out" "$k" >>"$_FAV_DIR/.hashmemo" 2>/dev/null
+  return 0
+}
+_fav_hash() { _fav_hash_v "$1"; printf '%s' "$_fh_out"; }
 
-_fav_norm() { local d="${1%/}"; [ -z "$d" ] && d="/"; printf '%s' "$d"; }
+# any favourites file at all?  (no: nothing to look up, no hash to compute, no stat to run)
+_fav_any() { local -a _fa=("$_FAV_DIR"/*.fav); [ -e "${_fa[0]-}" ]; }
+
+_fn_out=""
+_fav_norm_v() { _fn_out="${1%/}"; [ -z "$_fn_out" ] && _fn_out="/"; return 0; }
+_fav_norm() { _fav_norm_v "$1"; printf '%s' "$_fn_out"; }
 _fav_join() { local b="${1%/}"; printf '%s/%s' "$b" "$2"; }
 
 # ── lock shared with the daemon (mkdir is atomic) ─────────────────────────────
@@ -97,8 +120,8 @@ _fav_unlock() {
 # ── locate the .fav file for a folder (adopting it if the folder was renamed) ─
 # Sets _FAV_FILE. Returns 0 when the file exists, 1 otherwise.
 _fav_file_for() {
-  local dir; dir=$(_fav_norm "$1")
-  _FAV_FILE="$_FAV_DIR/$(_fav_hash "$dir").fav"
+  local dir; _fav_norm_v "$1"; dir="$_fn_out"
+  _fav_hash_v "$dir"; _FAV_FILE="$_FAV_DIR/$_fh_out.fav"
   [ -f "$_FAV_FILE" ] && return 0
   local -a all=("$_FAV_DIR"/*.fav)
   [ ${#all[@]} -eq 0 ] && return 1
@@ -121,13 +144,19 @@ _fav_file_for() {
 # _fav_load <dir>   fills _fav_* arrays. Returns 1 if the folder has no favourites.
 _fav_adopted=false
 _fav_load() {
-  local dir; dir=$(_fav_norm "$1")
+  local dir; _fav_norm_v "$1"; dir="$_fn_out"
   _fav_adopted=false
-  local existed=true
-  _fav_file_for "$dir" || existed=false
-  local key="$dir|$(_fav_mtime "$_FAV_FILE")|$(_fav_mtime "$dir")"
-  if $existed && [ "$key" = "$_fav_cache_key" ] && [ "$_fav_base" = "$dir" ]; then
-    return 0
+  local existed=true key=""
+  if _fav_any; then
+    _fav_file_for "$dir" || existed=false
+  else
+    existed=false          # no favourites anywhere: skip the hash, the lookups and the two stat calls
+  fi
+  if $existed; then
+    key="$dir|$(_fav_mtime "$_FAV_FILE")|$(_fav_mtime "$dir")"
+    if [ "$key" = "$_fav_cache_key" ] && [ "$_fav_base" = "$dir" ]; then
+      return 0
+    fi
   fi
   _fav_names=(); _fav_alias=(); _fav_ids=(); _fav_stale=(); _fav_moved=()
   _fav_base="$dir"; _fav_dirty=false

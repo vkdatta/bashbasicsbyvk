@@ -435,6 +435,7 @@ bvk_main_exec() {
   esac
 }
 _cm_run_main() {
+  declare -F _bvk_tail_pending >/dev/null 2>&1 && _bvk_tail_pending && _bvk_load_rest   # a command is about to run: all modules must be loaded
   local h="${_CM_HANDLER:-bvk_main_exec}"
   [ "$h" = "-" ] && h=bvk_main_exec
   "$h" "$1"

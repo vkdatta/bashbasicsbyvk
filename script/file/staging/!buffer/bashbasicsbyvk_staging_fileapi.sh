@@ -1,3 +1,5 @@
+[ -n "${_BVK_LOADED_STG_FILEAPI:-}" ] && return 0     # sourced by several modules: parse it once
+_BVK_LOADED_STG_FILEAPI=1
 # Shared endpoint (WORKER_URL), curl hardening (_BB_CURL_OPTS) and _bb_* helpers
 source "_3bvk_fileapi_lib.sh"
 

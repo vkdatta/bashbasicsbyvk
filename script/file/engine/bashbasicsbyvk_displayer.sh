@@ -13,35 +13,54 @@
 # ── Native (C) fast path: use bvk-ls when installed, else fall back to Python ─────────
 # _BVK_GO_WHY records why the native binary is NOT in use (read by the `health` command).
 declare -g _BVK_GO_WHY=""
+
+# PATH lookup without a process ( $(command -v x) forks a subshell ).  Sets _bw_out.
+_bvk_which() {
+  local IFS=: _d; _bw_out=""
+  for _d in $PATH; do
+    [ -n "$_d" ] && [ -f "$_d/$1" ] && [ -x "$_d/$1" ] && { _bw_out="$_d/$1"; return 0; }
+  done
+  return 1
+}
+
+# Which native binary to use.  The answer (and its two self-test runs) is expensive on a phone, so it is
+# remembered in ~/.bashbasicsbyvk/cache/gobin  — valid while that file is newer than the binary it names.
+# It is also resolved ONCE, in the main shell, so the $( ) subshells that list folders inherit it
+# instead of repeating the whole probe themselves.
 _bvk_go_bin() {
   if [ -z "${_BVK_GO_BIN+x}" ]; then
     _BVK_GO_BIN=""
     _BVK_GO_WHY=""
+    local _vf="${HOME}/.bashbasicsbyvk/cache/gobin" _vb=""
     if [ "${BVK_NO_GO:-0}" = "1" ]; then
       _BVK_GO_WHY="BVK_NO_GO=1 is set — the C engine is switched off on purpose"
+    elif [ -r "$_vf" ] && { IFS= read -r _vb <"$_vf"; [ -n "$_vb" ]; } && [ -x "$_vb" ] && [ "$_vf" -nt "$_vb" ]; then
+      _BVK_GO_BIN="$_vb"                      # verdict from an earlier run: no probing, no process
     else
       local _m _os _b _o _d _old=""
       local -a _cand=()
-      case "$(uname -m)" in
+      # $MACHTYPE is "aarch64-unknown-linux-android" / "x86_64-pc-linux-gnu" …: no uname process
+      case "${MACHTYPE%%-*}" in
         aarch64|arm64) _m=arm64 ;;
         x86_64|amd64)  _m=amd64 ;;
-        armv7*|armv8l) _m=arm ;;
-        *)             _m="" ; _BVK_GO_WHY="no prebuilt bvk-ls for CPU '$(uname -m)'" ;;
+        armv7*|armv8l|arm) _m=arm ;;
+        *)             _m="" ; _BVK_GO_WHY="no prebuilt bvk-ls for CPU '${MACHTYPE%%-*}'" ;;
       esac
       # Android (bionic) cannot run the static glibc "linux" builds: its linker
       # needs PT_PHDR, which a glibc static-pie binary does not have, and aborts
       # ("Could not find a PHDR: broken executable?"). Android uses the NDK
       # "android" builds; everything else uses the "linux" ones.
-      # $OSTYPE says "linux-android" on Android: saves a process (~20 ms on a phone); else ask uname
+      # $OSTYPE says "linux-android" on Android; else ask uname (only when no other hint)
       case "$OSTYPE" in
         *android*) _os=android ;;
-        *) case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac ;;
+        *) if [ -n "${ANDROID_ROOT:-}" ] && [ -d /system/bin ]; then _os=android
+           else case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac; fi ;;
       esac
-      _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
-      _cand=("$(command -v bvk-ls 2>/dev/null)")
+      _bvk_which o && _o="$_bw_out" || _o=""; _d="${_o%/*}"
+      _bvk_which bvk-ls && _cand=("$_bw_out") || _cand=("")
       if [ -n "$_m" ]; then
-        _cand+=("$_d/../bashbasicsbyvk/bin/bvk-ls-$_os-$_m"
-                "$(command -v "bvk-ls-$_os-$_m" 2>/dev/null)")
+        _bvk_which "bvk-ls-$_os-$_m" && _b="$_bw_out" || _b=""
+        _cand+=("$_d/../bashbasicsbyvk/bin/bvk-ls-$_os-$_m" "$_b")
       fi
       [ -n "$_BVK_GO_WHY" ] || _BVK_GO_WHY="no bvk-ls binary found (looked next to 'o' and on PATH)"
       for _b in "${_cand[@]}"; do
@@ -57,7 +76,10 @@ _bvk_go_bin() {
         case "$("$_b" group 2>&1 </dev/null)" in
           *'unknown command'*) [ -n "$_old" ] || _old="$_b"; _BVK_GO_WHY="$_b is out of date (no 'group' command)"; continue ;;
         esac
-        _BVK_GO_BIN="$_b"; _BVK_GO_WHY=""; break
+        _BVK_GO_BIN="$_b"; _BVK_GO_WHY=""
+        # remember the verdict (only a fully verified binary is remembered)
+        { [ -d "${_vf%/*}" ] || mkdir -p "${_vf%/*}" 2>/dev/null; } && printf '%s\n' "$_b" >"$_vf" 2>/dev/null
+        break
       done
       [ -z "$_BVK_GO_BIN" ] && [ -n "$_old" ] && _BVK_GO_BIN="$_old"
     fi
@@ -91,16 +113,22 @@ _bvk_src_tag() { local _bst_out; _bvk_src_tag_v; printf '%s' "$_bst_out"; }
 # bash reads a pipe/process-substitution ONE BYTE at a time, which made
 # `mapfile -t items < <(cmd)` ~30x slower than the listing itself (200k files:
 # ~1.1 s from a pipe vs ~35 ms from a regular file).
-_bvk_tmp() {
-  mktemp "${_BVK_DSIZE_TMP:-${TMPDIR:-/tmp}}/ld.XXXXXX" 2>/dev/null || mktemp
+# No process is started: the name is built from $$ and a counter, the file is created by the redirect.
+# (kept for old callers that capture it with $( ) ; new code uses _bvk_tmp_v and reads _bvk_tmp_out)
+_bvk_tmp_n=0; _bvk_tmp_out=""
+_bvk_tmp_v() {
+  _bvk_tmp_n=$(( (_bvk_tmp_n + 1) % 8 ))          # a small pool of names, reused: a call never holds more than 3 at once
+  _bvk_tmp_out="${TMPDIR:-/tmp}/bvk-ld.$$.$_bvk_tmp_n"
+  : >"$_bvk_tmp_out" 2>/dev/null || { _bvk_tmp_out="$(mktemp)"; }
 }
+_bvk_tmp() { _bvk_tmp_v; printf '%s' "$_bvk_tmp_out"; }
 
 # _bvk_fill_items <python-fallback-fn> <bvk-ls subcommand> args...
 # Fills items[] from the C binary, or from the Python fallback (called with the
 # same args minus the subcommand) when the binary is missing / fails.
 _bvk_fill_items() {
   local _fb="$1"; shift
-  local _f; _f="$(_bvk_tmp)" || return 1
+  local _f; _bvk_tmp_v; _f="$_bvk_tmp_out"
   if _bvk_go_bin && "$_BVK_GO_BIN" "$@" >"$_f" 2>/dev/null; then
     _BVK_LOAD_SRC=c
   else
@@ -108,7 +136,7 @@ _bvk_fill_items() {
     "$_fb" "${@:2}" >"$_f" 2>/dev/null
   fi
   mapfile -t items <"$_f"
-  rm -f "$_f"
+  : >"$_f"          # emptied, not removed: no rm process; the files go with the session (EXIT trap)
 }
 
 # ── Core arrays ───────────────────────────────────────────────────────────────
@@ -134,10 +162,12 @@ declare -g _BVK_DSIZE_JOB_IN=""
 declare -g _BVK_DSIZE_JOB_OUT=""
 
 # Per-session temp dir for job scratch
+# (the directory itself is created by _bvk_dsize_tmp_ensure, the first time a job needs it: no mktemp at startup)
 if [ -z "${_BVK_DSIZE_TMP:-}" ]; then
-  _BVK_DSIZE_TMP="$(mktemp -d -t bvk-dsize.XXXXXX 2>/dev/null)"
+  _BVK_DSIZE_TMP="${TMPDIR:-/tmp}/bvk-dsize.$$"
   export _BVK_DSIZE_TMP
 fi
+_bvk_dsize_tmp_ensure() { [ -d "$_BVK_DSIZE_TMP" ] || mkdir -p "$_BVK_DSIZE_TMP" 2>/dev/null; }
 
 # ── Rendering helpers ─────────────────────────────────────────────────────────
 
@@ -685,7 +715,7 @@ _load_window() {
     return
   fi
 
-  local tmp_in; tmp_in=$(mktemp)
+  local tmp_in; _bvk_tmp_v; tmp_in="$_bvk_tmp_out"
   local i
   for (( i=lo; i<=hi; i++ )); do
     local f="${items[$((i-1))]}"
@@ -693,13 +723,13 @@ _load_window() {
   done > "$tmp_in"
 
   if [ ! -s "$tmp_in" ]; then
-    rm -f "$tmp_in"
+    : >"$tmp_in"
     _win_lo=$lo; _win_hi=$hi
     _meta_loaded=true
     return
   fi
 
-  local tmp_out; tmp_out="$(_bvk_tmp)"
+  local tmp_out; _bvk_tmp_v; tmp_out="$_bvk_tmp_out"
   if _bvk_go_bin && "$_BVK_GO_BIN" meta "$tmp_in" >"$tmp_out" 2>/dev/null; then
     _BVK_META_SRC=c
   else
@@ -713,7 +743,7 @@ _load_window() {
     item_children["$fpath"]="$fchildren"
     item_icon["$fpath"]="$ftype"
   done <"$tmp_out"
-  rm -f "$tmp_in" "$tmp_out"
+  : >"$tmp_in"; : >"$tmp_out"
 
   local evict_lo=$(( lo - _BVK_WIN_RADIUS ))
   local evict_hi=$(( hi + _BVK_WIN_RADIUS ))
@@ -792,6 +822,7 @@ _load_dir_size_window() {
   _BVK_DSIZE_JOB_IN=""
   _BVK_DSIZE_JOB_OUT=""
 
+  _bvk_dsize_tmp_ensure
   local tmp_in; tmp_in=$(mktemp "$_BVK_DSIZE_TMP/in.XXXXXX" 2>/dev/null) || tmp_in=$(mktemp)
   local i f
   for (( i=_win_lo; i<=_win_hi; i++ )); do

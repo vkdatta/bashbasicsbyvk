@@ -313,6 +313,9 @@ def render_one(evs, T, R, cols, meta, history_rows, probe=True, full=False):
             shown += "  (%s)" % label
         A("   you pressed Enter on %s  →  %s is drawn and waiting for a key" % (shown, to))
     A("   TOTAL  %s" % ms(total))
+    fp = [e for e in marks if e.name.startswith("first paint")]
+    if fp:
+        A("   FIRST PAINT  %s   (cached menu on screen; keys typed meanwhile are kept — TOTAL = menu live)" % ms(fp[0].t - T.t))
     A("─" * width)
 
     # who consumed it
