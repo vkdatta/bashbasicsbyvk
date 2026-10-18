@@ -69,7 +69,8 @@ _disp_store() {                    # _disp_store <expr> [csv ...]
 
 _disp_clear() { rm -f "$_DISP_ACTIVE" 2>/dev/null; _disp_cache_reset; _disp_banner=""; }
 
-_disp_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
+_disp_mtime() { [ -e "$1" ] || [ -L "$1" ] || { echo 0; return; }   # missing file: no stat process (the usual case when no filter is set)
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
 
 # Run the engine for the active filter in $path → fills _DISP_HIT. 0 ok / 1 error
 # (error text in _disp_err).

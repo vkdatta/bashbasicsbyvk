@@ -32,9 +32,10 @@ _bvk_go_bin() {
       # needs PT_PHDR, which a glibc static-pie binary does not have, and aborts
       # ("Could not find a PHDR: broken executable?"). Android uses the NDK
       # "android" builds; everything else uses the "linux" ones.
-      case "$(uname -o 2>/dev/null)" in
-        Android) _os=android ;;
-        *)       _os=linux ;;
+      # $OSTYPE says "linux-android" on Android: saves a process (~20 ms on a phone); else ask uname
+      case "$OSTYPE" in
+        *android*) _os=android ;;
+        *) case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac ;;
       esac
       _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
       _cand=("$(command -v bvk-ls 2>/dev/null)")

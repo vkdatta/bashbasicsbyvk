@@ -11,14 +11,15 @@ _get_rc_file() {
 _MARKER_BEGIN="# bashbasicsbyvk colors BEGIN"
 _MARKER_END="# bashbasicsbyvk colors END"
 
+# no forks: bash upper-cases it itself (every fork is ~20 ms on a phone).  _nh sets $_NH, no subshell.
+_nh() { _NH="${1#\#}"; _NH="${_NH^^}"; }
 _normalize_hex() {
-    echo "${1#\#}" | tr '[:lower:]' '[:upper:]'
+    _nh "$1"; printf '%s\n' "$_NH"
 }
 
 _valid_hex() {
-    local hex
-    hex="$(_normalize_hex "$1")"
-    [[ "$hex" =~ ^[0-9A-F]{6}$ ]]
+    _nh "$1"
+    [[ "$_NH" =~ ^[0-9A-F]{6}$ ]]
 }
 
 _hex_to_rgb() {
@@ -32,14 +33,12 @@ _hex_to_rgb() {
 
 apply_colors() {
     if [ -n "$terminal_bg_color" ] && _valid_hex "$terminal_bg_color"; then
-        local hex
-        hex="$(_normalize_hex "$terminal_bg_color")"
-        printf "\e]11;#%s\a" "$hex"
+        _nh "$terminal_bg_color"
+        printf "\e]11;#%s\a" "$_NH"
     fi
     if [ -n "$terminal_text_color" ] && _valid_hex "$terminal_text_color"; then
-        local hex
-        hex="$(_normalize_hex "$terminal_text_color")"
-        printf "\e]10;#%s\a" "$hex"
+        _nh "$terminal_text_color"
+        printf "\e]10;#%s\a" "$_NH"
     fi
     if [ -n "$terminal_bg_color" ] || [ -n "$terminal_text_color" ]; then
         printf "\e[2J\e[H"

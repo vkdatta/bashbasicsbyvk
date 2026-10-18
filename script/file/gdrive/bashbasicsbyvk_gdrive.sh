@@ -22,7 +22,8 @@
 #  Uses: bashbasicsbyvk_loadingbar.sh (_lb_run), _3bvk_gd_main (python), rclone
 # ════════════════════════════════════════════════════════════════════════════
 
-_GD_SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
+_GD_SRC_DIR="$(cd -- "$_bvk_d" && pwd)"; unset _bvk_d
 _GD_BASE="${HOME}/.bashbasicsbyvk/gdrive"
 
 _GD_ACTIVE=0          # 1 while a Drive is open
@@ -317,7 +318,12 @@ _gd_order_items() {
 # ═════════════════════════════════════════════════════════════════════════════
 _gd_rename_fn() {          # _gd_rename_fn old new   (keeps the original callable under a new name)
   declare -F "$1" >/dev/null 2>&1 || return 1
-  eval "$(declare -f "$1" | sed "1s/^$1 /$2 /")"
+  # no forks (the old declare|sed cost 2 processes per function — ~40 ms each on a phone):
+  # declare writes into a file, $(<file) reads it without starting a process
+  local _f="${TMPDIR:-/tmp}/.bvk-rn.$$" _d
+  declare -f "$1" >"$_f" 2>/dev/null || return 1
+  _d="$(<"$_f")"
+  eval "${_d/#"$1 "/"$2 "}"
 }
 
 # server-side copy of items that are all inside the Drive into a Drive folder
@@ -509,3 +515,4 @@ handle_gd_cmd() {
 }
 
 _gd_install_wrappers
+rm -f "${TMPDIR:-/tmp}/.bvk-rn.$$" 2>/dev/null

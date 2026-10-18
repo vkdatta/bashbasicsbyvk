@@ -55,7 +55,8 @@ _inner_run() {
   done
 }
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
+SCRIPT_DIR="$(cd -- "$_bvk_d" && pwd)"; unset _bvk_d
 
 _lt_b "start: recents daemon check";  _bvk_wake_recents_daemon; _lt_e
 _lt_b "start: telemetry (background)"; _bvk_telemetry_start; _lt_e

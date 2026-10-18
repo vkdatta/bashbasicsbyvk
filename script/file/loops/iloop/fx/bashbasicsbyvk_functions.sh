@@ -141,7 +141,8 @@ _fx_adf_breadcrumb() {
 #  alongside this file and add a source line below.
 # ════════════════════════════════════════════════════════════════════════════
 
-_FX_ADF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
+_FX_ADF_DIR="$(cd -- "$_bvk_d" && pwd)"; unset _bvk_d
 
 _lt_b "load adf_rename_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_rename_csv.sh"; _lt_e
 _lt_b "load adf_move_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_move_csv.sh"; _lt_e

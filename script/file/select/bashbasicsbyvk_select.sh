@@ -20,7 +20,8 @@
 _SEL_FILE="${HOME}/.bashbasicsbyvk/selection.list"
 _SEL_RULES_DIR="${HOME}/.bashbasicsbyvk/rules"
 
-_SEL_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+_bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
+_SEL_HERE="$(cd -- "$_bvk_d" 2>/dev/null && pwd)"; unset _bvk_d
 
 _sel_ensure_store() {
   mkdir -p "$(dirname "$_SEL_FILE")" "$_SEL_RULES_DIR" 2>/dev/null

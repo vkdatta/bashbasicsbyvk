@@ -47,6 +47,7 @@ _fav_last_path=""
 
 # ── small helpers ─────────────────────────────────────────────────────────────
 _fav_id() {                         # dev:inode of a path
+  [ -e "$1" ] || [ -L "$1" ] || return 0     # missing: nothing to stat (same empty answer, no process)
   local i
   i=$(stat -c '%d:%i' -- "$1" 2>/dev/null) || i=$(stat -f '%d:%i' -- "$1" 2>/dev/null) || i=""
   printf '%s' "$i"
@@ -55,6 +56,7 @@ _fav_id() {                         # dev:inode of a path
 # change fingerprint: nanosecond mtime + size (whole-second mtime can miss edits
 # made within the same second — e.g. by the daemon or a hand edit)
 _fav_mtime() {
+  [ -e "$1" ] || [ -L "$1" ] || { echo 0; return; }   # missing: same "0", no process
   stat -c '%.9Y:%s' -- "$1" 2>/dev/null || stat -c '%Y:%s' -- "$1" 2>/dev/null \
     || stat -f '%m:%z' -- "$1" 2>/dev/null || echo 0
 }

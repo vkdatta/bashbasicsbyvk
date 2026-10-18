@@ -17,7 +17,8 @@
 #  This file replaces the old single "recover" button in functions.sh; bashbasicsbyvk_adf_recover.sh is untouched.
 # ════════════════════════════════════════════════════════════════════════════
 
-_CFW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
+_CFW_DIR="$(cd -- "$_bvk_d" && pwd)"; unset _bvk_d
 declare -ga _CFW_TYPE=() _CFW_NAME=() _CFW_EPOCH=() _CFW_ERR=()
 _CFW_NAV=""; _CFW_PY=""; _CFW_MAIN=""; _CFW_TOK=""; _CFW_ACC=""
 
