@@ -57,34 +57,46 @@ declare -gA _CM_MAP_PARENT=()   # map -> parent map
 declare -gA _CM_MAP_FILE=()     # map -> source path
 declare -gA _CM_MAP_LINES=()    # map -> newline separated "key|kind|tgt|lineno"
 declare -ga _CM_MAP_NAMES=()
+declare -gA _CM_MAP_PENDING=()   # map -> file, wiring not parsed yet (parsed on first use)
 _CM_BOOTED=0
 _CM_FLASH=""                    # one-shot message shown in the hint row
 _CM_ABORT=0; _CM_ABORT_MSG=""; _CM_ABORT_DEPTH=0; _CM_ABORT_N=0
 _CM_MUTE=0
 
 # ------------------------------------------------------------ locating the files
-_cm_dirs() {
-  local d="${SCRIPT_DIR:-}"
-  [ -n "$d" ] && printf '%s\n' "$d" "$d/cmdmap" "$d/file/cmdmap"
-  local IFS=:; for d in $PATH; do [ -n "$d" ] && printf '%s\n' "$d"; done
-  printf '%s\n' "$PWD"
-}
-_cm_find() {   # name -> path on stdout
-  local d
-  while IFS= read -r d; do
-    [ -f "$d/$1" ] && { printf '%s' "$d/$1"; return 0; }
-  done < <(_cm_dirs)
-  return 1
-}
-_cm_list_maps() {  # every *.map next to a known cmdmap dir
-  local d f seen=" "
-  while IFS= read -r d; do
-    for f in "$d"/*.map; do
-      [ -f "$f" ] || continue
-      case "$seen" in *" ${f##*/} "*) continue ;; esac
-      seen+="${f##*/} "; printf '%s\n' "$f"
+# Built ONCE per session, with no subshells: the directories to look in, and every
+# command-map file found in them (name -> full path).  Nothing is searched twice.
+declare -gA _CM_PATHS=()       # basename -> full path
+declare -ga _CM_MAPFILES=()    # *.map files, in discovery order
+_CM_SCANNED=0
+_cm_scan() {
+  [ "$_CM_SCANNED" = 1 ] && return 0
+  _CM_SCANNED=1
+  local d f b IFS_save="$IFS"
+  local -a dirs=()
+  [ -n "${SCRIPT_DIR:-}" ] && dirs+=("$SCRIPT_DIR" "$SCRIPT_DIR/cmdmap" "$SCRIPT_DIR/file/cmdmap")
+  local IFS=:
+  for d in $PATH; do [ -n "$d" ] && dirs+=("$d"); done
+  IFS="$IFS_save"
+  # the files we need are named *commands.sh / *menucommands.sh / *.map — glob only those
+  shopt -s nullglob
+  for d in "${dirs[@]}"; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*commands.sh "$d"/*.map; do
+      b="${f##*/}"
+      [ -n "${_CM_PATHS[$b]+x}" ] && continue
+      _CM_PATHS["$b"]="$f"
+      [[ "$b" == *.map ]] && _CM_MAPFILES+=("$f")
     done
-  done < <(_cm_dirs)
+  done
+  shopt -u nullglob
+  return 0
+}
+_cm_find() {   # name -> _CM_FOUND (and stdout)
+  _cm_scan
+  _CM_FOUND="${_CM_PATHS[$1]-}"
+  [ -n "$_CM_FOUND" ] && { printf '%s' "$_CM_FOUND"; return 0; }
+  return 1
 }
 
 # ------------------------------------------------------------ definitions
@@ -96,8 +108,13 @@ cmd_def() {
   _CM_DEF["$_CM_SRC_FILE:$id"]="$kind|$handler|$class|$desc|$ex"
 }
 
-_cm_load_defs() {   # basename of a *commands.sh
-  local f; f=$(_cm_find "$1") || return 1
+declare -gA _CM_LOADED=()
+_cm_load_defs() {   # basename of a *commands.sh  (each file is sourced exactly once)
+  [ -n "${_CM_LOADED[$1]+x}" ] && return 0
+  _CM_LOADED["$1"]=1
+  _cm_scan
+  local f="${_CM_PATHS[$1]-}"
+  [ -n "$f" ] || return 1
   _CM_SRC_FILE="$1"
   # shellcheck disable=SC1090
   source "$f"
@@ -109,20 +126,20 @@ _cm_boot() {
   [ "$_CM_BOOTED" = 1 ] && return 0
   _CM_BOOTED=1
   _cm_load_defs maincommands.sh
+  _cm_scan
   local f
-  for f in $(_cm_list_maps); do _cm_parse_map "$f"; done
+  for f in "${_CM_MAPFILES[@]}"; do _cm_parse_map "$f" head; done   # headers only: cheap
   return 0
 }
 
 # kind of a typed key, learned from the command it is wired to
-_cm_kind_of_tgt() {   # $1=file:ID  -> kind
+_cm_kind_of_tgt() {   # $1=file:ID  -> _CM_KIND   (no subshell)
   local d="${_CM_DEF[$1]-}"
-  [ -n "$d" ] && { printf '%s' "${d%%|*}"; return; }
-  printf 'exact'
+  if [ -n "$d" ]; then _CM_KIND="${d%%|*}"; else _CM_KIND=exact; fi
 }
 
-_cm_parse_map() {
-  local f="$1" line n=0 map="" kind="menu" key tgt rx srcfile id kd
+_cm_parse_map() {   # $1 file  $2 = head (directives only, stop at the first wire line)
+  local f="$1" headonly="${2:-}" line n=0 map="" kind="menu" key tgt rx srcfile id kd
   local fn="" back="u" parent="main" lines=""
   local rx_wire='^([^[:space:]]+)[[:space:]]+\.mapto\(\)[[:space:]]+(block\(\)|back\(\)|([^[:space:]]+)[[:space:]]+from[[:space:]]+([^[:space:]#]+))'
   while IFS= read -r line || [ -n "$line" ]; do
@@ -138,31 +155,33 @@ _cm_parse_map() {
       @parent*) parent="${line#@parent}"; parent="${parent//[[:space:]]/}" ;;
       @*)       ;;
       *)
+        [ -n "$headonly" ] && break
         if [[ "$line" =~ $rx_wire ]]; then
           key="${BASH_REMATCH[1]}"
           if [ "${BASH_REMATCH[2]}" = "block()" ]; then tgt="BLOCK"
           elif [ "${BASH_REMATCH[2]}" = "back()" ]; then tgt="BACK"
           else
             id="${BASH_REMATCH[3]}"; srcfile="${BASH_REMATCH[4]}"
-            _cm_load_defs "$srcfile" 2>/dev/null
+            _cm_load_defs "$srcfile"
             tgt="$srcfile:$id"
           fi
           case "$tgt" in
             BLOCK|BACK)
               # the kind of a blocked key is the kind of the main command it shadows
               if [[ "$key" == *'*' ]]; then kd=prefix; key="${key%\*}"
-              else kd=$(_cm_kind_of_tgt "maincommands.sh:$key"); fi ;;
-            *) kd=$(_cm_kind_of_tgt "$tgt") ;;
+              else _cm_kind_of_tgt "maincommands.sh:$key"; kd="$_CM_KIND"; fi ;;
+            *) _cm_kind_of_tgt "$tgt"; kd="$_CM_KIND" ;;
           esac
           lines+="$key|$kd|$tgt|$n"$'\n'
         fi ;;
     esac
   done < "$f"
   [ -z "$map" ] && return 0
+  if [ -n "$headonly" ]; then _CM_MAP_PENDING["$map"]="$f"; else unset '_CM_MAP_PENDING[$map]'; fi
   _CM_MAP_KIND["$map"]="$kind"; _CM_MAP_BACK["$map"]="$back"
   _CM_MAP_PARENT["$map"]="$parent"; _CM_MAP_FILE["$map"]="$f"
   _CM_MAP_LINES["$map"]="$lines"
-  _CM_MAP_NAMES+=("$map")
+  case " ${_CM_MAP_NAMES[*]} " in *" $map "*) ;; *) _CM_MAP_NAMES+=("$map") ;; esac
   [ -n "$fn" ] && _CM_MAP_FUNC["$fn"]="$map"
   return 0
 }
@@ -197,12 +216,17 @@ _cm_ctx_find() {
 # ------------------------------------------------------------ the effective table of a map
 declare -ga _ct_key=() _ct_kind=() _ct_tgt=() _ct_map=() _ct_impl=()
 _CM_TBL_MAP=""
+# wiring of a map is parsed the first time it is needed (a menu you never open costs nothing)
+_cm_ensure() { [ -n "${_CM_MAP_PENDING[$1]+x}" ] && _cm_parse_map "${_CM_MAP_PENDING[$1]}"; return 0; }
+_cm_ensure_all() { local m; for m in "${!_CM_MAP_PENDING[@]}"; do _cm_ensure "$m"; done; }
+
 _cm_table_build() {   # $1 = map
   [ "$_CM_TBL_MAP" = "$1" ] && return 0
   _CM_TBL_MAP="$1"
   _ct_key=(); _ct_kind=(); _ct_tgt=(); _ct_map=(); _ct_impl=()
   local m="$1" depth=0 line key kd tgt rest seen=$'\n' lc
   while [ -n "$m" ] && [ "$depth" -lt 6 ]; do
+    _cm_ensure "$m"
     while IFS= read -r line; do
       [ -z "$line" ] && continue
       key="${line%%|*}"; rest="${line#*|}"; kd="${rest%%|*}"; rest="${rest#*|}"; tgt="${rest%%|*}"
@@ -655,7 +679,7 @@ _cm_text_read() {   # prompt initial var can_complete
 # ------------------------------------------------------------ show / lint
 # o --map-show [menu]   prints the effective command table of a menu
 _cm_show() {
-  _cm_boot
+  _cm_boot; _cm_ensure_all
   local m="${1:-main}" i
   [ -n "${_CM_MAP_LINES[$m]+x}" ] || { echo "no such map: $m"; echo "maps: ${_CM_MAP_NAMES[*]}"; return 1; }
   _CM_MAP="$m"; _CM_TBL_MAP=""; _cm_table_build "$m"
@@ -677,7 +701,7 @@ _cm_show() {
 
 # o --map-lint   every gap in the wiring
 _cm_lint() {
-  _cm_boot
+  _cm_boot; _cm_ensure_all
   local m k d bad=0 id line key tgt
   local -a mainkeys=()
   for k in "${!_CM_DEF[@]}"; do [[ "$k" == maincommands.sh:* ]] && mainkeys+=("${k#maincommands.sh:}"); done

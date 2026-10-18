@@ -539,7 +539,7 @@ _input_hint_sync() {
   if [ "${_vp_hint_row:-0}" = 1 ]; then
     # "=" has its own hint (live filter); everything else is the command map's live suggestion
     [ "${_vp_input_fn:-}" = "_print_input_line" ] && declare -F _filter_hint_text >/dev/null 2>&1 && _filter_hint_text
-    if [ -z "$_hint_want" ] && declare -F _cm_hint >/dev/null 2>&1; then _cm_hint "${_buf:-}" "$([ "${_vp_input_fn:-}" = _multi_print_input_line ] && echo text || echo menu)"; fi
+    if [ -z "$_hint_want" ] && declare -F _cm_hint >/dev/null 2>&1; then if [ "${_vp_input_fn:-}" = _multi_print_input_line ]; then _cm_hint "${_buf:-}" text; else _cm_hint "${_buf:-}" menu; fi; fi
   fi
   [ "$_hint_want" = "$_hint_cur" ] && return 0
   _hint_cur="$_hint_want"
