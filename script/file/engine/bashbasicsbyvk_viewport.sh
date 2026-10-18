@@ -3,23 +3,9 @@ _vp_rows_now=0
 _vp_cols_now=0
 _vp_size_pending=""
 
-# Terminal size WITHOUT a process: ask the terminal where the cursor lands after "go far bottom-right"
-# (cursor-position report, ~0.2 ms).  Only used while nobody can be typing (before the menu is ready,
-# _vp_dsr_ok=1): a key typed during the query would be read as part of the answer.  Falls back to stty.
-_vp_dsr_ok=1
-_vp_read_size_dsr() {
-  local rep r c
-  [ "$_vp_dsr_ok" = 1 ] && [ -t 0 ] && [ -t 1 ] || return 1
-  builtin printf '\0337\033[9999;9999H\033[6n\0338'
-  IFS= read -rs -t 0.15 -d R rep || { _vp_dsr_ok=0; return 1; }
-  rep="${rep##*\[}"; r="${rep%%;*}"; c="${rep##*;}"
-  [[ "$r" =~ ^[0-9]+$ && "$c" =~ ^[0-9]+$ ]] && (( r > 0 && c > 0 )) || return 1
-  _vp_pr="$r"; _vp_pc="$c"
-}
 _vp_read_size() {
   local sz r c
   _vp_pr=""; _vp_pc=""
-  _vp_read_size_dsr && return 0
   sz=$(stty size 2>/dev/null)
   r="${sz%% *}"; c="${sz##* }"
   if [[ "$r" =~ ^[0-9]+$ ]] && [ "$r" -gt 0 ] \
@@ -37,8 +23,6 @@ _vp_read_size() {
 }
 
 _vp_probe_size() {
-  # size known and no SIGWINCH since: nothing to ask (the trap stays installed for the whole session)
-  if [ "$_vp_resized" != true ] && [ "$_vp_rows_now" -gt 0 ] 2>/dev/null && [ "$_vp_cols_now" -gt 0 ] 2>/dev/null; then return 0; fi
   if _vp_read_size; then
     _vp_rows_now="$_vp_pr"; _vp_cols_now="$_vp_pc"
   elif [ "$_vp_rows_now" -gt 0 ] 2>/dev/null; then
@@ -59,9 +43,7 @@ _term_cols() {
 }
 
 _vp_check_resize() {
-  [ "$_vp_resized" = true ] || [ -n "$_vp_size_pending" ] || return 1     # SIGWINCH sets _vp_resized: no stty process every idle tick
   _vp_resized=false
-  _vp_dsr_ok=0                                                             # (a person may be typing now: ask stty, not the terminal)
   _vp_read_size || return 1
   local nr="$_vp_pr" nc="$_vp_pc"
   if [ "$nr" = "$_vp_rows_now" ] && [ "$nc" = "$_vp_cols_now" ]; then
@@ -370,10 +352,8 @@ _vp_mark_sel() {
 _vp_build_chrome() {
   local _i _n
   _vp_probe_size; _vp_cols="$_vp_cols_now"     # live width BEFORE header/footer wrap to it
-  # header / footer text: written to a scratch file and read back — no subshell (a fork per call is slow on a phone)
-  _bvk_tmp_v; $_vp_header_fn >"$_bvk_tmp_out" 2>&1 </dev/null; mapfile -t _vp_hdr_arr <"$_bvk_tmp_out"
-  $_vp_footer_fn >"$_bvk_tmp_out" 2>&1 </dev/null; mapfile -t _vp_ftr_arr <"$_bvk_tmp_out"
-  : >"$_bvk_tmp_out"
+  mapfile -t _vp_hdr_arr < <($_vp_header_fn)
+  mapfile -t _vp_ftr_arr < <($_vp_footer_fn)
 
   # header: drop trailing blanks (the rule follows immediately, no linebreak between)
   _n=${#_vp_hdr_arr[@]}
@@ -574,18 +554,6 @@ _vp_emit() {
 
   for line in "${_vp_ftr_out[@]}"; do _vp_fit "$line"; _vp_el "$_vp_line"; done
 
-  # a cached menu from the instant first paint is on screen (see the top of `o`): identical → nothing to
-  # draw; different → step back to the top of it and let this frame replace it
-  if [ -n "${_BVK_FP_UP:-}" ]; then
-    if [ "$_vp_frame" = "$_BVK_FP_FRAME" ]; then
-      _BVK_SCR_RAW="$_vp_frame"; _BVK_SCR_EXTRA=""
-      _BVK_FP_UP=""; _BVK_FP_FRAME=""; _vp_frame=""
-      _set_available_above "$_blk_h"
-      return 0
-    fi
-    builtin printf '\r\033[%dA\033[J' "$_BVK_FP_UP"
-    _BVK_FP_UP=""; _BVK_FP_FRAME=""
-  fi
   # frame is complete — one write; ?2026 = synchronized output (terminals that lack it ignore it)
   builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
   _BVK_SCR_RAW="$_vp_frame"; _BVK_SCR_EXTRA=""      # print: remember what was just drawn
@@ -1024,7 +992,7 @@ _multi_prompt_loop_raw() {
     esac
   done
 
-  trap '_vp_on_resize' WINCH
+  trap - WINCH
   stty "$_orig_stty" 2>/dev/null
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
   echo

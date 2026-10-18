@@ -31,7 +31,7 @@
 
 _HL_BAD=0
 _HL_WARN=0
-declare -ga _HL_FINDINGS=()      # "what is wrong|how to fix"
+declare -a _HL_FINDINGS=()      # "what is wrong|how to fix"
 _HL_WHY=""
 _HL_FIX=""
 

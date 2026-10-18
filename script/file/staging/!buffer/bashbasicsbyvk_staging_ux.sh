@@ -1,5 +1,3 @@
-[ -n "${_BVK_LOADED_STG_UX:-}" ] && return 0     # sourced by several modules: parse it once
-_BVK_LOADED_STG_UX=1
 # ux-  —  client-side encrypted (CSE) sharing with people you already linked in RBAM.
 # ════════════════════════════════════════════════════════════════════════════
 #  ux-<items> [as <alias>]      e.g.  ux-1-5   ·   ux-a-1-5 as project files

@@ -1,5 +1,3 @@
-[ -n "${_BVK_LOADED_STG_HELPERS:-}" ] && return 0     # sourced by several modules: parse it once
-_BVK_LOADED_STG_HELPERS=1
 _SP_BUFFER_DIR="${HOME}/.bashbasicsbyvk/buffer"
 
 _SP_CP_FILE="${_SP_BUFFER_DIR}/copy.list"

@@ -40,8 +40,7 @@ _disp_dir=""
 declare -ga _disp_csvs=()
 
 _disp_startup() {                  # call once when the app starts
-  [ "${display_filter_persist:-false}" = "true" ] || { [ -e "$_DISP_ACTIVE" ] && rm -f "$_DISP_ACTIVE" 2>/dev/null; }   # (no process when there is nothing to remove)
-  return 0
+  [ "${display_filter_persist:-false}" = "true" ] || rm -f "$_DISP_ACTIVE" 2>/dev/null
 }
 
 _disp_cache_reset() { _disp_cache_key=""; _DISP_HIT=(); }

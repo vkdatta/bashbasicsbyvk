@@ -1,6 +1,6 @@
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk"
 SETTINGS_FILE="$CONFIG_DIR/config"
-[ -d "$CONFIG_DIR" ] || mkdir -p "$CONFIG_DIR"      # (no process when it exists)
+mkdir -p "$CONFIG_DIR"
 
 DEFAULT_SHOW_HIDDEN_FILES=false
 DEFAULT_INDEX_MODE_THRESHOLD=200
@@ -160,13 +160,7 @@ _tz_valid() {
   done
   # tz data kept somewhere unusual (e.g. Android's single tzdata blob): trust the zone if date resolves it
   # to a real abbreviation instead of echoing the name back
-  # (the answer is remembered in ~/.bashbasicsbyvk/cache/tzok: the `date` process below costs ~12 ms on a phone, every start)
-  local _tzf="${HOME}/.bashbasicsbyvk/cache/tzok" _l
-  if [ -r "$_tzf" ]; then while IFS= read -r _l; do [ "$_l" = "$z" ] && return 0; done <"$_tzf"; fi
-  if [[ "$z" == */* ]] && [ "$(TZ="$z" date +%Z 2>/dev/null)" != "${z%%/*}" ]; then
-    { [ -d "${_tzf%/*}" ] || mkdir -p "${_tzf%/*}" 2>/dev/null; } && printf '%s\n' "$z" >>"$_tzf" 2>/dev/null
-    return 0
-  fi
+  [[ "$z" == */* ]] && [ "$(TZ="$z" date +%Z 2>/dev/null)" != "${z%%/*}" ] && return 0
   return 1
 }
 

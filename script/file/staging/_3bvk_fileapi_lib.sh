@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-[ -n "${_BVK_LOADED_FILEAPI_LIB:-}" ] && return 0     # sourced by several modules: parse it once
-_BVK_LOADED_FILEAPI_LIB=1
 # _3bvk_fileapi_lib.sh — the ONE place for the fileapi endpoint, transport hardening and
 # credential/response helpers. Sourced by:
 #   • cmd/bashbasicsbyvk_copy                          (stand-alone `bashbasicsbyvk_copy`)

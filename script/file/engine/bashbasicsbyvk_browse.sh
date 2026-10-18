@@ -663,9 +663,7 @@ _read_choice_raw() {
     _hl_index=0
   fi
 
-  # already raw (set by the instant first paint and not yet restored): no stty process
-  if [ "${_BVK_TTY_RAW:-0}" != 1 ]; then stty -icanon -echo min 1 time 0 2>/dev/null; fi
-  _BVK_TTY_RAW=1
+  stty -icanon -echo min 1 time 0 2>/dev/null
   trap '_vp_on_resize' WINCH
 
   _buf=""
@@ -673,19 +671,11 @@ _read_choice_raw() {
   local key seq _rc
   _print_input_line
   _lt_ready menu
-  _vp_dsr_ok=0       # from here on a person may type: the size is never asked of the terminal again
-  # the menu is up: while nobody types, load the rest of the program (see "WHAT IS LOADED WHEN" in o)
-  declare -F _bvk_tail_pending >/dev/null 2>&1 && _bvk_tail_pending && _vp_poll_cur=0.01
 
   while true; do
     IFS= read -rsn1 -t "$_vp_poll_cur" key
     _rc=$?
     if [ "$_rc" -gt 128 ]; then
-      if declare -F _bvk_tail_pending >/dev/null 2>&1 && _bvk_tail_pending; then
-        _bvk_load_rest idle
-        _bvk_tail_pending || _vp_poll_active           # done: back to the normal poll rhythm
-        continue
-      fi
       _vp_poll_tick
       # a screen can ask for a callback on every idle tick (e.g. Links → live "time left" column)
       [ -n "${_vp_tick_fn:-}" ] && "$_vp_tick_fn"
@@ -778,9 +768,8 @@ _read_choice_raw() {
     esac
   done
 
-  trap '_vp_on_resize' WINCH
+  trap - WINCH
   stty "$_orig_stty" 2>/dev/null
-  _BVK_TTY_RAW=0
   # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "$_hint_cur" ]; then
     _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'
@@ -815,12 +804,11 @@ _bvk_wake_recents_daemon() {
     if [ -f "$_c" ]; then _daemon_script="$_c"; break; fi
   done
   [ -n "$_daemon_script" ] || return
-  # read -r instead of $(cat …): no subshell, no process
-  local _pid="" _ver=""
-  [ -r "$_BVK_RECENTS_PID_FILE" ] && IFS= read -r _pid <"$_BVK_RECENTS_PID_FILE"
+  local _pid
+  _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
   # alive AND current version → nothing to do.  Alive but older (pre-upgrade) →
   # fall through: the daemon script itself replaces the old process.
-  [ -r "${HOME}/.bashbasicsbyvk/daemon.version" ] && IFS= read -r _ver <"${HOME}/.bashbasicsbyvk/daemon.version"
+  local _ver; _ver=$(cat "${HOME}/.bashbasicsbyvk/daemon.version" 2>/dev/null)
   kill -0 "$_pid" 2>/dev/null && [ "$_ver" = "$_BVK_DAEMON_VERSION" ] && return
   if [ -x "$_daemon_script" ]; then
     "$_daemon_script" </dev/null >/dev/null 2>&1 &
@@ -832,7 +820,7 @@ _bvk_wake_recents_daemon() {
   disown
 }
 
-builtin cd -P -- . 2>/dev/null; path="$PWD"      # physical path, no $( ) subshell
+path="$(pwd -P)"
 export BVK_FILEMANAGER_BOUNDARY="$path"
 selected_items=()
 group_prefix=""

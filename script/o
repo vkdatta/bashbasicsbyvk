@@ -1,195 +1,36 @@
 #!/usr/bin/env bash
 
-# ═══════════════════════════════════════════════════════════════════════════════════════════
-#  INSTANT FIRST PAINT
-#  The menu you saw last time in this folder is drawn from a small cache file BEFORE anything
-#  else is loaded — no process is started on this path (builtins only), so it lands within a
-#  few milliseconds even on a phone.  The real menu is then built as always; when it is identical
-#  to the cached one nothing is redrawn, otherwise it replaces it in place (see _vp_emit).
-#  Keys typed while the rest loads are kept by the terminal and handled as soon as the menu is live.
-#  Skipped when: arguments are given, not a terminal, BVK_FASTPAINT=0, cache missing/stale, the
-#  terminal size differs from the cached one, or the terminal does not answer the size query.
-#  Cache: ~/.bashbasicsbyvk/cache/fp/<folder with / as %>   (line 1: cols rows lines-above-prompt, then the frame)
-# ═══════════════════════════════════════════════════════════════════════════════════════════
-_BVK_FP_UP=""; _BVK_FP_FRAME=""; _BVK_FP_US=""; _BVK_FP_STTY=""
-_bvk_fp_paint() {
-  (( $# == 0 )) || return 1
-  [ -t 0 ] && [ -t 1 ] && [ "${BVK_FASTPAINT:-1}" != 0 ] || return 1
-  local f="${HOME}/.bashbasicsbyvk/cache/fp/${PWD//\//%}" meta="" body="" s rep r c cc rr up
-  [ -r "$f" ] && [ "$f" -nt "$PWD" ] && [ "$f" -nt "${BASH_SOURCE[0]}" ] || return 1
-  for s in "${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/config" "${HOME}/.bashbasicsbyvk/selection.list" \
-           "${HOME}/.bashbasicsbyvk/locks.list" "${HOME}/.bashbasicsbyvk/display/active" "${HOME}/.bashbasicsbyvk/favourites"; do
-    [ "$s" -nt "$f" ] && return 1
-  done
-  { IFS= read -r meta && IFS= read -r -d '' body; } <"$f"
-  [ -n "$meta" ] && [ -n "$body" ] || return 1
-  read -r cc rr up <<<"$meta"
-  [[ "$cc" =~ ^[0-9]+$ && "$rr" =~ ^[0-9]+$ && "$up" =~ ^[0-9]+$ ]] || return 1
-  # terminal size: ask the terminal itself (cursor-position report) — answered in well under a millisecond
-  builtin printf '\0337\033[9999;9999H\033[6n\0338'
-  IFS= read -rs -t 0.15 -d R rep || return 1
-  rep="${rep##*\[}"; r="${rep%%;*}"; c="${rep##*;}"
-  [ "$c" = "$cc" ] && [ "$r" = "$rr" ] || return 1
-  builtin printf '\033[?2026h%s\033[?2026l\n\r\033[2K\033[1A\r\033[KSelect: ' "$body"
-  _BVK_FP_UP="$up"; _BVK_FP_FRAME="$body"; _BVK_FP_US="${EPOCHREALTIME/[.,]/}"
-  # keys typed while the rest loads: no echo, no line-buffering (restored by the existing exit paths)
-  _BVK_FP_STTY=$(stty -g 2>/dev/null) && stty -icanon -echo min 1 time 0 2>/dev/null || _BVK_FP_STTY=""
-  return 0
-}
-_bvk_fp_paint "$@"
-
 source "bashbasicsbyvk_loadtime.sh"      # first: so that even the loading of the scripts is on the loadtime timeline
 _lt_init
-[ -n "$_BVK_FP_US" ] && _lt_w M "$_BVK_FP_US" 0 "first paint — cached menu is on screen" "" 2>/dev/null
 
-# ═══════════════════════════════════════════════════════════════════════════════════════════
-#  WHAT IS LOADED WHEN
-#  The main menu needs only a handful of modules (engine, settings values, selection / favourites /
-#  filter / lock hooks).  Those are sourced here, before the first draw.  The other ~50 modules (file
-#  operations, staging, services, Settings screens, Home, fx, api, auth, Google Drive …) make up the
-#  TAIL: they are sourced afterwards, in their original order —
-#     · in small steps while nobody is typing (the first idle moment after the menu is drawn:
-#       _bvk_load_rest idle, called from the key-wait loop; it stops as soon as a key is waiting),
-#     · and in full, at the latest, before the first command is run (main loop, _cm_run_main) or when a
-#       function that is not defined yet is called (command_not_found_handle).
-#  So every command sees exactly the same code as before; the menu simply no longer waits for it.
-#  Adding a module: put it in _BVK_TAIL (or, if the main menu itself calls it, in the eager list below).
-# ═══════════════════════════════════════════════════════════════════════════════════════════
-_lt_b "load import_engine"
-for _bvk_m in bashbasicsbyvk_loadingbar.sh bashbasicsbyvk_print.sh bashbasicsbyvk_smartmenu.sh bashbasicsbyvk_menuchrome.sh \
-              bashbasicsbyvk_cmdmap.sh bashbasicsbyvk_viewport.sh bashbasicsbyvk_displayer.sh bashbasicsbyvk_browse.sh; do
-  _lt_b "load ${_bvk_m#bashbasicsbyvk_}"; source "$_bvk_m"; _lt_e
-done
-_lt_e
-for _bvk_m in bashbasicsbyvk_lock.sh bashbasicsbyvk_select.sh bashbasicsbyvk_display_filter.sh bashbasicsbyvk_favourites.sh \
-              bashbasicsbyvk_settings_ui.sh bashbasicsbyvk_settings.sh bashbasicsbyvk_colors.sh bashbasicsbyvk_filter.sh; do
-  _lt_b "load ${_bvk_m#bashbasicsbyvk_}"; source "$_bvk_m"; _lt_e
-done
-unset _bvk_m
+_lt_b "load import_engine"; source "_3bvk_import_engine.sh"; _lt_e
+_lt_b "load import_functions"; source "_3bvk_import_functions.sh"; _lt_e
+_lt_b "load import_staging"; source "_3bvk_import_staging.sh"; _lt_e
+_lt_b "load import_services"; source "_3bvk_import_services.sh"; _lt_e
+_lt_b "load import_select"; source "_3bvk_import_select.sh"; _lt_e
 
-_BVK_TAIL=(
-  bashbasicsbyvk_health.sh
-  bashbasicsbyvk_create.sh
-  bashbasicsbyvk_find.sh
-  bashbasicsbyvk_organise.sh
-  bashbasicsbyvk_rename.sh
-  bashbasicsbyvk_transfer.sh
-  bashbasicsbyvk_delete.sh
-  bashbasicsbyvk_bundle_io.sh
-  bashbasicsbyvk_carry.sh
-  bashbasicsbyvk_staging_fileapi.sh
-  bashbasicsbyvk_staging_archive.sh
-  bashbasicsbyvk_staging_ux.sh
-  bashbasicsbyvk_staging_map.sh
-  bashbasicsbyvk_staging_helpers.sh
-  bashbasicsbyvk_staging_move.sh
-  bashbasicsbyvk_staging_copy.sh
-  bashbasicsbyvk_staging_shortcut.sh
-  bashbasicsbyvk_staging_shortcut_registry.sh
-  bashbasicsbyvk_staging_bookmark.sh
-  bashbasicsbyvk_staging_buffer.sh
-  bashbasicsbyvk_svc_core.sh
-  bashbasicsbyvk_backup.sh
-  bashbasicsbyvk_saved.sh
-  bashbasicsbyvk_snapshot.sh
-  bashbasicsbyvk_rules.sh
-  bashbasicsbyvk_daemon_cmd.sh
-  bashbasicsbyvk_run.sh
-  bashbasicsbyvk_csv.sh
-  bashbasicsbyvk_settings_groups.sh
-  bashbasicsbyvk_hidefiles.sh
-  bashbasicsbyvk_indexmode.sh
-  bashbasicsbyvk_importnano.sh
-  bashbasicsbyvk_compress.sh
-  bashbasicsbyvk_timezone.sh
-  bashbasicsbyvk_help.sh
-  bashbasicsbyvk_home.sh
-  bashbasicsbyvk_refresh.sh
-  bashbasicsbyvk_switch.sh
-  bashbasicsbyvk_upgrade.sh
-  bashbasicsbyvk_api.sh
-  bashbasicsbyvk_functions.sh
-  bashbasicsbyvk_infinity.sh
-  bashbasicsbyvk_telemetry.sh
-  bashbasicsbyvk_auth.sh
-  bashbasicsbyvk_xui.sh
-  bashbasicsbyvk_rbam.sh
-  bashbasicsbyvk_notify.sh
-  bashbasicsbyvk_csurf.sh
-  bashbasicsbyvk_ai.sh
-  bashbasicsbyvk_gdrive.sh
-)
-_BVK_TAIL_I=0
-
-# Source the next tail modules.  "idle" = stop as soon as a key is waiting (read -t 0 does not consume it).
-# Errors from a module are not shown while the person is looking at the menu.
-_bvk_load_rest() {
-  local _bvk_lm
-  while (( _BVK_TAIL_I < ${#_BVK_TAIL[@]} )); do
-    if [ "${1:-}" = idle ]; then read -t 0 && return 0; fi
-    _bvk_lm="${_BVK_TAIL[_BVK_TAIL_I]}"; _BVK_TAIL_I=$(( _BVK_TAIL_I + 1 ))
-    _lt_b "load ${_bvk_lm#bashbasicsbyvk_}"
-    if [ "${1:-}" = idle ]; then source "$_bvk_lm" 2>/dev/null; else source "$_bvk_lm"; fi
-    _lt_e
-  done
-  return 0
-}
-_bvk_tail_pending() { (( _BVK_TAIL_I < ${#_BVK_TAIL[@]} )); }
-
-# a function that is not defined yet: load the tail, then run it (a safety net — the paths above come first)
-command_not_found_handle() {
-  if _bvk_tail_pending; then
-    _bvk_load_rest
-    if declare -F "$1" >/dev/null 2>&1; then "$@"; return $?; fi
-  fi
-  builtin printf '%s: command not found\n' "$1" >&2
-  return 127
-}
-
-# ── light stand-ins for the modules that are in the tail but are called while the main menu is built ──
-# (same answers as the real functions give when nothing of that kind is active; the real ones replace them)
-_GD_ACTIVE=0; _gd_vp=""
-_gd_at_root()     { [ "${_GD_ACTIVE:-0}" = 1 ] && [ "$path" = "${_GD_ROOT:-}" ] && [ -z "$group_prefix" ]; }
-_gd_view_path()   { _gd_vp="$1"; }
-_gd_cycle()       { [ "${_GD_ACTIVE:-0}" = 1 ] || return 0; _bvk_load_rest; _gd_cycle; }
-_gd_order_items() { [ "${_GD_ACTIVE:-0}" = 1 ] || return 0; _bvk_load_rest; _gd_order_items; }
-_gd_before_exec() { [ "${_GD_ACTIVE:-0}" = 1 ] || return 0; _bvk_load_rest; _gd_before_exec; }
-_gd_on_exit()     { [ "${_GD_ACTIVE:-0}" = 1 ] || return 0; _bvk_load_rest; _gd_on_exit; }
-_SNAP_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/snapshots"; _SNAP_NOTICE="$_SNAP_DIR/notice"; _SNAP_TARGETS="$_SNAP_DIR/targets"
-# snapshots: nothing to start unless a path is on the list; then the daemon is started from a background shell that loads the rest itself
-_snap_daemon_start() {
-  [ -s "$_SNAP_TARGETS" ] || return 0
-  ( _bvk_load_rest; _snap_daemon_start ) >/dev/null 2>&1 &
-  disown 2>/dev/null
-  return 0
-}
-# telemetry runs in the background anyway: load its module there, not here
-_bvk_telemetry_start() {
-  ( source "bashbasicsbyvk_telemetry.sh"; declare -F _lt_bg >/dev/null 2>&1 && _lt_bg; _bvk_telemetry_ping ) >/dev/null 2>&1 &
-  disown 2>/dev/null
-  return 0
-}
+_lt_b "load run"; source "bashbasicsbyvk_run.sh"; _lt_e
+_lt_b "load csv"; source "bashbasicsbyvk_csv.sh"; _lt_e
+_lt_b "load import_settings"; source "_3bvk_import_settings.sh"; _lt_e
+_lt_b "load help"; source "bashbasicsbyvk_help.sh"; _lt_e
+_lt_b "load home"; source "bashbasicsbyvk_home.sh"; _lt_e
+_lt_b "load refresh"; source "bashbasicsbyvk_refresh.sh"; _lt_e
+_lt_b "load switch"; source "bashbasicsbyvk_switch.sh"; _lt_e
+_lt_b "load upgrade"; source "bashbasicsbyvk_upgrade.sh"; _lt_e
+_lt_b "load api"; source "bashbasicsbyvk_api.sh"; _lt_e
+_lt_b "load functions"; source "bashbasicsbyvk_functions.sh"; _lt_e
+_lt_b "load infinity"; source "bashbasicsbyvk_infinity.sh"; _lt_e
+_lt_b "load telemetry"; source "bashbasicsbyvk_telemetry.sh"; _lt_e
+_lt_b "load auth"; source "bashbasicsbyvk_auth.sh"; _lt_e
+_lt_b "load xui"; source "bashbasicsbyvk_xui.sh"; _lt_e
+_lt_b "load rbam"; source "bashbasicsbyvk_rbam.sh"; _lt_e
+_lt_b "load notify"; source "bashbasicsbyvk_notify.sh"; _lt_e
+_lt_b "load csurf"; source "bashbasicsbyvk_csurf.sh"; _lt_e
+_lt_b "load ai"; source "bashbasicsbyvk_ai.sh"; _lt_e
+_lt_b "load gdrive"; source "bashbasicsbyvk_gdrive.sh"; _lt_e   # Google Drive (fx → google_drive_fx): session layer, wraps the native read/copy functions
 
 # Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), bk (Backup), sv (Saved Surf), sn (Snapshots), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
-# remember the main menu just drawn, for the instant first paint of the next launch (see the top of this file)
-declare -A _FP_SAVED=()
-_bvk_fp_save() {
-  [ "${BVK_FASTPAINT:-1}" != 0 ] || return 0
-  $imaginary_mode && return 0; $_fav_on && return 0; $_disp_on && return 0; $_has_group_view && return 0
-  [ -z "$group_prefix" ] && [ "${_GD_ACTIVE:-0}" != 1 ] && [ -z "${_BVK_FP_UP:-}" ] || return 0
-  [ "${_vp_mode:-}" = items ] && [ "${_vp_hl_fn:-}" = _vp_is_hl_single ] || return 0
-  [ -n "$_BVK_SCR_RAW" ] || return 0
-  [ "${_FP_SAVED[$path]-}" = "$_BVK_SCR_RAW" ] && return 0                 # unchanged since this session last saved it
-  (( ${#_FP_SAVED[@]} < 20 )) || [ -n "${_FP_SAVED[$path]+x}" ] || return 0   # a session never writes more than 20 folders
-  local d="${HOME}/.bashbasicsbyvk/cache/fp" f nl
-  f="$d/${path//\//%}"; (( ${#f} < 240 )) || return 0
-  [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || return 0
-  nl="${_BVK_SCR_RAW//[^$'\n']/}"
-  { builtin printf '%s %s %s\n' "${_vp_cols_now:-0}" "${_vp_rows_now:-0}" "${#nl}"; builtin printf '%s' "$_BVK_SCR_RAW"; } >"$f" 2>/dev/null
-  _FP_SAVED[$path]="$_BVK_SCR_RAW"
-}
-
 _inner_next=""
 _inner_run() {
   local _next="$1"
@@ -224,13 +65,10 @@ _lt_b "start: terminal colours + screen setup"; _disp_startup; _lt_e
 
 trap '_gd_on_exit 2>/dev/null; _lt_cleanup; stty "$_orig_stty" 2>/dev/null; \
       [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
-      [ -n "${_BVK_DSIZE_TMP:-}" ] && [ -d "$_BVK_DSIZE_TMP" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
-      rm -f "${TMPDIR:-/tmp}"/bvk-ld.$$.* 2>/dev/null; \
+      [ -n "${_BVK_DSIZE_TMP:-}" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
       true' EXIT
 
-trap '_vp_on_resize' WINCH       # lets the size be cached: it is re-read only after a resize
-if [ -n "$_BVK_FP_STTY" ]; then _orig_stty="$_BVK_FP_STTY"      # already captured by the first-paint step
-else _orig_stty=$(stty -g 2>/dev/null); fi
+_orig_stty=$(stty -g 2>/dev/null)
 
 # command map tooling:  o --map-show [menu] · o --map-lint · o --map-gen
 case "${1:-}" in
@@ -334,12 +172,10 @@ while true; do
   _lt_b "draw the menu"
   _vp_prime_rows
   _vp_render_fresh
-  _bvk_fp_save
   _lt_e
 
   _read_choice_filtered
   _lt_mark "dispatch: ${choice:-?}"
-  _bvk_tail_pending && _bvk_load_rest        # whatever was typed may need any module: make sure all of them are loaded
 
   shopt -s nocasematch
   case "$choice" in
