@@ -1,30 +1,33 @@
 #!/usr/bin/env bash
 
-source "_3bvk_import_engine.sh"
-source "_3bvk_import_functions.sh"
-source "_3bvk_import_staging.sh"
-source "_3bvk_import_services.sh"
-source "_3bvk_import_select.sh"
+source "bashbasicsbyvk_loadtime.sh"      # first: so that even the loading of the scripts is on the loadtime timeline
+_lt_init
 
-source "bashbasicsbyvk_run.sh"
-source "bashbasicsbyvk_csv.sh"
-source "_3bvk_import_settings.sh"
-source "bashbasicsbyvk_help.sh"
-source "bashbasicsbyvk_home.sh"
-source "bashbasicsbyvk_refresh.sh"
-source "bashbasicsbyvk_switch.sh"
-source "bashbasicsbyvk_upgrade.sh"
-source "bashbasicsbyvk_api.sh"
-source "bashbasicsbyvk_functions.sh"
-source "bashbasicsbyvk_infinity.sh"
-source "bashbasicsbyvk_telemetry.sh"
-source "bashbasicsbyvk_auth.sh"
-source "bashbasicsbyvk_xui.sh"
-source "bashbasicsbyvk_rbam.sh"
-source "bashbasicsbyvk_notify.sh"
-source "bashbasicsbyvk_csurf.sh"
-source "bashbasicsbyvk_ai.sh"
-source "bashbasicsbyvk_gdrive.sh"     # Google Drive (fx → google_drive_fx): session layer, wraps the native read/copy functions
+_lt_b "load import_engine"; source "_3bvk_import_engine.sh"; _lt_e
+_lt_b "load import_functions"; source "_3bvk_import_functions.sh"; _lt_e
+_lt_b "load import_staging"; source "_3bvk_import_staging.sh"; _lt_e
+_lt_b "load import_services"; source "_3bvk_import_services.sh"; _lt_e
+_lt_b "load import_select"; source "_3bvk_import_select.sh"; _lt_e
+
+_lt_b "load run"; source "bashbasicsbyvk_run.sh"; _lt_e
+_lt_b "load csv"; source "bashbasicsbyvk_csv.sh"; _lt_e
+_lt_b "load import_settings"; source "_3bvk_import_settings.sh"; _lt_e
+_lt_b "load help"; source "bashbasicsbyvk_help.sh"; _lt_e
+_lt_b "load home"; source "bashbasicsbyvk_home.sh"; _lt_e
+_lt_b "load refresh"; source "bashbasicsbyvk_refresh.sh"; _lt_e
+_lt_b "load switch"; source "bashbasicsbyvk_switch.sh"; _lt_e
+_lt_b "load upgrade"; source "bashbasicsbyvk_upgrade.sh"; _lt_e
+_lt_b "load api"; source "bashbasicsbyvk_api.sh"; _lt_e
+_lt_b "load functions"; source "bashbasicsbyvk_functions.sh"; _lt_e
+_lt_b "load infinity"; source "bashbasicsbyvk_infinity.sh"; _lt_e
+_lt_b "load telemetry"; source "bashbasicsbyvk_telemetry.sh"; _lt_e
+_lt_b "load auth"; source "bashbasicsbyvk_auth.sh"; _lt_e
+_lt_b "load xui"; source "bashbasicsbyvk_xui.sh"; _lt_e
+_lt_b "load rbam"; source "bashbasicsbyvk_rbam.sh"; _lt_e
+_lt_b "load notify"; source "bashbasicsbyvk_notify.sh"; _lt_e
+_lt_b "load csurf"; source "bashbasicsbyvk_csurf.sh"; _lt_e
+_lt_b "load ai"; source "bashbasicsbyvk_ai.sh"; _lt_e
+_lt_b "load gdrive"; source "bashbasicsbyvk_gdrive.sh"; _lt_e   # Google Drive (fx → google_drive_fx): session layer, wraps the native read/copy functions
 
 # Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), bk (Backup), sv (Saved Surf), sn (Snapshots), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
@@ -54,12 +57,12 @@ _inner_run() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-_bvk_wake_recents_daemon
-_bvk_telemetry_start
-_snap_daemon_start          # Snapshots: background sync while  o  runs (does nothing until a path is on the list)
-_disp_startup
+_lt_b "start: recents daemon check";  _bvk_wake_recents_daemon; _lt_e
+_lt_b "start: telemetry (background)"; _bvk_telemetry_start; _lt_e
+_lt_b "start: snapshot daemon";       _snap_daemon_start; _lt_e         # Snapshots: background sync while  o  runs (does nothing until a path is on the list)
+_lt_b "start: terminal colours + screen setup"; _disp_startup; _lt_e
 
-trap '_gd_on_exit 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
+trap '_gd_on_exit 2>/dev/null; _lt_cleanup; stty "$_orig_stty" 2>/dev/null; \
       [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
       [ -n "${_BVK_DSIZE_TMP:-}" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
       true' EXIT
@@ -73,6 +76,7 @@ case "${1:-}" in
   --map-gen)  _mg=$(_cm_find bashbasicsbyvk_mapgen) && exec python3 "$_mg" "${@:2}"; echo "mapgen not found"; exit 1 ;;
 esac
 
+_lt_mark "startup finished — entering the main loop"
 if [ $# -eq 1 ]; then
   target="$1"
   if [ -d "$target" ]; then
@@ -89,9 +93,9 @@ fi
 
 shopt -s nullglob
 while true; do
-  _gd_cycle      # Google Drive open: push what the last command changed, list this folder
+  _lt_b "gdrive: sync cycle"; _gd_cycle; _lt_e     # Google Drive open: push what the last command changed, list this folder
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
-  total=$(count_items_in_path "$path")
+  _lt_b "count items in this folder"; total=$(count_items_in_path "$path"); _lt_e
 
   imaginary_mode=false
   _filter_reset_state
@@ -101,10 +105,13 @@ while true; do
   _has_group_view=false
   [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
 
+  _lt_b "read display filter / selection / favourites"
   _disp_begin   # .d display filter: sets _disp_on
   _sel_begin    # selection count for the header (marks are drawn by the viewport)
   _fav_begin    # favourites: sets _fav_on (mode priority: favourite > imaginary > normal)
+  _lt_e
 
+  _lt_b "build the item list ($total items)"
   if $_fav_on; then
     _fav_build_items
   elif [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show && ! $_disp_on; then
@@ -136,11 +143,14 @@ while true; do
     fi
   fi
 
+  _lt_e
+  _lt_b "apply filters / drive order / group view"
   $imaginary_mode || _disp_apply   # narrow to the .d display filter
   $imaginary_mode || _gd_order_items   # Google Drive: folders first, like drive.google.com
   # Group view: breadcrumb drill (menu of groups, then the files of the picked group)
   _gv_crumb_menu=false; _gv_leaf=false
   $imaginary_mode || $_fav_on || _gv_crumb_apply
+  _lt_e
 
   if $imaginary_mode; then
     _vp_mode="imaginary"
@@ -158,14 +168,17 @@ while true; do
   # may have left its own row renderer set, which would replace the file rows.
   _vp_rowtext_fn=""
   _vp_cache_reset
+  _lt_b "draw the menu"
   _vp_prime_rows
   _vp_render_fresh
+  _lt_e
 
   _read_choice_filtered
+  _lt_mark "dispatch: ${choice:-?}"
 
   shopt -s nocasematch
   case "$choice" in
-    q)           if $_sw_did_switch; then _gd_before_exec; cd "$path" && exec "$SHELL"; else exit 0; fi ;;
+    q)           if $_sw_did_switch; then _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi ;;
     -h)          open_help ;;
     h)           home_menu ;;
     u)           if _gd_at_root; then echo "☁️  This is the top of your Google Drive — gdx leaves it"
@@ -188,7 +201,7 @@ while true; do
     z)           organise_menu ;;
     s)           settings_menu ;;
     r)           handle_rename ;;
-    cd)          if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁️  A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; else cd "$path" && exec "$SHELL"; fi ;;
+    cd)          if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁️  A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; else _lt_cleanup; cd "$path" && exec "$SHELL"; fi ;;
     kl)          kill -9 -1 ;;
     i)           infinity_stones_menu ;;
     -u)          _inner_run upg ;;

@@ -1,3 +1,4 @@
+declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 # bashbasicsbyvk_settings_ui.sh — one small menu engine for every Settings screen
 # ════════════════════════════════════════════════════════════════════════════
 #  Styled exactly like the main menu (header · rule · numbered rows · rule ·
@@ -245,6 +246,7 @@ _st_draw() {
   out+="$nl${f1:0:cols-1}"$'\n'
   out+="$nl${f2:0:cols-1}"$'\n'
   out+="$nl"$'\n'                                         # linebreak under the footer
+  _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
   out+="${nl}Select: $buf"$'\033[J'
   builtin printf '\033[?2026h%s\033[?2026l' "$out"
   prev=$(( vis + 10 ))
@@ -294,15 +296,20 @@ _st_run() {
     # rows are rebuilt only when something changed (a choice, a filter edit) — never for plain
     # ↑ ↓ PgUp PgDn Home End, which only move the highlight (this is what made long lists crawl)
     if (( need )); then
+      _lt_b "settings: build the rows ($title)"
       "$build"
       _st_filter_rows
       _st_number
+      _lt_e
       need=0
     fi
     n=${#_st_lbl[@]}
     (( cur >= n )) && cur=$(( n - 1 ))
     (( cur < 0 && n == 0 )) && cur=-1
+    _lt_b "settings: draw the screen"
     _st_draw
+    _lt_e
+    _lt_ready settings "$path_title"
     _st_readkey
     need=1
     case "$_st_k" in
@@ -321,11 +328,12 @@ _st_run() {
         elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
         else buf+="$_st_d"; _st_follow; need=0; fi ;;
       left|right)
-        (( cur >= 0 )) && _st_selectable "$cur" && "$act" "$cur" "$_st_k"
+        (( cur >= 0 )) && _st_selectable "$cur" && { _lt_enter "$_st_k" "${_st_lbl[$cur]}"; "$act" "$cur" "$_st_k"; }
         ;;
       space)
         if [[ "$buf" == =* ]]; then buf+=" "; fq="${buf:1}"; cur=-1; top=0     # a space inside =text is part of the search
-        elif (( cur >= 0 )) && _st_selectable "$cur"; then buf=""; _st_activate; fi
+        elif [ -n "$buf" ] && [[ "$buf" == [a-z]* ]]; then buf+=" "            # a command being typed (loadtime 2)
+        elif (( cur >= 0 )) && _st_selectable "$cur"; then buf=""; _lt_enter "space" "${_st_lbl[$cur]}"; _st_activate; fi
         ;;
       enter)
         if [[ "$buf" == =* ]]; then
@@ -334,6 +342,15 @@ _st_run() {
           buf=""; cur=-1; top=0
           continue
         fi
+        # print / loadtime work on every settings screen: wipe the block, run, draw it again
+        case "${buf,,}" in
+          print|loadtime|loadtime\ *)
+            _st_wipe; _st_tty_cooked
+            bvk_main_exec "${buf,,}"
+            _st_tty_raw; buf=""; cur=-1; continue ;;
+        esac
+        _ltl=""; (( cur >= 0 )) && _ltl="${_st_lbl[$cur]}"
+        _lt_enter "${buf:-enter}" "$_ltl"
         if [ -n "$cmdfn" ] && "$cmdfn" "${buf,,}"; then buf=""; continue; fi
         case "${buf,,}" in
           u) if [ -n "$fq" ]; then fq=""; buf=""; cur=-1; top=0; continue; fi

@@ -290,6 +290,7 @@ _snap_daemon_start() {
   fi
   local oppid=$$
   (
+    declare -F _lt_off >/dev/null 2>&1 && _lt_off      # a daemon is never part of a loadtime report
     echo "$BASHPID" > "$_SNAP_LOCK/pid"
     exec </dev/null >>"$_SNAP_LOG" 2>&1
     _snap_daemon_main "$oppid"

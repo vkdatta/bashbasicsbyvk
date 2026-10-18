@@ -196,7 +196,7 @@ _cm_ctx_find() {
   for (( i=1; i<n; i++ )); do
     fn="${FUNCNAME[i]}"
     case "$fn" in
-      _cm_*|_multi_*|select_items_common|select_imaginary_items_common|_read_choice|_read_choice_raw|_read_choice_filtered|read|_sm_*|_vp_*|_input_*|_print_input_line|_mc_ask|source|main) continue ;;
+      _cm_*|_lt_*|_multi_*|select_items_common|select_imaginary_items_common|_read_choice|_read_choice_raw|_read_choice_filtered|read|_sm_*|_vp_*|_input_*|_print_input_line|_mc_ask|source|main) continue ;;
     esac
     m="${_CM_MAP_FUNC[$fn]-}"
     if [ -n "$m" ]; then
@@ -281,6 +281,10 @@ _cm_resolve() {
   _CM_HANDLER="$handler"
   local fromfile="${tgt%%:*}" in_main=0
   [ "${_ct_map[best]}" = "main" ] && in_main=1
+  # a "tool" (print, loadtime) works at EVERY prompt: it only reads state, it never changes where you are
+  if [ "$class" = tool ] && [ "$fromfile" = maincommands.sh ] && declare -F "$handler" >/dev/null 2>&1; then
+    _CM_ACT=run; return 0
+  fi
   # ---- what does a typed command do HERE?
   if [ "$_CM_MAP" = "main" ] && [ "$mode" = "menu" ]; then _CM_ACT=local; return 0; fi
   if [ "$fromfile" != "maincommands.sh" ]; then
@@ -425,6 +429,8 @@ bvk_main_exec() {
     clear)  hash -r ;;
     sast)   bashbasicsbyvk_sast ;;
     -auth)  auth_menu ;;
+    print)  bvk_print_cmd ;;
+    loadtime|loadtime\ *) bvk_loadtime_cmd "$c" ;;
     *)      return 1 ;;
   esac
 }
@@ -465,7 +471,9 @@ _cm_read_choice() {
     _cm_ctx_find
     _read_choice_raw
     _cm_gate_choice && return 0
-    # a message is on screen; draw the menu again below it (same convention as _bvk_invalid)
+    # a message is on screen; draw the menu again below it (same convention as _bvk_invalid).
+    # A command that opened a smart menu (print → "1) Copy …") leaves ITS rows in the row cache: rebuild them.
+    _vp_cache_reset; _vp_prime_rows
     _vp_render_fresh
   done
 }
@@ -610,6 +618,7 @@ _cm_line_edit() {
   _CM_HINT_CUR=""
   stty_orig=$(stty -g 2>/dev/null)
   stty -icanon -echo min 1 time 0 2>/dev/null
+  _BVK_SCR_PROMPT="${_ce_prompt##*$'\n'}"
   builtin printf '%s%s' "$_ce_prompt" "$_ce_buf"
   builtin printf '\n\033[1A'                       # reserve the hint row (scrolls if at the bottom)
   _cm_edit_draw

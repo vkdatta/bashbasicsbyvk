@@ -67,3 +67,5 @@ ram        .mapto()  ram        from maincommands.sh
 clear      .mapto()  clear      from maincommands.sh
 sast       .mapto()  sast       from maincommands.sh
 kl         .mapto()  block()
+print      .mapto()  print      from maincommands.sh
+loadtime   .mapto()  loadtime   from maincommands.sh

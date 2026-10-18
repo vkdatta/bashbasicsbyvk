@@ -6,7 +6,8 @@
 #   KIND    exact | prefix | word      (see bashbasicsbyvk_cmdmap.sh)
 #   HANDLER bvk_main_exec  → can be run from any menu / prompt (nav, util)
 #           -              → handled by the list loop itself (act, filter)
-#   CLASS   nav | util | act | filter | danger
+#   CLASS   nav | util | tool | act | filter | danger
+#           tool = works at EVERY prompt, even inside a flow (print, loadtime)
 #
 # Menus never copy these. A menu's .map either wires an ID from here
 # ("p-  .mapto()  p-  from maincommands.sh"), replaces it with its own, or blocks it.
@@ -79,4 +80,6 @@ cmd_def disk     exact  bvk_main_exec  util   "Disk usage"
 cmd_def ram      exact  bvk_main_exec  util   "Memory usage"
 cmd_def clear    exact  bvk_main_exec  util   "Forget the command cache (hash -r)"
 cmd_def sast     exact  bvk_main_exec  util   "Static security scan"
+cmd_def print    exact  bvk_main_exec  tool   "Print what is on screen — copy it or save as txt"
+cmd_def loadtime word   bvk_main_exec  tool   "Load time: what each screen change cost (loadtime 2 · loadtime all)"
 cmd_def kl       exact  -              danger "Kill every process of this user (kill -9 -1)"

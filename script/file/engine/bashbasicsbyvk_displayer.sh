@@ -808,7 +808,7 @@ _load_dir_size_window() {
   _BVK_DSIZE_JOB_IN="$tmp_in"
   _BVK_DSIZE_JOB_OUT="${tmp_in}.out"
 
-  _py_recursive_size "$tmp_in" > "$_BVK_DSIZE_JOB_OUT" 2>/dev/null &
+  { declare -F _lt_bg >/dev/null 2>&1 && _lt_bg; _py_recursive_size "$tmp_in" > "$_BVK_DSIZE_JOB_OUT" 2>/dev/null; } &
   _BVK_DSIZE_JOB_PID=$!
   disown 2>/dev/null || true
   return 0

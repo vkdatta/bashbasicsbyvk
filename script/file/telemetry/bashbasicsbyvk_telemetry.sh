@@ -74,7 +74,7 @@ _bvk_telemetry_ping() {
 
 # Fire-and-forget: never delays or breaks startup.
 _bvk_telemetry_start() {
-  ( _bvk_telemetry_ping ) >/dev/null 2>&1 &
+  ( declare -F _lt_bg >/dev/null 2>&1 && _lt_bg; _bvk_telemetry_ping ) >/dev/null 2>&1 &
   disown 2>/dev/null
   return 0
 }

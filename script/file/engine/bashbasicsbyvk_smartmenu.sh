@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 # ============================================================
 #  SMART MENU  —  universal interactive-menu highlighter
 #
@@ -59,8 +60,10 @@ _sm_record() {
 
   # a screen clear invalidates everything above it
   case "$rest" in
-    *$'\033'"[2J"*) _sm_reset; rest="${rest##*$'\033'\[2J}" ;;
+    *$'\033'"[2J"*) _sm_reset; _BVK_SCR_RAW=""; _BVK_SCR_EXTRA=""; rest="${rest##*$'\033'\[2J}" ;;
   esac
+  # print: plain output after the last drawn frame (capped, so a huge listing cannot grow it forever)
+  if (( ${#_BVK_SCR_EXTRA} < 60000 )); then _BVK_SCR_EXTRA+="$rest"; fi
 
   while [[ "$rest" == *$'\n'* ]]; do
     _sm_partial+="${rest%%$'\n'*}"
@@ -444,6 +447,7 @@ _sm_is_hl_multi() { [ -n "${_msel_set[$1]+x}" ]; }
 
 _sm_input_fn() {
   declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
+  _BVK_SCR_PROMPT="${_sm_prompt##*$'\n'}"
   builtin printf '\r\033[K%s%s' "$_sm_prompt" "$_buf"
   local back=$(( ${#_buf} - _pos ))
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
@@ -661,6 +665,7 @@ _sm_run() {
   fi
 
   stty -icanon -echo min 1 time 0 2>/dev/null
+  _lt_ready smart
   while true; do
     IFS= builtin read -rsn1 -t "${_vp_poll_cur:-0.5}" key
     _rc=$?
@@ -775,6 +780,7 @@ _sm_run() {
       _sm_result=""
     fi
   fi
+  _lt_enter "$_sm_result"
   return 0
 }
 
@@ -787,15 +793,19 @@ _sm_run() {
 _cm_read_fallback() {
   local __cmf_ok="$1" __cmf_p="$2" __cmf_i="$3" __cmf_v="$4" __cmf_c="$5" __cmf_rc
   shift 5
+  _lt_ready text
   if [ "$__cmf_ok" = 1 ] && [ -t 0 ] && [ -t 1 ] && [ "${VK_CMD_EDITOR:-1}" != 0 ] \
      && declare -F _cm_text_read >/dev/null 2>&1; then
     _cm_text_read "$__cmf_p" "$__cmf_i" "$__cmf_v" "$__cmf_c"; __cmf_rc=$?
     if [ "$__cmf_rc" -ne 99 ]; then
       builtin printf -v "$__cmf_v" '%s' "$_CM_RESULT"
+      _lt_enter "$_CM_RESULT"
       return "$__cmf_rc"
     fi
   fi
-  builtin read "$@"
+  builtin read "$@"; __cmf_rc=$?
+  _lt_enter "${!__cmf_v:-}"
+  return "$__cmf_rc"
 }
 
 read() {

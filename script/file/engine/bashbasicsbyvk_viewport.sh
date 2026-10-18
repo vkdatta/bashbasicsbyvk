@@ -1,3 +1,4 @@
+declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 _vp_rows_now=0
 _vp_cols_now=0
 _vp_size_pending=""
@@ -257,6 +258,11 @@ declare -g _vp_lazy_rows=false
 declare -g _vp_meta_primed=false   # true while display_items runs in the prime subshell
 
 _vp_prime_rows() {
+  _lt_b "prepare rows (icons, sizes, names)"
+  _vp_prime_rows_run
+  _lt_e
+}
+_vp_prime_rows_run() {
   declare -F _gv_off >/dev/null 2>&1 && _gv_off
   [ "$_vp_mode" == "items" ] || return 0
   declare -F _lk_load >/dev/null 2>&1 && _lk_load     # 🔒 suffix needs the lock registry
@@ -550,6 +556,7 @@ _vp_emit() {
 
   # frame is complete — one write; ?2026 = synchronized output (terminals that lack it ignore it)
   builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
+  _BVK_SCR_RAW="$_vp_frame"; _BVK_SCR_EXTRA=""      # print: remember what was just drawn
   _vp_frame=""
   _set_available_above "$_blk_h"
   return 0
@@ -565,10 +572,14 @@ _vp_rerender() {
 _vp_render_fresh() {
   declare -F _cm_abort_report >/dev/null 2>&1 && _cm_abort_report   # a cancelled flow: say why, once, above the menu
   _hint_cur="?"          # a fresh screen: whatever sits under the prompt is unknown, repaint the hint row
+  _lt_b "draw: header + footer layout"
   _vp_build_chrome
   _vp_geometry
   _vp_ensure_visible "${_hl_index:-1}"
+  _lt_e
+  _lt_b "draw: rows → one write to the terminal"
   _vp_emit
+  _lt_e
   $_vp_input_fn
 }
 
@@ -770,8 +781,10 @@ _multi_print_input_line() {
   declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
   builtin printf '\r\033[K'
   if [ "$_vp_mode" == "imaginary" ]; then
+    _BVK_SCR_PROMPT="Group numbers:"
     builtin printf "Group numbers: %s" "$_buf"
   else
+    _BVK_SCR_PROMPT="Item numbers:"
     builtin printf "Item numbers: %s" "$_buf"
   fi
   local back=$(( ${#_buf} - _pos ))
@@ -917,6 +930,7 @@ _multi_prompt_loop_raw() {
   stty -icanon -echo min 1 time 0 2>/dev/null
   trap '_vp_on_resize' WINCH
   _multi_render
+  _lt_ready text
 
   while true; do
     IFS= read -rsn1 -t "$_vp_poll_cur" key
@@ -982,4 +996,5 @@ _multi_prompt_loop_raw() {
   stty "$_orig_stty" 2>/dev/null
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
   echo
+  _lt_enter "$_buf"
 }

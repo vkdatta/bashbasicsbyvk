@@ -87,7 +87,7 @@ handle_staging_map() {
 #    1) Copy to clipboard   2) Save to txt file
 # ─────────────────────────────────────────────
 _map_deliver() {
-  local map_output="$1"
+  local map_output="$1" suggest="${2:-}"
   echo
   _mc_menu -- "Copy to clipboard" "Save to txt file" -- @back_quit
 
@@ -99,16 +99,23 @@ _map_deliver() {
   q|Q) _bvk_quit ;;
     1)
       printf "%s" "$map_output" | bashbasicsbyvk_copy
-      echo "✅ Map copied to clipboard"
+      if [ -n "$suggest" ]; then echo "✅ Copied to clipboard"; else echo "✅ Map copied to clipboard"; fi
       ;;
     2)
       local filename
-      read -e -p "Enter file name: " filename
+      if [ -n "$suggest" ]; then
+        read -e -p "Enter file name [$suggest]: " filename
+        filename="${filename:-$suggest}"
+      else
+        read -e -p "Enter file name: " filename
+      fi
       if [ -z "$filename" ]; then
         echo "🚫 Cancelled — no file name entered."
       else
-        printf "%s" "$map_output" > "$path/$filename"
-        echo "✅ Map saved as $path/$filename"
+        local target="$path/$filename"
+        case "$filename" in /*) target="$filename" ;; "~"/*) target="$HOME/${filename#\~/}" ;; esac
+        if [ -n "$suggest" ]; then printf "%s\n" "$map_output" > "$target"; else printf "%s" "$map_output" > "$target"; fi
+        if [ -n "$suggest" ]; then echo "✅ Saved as $target"; else echo "✅ Map saved as $target"; fi
       fi
       ;;
     *)

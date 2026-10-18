@@ -1,3 +1,4 @@
+declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 get_abs_path() {
   local target="$1"
   if [ -d "$target" ]; then
@@ -553,6 +554,7 @@ _input_hint_sync() {
 _print_input_line() {
   _input_hint_sync
   builtin printf '\r\033[K'
+  _BVK_SCR_PROMPT="Select:"
   builtin printf "Select: %s" "$_buf"
   local back=$(( ${#_buf} - _pos ))
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
@@ -668,6 +670,7 @@ _read_choice_raw() {
   _pos=0
   local key seq _rc
   _print_input_line
+  _lt_ready menu
 
   while true; do
     IFS= read -rsn1 -t "$_vp_poll_cur" key
@@ -775,6 +778,12 @@ _read_choice_raw() {
 
   if [ -n "$_buf" ]; then choice="$_buf"
   elif $_can_nav && [ "$_hl_index" -ge 1 ]; then choice="$_hl_index"
+  fi
+  # loadtime: Enter was pressed — a screen change starts here (numbers get the item's name as a label)
+  if [ -n "${_LT_ON:-}" ] && [ "$_LT_ON" = 1 ]; then
+    local _ltl=""
+    [[ "$choice" =~ ^[0-9]+$ ]] && [ "${#items[@]}" -ge "$choice" ] && [ "$choice" -ge 1 ] && _ltl="${items[$((choice-1))]##*/}"
+    _lt_enter "$choice" "$_ltl"
   fi
 }
 

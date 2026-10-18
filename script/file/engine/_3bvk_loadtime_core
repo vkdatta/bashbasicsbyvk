@@ -1,0 +1,541 @@
+#!/usr/bin/env python3
+"""_3bvk_loadtime_core — builds the `loadtime` report from the event log.
+
+    _3bvk_loadtime_core LOG [--pick N|all] [--cols C] [--meta "k=v;k=v"]
+
+LOG is the tab separated file written by bashbasicsbyvk_loadtime.sh (and by _3bvk_lt.py in the Python tools):
+
+    kind  start_us  dur_us  pid  flags  name  detail
+
+    T  Enter pressed (name = what was typed, detail = "<screen>|<label>")
+    R  prompt ready  (name = screen, detail = kind)
+    S  step   X  external command   N  network request   P  process start   M  marker
+    flags "b" = background helper: it ran, but did not block the menu
+
+A SCREEN CHANGE is one T followed by the next R.  The report lists, in time order, everything that
+happened between them, then ranks it by the time each thing consumed itself (children excluded).
+Plain text only: what you read is exactly what "copy" and "save as txt" give you.
+"""
+import os
+import socket
+import ssl
+import sys
+import time
+
+TOOL_WORDS = ("print", "loadtime")
+NET_PHASES = (("DNS lookup", "dns"), ("TCP connect", "tcp"), ("TLS handshake", "tls"),
+              ("server wait (request sent → first byte)", "wait"), ("download", "dl"))
+
+
+class Ev(object):
+    __slots__ = ("kind", "t", "dur", "pid", "bg", "name", "detail", "end", "self_us", "kids", "depth")
+
+    def __init__(self, kind, t, dur, pid, bg, name, detail):
+        self.kind, self.t, self.dur, self.pid = kind, t, dur, pid
+        self.bg, self.name, self.detail = bg, name, detail
+        self.end = t + dur
+        self.self_us = dur
+        self.kids = []
+        self.depth = 0
+
+
+# ─────────────────────────────────────────────────────────────────── helpers
+def ms(us):
+    if us is None:
+        return "?"
+    v = us / 1000.0
+    if abs(v) >= 10000:
+        return "%.1f s" % (v / 1000.0)
+    if abs(v) >= 100:
+        return "{:,.0f} ms".format(v)
+    if abs(v) >= 10:
+        return "%.1f ms" % v
+    return "%.2f ms" % v
+
+
+def pct(part, whole):
+    if not whole:
+        return "  0%"
+    return "%3d%%" % int(round(100.0 * part / whole))
+
+
+def bar(part, whole, width=10):
+    if not whole or part <= 0:
+        return "░" * width
+    n = int(round(width * float(part) / whole))
+    n = max(1, min(width, n))
+    return "█" * n + "░" * (width - n)
+
+
+def human_bytes(n):
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return ""
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return ("%d %s" % (n, unit)) if unit == "B" else ("%.1f %s" % (n, unit))
+        n /= 1024.0
+
+
+def trunc(s, width):
+    return s if len(s) <= width else s[:max(1, width - 1)] + "…"
+
+
+def parse_kv(detail):
+    out = {}
+    for part in detail.split(";"):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def fnum(d, k):
+    try:
+        return float(d.get(k, ""))
+    except ValueError:
+        return None
+
+
+def load(path):
+    evs = []
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                p = line.rstrip("\n").split("\t")
+                if len(p) < 6:
+                    continue
+                try:
+                    kind, t, dur, pid = p[0], int(p[1]), int(p[2]), p[3]
+                except ValueError:
+                    continue
+                evs.append(Ev(kind, t, max(0, dur), pid, p[4], p[5], p[6] if len(p) > 6 else ""))
+    except OSError:
+        pass
+    return evs
+
+
+def is_tool(cmd):
+    c = cmd.strip().lower()
+    if c.startswith("@"):
+        return False
+    return c in TOOL_WORDS or c.startswith("loadtime ")
+
+
+def pairs_of(evs):
+    """[(T, R)] in order; a T that never reached an R (a tool command, a quit) is dropped."""
+    out, pending = [], None
+    for e in evs:
+        if e.kind == "T":
+            pending = e
+        elif e.kind == "R" and pending is not None:
+            if not is_tool(pending.name) and e.t >= pending.t:
+                out.append((pending, e))
+            pending = None
+    return out
+
+
+def split_from(detail):
+    frm, _, label = detail.partition("|")
+    return frm or "?", label
+
+
+# ─────────────────────────────────────────────────────────────────── the tree
+def build_tree(window):
+    """Foreground steps nest by time containment, whichever process wrote them."""
+    spans = [e for e in window if e.kind in ("S", "X", "N", "P") and not e.bg and e.dur > 0]
+    spans.sort(key=lambda e: (e.t, -e.dur))
+    stack, roots = [], []
+    for e in spans:
+        while stack and e.t >= stack[-1].end:
+            stack.pop()
+        # a span that starts inside its parent but ends after it (concurrent work) is clipped, not nested
+        if stack and e.end <= stack[-1].end + 50:
+            stack[-1].kids.append(e)
+            e.depth = stack[-1].depth + 1
+        else:
+            e.depth = 0
+            roots.append(e)
+        stack.append(e)
+    for e in spans:
+        kid_sum = sum(k.dur for k in e.kids)
+        e.self_us = max(0, e.dur - kid_sum)
+    return spans, roots
+
+
+def covered(spans, lo, hi):
+    """Length of the union of the intervals, clipped to [lo, hi] (parallel work counts once)."""
+    iv = sorted((max(lo, s.t), min(hi, s.end)) for s in spans)
+    tot, cur_s, cur_e = 0, None, None
+    for a, b in iv:
+        if b <= a:
+            continue
+        if cur_e is None or a > cur_e:
+            if cur_e is not None:
+                tot += cur_e - cur_s
+            cur_s, cur_e = a, b
+        else:
+            cur_e = max(cur_e, b)
+    if cur_e is not None:
+        tot += cur_e - cur_s
+    return tot
+
+
+# ─────────────────────────────────────────────────────────────────── network
+def net_phases(e):
+    """Phase times in µs from the cumulative curl-style numbers (seconds)."""
+    d = parse_kv(e.detail)
+    ns, co, ap, pt, st, tt = (fnum(d, k) for k in ("ns", "co", "ap", "pt", "st", "tt"))
+    ph = {}
+    if tt is None:
+        return ph, d
+    nc = d.get("nc")
+    reused = (nc == "0")
+    ph["reused"] = reused
+    if not reused:
+        if ns is not None:
+            ph["dns"] = ns * 1e6
+        if co is not None and ns is not None:
+            ph["tcp"] = max(0.0, (co - ns)) * 1e6
+        if ap is not None and co is not None and ap > 0:
+            ph["tls"] = max(0.0, (ap - co)) * 1e6
+    if st is not None and pt is not None:
+        ph["wait"] = max(0.0, (st - pt)) * 1e6
+    if st is not None:
+        ph["dl"] = max(0.0, (tt - st)) * 1e6
+    return ph, d
+
+
+def net_lines(e, indent):
+    ph, d = net_phases(e)
+    out = []
+    if not ph:
+        return out
+    pad = " " * indent
+    if ph.get("reused"):
+        out.append("%s↳ connection reused (no DNS / TCP / TLS)" % pad)
+    for label, key in NET_PHASES:
+        if key in ph:
+            out.append("%s↳ %-40s %10s" % (pad, label, ms(ph[key])))
+    extra = []
+    if d.get("code") and d.get("code") != "000":
+        extra.append("HTTP %s" % d["code"])
+    if d.get("ver"):
+        extra.append("HTTP/%s" % d["ver"])
+    if d.get("ip"):
+        extra.append(d["ip"])
+    if d.get("dl") not in (None, "", "0"):
+        extra.append("↓ " + human_bytes(d["dl"]))
+    if d.get("ul") not in (None, "", "0"):
+        extra.append("↑ " + human_bytes(d["ul"]))
+    if d.get("nr") not in (None, "", "0"):
+        extra.append("%s redirect(s)" % d["nr"])
+    if extra:
+        out.append("%s↳ %s" % (pad, " · ".join(extra)))
+    return out
+
+
+def probe_host(host, timeout=3.0):
+    """One fresh measurement: DNS, TCP, TLS, first byte of a HEAD request."""
+    r = {}
+    try:
+        t = time.perf_counter()
+        info = socket.getaddrinfo(host, 443, 0, socket.SOCK_STREAM)
+        r["dns"] = (time.perf_counter() - t) * 1e6
+        fam, typ, proto, _c, addr = info[0]
+        s = socket.socket(fam, typ, proto)
+        s.settimeout(timeout)
+        t = time.perf_counter()
+        s.connect(addr)
+        r["tcp"] = (time.perf_counter() - t) * 1e6
+        ctx = ssl.create_default_context()
+        t = time.perf_counter()
+        ss = ctx.wrap_socket(s, server_hostname=host)
+        r["tls"] = (time.perf_counter() - t) * 1e6
+        t = time.perf_counter()
+        ss.sendall(("HEAD / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nUser-Agent: bvk-loadtime\r\n\r\n" % host).encode())
+        first = ss.recv(64)
+        r["wait"] = (time.perf_counter() - t) * 1e6
+        r["status"] = first.split(b"\r\n")[0].decode("latin-1", "replace")
+        ss.close()
+    except Exception as ex:  # network may be off, or only reachable through a proxy
+        r["error"] = "%s: %s" % (type(ex).__name__, ex)
+    return r
+
+
+# ─────────────────────────────────────────────────────────────────── the report
+def top_consumers(spans):
+    agg = {}
+    for e in spans:
+        key = (e.kind, e.name)
+        a = agg.setdefault(key, [0, 0, 0])      # calls, self, incl
+        a[0] += 1
+        a[1] += e.self_us
+        a[2] += e.dur
+    rows = [(k, v) for k, v in agg.items()]
+    rows.sort(key=lambda kv: -kv[1][1])
+    return rows
+
+
+def kind_label(kind):
+    return {"S": "step", "X": "command", "N": "network", "P": "process"}.get(kind, kind)
+
+
+def window_events(evs, T, R):
+    lo = T.t - 2000
+    hi = R.t + 2000
+    return [e for e in evs if e.kind in ("S", "X", "N", "P", "M") and lo <= e.t <= hi]
+
+
+def render_one(evs, T, R, cols, meta, history_rows, probe=True, full=False):
+    width = max(60, min(cols, 110))
+    total = R.t - T.t
+    frm, label = split_from(T.detail)
+    to = R.name
+    typed = T.name if T.name else "(Enter)"
+    win = window_events(evs, T, R)
+    spans, roots = build_tree(win)
+    fg = [e for e in spans]
+    marks = sorted([e for e in win if e.kind == "M" and not e.bg], key=lambda e: e.t)
+    bgev = sorted([e for e in win if e.bg and e.kind in ("S", "X", "N")], key=lambda e: e.t)
+    cov = covered([e for e in fg if e.depth == 0], T.t, R.t)
+    gap = max(0, total - cov)
+
+    out = []
+    A = out.append
+    A("⏱  LOADTIME — %s → %s" % (frm, to))
+    if T.name == "o" and frm == "shell":
+        A("   launch: you ran  o  →  %s is drawn and waiting for a key" % to)
+    else:
+        shown = "“%s”" % typed
+        if label:
+            shown += "  (%s)" % label
+        A("   you pressed Enter on %s  →  %s is drawn and waiting for a key" % (shown, to))
+    A("   TOTAL  %s" % ms(total))
+    A("─" * width)
+
+    # who consumed it
+    by_kind = {"N": 0, "X": 0, "S": 0, "P": 0}
+    for e in fg:
+        by_kind[e.kind] = by_kind.get(e.kind, 0) + e.self_us
+    # a command that is a network request's parent is not counted twice (self time already excludes children)
+    split = [("network", by_kind["N"]), ("external commands (python3, stty, stat, git …)", by_kind["X"]),
+             ("shell steps (build list, draw, load scripts …)", by_kind["S"]), ("process start-up", by_kind["P"]),
+             ("not on the timeline (bash loops, string work between steps)", gap)]
+    A("WHAT CONSUMED THE TIME")
+    for name, val in split:
+        if val <= 0:
+            continue
+        A("  %s  %s  %10s  %s" % (bar(val, total), pct(val, total), ms(val), name))
+    A("")
+
+    # time order
+    fold = 0 if full else max(1000, int(total * 0.004))
+    A("TIMELINE — in the order it happened   (offset from Enter · what · time taken)")
+    A("  %10s  ▶ Enter pressed %s" % ("+0", "“%s” at %s" % (typed, frm)))
+    items = sorted(spans + marks, key=lambda e: (e.t, -e.dur))
+    i = 0
+    while i < len(items):
+        e = items[i]
+        off = e.t - T.t
+        if e.kind == "M":
+            A("  %10s  · %s" % ("+" + ms(off), trunc(e.name, width - 20)))
+            i += 1
+            continue
+        if fold and e.dur < fold and not any(k.dur >= fold for k in e.kids):
+            # a run of small steps becomes one line
+            j, tot_small = i, 0
+            while j < len(items) and items[j].kind != "M" and items[j].dur < fold \
+                    and not any(k.dur >= fold for k in items[j].kids):
+                tot_small += items[j].self_us
+                j += 1
+            n = j - i
+            A("  %10s  %s· %d small step%s under %s — %s together" %
+              ("+" + ms(off), "  " * e.depth, n, "" if n == 1 else "s", ms(fold), ms(tot_small)))
+            i = j
+            continue
+        # fold a run of identical steps (same kind, name and depth) into one line
+        j = i + 1
+        while (j < len(items) and items[j].kind == e.kind and items[j].name == e.name
+               and items[j].depth == e.depth and e.kind in ("X", "S") and not items[j].kids and not e.kids):
+            j += 1
+        group = items[i:j]
+        ind = "  " * e.depth
+        if len(group) > 1:
+            tot = sum(g.dur for g in group)
+            A("  %10s  %s%s ×%d   %s   %s" % ("+" + ms(off), ind, trunc(e.name, width - 44), len(group), ms(tot), pct(tot, total)))
+        else:
+            A("  %10s  %s%s   %s   %s" % ("+" + ms(off), ind, trunc(e.name, width - 44), ms(e.dur), pct(e.dur, total)))
+            if e.kind == "N":
+                for ln in net_lines(e, 14 + len(ind)):
+                    A("  " + ln)
+        i = j
+    A("  %10s  ■ %s is ready for input" % ("+" + ms(total), to))
+    A("")
+
+    # ranking
+    A("RANKED BY TIME CONSUMED   (own time, slowest first — a step's children are not counted in it)")
+    rows = top_consumers(fg)
+    if gap > 0:
+        rows.append((("-", "not on the timeline (bash work between steps)"), [1, gap, gap]))
+        rows.sort(key=lambda kv: -kv[1][1])
+    A("  %-4s %-*s %6s %11s %5s" % ("#", width - 34, "what", "calls", "own time", "share"))
+    shown = 0
+    rows = [r for r in rows if r[1][1] >= 10]          # own time under 0.01 ms is not worth a row
+    for n, (key, v) in enumerate(rows, 1):
+        if n > 15:
+            break
+        shown = n
+        A("  %-4s %-*s %6s %11s %5s" % ("#%d" % n, width - 34, trunc("%s  [%s]" % (key[1], kind_label(key[0])) if key[0] != "-" else key[1], width - 34),
+                                         v[0], ms(v[1]), pct(v[1], total)))
+    if len(rows) > shown:
+        rest = sum(v[1] for _k, v in rows[shown:])
+        A("  …    %d more, %s together" % (len(rows) - shown, ms(rest)))
+    A("")
+
+    # network
+    nets = [e for e in fg if e.kind == "N"]
+    if nets:
+        A("NETWORK   (%d request%s)" % (len(nets), "" if len(nets) == 1 else "s"))
+        wait_sum = covered(nets, T.t, R.t)
+        for e in nets:
+            A("  %s   total %s" % (trunc(e.name, width - 24), ms(e.dur)))
+            for ln in net_lines(e, 4):
+                A("  " + ln)
+        last_end = max(e.end for e in nets)
+        A("  network time on the critical path: %s (%s of total)" % (ms(wait_sum), pct(wait_sum, total).strip()))
+        if last_end <= R.t:
+            A("  last response arrived at +%s → parsing + building the list + drawing the menu took %s" %
+              (ms(last_end - T.t), ms(R.t - last_end)))
+        A("")
+
+    # tools that give no phase numbers: measure the host now
+    host_probe = {}
+    if probe and os.environ.get("BVK_LT_PROBE", "1") != "0":
+        names = " ".join(e.name for e in fg)
+        if "rclone" in names and not nets:
+            host_probe["www.googleapis.com"] = "rclone (Google Drive)"
+        if "git ls-remote" in names or "git fetch" in names or "git clone" in names:
+            host_probe["github.com"] = "git"
+    if host_probe:
+        A("NETWORK PROBE   (rclone / git do not report their own phases — one fresh measurement of the host, taken now)")
+        for host, who in host_probe.items():
+            r = probe_host(host)
+            if "error" in r:
+                A("  %s (%s): could not be measured — %s" % (host, who, trunc(r["error"], width - 40)))
+                continue
+            A("  %s (%s)" % (host, who))
+            A("    ↳ %-40s %10s" % ("DNS lookup", ms(r.get("dns"))))
+            A("    ↳ %-40s %10s" % ("TCP connect", ms(r.get("tcp"))))
+            A("    ↳ %-40s %10s" % ("TLS handshake", ms(r.get("tls"))))
+            A("    ↳ %-40s %10s   %s" % ("server wait (HEAD / → first byte)", ms(r.get("wait")), r.get("status", "")))
+        A("")
+
+    if bgev:
+        A("BACKGROUND   (ran alongside — these did NOT hold the menu back)")
+        for e in bgev:
+            A("  %10s  %s   %s" % ("+" + ms(e.t - T.t), trunc(e.name, width - 34), ms(e.dur)))
+            if e.kind == "N":
+                for ln in net_lines(e, 14):
+                    A("  " + ln)
+        A("")
+
+    if history_rows:
+        A("RECENT SCREEN CHANGES   (newest first)")
+        for h in history_rows:
+            A(h)
+        A("")
+
+    A("─" * width)
+    A("measured %s · %s" % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(R.t / 1e6)),
+                            " · ".join("%s %s" % (k, v) for k, v in meta.items() if v and k in ("bash", "os", "cols", "rows"))))
+    A("sed / grep / awk / sort / cat are not timed one by one (their time sits in the step that runs them)")
+    if not full:
+        A("small steps are folded in the timeline — type  loadtime full  to list every one")
+    return "\n".join(out)
+
+
+def history_table(pairs, evs, current, limit=12, cols=100):
+    rows = []
+    n = len(pairs)
+    for idx in range(n - 1, max(-1, n - 1 - limit), -1):
+        T, R = pairs[idx]
+        frm, _lbl = split_from(T.detail)
+        tot = R.t - T.t
+        win = window_events(evs, T, R)
+        spans, _r = build_tree(win)
+        top = top_consumers(spans)
+        slow = ""
+        if top:
+            k, v = top[0]
+            slow = "%s %s" % (k[1], ms(v[1]))
+        cmd = T.name if T.name != "o" else "o (launch)"
+        mark = "◀" if idx == current else " "
+        left = "  %s %-30s %-12s %10s" % (mark, trunc("%s → %s" % (frm, R.name), 30), trunc("“%s”" % cmd, 12), ms(tot))
+        rows.append(("%s   slowest: %s" % (left, trunc(slow, max(10, cols - len(left) - 14)))) if slow else left)
+    return rows
+
+
+def main(argv):
+    if len(argv) < 2:
+        print("usage: _3bvk_loadtime_core LOG [--pick N|all] [--cols C] [--meta k=v;…]")
+        return 2
+    log = argv[1]
+    pick, cols, meta = "1", 100, {}
+    i = 2
+    while i < len(argv):
+        a = argv[i]
+        if a == "--pick" and i + 1 < len(argv):
+            pick = argv[i + 1]; i += 2
+        elif a == "--cols" and i + 1 < len(argv):
+            try:
+                cols = int(argv[i + 1])
+            except ValueError:
+                pass
+            i += 2
+        elif a == "--meta" and i + 1 < len(argv):
+            for part in argv[i + 1].split(";"):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    meta[k] = v.strip()
+            i += 2
+        else:
+            i += 1
+    evs = load(log)
+    pairs = pairs_of(evs)
+    if not pairs:
+        print("⏱  LOADTIME\n   Nothing measured yet — move to another screen first (open a folder, press s …), then type loadtime.")
+        return 0
+    toks = pick.split()
+    full = "full" in toks
+    pick = "all" if "all" in toks else next((t for t in toks if t.isdigit()), "1")
+    if pick == "all":
+        width = max(60, min(cols, 110))
+        print("⏱  LOADTIME — every screen change this session (newest first)")
+        print("─" * width)
+        n = len(pairs)
+        for line in history_table(pairs, evs, -1, limit=25, cols=width):
+            print(line)
+        print("─" * width)
+        print("type  loadtime 2  (3, 4 …)  for the full breakdown of an earlier one")
+        return 0
+    try:
+        k = max(1, int(pick))
+    except ValueError:
+        k = 1
+    if k > len(pairs):
+        print("⏱  LOADTIME\n   Only %d screen change%s recorded so far." % (len(pairs), "" if len(pairs) == 1 else "s"))
+        return 0
+    idx = len(pairs) - k
+    T, R = pairs[idx]
+    hist = history_table(pairs, evs, idx, cols=cols)
+    print(render_one(evs, T, R, cols, meta, hist, full=full))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except BrokenPipeError:
+        sys.exit(0)

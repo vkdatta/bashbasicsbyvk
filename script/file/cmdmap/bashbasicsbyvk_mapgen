@@ -203,7 +203,7 @@ for raw in open(os.path.join(OUT, "menus.list"), encoding="utf-8"):
             cls = d["cls"]
             if kind == "prompt":
                 # prompts: only navigation is allowed out of a prompt; everything else is blocked
-                if id_ in ("s", "h", "q") :
+                if id_ in ("s", "h", "q") or cls == "tool":
                     lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh\n")
                 elif id_ == "u":
                     lines_out.append(f"{id_:<10} .mapto()  back()\n")
@@ -213,10 +213,10 @@ for raw in open(os.path.join(OUT, "menus.list"), encoding="utf-8"):
             if id_ == "u":
                 lines_out.append(f"{id_:<10} .mapto()  back()\n")
                 continue
-            if kind == "menu" and not local and cls not in ("nav", "util", "filter"):
+            if kind == "menu" and not local and cls not in ("nav", "util", "tool", "filter"):
                 lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()\n")
                 continue
-            if cls in ("nav", "util"):
+            if cls in ("nav", "util", "tool"):
                 lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh\n")
             elif cls == "filter":
                 if uses_filter: lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh\n")

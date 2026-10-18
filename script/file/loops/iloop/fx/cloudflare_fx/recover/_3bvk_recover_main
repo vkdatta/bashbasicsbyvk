@@ -26,6 +26,10 @@ Output per worker: src/ (or src-from-map/), wrangler.*, raw/, config/, RECOVERY-
 """
 import argparse, os, re, sys, traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+try:                                   # loadtime: join the app's timeline (no-op unless a screen change is being timed)
+    import _3bvk_lt; _3bvk_lt.install("cloudflare recover")
+except Exception:
+    pass
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

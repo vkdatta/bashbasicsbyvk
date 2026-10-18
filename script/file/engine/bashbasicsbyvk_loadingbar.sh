@@ -1,3 +1,4 @@
+declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 # bashbasicsbyvk_loadingbar.sh — reusable "back and forth" loading bar
 #
 #   [░░░░████░░░░░░░░░░░░] Loading stable releases…  3s
@@ -50,6 +51,7 @@ _lb_cols() {
 #   $1 tty  $2 message  $3 below(0/1)  $4 columns  $5 parent pid
 _lb_loop() {
   local tty="$1" msg="$2" below="$3" cols="$4" parent="$5"
+  declare -F _lt_off >/dev/null 2>&1 && _lt_off     # the animator's own sleep/stty calls are not work
   local W=22 BW=5 pos=0 dir=1 left right bar line el t0=$SECONDS pre="" post="" slp=0.1
   sleep 0.15 2>/dev/null || slp=1      # short grace period: instant work never flashes a bar
   # bar width / message length follow the screen, like the upload bar does
@@ -115,11 +117,13 @@ _lb_run() {
   msg="$1"; shift
   errf="$(mktemp 2>/dev/null)" || errf=""
   _lb_start $below "$msg"
+  _lt_b "loading bar: $msg"
   if [ -n "$_LB_PID" ] && [ -n "$errf" ]; then
     "$@" 2>"$errf"; rc=$?
   else
     "$@"; rc=$?
   fi
+  _lt_e
   _lb_stop
   if [ -n "$errf" ]; then [ -s "$errf" ] && cat "$errf" >&2; rm -f "$errf"; fi
   return $rc

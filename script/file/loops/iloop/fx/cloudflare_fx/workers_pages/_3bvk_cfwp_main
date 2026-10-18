@@ -15,6 +15,10 @@ Times follow the app timezone (the app exports TZ).
 import argparse, os, re, sys, traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+try:                                   # loadtime: join the app's timeline (no-op unless a screen change is being timed)
+    import _3bvk_lt; _3bvk_lt.install("cloudflare workers and pages")
+except Exception:
+    pass
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 for _d in (_HERE, os.path.join(_HERE, "..", "recover")):          # installed flat, or still in the source tree

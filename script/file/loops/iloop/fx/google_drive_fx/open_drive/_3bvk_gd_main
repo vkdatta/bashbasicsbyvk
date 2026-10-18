@@ -26,6 +26,15 @@ Exit codes: 0 ok · 1 error · 3 nothing to do/not found · 4 cancelled by the p
 import argparse, calendar, contextlib, json, os, re, shlex, shutil, sqlite3, stat, subprocess, sys
 import tempfile, threading, time
 from concurrent.futures import ThreadPoolExecutor
+try:                                   # loadtime: join the app's timeline (no-op unless a screen change is being timed)
+    import _3bvk_lt as _lt; _lt.install("google drive")
+except Exception:
+    _lt = None
+
+
+def _span(name, detail=""):
+    return _lt.span(name, detail) if _lt else contextlib.suppress()
+
 
 RCLONE = os.environ.get("BVK_GD_RCLONE") or shutil.which("rclone") or "rclone"
 TTL_DEFAULT = 120
@@ -269,13 +278,14 @@ class Ctx:
 def rclone(ctx, args, check=True, passthrough=False, quiet_ok=()):
     cmd = [RCLONE, "--ask-password=false", *ctx.flags, *args]
     try:
-        if passthrough:
-            p = subprocess.run(cmd, stdin=subprocess.DEVNULL)
-            out, err = "", ""
-        else:
-            p = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                               errors="replace")
-            out, err = p.stdout, p.stderr
+        with _span("rclone " + str(args[0] if args else "")):      # rclone does not report DNS / TLS / first byte: loadtime probes the host
+            if passthrough:
+                p = subprocess.run(cmd, stdin=subprocess.DEVNULL)
+                out, err = "", ""
+            else:
+                p = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                   errors="replace")
+                out, err = p.stdout, p.stderr
     except FileNotFoundError:
         raise GdError("rclone is not installed (see README → Rclone).")
     if check and p.returncode != 0 and p.returncode not in quiet_ok:

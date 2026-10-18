@@ -143,28 +143,28 @@ _fx_adf_breadcrumb() {
 
 _FX_ADF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_rename_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_move_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_copy_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_shortcut_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_map_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_bookmark_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_common.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_ext.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_date.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_zip_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_unzip_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_text_csv.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_import_link.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selection.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selected.sh"
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_gdrive.sh"     # google_drive_fx/open google drive — rclone profiles → the Drive as the main screen (bashbasicsbyvk_gdrive.sh, _3bvk_gd_main)
-source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_cfwp.sh"      # cloudflare_fx/workers and pages — single button: list · export · recover (python: _3bvk_cfwp_*, _3bvk_recover_*)
+_lt_b "load adf_rename_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_rename_csv.sh"; _lt_e
+_lt_b "load adf_move_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_move_csv.sh"; _lt_e
+_lt_b "load adf_copy_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_copy_csv.sh"; _lt_e
+_lt_b "load adf_shortcut_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_shortcut_csv.sh"; _lt_e
+_lt_b "load adf_upload_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_csv.sh"; _lt_e
+_lt_b "load adf_map_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_map_csv.sh"; _lt_e
+_lt_b "load adf_bookmark_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_bookmark_csv.sh"; _lt_e
+_lt_b "load adf_delete_common"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_common.sh"; _lt_e
+_lt_b "load adf_delete_ext"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_ext.sh"; _lt_e
+_lt_b "load adf_delete_date"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_date.sh"; _lt_e
+_lt_b "load adf_zip_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_zip_csv.sh"; _lt_e
+_lt_b "load adf_unzip_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_unzip_csv.sh"; _lt_e
+_lt_b "load adf_delete_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_delete_csv.sh"; _lt_e
+_lt_b "load adf_upload_text_csv"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_upload_text_csv.sh"; _lt_e
+_lt_b "load adf_import_link"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_import_link.sh"; _lt_e
+_lt_b "load adf_selection"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selection.sh"; _lt_e
+_lt_b "load adf_selected"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_selected.sh"; _lt_e
+_lt_b "load adf_gdrive"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_gdrive.sh"; _lt_e   # google_drive_fx/open google drive — rclone profiles → the Drive as the main screen (bashbasicsbyvk_gdrive.sh, _3bvk_gd_main)
+_lt_b "load adf_cfwp"; source "${_FX_ADF_DIR}/bashbasicsbyvk_adf_cfwp.sh"; _lt_e   # cloudflare_fx/workers and pages — single button: list · export · recover (python: _3bvk_cfwp_*, _3bvk_recover_*)
 
 # UDF tab extras: e-N (edit item), ux / ui (export / import all UDFs as a zip)
-source "${_FX_ADF_DIR}/bashbasicsbyvk_udf_io.sh"
+_lt_b "load udf_io"; source "${_FX_ADF_DIR}/bashbasicsbyvk_udf_io.sh"; _lt_e
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Tab cycle

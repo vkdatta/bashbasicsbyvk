@@ -1,10 +1,10 @@
-source "bashbasicsbyvk_settings_ui.sh"
-source "bashbasicsbyvk_settings.sh"
-source "bashbasicsbyvk_settings_groups.sh"
-source "bashbasicsbyvk_colors.sh"
-source "bashbasicsbyvk_hidefiles.sh"
-source "bashbasicsbyvk_indexmode.sh"
-source "bashbasicsbyvk_importnano.sh"
-source "bashbasicsbyvk_compress.sh"
-source "bashbasicsbyvk_filter.sh"
-source "bashbasicsbyvk_timezone.sh"
+_lt_b "load settings_ui"; source "bashbasicsbyvk_settings_ui.sh"; _lt_e
+_lt_b "load settings"; source "bashbasicsbyvk_settings.sh"; _lt_e
+_lt_b "load settings_groups"; source "bashbasicsbyvk_settings_groups.sh"; _lt_e
+_lt_b "load colors"; source "bashbasicsbyvk_colors.sh"; _lt_e
+_lt_b "load hidefiles"; source "bashbasicsbyvk_hidefiles.sh"; _lt_e
+_lt_b "load indexmode"; source "bashbasicsbyvk_indexmode.sh"; _lt_e
+_lt_b "load importnano"; source "bashbasicsbyvk_importnano.sh"; _lt_e
+_lt_b "load compress"; source "bashbasicsbyvk_compress.sh"; _lt_e
+_lt_b "load filter"; source "bashbasicsbyvk_filter.sh"; _lt_e
+_lt_b "load timezone"; source "bashbasicsbyvk_timezone.sh"; _lt_e

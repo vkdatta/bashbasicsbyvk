@@ -1,8 +1,9 @@
-source "bashbasicsbyvk_loadingbar.sh"
-source "bashbasicsbyvk_smartmenu.sh"
-source "bashbasicsbyvk_menuchrome.sh"
-source "bashbasicsbyvk_cmdmap.sh"
-source "bashbasicsbyvk_viewport.sh"
-source "bashbasicsbyvk_displayer.sh"
-source "bashbasicsbyvk_browse.sh"
-source "bashbasicsbyvk_health.sh"
+_lt_b "load loadingbar"; source "bashbasicsbyvk_loadingbar.sh"; _lt_e
+_lt_b "load print"; source "bashbasicsbyvk_print.sh"; _lt_e
+_lt_b "load smartmenu"; source "bashbasicsbyvk_smartmenu.sh"; _lt_e
+_lt_b "load menuchrome"; source "bashbasicsbyvk_menuchrome.sh"; _lt_e
+_lt_b "load cmdmap"; source "bashbasicsbyvk_cmdmap.sh"; _lt_e
+_lt_b "load viewport"; source "bashbasicsbyvk_viewport.sh"; _lt_e
+_lt_b "load displayer"; source "bashbasicsbyvk_displayer.sh"; _lt_e
+_lt_b "load browse"; source "bashbasicsbyvk_browse.sh"; _lt_e
+_lt_b "load health"; source "bashbasicsbyvk_health.sh"; _lt_e

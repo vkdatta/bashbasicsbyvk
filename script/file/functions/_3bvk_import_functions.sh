@@ -1,10 +1,10 @@
-source "bashbasicsbyvk_create.sh"
-source "bashbasicsbyvk_find.sh"
-source "bashbasicsbyvk_organise.sh"
-source "bashbasicsbyvk_rename.sh"
-source "bashbasicsbyvk_transfer.sh"
-source "bashbasicsbyvk_delete.sh"
-source "bashbasicsbyvk_bundle_io.sh"
-source "action_confirm_key.sh"
-source "bashbasicsbyvk_lock.sh"
-source "bashbasicsbyvk_carry.sh"
+_lt_b "load create"; source "bashbasicsbyvk_create.sh"; _lt_e
+_lt_b "load find"; source "bashbasicsbyvk_find.sh"; _lt_e
+_lt_b "load organise"; source "bashbasicsbyvk_organise.sh"; _lt_e
+_lt_b "load rename"; source "bashbasicsbyvk_rename.sh"; _lt_e
+_lt_b "load transfer"; source "bashbasicsbyvk_transfer.sh"; _lt_e
+_lt_b "load delete"; source "bashbasicsbyvk_delete.sh"; _lt_e
+_lt_b "load bundle_io"; source "bashbasicsbyvk_bundle_io.sh"; _lt_e
+_lt_b "load action_confirm_key"; source "action_confirm_key.sh"; _lt_e
+_lt_b "load lock"; source "bashbasicsbyvk_lock.sh"; _lt_e
+_lt_b "load carry"; source "bashbasicsbyvk_carry.sh"; _lt_e
