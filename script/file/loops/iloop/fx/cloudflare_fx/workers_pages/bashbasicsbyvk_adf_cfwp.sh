@@ -110,7 +110,7 @@ _cfw_run() {
   _xui_yes "Start recovery?" || return 1
   echo
   _cfw_cf "${args[@]}"
-  echo; builtin read -e -r -p "   ↩  Press Enter to return to the list " _
+  echo
   return 0
 }
 
@@ -129,7 +129,7 @@ _cfw_export() {
   done
   files="$(printf '%s' "$tsv" | "$_CFW_PY" "$_CFW_MAIN" "$_CFW_NAV" --export "$fmt")" || { echo "❌ Export failed."; return 1; }
   echo; echo "✅ Exported:"; while IFS= read -r r; do [ -n "$r" ] && echo "   $r"; done <<<"$files"
-  echo; builtin read -e -r -p "   ↩  Press Enter to return to the list " _
+  echo
   return 0
 }
 

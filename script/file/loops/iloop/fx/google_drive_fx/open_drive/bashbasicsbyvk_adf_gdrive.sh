@@ -61,7 +61,7 @@ _gdp_cmd() {
     [0-9]*)
       _xui_row "$1" || { _bvk_invalid; return 1; }
       if _gd_enter "${_GDP_NAME[$_XUI_SLOT]}"; then return 2; fi
-      echo; builtin read -e -r -p "   ↩  Press Enter to return to the list " _
+      echo
       return 0 ;;
     fx|sw|api|.r|-u) echo "↩️  Go back with  u  first."; return 1 ;;
     *) return 9 ;;

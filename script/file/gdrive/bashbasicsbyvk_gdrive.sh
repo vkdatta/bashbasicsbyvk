@@ -357,7 +357,7 @@ _gd_dispatch() {
   done
   if [ "$cnt" -gt 0 ]; then
     echo "📦 $cnt item(s) are staged for copy/move OUTSIDE Google Drive (your normal buffers)."
-    local a; builtin read -e -r -p "   Apply them into this Drive folder too? (y/N): " a
+    local a; read -e -r -p "   Apply them into this Drive folder too? (y/N): " a
     case "$a" in
       [yY]|[yY][eE][sS])
         local -a keep=()
@@ -498,7 +498,7 @@ handle_gd_cmd() {
       _gd_py sync "$path" --force --recursive && echo "✅ Listed everything below $(_gd_view_path "$path"; echo "$_gd_vp")" ;;
     gd.clean)
       echo "ℹ️  Downloaded files you did not change turn back into placeholders (they download again when needed)."
-      builtin read -e -r -p "   Free the downloaded content of this whole Drive? (y/N): " a
+      read -e -r -p "   Free the downloaded content of this whole Drive? (y/N): " a
       case "$a" in [yY]|[yY][eE][sS]) _gd_push; local r; r="$(_gd_py clean)"; echo "✅ ${r%%$'\t'*} file(s) freed (≈ ${r#*$'\t'} bytes of disk)." ;; *) echo "🚫 Cancelled" ;; esac ;;
     gd.push) _gd_push && echo "✅ Nothing pending." ;;
     gd.sw|gd.switch) _inner_run gdp ;;

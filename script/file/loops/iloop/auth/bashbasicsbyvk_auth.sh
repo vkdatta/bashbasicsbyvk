@@ -178,7 +178,7 @@ _bvk_auth_create() {
    For any help with paid services ONLY a receipt from the e-mail used here
    is accepted. Anything else is rejected outright, with no reply.
 TXT
-  local mail; builtin read -e -r -p $'\n   Enter email: ' mail
+  local mail; read -e -r -p $'\n   Enter email: ' mail
   [ -z "$mail" ] && { echo "↩️  Cancelled."; return; }
   _bvk_auth_mail_ok "$mail" || { echo "❌ Invalid input (max 256 chars; no spaces, quotes, < > \` \$ \\ ; | & ( ) { })."; return; }
   [ -r "$_BVK_TELEMETRY_DIR/uuid" ] || { echo "❌ No telemetry id found (is BVK_TELEMETRY=off?). Creating a user needs it for abuse protection. Restart 'o' once with telemetry on."; return; }
@@ -297,7 +297,7 @@ _bvk_auth_import() {
 _bvk_auth_link() {
   echo; echo "🔗 Link existing account (one-time upgrade)"
   echo "   Use the e-mail and API key you used before this update. A diseps + dinons will be added to it."
-  local mail key; builtin read -e -r -p "   Email: " mail; builtin read -r -s -p "   API key: " key; echo
+  local mail key; read -e -r -p "   Email: " mail; builtin read -r -s -p "   API key: " key; echo
   _bvk_auth_mail_ok "$mail" && [ -n "$key" ] || { echo "❌ Invalid input."; return; }
   P_MAIL="$mail"; P_APIKEY="$key"; P_DISEPS=""                      # no diseps yet => server treats it as legacy login
   P_DINONS=$(_bvk_auth_gen_codes $_BVK_DINONS_N); local nd fek wrapped
@@ -328,7 +328,7 @@ _bvk_auth_regen() {  # $1=what: diseps|apikey|dinons|mail   (P_* = current profi
   cp -f "$file" "$file.prev" 2>/dev/null && chmod 600 "$file.prev"        # lock-out safety net
   case "$what" in
     mail)
-      builtin read -e -r -p "   New email: " newmail
+      read -e -r -p "   New email: " newmail
       _bvk_auth_mail_ok "$newmail" || { echo "❌ Invalid input."; return; }
       json=$(printf '{"action":"change_mail","new_mail":%s}' "$(_bvk_auth_jstr "$newmail")") ;;
     diseps)
@@ -437,7 +437,7 @@ _bvk_bill_valid() {  # $1=key $2=value ; prints the reason and returns 1 when in
     tax_id)  [ "$n" -eq 0 ] || [[ "$v" =~ ^[A-Za-z0-9][A-Za-z0-9\ ./-]{0,39}$ ]] || { echo "   TAX ID: letters, digits, space . / - (max 40)."; return 1; } ;;
   esac
 }
-_au_pause() { echo; builtin read -rsn1 -p "↵ press any key to return" _ </dev/tty 2>/dev/null; echo; }
+_au_pause() { :; }   # no stranded "press any key": the message stays on screen and the menu redraws below it
 _au_trunc() { local s="$1" n="$2"; [ "${#s}" -gt "$n" ] && s="${s:0:$((n-1))}…"; printf '%s' "$s"; }
 
 _au_sub_header() {
@@ -465,7 +465,7 @@ _au_billing_action() {  # $1 = 0-based slot
   local i="$1" key="${_AU_BILL_KEYS[$1]}" label="${_AU_BILL_LABELS[$1]}" cur new
   cur=$(_bvk_bill_get "$key")
   [ -z "$cur" ] && [ "$key" = email ] && cur="$P_MAIL"
-  echo; builtin read -e -r -i "$cur" -p "   $label: " new </dev/tty || return 0
+  echo; read -e -r -i "$cur" -p "   $label: " new </dev/tty || return 0
   new="${new#"${new%%[![:space:]]*}"}"; new="${new%"${new##*[![:space:]]}"}"
   [ "$new" = "$cur" ] && [ -n "$(_bvk_bill_get "$key")" ] && return 0
   if _bvk_bill_valid "$key" "$new"; then _bvk_bill_set "$key" "$new" && echo "   ✅ $label saved."; else _au_pause; fi
@@ -487,7 +487,7 @@ _au_recharge_action() {  # $1 = 0-based slot
 _bvk_pay_amount() {  # prompts; sets _PAY_AMOUNT (validated, >= 1) ; returns 1 on cancel
   local a
   while :; do
-    builtin read -e -r -p "   Amount in US\$ (min 1, blank = cancel): " a </dev/tty || return 1
+    read -e -r -p "   Amount in US\$ (min 1, blank = cancel): " a </dev/tty || return 1
     [ -z "$a" ] && return 1
     if [[ "$a" =~ ^[0-9]{1,5}(\.[0-9]{1,2})?$ ]] && awk "BEGIN{exit !($a>=1)}"; then _PAY_AMOUNT="$a"; return 0; fi
     echo "   ❌ Enter a number of at least 1 (up to 2 decimals)."
@@ -529,7 +529,7 @@ _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary l
     echo "   ⚠️  Fill Billing details first (at least NAME and EMAIL), then try again."; return 1; }
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
   body=$(_bvk_pay_build "$kind" "$amount" "$accts") || { echo "   ❌ Could not build the request (node is required)."; return 1; }
-  echo "   $4"; builtin read -r -p "   Create the payment link? (y/n): " ans </dev/tty
+  echo "   $4"; read -r -p "   Create the payment link? (y/n): " ans </dev/tty
   [[ "${ans,,}" == y* ]] || { echo "   Cancelled."; return 1; }
   echo "   ⏳ Creating link…"
   if ! _bvk_auth_call POST /api/orders "$body" creds "$_BVK_PAY_URL"; then _bvk_auth_err; return 1; fi
@@ -538,7 +538,7 @@ _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary l
   echo; echo "   ✅ Payment link ready — total US\$$total · valid for 30 minutes, or until it is paid"
   echo "   🔗 $link"
   echo "   Open it, choose Razorpay or PayPal, and pay. Credits are added once the payment is confirmed."
-  builtin read -r -p "   Open in browser now? (y/n): " ans </dev/tty
+  read -r -p "   Open in browser now? (y/n): " ans </dev/tty
   [[ "${ans,,}" == y* ]] && { _bvk_pay_open "$link" || echo "   (no browser opener found — copy the link)"; }
   return 0
 }
@@ -552,7 +552,7 @@ _bvk_pay_recharge() {  # $1=self|others
     _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "US\$$_PAY_AMOUNT → $(awk "BEGIN{printf \"%d\", $_PAY_AMOUNT*1000}") credits to $P_MAIL"
   else
     echo "   File (.csv / .txt): one account per line, as  email,diseps"
-    builtin read -e -r -p "   Path (blank = cancel): " f </dev/tty; f="${f/#\~/$HOME}"
+    read -e -r -p "   Path (blank = cancel): " f </dev/tty; f="${f/#\~/$HOME}"
     [ -z "$f" ] && { echo "   Cancelled."; _au_pause; return 0; }
     [ -f "$f" ] && [ -r "$f" ] || { echo "   ❌ Cannot read: $f"; _au_pause; return 0; }
     [ "$(wc -c < "$f")" -le 1048576 ] || { echo "   ❌ File is larger than 1 MB."; _au_pause; return 0; }
@@ -710,7 +710,7 @@ _au_export_ids() {  # profile ids...
 _au_remove_ids() {  # profile ids...
   local ans id
   echo "⚠️  Removes $# user(s) from THIS machine only. Without an export you lose the apikey/dinons."
-  builtin read -e -r -p "Are you really sure? (y/n): " ans
+  read -e -r -p "Are you really sure? (y/n): " ans
   if [[ "$ans" != y && "$ans" != Y ]]; then echo "🚫 Removal cancelled"; return 1; fi
   for id in "$@"; do
     rm -f "$_BVK_AUTH_DIR/profiles/$id" "$_BVK_AUTH_DIR/profiles/$id.prev"

@@ -66,6 +66,13 @@ trap '_gd_on_exit 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
 
 _orig_stty=$(stty -g 2>/dev/null)
 
+# command map tooling:  o --map-show [menu] · o --map-lint · o --map-gen
+case "${1:-}" in
+  --map-show) _cm_show "${2:-main}"; exit $? ;;
+  --map-lint) _cm_lint; exit $? ;;
+  --map-gen)  _mg=$(_cm_find bashbasicsbyvk_mapgen) && exec python3 "$_mg" "${@:2}"; echo "mapgen not found"; exit 1 ;;
+esac
+
 if [ $# -eq 1 ]; then
   target="$1"
   if [ -d "$target" ]; then

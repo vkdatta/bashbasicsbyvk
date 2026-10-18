@@ -88,7 +88,7 @@ _nf_open() {
   echo; echo "   🔔 $_NF_T"
   if [ "$_NF_ACT" = 1 ]; then
     echo "      1. Yes   2. No   (anything else: decide later)"
-    builtin read -e -r -p "   Select: " a
+    read -e -r -p "   Select: " a
     case "$a" in
       1|y|Y) a=true ;; 2|n|N) a=false ;; *) echo "🕒 Left for later."; return 0 ;;
     esac

@@ -1,0 +1,69 @@
+# organise.map — wiring for the 'organise' menu
+@menu   organise
+@func   organise_menu
+@kind   menu
+@back   u
+@parent main
+
+q          .mapto()  q          from maincommands.sh
+u          .mapto()  back()
+h          .mapto()  h          from maincommands.sh
+s          .mapto()  s          from maincommands.sh
+i          .mapto()  i          from maincommands.sh
+-h         .mapto()  -h         from maincommands.sh
+-u         .mapto()  -u         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+-auth      .mapto()  -auth      from maincommands.sh
+cd         .mapto()  cd         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+sw         .mapto()  sw         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+fx         .mapto()  fx         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+api        .mapto()  api        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+bk         .mapto()  bk         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+sv         .mapto()  sv         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+sn         .mapto()  sn         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+rbam       .mapto()  rbam       from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+nf         .mapto()  nf         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+cs         .mapto()  cs         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+gd         .mapto()  gd         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+gdx        .mapto()  gdx        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+c          .mapto()  c          from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+d          .mapto()  d          from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+r          .mapto()  r          from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+t          .mapto()  t          from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+f          .mapto()  f          from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+z          .mapto()  z          from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+fs         .mapto()  fs         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+forceshow  .mapto()  forceshow  from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+ns         .mapto()  ns         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+fa         .mapto()  fa         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+rf         .mapto()  rf         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+l-         .mapto()  l-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+ul-        .mapto()  ul-        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+z-         .mapto()  z-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+uz-        .mapto()  uz-        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+p-         .mapto()  p-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+c-         .mapto()  c-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+m-         .mapto()  m-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+s-         .mapto()  s-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+b-         .mapto()  b-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+d-         .mapto()  d-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+v-         .mapto()  v-         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+do-        .mapto()  do-        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+c2c-       .mapto()  c2c-       from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+up-        .mapto()  up-        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+ux-        .mapto()  ux-        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+save-      .mapto()  save-      from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+snap-      .mapto()  snap-      from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+scr-sync   .mapto()  scr-sync   from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+=          .mapto()  block()
+.s         .mapto()  .s         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.us        .mapto()  .us        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.r         .mapto()  .r         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.d         .mapto()  .d         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.dm        .mapto()  .dm        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.ai        .mapto()  .ai        from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+health     .mapto()  health     from maincommands.sh
+disk       .mapto()  disk       from maincommands.sh
+ram        .mapto()  ram        from maincommands.sh
+clear      .mapto()  clear      from maincommands.sh
+sast       .mapto()  sast       from maincommands.sh
+kl         .mapto()  kl         from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()

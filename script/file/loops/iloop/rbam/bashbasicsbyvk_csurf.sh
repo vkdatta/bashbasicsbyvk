@@ -47,7 +47,7 @@ _cs_load() {
 
 _cs_answer_offer() {                         # share id, alias
   echo "   📨 “${2:-$1}” was offered to you.   1. Yes   2. No"
-  local a; builtin read -e -r -p "   Select: " a
+  local a; read -e -r -p "   Select: " a
   case "$a" in
     1|y|Y) a=true ;; 2|n|N) a=false ;; *) echo "🕒 Left for later."; return 0 ;;
   esac

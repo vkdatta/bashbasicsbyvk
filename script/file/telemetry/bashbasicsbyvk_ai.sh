@@ -238,6 +238,5 @@ PY
   bal=$(grep -i '^X-Credits-Balance:'  "$hdr" | tr -d '\r' | cut -d' ' -f2-)
   [ -n "$ded" ] && [ "$ded" != 0 ] && echo "💳 -$ded credits${bal:+ · balance $bal}"
   rm -f "$body" "$resp" "$hdr"
-  echo; read -rsn1 -p "↵ press any key to return" _ </dev/tty 2>/dev/null; echo
   return 0
 }

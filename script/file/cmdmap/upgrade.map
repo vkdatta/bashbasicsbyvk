@@ -1,0 +1,72 @@
+# upgrade.map — wiring for the 'upgrade' menu
+@menu   upgrade
+@func   upgrade_menu
+@kind   menu
+@back   u
+@parent main
+
+-u         .mapto()  -u         from upgrademenucommands.sh
+u          .mapto()  u          from upgrademenucommands.sh
+fx         .mapto()  fx         from upgrademenucommands.sh
+sw         .mapto()  sw         from upgrademenucommands.sh
+.r         .mapto()  .r         from upgrademenucommands.sh
+q          .mapto()  q          from upgrademenucommands.sh
+-h         .mapto()  -h         from upgrademenucommands.sh
+i-         .mapto()  i-         from upgrademenucommands.sh
+m          .mapto()  m          from upgrademenucommands.sh
+main       .mapto()  main       from upgrademenucommands.sh
+rf         .mapto()  rf         from upgrademenucommands.sh
+p-         .mapto()  p-         from upgrademenucommands.sh
+disk       .mapto()  disk       from upgrademenucommands.sh
+ram        .mapto()  ram        from upgrademenucommands.sh
+h          .mapto()  h          from maincommands.sh
+s          .mapto()  s          from maincommands.sh
+i          .mapto()  i          from maincommands.sh
+-auth      .mapto()  -auth      from maincommands.sh
+cd         .mapto()  block()
+api        .mapto()  block()
+bk         .mapto()  block()
+sv         .mapto()  block()
+sn         .mapto()  block()
+rbam       .mapto()  block()
+nf         .mapto()  block()
+cs         .mapto()  block()
+gd         .mapto()  block()
+gdx        .mapto()  block()
+c          .mapto()  block()
+d          .mapto()  block()
+r          .mapto()  block()
+t          .mapto()  block()
+f          .mapto()  block()
+z          .mapto()  block()
+fs         .mapto()  block()
+forceshow  .mapto()  block()
+ns         .mapto()  block()
+fa         .mapto()  block()
+l-         .mapto()  block()
+ul-        .mapto()  block()
+z-         .mapto()  block()
+uz-        .mapto()  block()
+c-         .mapto()  block()
+m-         .mapto()  m-         from maincommands.sh   # loop mentions it — kept as before
+s-         .mapto()  block()
+b-         .mapto()  block()
+d-         .mapto()  block()
+v-         .mapto()  block()
+do-        .mapto()  do-        from maincommands.sh   # loop mentions it — kept as before
+c2c-       .mapto()  block()
+up-        .mapto()  block()
+ux-        .mapto()  block()
+save-      .mapto()  block()
+snap-      .mapto()  block()
+scr-sync   .mapto()  block()
+=          .mapto()  =          from maincommands.sh
+.s         .mapto()  block()
+.us        .mapto()  block()
+.d         .mapto()  block()
+.dm        .mapto()  block()
+.ai        .mapto()  block()
+health     .mapto()  health     from maincommands.sh
+clear      .mapto()  clear      from maincommands.sh
+sast       .mapto()  sast       from maincommands.sh
+kl         .mapto()  block()

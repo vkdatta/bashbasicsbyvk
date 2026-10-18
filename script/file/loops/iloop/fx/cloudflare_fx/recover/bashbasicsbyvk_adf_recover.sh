@@ -81,7 +81,7 @@ _rcv_run() {
   _xui_yes "Start recovery?" || return 1
   echo
   _rcv_cf "${args[@]}"
-  echo; builtin read -e -r -p "   ↩  Press Enter to return to the worker list " _
+  echo
   return 0
 }
 

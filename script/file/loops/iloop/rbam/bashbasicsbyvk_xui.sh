@@ -132,8 +132,8 @@ _xui_select_rows() {
 # ── one-line questions ───────────────────────────────────────────────────────
 _xui_ask() {                                 # _xui_ask "What to type" [default]
   local q="$1" def="${2:-}" a
-  if [ -n "$def" ]; then builtin read -e -r -p "   $q [$def] (u = back): " a; a="${a:-$def}"
-  else                   builtin read -e -r -p "   $q (u = back): " a; fi
+  if [ -n "$def" ]; then read -e -r -p "   $q [$def] (u = back): " a; a="${a:-$def}"
+  else                   read -e -r -p "   $q (u = back): " a; fi
   a="${a%$'\r'}"
   _XUI_IN="$a"
   case "${a,,}" in ""|u|q) return 1 ;; esac
@@ -141,7 +141,7 @@ _xui_ask() {                                 # _xui_ask "What to type" [default]
 }
 
 _xui_yes() {                                 # _xui_yes "Question?"  -> 0 on y
-  local a; builtin read -e -r -p "   $1 (y/N): " a
+  local a; read -e -r -p "   $1 (y/N): " a
   case "$a" in [yY]|[yY][eE][sS]) return 0 ;; esac
   echo "🚫 Cancelled"; return 1
 }

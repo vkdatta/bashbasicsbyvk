@@ -1,0 +1,68 @@
+# main.map — wiring for the 'main' menu
+@menu   main
+@kind   menu
+@back   q
+@parent main
+
+q          .mapto()  q          from maincommands.sh
+u          .mapto()  u          from maincommands.sh
+h          .mapto()  h          from maincommands.sh
+s          .mapto()  s          from maincommands.sh
+i          .mapto()  i          from maincommands.sh
+-h         .mapto()  -h         from maincommands.sh
+-u         .mapto()  -u         from maincommands.sh
+-auth      .mapto()  -auth      from maincommands.sh
+cd         .mapto()  cd         from maincommands.sh
+sw         .mapto()  sw         from maincommands.sh
+fx         .mapto()  fx         from maincommands.sh
+api        .mapto()  api        from maincommands.sh
+bk         .mapto()  bk         from maincommands.sh
+sv         .mapto()  sv         from maincommands.sh
+sn         .mapto()  sn         from maincommands.sh
+rbam       .mapto()  rbam       from maincommands.sh
+nf         .mapto()  nf         from maincommands.sh
+cs         .mapto()  cs         from maincommands.sh
+gd         .mapto()  gd         from maincommands.sh
+gdx        .mapto()  gdx        from maincommands.sh
+c          .mapto()  c          from maincommands.sh
+d          .mapto()  d          from maincommands.sh
+r          .mapto()  r          from maincommands.sh
+t          .mapto()  t          from maincommands.sh
+f          .mapto()  f          from maincommands.sh
+z          .mapto()  z          from maincommands.sh
+fs         .mapto()  fs         from maincommands.sh
+forceshow  .mapto()  forceshow  from maincommands.sh
+ns         .mapto()  ns         from maincommands.sh
+fa         .mapto()  fa         from maincommands.sh
+rf         .mapto()  rf         from maincommands.sh
+l-         .mapto()  l-         from maincommands.sh
+ul-        .mapto()  ul-        from maincommands.sh
+z-         .mapto()  z-         from maincommands.sh
+uz-        .mapto()  uz-        from maincommands.sh
+p-         .mapto()  p-         from maincommands.sh
+c-         .mapto()  c-         from maincommands.sh
+m-         .mapto()  m-         from maincommands.sh
+s-         .mapto()  s-         from maincommands.sh
+b-         .mapto()  b-         from maincommands.sh
+d-         .mapto()  d-         from maincommands.sh
+v-         .mapto()  v-         from maincommands.sh
+do-        .mapto()  do-        from maincommands.sh
+c2c-       .mapto()  c2c-       from maincommands.sh
+up-        .mapto()  up-        from maincommands.sh
+ux-        .mapto()  ux-        from maincommands.sh
+save-      .mapto()  save-      from maincommands.sh
+snap-      .mapto()  snap-      from maincommands.sh
+scr-sync   .mapto()  scr-sync   from maincommands.sh
+=          .mapto()  =          from maincommands.sh
+.s         .mapto()  .s         from maincommands.sh
+.us        .mapto()  .us        from maincommands.sh
+.r         .mapto()  .r         from maincommands.sh
+.d         .mapto()  .d         from maincommands.sh
+.dm        .mapto()  .dm        from maincommands.sh
+.ai        .mapto()  .ai        from maincommands.sh
+health     .mapto()  health     from maincommands.sh
+disk       .mapto()  disk       from maincommands.sh
+ram        .mapto()  ram        from maincommands.sh
+clear      .mapto()  clear      from maincommands.sh
+sast       .mapto()  sast       from maincommands.sh
+kl         .mapto()  kl         from maincommands.sh

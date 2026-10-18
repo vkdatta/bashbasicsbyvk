@@ -134,7 +134,7 @@ _rb_export() {
   echo "   $P_MAIL $d3"
   echo
   local ans f
-  builtin read -e -r -p "   Save it to a file in this folder too? (y/N): " ans
+  read -e -r -p "   Save it to a file in this folder too? (y/N): " ans
   case "$ans" in [yY]*)
     f="$PWD/rbam-card.txt"
     [ -e "$f" ] && f="$PWD/rbam-card-$(date +%s).txt"
@@ -177,7 +177,7 @@ _rb_answer() {
   else q="has offered to give you receive access. Become their receiver?"; fi
   echo "   📨 ${_RB_MAIL[$k]} [${_RB_D3[$k]}] $q"
   echo "      1. Yes   2. No"
-  local a; builtin read -e -r -p "   Select: " a
+  local a; read -e -r -p "   Select: " a
   case "$a" in 1|y|Y) _nf_rbam_respond "${_RB_RID[$k]}" true ;; 2|n|N) _nf_rbam_respond "${_RB_RID[$k]}" false ;; *) echo "🚫 No answer given." ;; esac
 }
 

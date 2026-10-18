@@ -80,6 +80,7 @@ echo() {
   # Fast path: if nothing is going to the screen there is nothing
   # worth capturing, so hand straight to the builtin. This keeps
   # bulk output (item listings, subshells, redirects) at native cost.
+  [[ ${_CM_MUTE:-0} == 1 && -t 1 ]] && return 0      # a cancelled flow says nothing more
   [[ $_sm_on == 1 && -t 1 ]] || { builtin echo "$@"; return $?; }
   local __n=0 __e=0 __s
   while [ "$#" -gt 0 ]; do
@@ -100,7 +101,9 @@ echo() {
 }
 
 printf() {
-  if [ "$1" = "-v" ] || [[ $_sm_on != 1 || ! -t 1 ]]; then
+  if [ "$1" = "-v" ]; then builtin printf "$@"; return $?; fi
+  [[ ${_CM_MUTE:-0} == 1 && -t 1 ]] && return 0      # a cancelled flow says nothing more
+  if [[ $_sm_on != 1 || ! -t 1 ]]; then
     builtin printf "$@"
     return $?
   fi
@@ -440,6 +443,7 @@ _sm_compute_msel() {
 _sm_is_hl_multi() { [ -n "${_msel_set[$1]+x}" ]; }
 
 _sm_input_fn() {
+  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
   builtin printf '\r\033[K%s%s' "$_sm_prompt" "$_buf"
   local back=$(( ${#_buf} - _pos ))
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
@@ -748,6 +752,7 @@ _sm_run() {
   done
 
   [ -n "${_orig_stty:-}" ] && stty "$_orig_stty" 2>/dev/null
+  if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
   builtin echo
 
   if $multi; then
@@ -776,7 +781,32 @@ _sm_run() {
 # ------------------------------------------------------------
 # the read shim
 # ------------------------------------------------------------
+# Plain-text prompt (no menu on screen): handed to the command layer's line editor so the
+# live hint row and the command / @-escape rules apply to every prompt in the app.
+# $1 = ok(1|0)  $2 = prompt  $3 = initial text  $4 = variable  $5 = tab-complete(1|0)  then the original read args
+_cm_read_fallback() {
+  local __cmf_ok="$1" __cmf_p="$2" __cmf_i="$3" __cmf_v="$4" __cmf_c="$5" __cmf_rc
+  shift 5
+  if [ "$__cmf_ok" = 1 ] && [ -t 0 ] && [ -t 1 ] && [ "${VK_CMD_EDITOR:-1}" != 0 ] \
+     && declare -F _cm_text_read >/dev/null 2>&1; then
+    _cm_text_read "$__cmf_p" "$__cmf_i" "$__cmf_v" "$__cmf_c"; __cmf_rc=$?
+    if [ "$__cmf_rc" -ne 99 ]; then
+      builtin printf -v "$__cmf_v" '%s' "$_CM_RESULT"
+      return "$__cmf_rc"
+    fi
+  fi
+  builtin read "$@"
+}
+
 read() {
+  # a flow that is being cancelled (blocked command / "back"): every prompt answers at once
+  if [ "${_CM_ABORT:-0}" = 1 ] && [ -t 0 ] && declare -F _cm_abort_swallow >/dev/null 2>&1 && _cm_abort_swallow; then
+    local __a __v=""
+    for __a in "$@"; do [[ "$__a" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && __v="$__a"; done
+    builtin printf -v "${__v:-REPLY}" '%s' ""
+    return 1
+  fi
+
   # fast path: anything without -p is never a menu prompt
   case "$*" in
     *-p*) ;;
@@ -785,7 +815,7 @@ read() {
 
   # locals here also snapshot the outer values, which makes
   # nested menus (a submenu opened from a menu) re-entrant
-  local _sm_prompt="" _sm_var="" _sm_ok=1 _sm_rc=0
+  local _sm_prompt="" _sm_var="" _sm_ok=1 _sm_rc=0 _cm_ok=1 _cm_init="" _cm_edit=0
   local _buf _pos _hl_index _can_nav _esc _kname
   local _vp_mode _vp_start _vp_end _vp_n _vp_page _vp_R _vp_gv
   local _vp_count_fn _vp_rowtext_fn _vp_header_fn _vp_footer_fn
@@ -806,12 +836,18 @@ read() {
         while [ -n "$__smr_rest" ]; do
           __smr_c="${__smr_rest:0:1}"; __smr_rest="${__smr_rest:1}"
           case "$__smr_c" in
-            r|e) ;;     # -e only matters for the builtin fallback (readline arrows)
+            r) ;;
+            e) _cm_edit=1 ;;     # -e only matters for the builtin fallback (readline arrows)
             p)
               if [ -n "$__smr_rest" ]; then _sm_prompt="$__smr_rest"; __smr_rest=""
               else __smr_i=$(( __smr_i + 1 )); _sm_prompt="${__smr_a[$__smr_i]}"; fi
               ;;
-            *) _sm_ok=0; __smr_rest="" ;;    # -s -a -d -n -t -u -i ...
+            i)   # initial text: still a plain text prompt, but never a menu
+              _sm_ok=0
+              if [ -n "$__smr_rest" ]; then _cm_init="$__smr_rest"; __smr_rest=""
+              else __smr_i=$(( __smr_i + 1 )); _cm_init="${__smr_a[$__smr_i]}"; fi
+              ;;
+            *) _sm_ok=0; _cm_ok=0; __smr_rest="" ;;    # -s -a -d -n -t -u ...
           esac
         done
         ;;
@@ -828,33 +864,51 @@ read() {
   # function, or printf -v would write to our local instead of the
   # caller's variable.
   case "$_sm_var" in
-    _sm_*|_vp_*|__smr_*|_buf|_pos|_hl_index|_can_nav|_esc|_kname|_blk_h|REPLY_sm) _sm_ok=0 ;;
+    _sm_*|_vp_*|__smr_*|_cm_*|__cmf_*|_CM_*|_buf|_pos|_hl_index|_can_nav|_esc|_kname|_blk_h|REPLY_sm) _sm_ok=0; _cm_ok=0 ;;
   esac
 
   if ! $_sm_enabled || [ "$_sm_ok" -eq 0 ] || $_sm_active \
      || [ ! -t 0 ] || [ ! -t 1 ] \
      || ! declare -F _vp_render_fresh >/dev/null 2>&1; then
-    builtin read "$@"; _sm_rc=$?; _sm_reset; return $_sm_rc
+    $_sm_active && _cm_ok=0
+    _cm_read_fallback "$_cm_ok" "${_sm_partial}${_sm_prompt}" "$_cm_init" "$_sm_var" "$_cm_edit" "$@"; _sm_rc=$?
+    _sm_reset; return $_sm_rc
   fi
 
   if ! _sm_detect; then
-    builtin read "$@"; _sm_rc=$?; _sm_reset; return $_sm_rc
+    _cm_read_fallback "$_cm_ok" "${_sm_partial}${_sm_prompt}" "$_cm_init" "$_sm_var" "$_cm_edit" "$@"; _sm_rc=$?
+    _sm_reset; return $_sm_rc
   fi
 
   local __smr_rows
   __smr_rows=$(_term_rows)
   if [ "$__smr_rows" -lt 8 ]; then
-    builtin read "$@"; _sm_rc=$?; _sm_reset; return $_sm_rc
+    _cm_read_fallback "$_cm_ok" "${_sm_partial}${_sm_prompt}" "$_cm_init" "$_sm_var" "$_cm_edit" "$@"; _sm_rc=$?
+    _sm_reset; return $_sm_rc
   fi
 
   # a partially written line becomes part of the prompt
   [ -n "$_sm_partial" ] && _sm_prompt="$_sm_partial$_sm_prompt"
 
-  _sm_active=true; _sm_sync_on
-  _sm_run
-  _sm_active=false; _sm_sync_on
+  # command layer: which keys does THIS menu print itself, and which map owns it?
+  declare -F _cm_local_collect >/dev/null 2>&1 && { _cm_ctx_find; _cm_local_collect; }
+
+  local __smr_g=0
+  while :; do
+    _sm_active=true; _sm_sync_on
+    _sm_run
+    _sm_active=false; _sm_sync_on
+    __smr_g=0
+    if declare -F _cm_gate_sm >/dev/null 2>&1; then _cm_gate_sm; __smr_g=$?; fi
+    case "$__smr_g" in
+      1) _sm_erase=0 ;;           # a command ran (settings, help ...): draw this menu again below it
+      *) break ;;
+    esac
+  done
   _sm_reset
+  declare -F _cm_local_clear >/dev/null 2>&1 && _cm_local_clear
 
   builtin printf -v "$_sm_var" '%s' "$_sm_result"
+  [ "$__smr_g" = 2 ] && return 1
   return 0
 }

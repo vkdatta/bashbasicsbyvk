@@ -1,6 +1,7 @@
 source "bashbasicsbyvk_loadingbar.sh"
 source "bashbasicsbyvk_smartmenu.sh"
 source "bashbasicsbyvk_menuchrome.sh"
+source "bashbasicsbyvk_cmdmap.sh"
 source "bashbasicsbyvk_viewport.sh"
 source "bashbasicsbyvk_displayer.sh"
 source "bashbasicsbyvk_browse.sh"

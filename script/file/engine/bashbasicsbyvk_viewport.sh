@@ -413,6 +413,8 @@ _vp_geometry() {
   # and the loading bar are drawn there, never on the line being typed on.
   _vp_hint_row=0
   [ "${_vp_input_fn:-}" = "_print_input_line" ] && _vp_hint_row=1
+  [ "${_vp_input_fn:-}" = "_sm_input_fn" ] && _vp_hint_row=1
+  [ "${_vp_input_fn:-}" = "_multi_print_input_line" ] && _vp_hint_row=1
 
   min_rows=3
   (( _vp_R > 0 && _vp_R < min_rows )) && min_rows=$_vp_R
@@ -561,6 +563,7 @@ _vp_rerender() {
 }
 
 _vp_render_fresh() {
+  declare -F _cm_abort_report >/dev/null 2>&1 && _cm_abort_report   # a cancelled flow: say why, once, above the menu
   _hint_cur="?"          # a fresh screen: whatever sits under the prompt is unknown, repaint the hint row
   _vp_build_chrome
   _vp_geometry
@@ -764,6 +767,7 @@ _multi_compute_set() {
 }
 
 _multi_print_input_line() {
+  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
   builtin printf '\r\033[K'
   if [ "$_vp_mode" == "imaginary" ]; then
     builtin printf "Group numbers: %s" "$_buf"
@@ -894,7 +898,18 @@ _multi_adjust_number_at_cursor() {
   _multi_sync
 }
 
+# The picker ("Item numbers:" / "Group numbers:") is a prompt inside a flow: a command typed here
+# (s, h ...) runs and the picker is asked again; a blocked one cancels the flow (see cmdmap).
 _multi_prompt_loop() {
+  declare -F _cm_ctx_find >/dev/null 2>&1 && _cm_ctx_find
+  while :; do
+    _multi_prompt_loop_raw
+    declare -F _cm_gate_multi >/dev/null 2>&1 || break
+    _cm_gate_multi && break
+  done
+}
+
+_multi_prompt_loop_raw() {
   local key seq _rc
   _buf=""
   _pos=0
@@ -965,5 +980,6 @@ _multi_prompt_loop() {
 
   trap - WINCH
   stty "$_orig_stty" 2>/dev/null
+  if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
   echo
 }
