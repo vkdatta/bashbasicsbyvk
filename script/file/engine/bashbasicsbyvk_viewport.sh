@@ -42,6 +42,83 @@ _term_cols() {
   echo "$_vp_cols_now"
 }
 
+# ── one-row input fitting ───────────────────────────────────────────────────────────────────
+# Every typed-line editor redraws its row with  \r \033[K <prompt><text>  and then moves the cursor back with \033[nD.
+# That only works while prompt+text fit ONE terminal row. When a long link is pasted on a narrow screen (a phone) the
+# text wraps, \r / \033[K / \033[nD then only act on the LAST wrapped row, so every keystroke prints the prompt again
+# one row lower ("Paste link ..." 60 times). These helpers keep the row to ONE line: the text scrolls sideways inside
+# the row (a "<" marks hidden text on the left) and the hint row is clipped, so nothing ever wraps.
+_bvk_is_ascii() { local LC_ALL=C; [[ "$1" != *[!\ -~]* ]]; }
+
+_bvk_dispw() {   # $1 text -> _BVK_W = display cells (ANSI colour codes ignored, wide chars/emoji = 2, combining = 0)
+  local s="$1" i c cp w=0 n
+  while [[ "$s" == *$'\033'* ]] && [[ "$s" =~ $'\033'\[[0-9\;?]*[A-Za-z] ]]; do s="${s/"${BASH_REMATCH[0]}"/}"; done
+  if _bvk_is_ascii "$s"; then _BVK_W=${#s}; return 0; fi
+  n=${#s}
+  for (( i=0; i<n; i++ )); do
+    c="${s:i:1}"
+    case "$c" in
+      [a-zA-Z0-9\ ._/:#=,\;-]) w=$(( w + 1 )) ;;
+      *) printf -v cp '%d' "'$c" 2>/dev/null || cp=0
+         if   (( cp < 32 )); then :
+         elif (( (cp >= 0x300 && cp <= 0x36F) || (cp >= 0x200B && cp <= 0x200F) || (cp >= 0xFE00 && cp <= 0xFE0F) )); then :
+         elif (( (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) \
+              || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF00 && cp <= 0xFF60) \
+              || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1FAFF) || (cp >= 0x20000 && cp <= 0x3FFFD) )); then w=$(( w + 2 ))
+         else w=$(( w + 1 )); fi ;;
+    esac
+  done
+  _BVK_W=$w
+}
+
+_bvk_cols() {   # -> _BVK_COLS (cached geometry, never below 20)
+  [ "${_vp_cols_now:-0}" -gt 0 ] 2>/dev/null || _vp_probe_size
+  _BVK_COLS="${_vp_cols_now:-80}"; [ "$_BVK_COLS" -ge 20 ] 2>/dev/null || _BVK_COLS=80
+}
+
+_bvk_clip() {   # $1 text [$2 max cells; default cols-1] -> _BVK_CLIP = text cut so it cannot wrap
+  local s="$1" lim="$2"
+  [ -n "$lim" ] || { _bvk_cols; lim=$(( _BVK_COLS - 1 )); }
+  _bvk_dispw "$s"
+  while (( _BVK_W > lim && ${#s} > 0 )); do s="${s:0:${#s}-1}"; _bvk_dispw "$s"; done
+  _BVK_CLIP="$s"
+}
+
+_BVK_FIT_S=0
+# _bvk_fit_input PROMPT TEXT CURSOR [LEFT_MARGIN_CELLS]
+#   -> _BVK_FIT_PROMPT (prompt, shortened if the screen is tiny) · _BVK_FIT (what to print after it) · _BVK_FIT_BACK (cells to
+#      move the cursor left from the end of _BVK_FIT).   _BVK_FIT_S (first visible char) is kept between calls so the text does
+#      not jump; set it to 0 when a new line starts.
+_bvk_fit_input() {
+  local p="$1" b="$2" pos="$3" lm="${4:-0}" cols avail pw len s tc wide=0 vis t i c
+  _bvk_cols; cols=$(( _BVK_COLS - lm ))
+  _bvk_dispw "$p"; pw=$_BVK_W
+  while (( pw > cols - 12 && ${#p} > 1 )); do p="${p:1}"; _bvk_dispw "$p"; pw=$_BVK_W; done   # tiny screen: keep the prompt's tail
+  _BVK_FIT_PROMPT="$p"
+  avail=$(( cols - pw - 1 ))                      # one spare cell so the cursor never sits in the "pending wrap" column
+  (( avail < 4 )) && avail=4
+  len=${#b}; (( pos > len )) && pos=$len; (( pos < 0 )) && pos=0
+  if ! _bvk_is_ascii "$b"; then                   # wide chars: leave room for their second cell
+    for (( i=0; i<len; i++ )); do c="${b:i:1}"; _bvk_dispw "$c"; (( _BVK_W > 1 )) && wide=$(( wide + 1 )); done
+    avail=$(( avail - wide )); (( avail < 4 )) && avail=4
+  fi
+  s=${_BVK_FIT_S:-0}; (( s < 0 || s > len )) && s=0
+  if (( len <= avail )); then s=0
+  else
+    (( pos - s > avail - (s > 0 ? 1 : 0) )) && s=$(( pos - (avail - 1) ))   # cursor ran off the right edge
+    (( s > 0 && pos - s < 1 )) && { s=$(( pos - 1 )); (( s < 0 )) && s=0; }  # keep one char left of the cursor visible
+    (( s > len - avail + 1 )) && s=$(( len - avail + 1 ))                   # do not leave an empty tail
+    (( s < 0 )) && s=0
+  fi
+  _BVK_FIT_S=$s
+  tc=$avail; (( s > 0 )) && tc=$(( avail - 1 ))
+  vis="${b:s:tc}"
+  t="$vis"; (( s > 0 )) && t="<$vis"
+  _BVK_FIT="$t"
+  t="${b:pos:$(( s + tc - pos > 0 ? s + tc - pos : 0 ))}"
+  _bvk_dispw "$t"; _BVK_FIT_BACK=$_BVK_W
+}
+
 _vp_check_resize() {
   _vp_resized=false
   _vp_read_size || return 1
@@ -780,14 +857,11 @@ _multi_compute_set() {
 _multi_print_input_line() {
   declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
   builtin printf '\r\033[K'
-  if [ "$_vp_mode" == "imaginary" ]; then
-    _BVK_SCR_PROMPT="Group numbers:"
-    builtin printf "Group numbers: %s" "$_buf"
-  else
-    _BVK_SCR_PROMPT="Item numbers:"
-    builtin printf "Item numbers: %s" "$_buf"
-  fi
-  local back=$(( ${#_buf} - _pos ))
+  local _mp back
+  if [ "$_vp_mode" == "imaginary" ]; then _BVK_SCR_PROMPT="Group numbers:"; _mp="Group numbers: "
+  else _BVK_SCR_PROMPT="Item numbers:"; _mp="Item numbers: "; fi
+  _bvk_fit_input "$_mp" "$_buf" "$_pos"                  # one row only: a long paste must not wrap
+  builtin printf '%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
 }
 

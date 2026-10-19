@@ -259,7 +259,8 @@ _st_draw() {
   out+="$nl${f2:0:cols-1}"$'\n'
   out+="$nl"$'\n'                                         # linebreak under the footer
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
-  out+="${nl}Select: $buf"$'\033[J'
+  if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "Select: " "$buf" "${#buf}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
+  else out+="${nl}Select: $buf"$'\033[J'; fi
   builtin printf '\033[?2026h%s\033[?2026l' "$out"
   prev=$(( vis + 10 ))
 }
@@ -401,7 +402,10 @@ _st_run() {
   # leave tidy: a sub screen erases itself so its parent redraws in the same
   # place; the top screen stays on screen with  Select: u  /  Select: q  as typed.
   if (( prev > 0 )); then
-    if (( _st_depth > 1 )); then _st_wipe; else builtin printf '\r\033[2KSelect: %s' "$buf"; fi
+    if (( _st_depth > 1 )); then _st_wipe; else
+      if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "Select: " "$buf" "${#buf}"; builtin printf '\r\033[2K%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"
+      else builtin printf '\r\033[2KSelect: %s' "$buf"; fi
+    fi
   fi
   if [ -n "$_st_old_winch" ]; then eval "$_st_old_winch"; else trap - WINCH; fi
   _ST_SIZE_STALE=1                      # the caller's size may differ again by the time we are back in it

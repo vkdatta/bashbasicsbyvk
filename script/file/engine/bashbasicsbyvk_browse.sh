@@ -545,7 +545,8 @@ _input_hint_sync() {
   [ "$_hint_want" = "$_hint_cur" ] && return 0
   _hint_cur="$_hint_want"
   if [ -n "$_hint_want" ]; then
-    builtin printf '\n\r\033[2K\033[2m%s\033[0m\033[1A\r' "$_hint_want"
+    declare -F _bvk_clip >/dev/null 2>&1 && { _bvk_clip "$_hint_want"; _hint_want_shown="$_BVK_CLIP"; } || _hint_want_shown="$_hint_want"
+    builtin printf '\n\r\033[2K\033[2m%s\033[0m\033[1A\r' "$_hint_want_shown"
   else
     builtin printf '\n\r\033[2K\033[1A\r'
   fi
@@ -555,8 +556,13 @@ _print_input_line() {
   _input_hint_sync
   builtin printf '\r\033[K'
   _BVK_SCR_PROMPT="Select:"
-  builtin printf "Select: %s" "$_buf"
-  local back=$(( ${#_buf} - _pos ))
+  local back
+  if declare -F _bvk_fit_input >/dev/null 2>&1; then
+    _bvk_fit_input "Select: " "$_buf" "$_pos"            # one row only (see _bvk_fit_input in viewport.sh)
+    builtin printf '%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
+  else
+    builtin printf "Select: %s" "$_buf"; back=$(( ${#_buf} - _pos ))
+  fi
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
 }
 

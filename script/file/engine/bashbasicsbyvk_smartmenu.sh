@@ -448,8 +448,13 @@ _sm_is_hl_multi() { [ -n "${_msel_set[$1]+x}" ]; }
 _sm_input_fn() {
   declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
   _BVK_SCR_PROMPT="${_sm_prompt##*$'\n'}"
-  builtin printf '\r\033[K%s%s' "$_sm_prompt" "$_buf"
-  local back=$(( ${#_buf} - _pos ))
+  local back
+  if declare -F _bvk_fit_input >/dev/null 2>&1; then
+    _bvk_fit_input "$_sm_prompt" "$_buf" "$_pos"        # one row only (see _bvk_fit_input in viewport.sh)
+    builtin printf '\r\033[K%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
+  else
+    builtin printf '\r\033[K%s%s' "$_sm_prompt" "$_buf"; back=$(( ${#_buf} - _pos ))
+  fi
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
   return 0
 }

@@ -580,7 +580,9 @@ _cm_hint_row() {   # paints _hint_want on the row under the prompt; leaves the c
   local want="$1"
   [ "$want" = "$_CM_HINT_CUR" ] && { builtin printf '\r'; return 0; }
   _CM_HINT_CUR="$want"
-  if [ -n "$want" ]; then builtin printf '\n\r\033[2K\033[2m%s\033[0m\033[1A\r' "$want"
+  if [ -n "$want" ]; then
+    declare -F _bvk_clip >/dev/null 2>&1 && { _bvk_clip "$want"; want="$_BVK_CLIP"; }      # a hint longer than the row would wrap and scroll the screen
+    builtin printf '\n\r\033[2K\033[2m%s\033[0m\033[1A\r' "$want"
   else builtin printf '\n\r\033[2K\033[1A\r'; fi
 }
 _cm_complete() {   # path completion for the word before the cursor  → sets _ce_buf/_ce_pos
@@ -603,8 +605,15 @@ _cm_complete() {   # path completion for the word before the cursor  → sets _c
 }
 _cm_edit_draw() {   # redraw the prompt row
   local lastp="${_ce_prompt##*$'\n'}" back
-  builtin printf '\r\033[K%s%s' "$lastp" "$_ce_buf"
-  back=$(( ${#_ce_buf} - _ce_pos ))
+  if declare -F _bvk_fit_input >/dev/null 2>&1; then
+    # one row only: long text (a pasted link on a phone) scrolls inside the row instead of wrapping; a wrapped row would
+    # make every keystroke print the prompt again one line lower
+    _bvk_fit_input "$lastp" "$_ce_buf" "$_ce_pos"
+    builtin printf '\r\033[K%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
+  else
+    builtin printf '\r\033[K%s%s' "$lastp" "$_ce_buf"
+    back=$(( ${#_ce_buf} - _ce_pos ))
+  fi
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
 }
 
@@ -618,7 +627,15 @@ _cm_line_edit() {
   stty_orig=$(stty -g 2>/dev/null)
   stty -icanon -echo min 1 time 0 2>/dev/null
   _BVK_SCR_PROMPT="${_ce_prompt##*$'\n'}"
-  builtin printf '%s%s' "$_ce_prompt" "$_ce_buf"
+  _BVK_FIT_S=0
+  # The prompt row itself is (re)drawn by _cm_edit_draw and must stay ONE terminal row, because a wrapped row breaks the
+  # redraw (every keystroke would print the prompt again). So: lines above it are printed once as they are; and a prompt that
+  # leaves too little room for typing (long prompt on a phone) is printed once on its own line(s) and the typing row is "> ".
+  if declare -F _bvk_dispw >/dev/null 2>&1; then
+    _bvk_cols; _bvk_dispw "${_ce_prompt##*$'\n'}"
+    if (( _BVK_W > _BVK_COLS - 24 )); then builtin printf '%s\n' "$_ce_prompt"; _ce_prompt="> "
+    elif [[ "$_ce_prompt" == *$'\n'* ]]; then builtin printf '%s\n' "${_ce_prompt%$'\n'*}"; fi
+  elif [[ "$_ce_prompt" == *$'\n'* ]]; then builtin printf '%s\n' "${_ce_prompt%$'\n'*}"; fi
   builtin printf '\n\033[1A'                       # reserve the hint row (scrolls if at the bottom)
   _cm_edit_draw
   # text that cc just typed in for you: show what it does, like any typed command
@@ -663,7 +680,7 @@ _cm_line_edit() {
   # leave: wipe the hint row, put the cursor after the text, newline
   _CM_HINT_CUR="?"; _cm_hint_row ""
   _cm_edit_draw
-  builtin printf '\033[%dC\n' "$(( ${#_ce_buf} - _ce_pos ))" 2>/dev/null
+  builtin printf '\033[%dC\n' "${_BVK_FIT_BACK:-$(( ${#_ce_buf} - _ce_pos ))}" 2>/dev/null
   [ -n "$stty_orig" ] && stty "$stty_orig" 2>/dev/null
   if [ "$rc" -ne 0 ]; then return 1; fi
   _CM_OUT="$_ce_buf"
