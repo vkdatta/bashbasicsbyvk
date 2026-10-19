@@ -9,8 +9,11 @@ fail=0
 for ed in cm browse; do for cols in 30 40 50 80; do
   out="$(python3 "$D/emu.py" "$ROOT" "$ed" "$cols" "$LINK" 2>&1)"
   rows="$(grep -o 'PROMPT_ROWS=[0-9]*' <<<"$out" | cut -d= -f2)"
-  got="$(sed -n '/^RESULT=\[/,/\]$/p' <<<"$out" | tr -d '\n' | sed 's/^RESULT=\[//; s/\]$//')"
-  if [ "${rows:-9}" -le 1 ] && [ "$got" = "$LINK" ]; then echo "  ok   $ed @ ${cols} cols (prompt rows=$rows, text intact)"
-  else echo "  FAIL $ed @ ${cols} cols: prompt rows=${rows:-?} (want <=1), text intact=$([ "$got" = "$LINK" ] && echo yes || echo NO)"; fail=1; fi
+  got="$(grep -o '^RESULT_JOINED=.*' <<<"$out" | sed 's/^RESULT_JOINED=//')"
+  # cm = the free-text editor: the text WRAPS onto following rows like `read -e`, so the whole link must be visible on screen.
+  # browse = the fixed-layout "Select:" row: it stays ONE row (text scrolls inside it), so only the prompt-row count matters.
+  vis=yes; [ "$ed" = cm ] && { grep -o '^SCREEN_JOINED=.*' <<<"$out" | grep -qF "$LINK" || vis=no; }
+  if [ "${rows:-9}" -le 1 ] && [ "$got" = "$LINK" ] && [ "$vis" = yes ]; then echo "  ok   $ed @ ${cols} cols (prompt rows=$rows, text intact$([ "$ed" = cm ] && echo ", whole link visible, wrapped"))"
+  else echo "  FAIL $ed @ ${cols} cols: prompt rows=${rows:-?} (want <=1), text intact=$([ "$got" = "$LINK" ] && echo yes || echo NO), whole link visible=$vis"; fail=1; fi
 done; done
 exit $fail

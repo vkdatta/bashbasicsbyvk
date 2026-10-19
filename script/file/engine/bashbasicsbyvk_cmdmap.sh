@@ -603,18 +603,46 @@ _cm_complete() {   # path completion for the word before the cursor  → sets _c
   _ce_buf="${pre}${pick}${after}"; _ce_pos=$(( ${#pre} + ${#pick} ))
   return 0
 }
-_cm_edit_draw() {   # redraw the prompt row
-  local lastp="${_ce_prompt##*$'\n'}" back
-  if declare -F _bvk_fit_input >/dev/null 2>&1; then
-    # one row only: long text (a pasted link on a phone) scrolls inside the row instead of wrapping; a wrapped row would
-    # make every keystroke print the prompt again one line lower
-    _bvk_fit_input "$lastp" "$_ce_buf" "$_ce_pos"
-    builtin printf '\r\033[K%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
-  else
+_CE_ROW=0     # rows between the first row of the prompt and the row the cursor is on (after the last draw)
+_cm_edit_draw() {   # redraw the whole prompt + text; long text WRAPS onto the next rows like `read -e` does
+  local lastp="${_ce_prompt##*$'\n'}" W pw bw T tp erow ecol trow tcol hint="${_CM_HINT_SHOW:-}"
+  if ! declare -F _bvk_dispw >/dev/null 2>&1; then          # helper not loaded: old single-row redraw
     builtin printf '\r\033[K%s%s' "$lastp" "$_ce_buf"
-    back=$(( ${#_ce_buf} - _ce_pos ))
+    local back=$(( ${#_ce_buf} - _ce_pos )); [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
+    return 0
   fi
-  [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
+  _bvk_cols; W=$_BVK_COLS
+  _bvk_dispw "$lastp"; pw=$_BVK_W
+  _bvk_dispw "$_ce_buf"; bw=$_BVK_W
+  T=$(( pw + bw ))
+  _bvk_dispw "${_ce_buf:0:_ce_pos}"; tp=$(( pw + _BVK_W ))
+  # 1. back to the first row of the prompt, wipe everything from there down (old text, old hint row)
+  builtin printf '\r'; [ "$_CE_ROW" -gt 0 ] && builtin printf '\033[%dA' "$_CE_ROW"
+  builtin printf '\033[J%s%s' "$lastp" "$_ce_buf"
+  # text that ends exactly at the right edge leaves the cursor in the "pending wrap" state: force it onto the next row
+  (( T > 0 && T % W == 0 )) && builtin printf ' \r'
+  erow=$(( T / W )); ecol=$(( T % W )); trow=$(( tp / W )); tcol=$(( tp % W ))
+  # 2. cursor from the end of the text to where it belongs
+  (( erow > trow )) && builtin printf '\033[%dA' $(( erow - trow ))
+  builtin printf '\r'; (( tcol > 0 )) && builtin printf '\033[%dC' "$tcol"
+  _CE_ROW=$trow
+  # 3. dim hint on the row below the text, then back
+  if [ -n "$hint" ]; then
+    _bvk_clip "$hint"
+    (( erow > trow )) && builtin printf '\033[%dB' $(( erow - trow ))
+    builtin printf '\n\r\033[2m%s\033[0m\033[%dA\r' "$_BVK_CLIP" $(( erow + 1 - trow ))
+    (( tcol > 0 )) && builtin printf '\033[%dC' "$tcol"
+  fi
+  _CE_ENDROW=$erow; _CE_ENDCOL=$ecol; _CE_FULL=$(( T > 0 && T % W == 0 ? 1 : 0 ))
+}
+# leave the editor: wipe the hint row, put the cursor after the text on a fresh row
+_cm_edit_leave() {
+  if ! declare -F _bvk_dispw >/dev/null 2>&1; then builtin printf '\033[%dC\n' "$(( ${#_ce_buf} - _ce_pos ))" 2>/dev/null; return 0; fi
+  [ "${_CE_ENDROW:-0}" -gt "$_CE_ROW" ] && builtin printf '\033[%dB' $(( _CE_ENDROW - _CE_ROW ))
+  builtin printf '\r'; [ "${_CE_ENDCOL:-0}" -gt 0 ] && builtin printf '\033[%dC' "$_CE_ENDCOL"
+  builtin printf '\033[J'
+  [ "${_CE_FULL:-0}" = 1 ] || builtin printf '\n'
+  _CE_ROW=0
 }
 
 # _cm_line_edit PROMPT INITIAL VAR EDIT(1|0)   ->  0 ok · 1 EOF/aborted
@@ -627,21 +655,14 @@ _cm_line_edit() {
   stty_orig=$(stty -g 2>/dev/null)
   stty -icanon -echo min 1 time 0 2>/dev/null
   _BVK_SCR_PROMPT="${_ce_prompt##*$'\n'}"
-  _BVK_FIT_S=0
-  # The prompt row itself is (re)drawn by _cm_edit_draw and must stay ONE terminal row, because a wrapped row breaks the
-  # redraw (every keystroke would print the prompt again). So: lines above it are printed once as they are; and a prompt that
-  # leaves too little room for typing (long prompt on a phone) is printed once on its own line(s) and the typing row is "> ".
-  if declare -F _bvk_dispw >/dev/null 2>&1; then
-    _bvk_cols; _bvk_dispw "${_ce_prompt##*$'\n'}"
-    if (( _BVK_W > _BVK_COLS - 24 )); then builtin printf '%s\n' "$_ce_prompt"; _ce_prompt="> "
-    elif [[ "$_ce_prompt" == *$'\n'* ]]; then builtin printf '%s\n' "${_ce_prompt%$'\n'*}"; fi
-  elif [[ "$_ce_prompt" == *$'\n'* ]]; then builtin printf '%s\n' "${_ce_prompt%$'\n'*}"; fi
-  builtin printf '\n\033[1A'                       # reserve the hint row (scrolls if at the bottom)
+  _CE_ROW=0; _CM_HINT_SHOW=""
+  # lines above the prompt row are printed once; the prompt row + text are (re)drawn by _cm_edit_draw, which counts wrapped rows
+  [[ "$_ce_prompt" == *$'\n'* ]] && builtin printf '%s\n' "${_ce_prompt%$'\n'*}"
   _cm_edit_draw
   # text that cc just typed in for you: show what it does, like any typed command
   if [ "${_CC_HINT_NOW:-0}" = 1 ]; then
     _CC_HINT_NOW=0
-    if [ "$no_cmds" = 0 ] && [ -n "$_ce_buf" ]; then _cm_hint "$_ce_buf" text; _cm_hint_row "$_hint_want"; _cm_edit_draw; fi
+    if [ "$no_cmds" = 0 ] && [ -n "$_ce_buf" ]; then _cm_hint "$_ce_buf" text; _CM_HINT_SHOW="$_hint_want"; _cm_edit_draw; fi
   fi
   while :; do
     IFS= builtin read -rsn1 key; rc=$?
@@ -674,13 +695,12 @@ _cm_line_edit() {
       esac
     fi
     if [ "$no_cmds" = 0 ]; then _cm_hint "$_ce_buf" text; else _hint_want=""; fi
-    _cm_hint_row "$_hint_want"
+    _CM_HINT_SHOW="$_hint_want"
     _cm_edit_draw
   done
   # leave: wipe the hint row, put the cursor after the text, newline
-  _CM_HINT_CUR="?"; _cm_hint_row ""
-  _cm_edit_draw
-  builtin printf '\033[%dC\n' "${_BVK_FIT_BACK:-$(( ${#_ce_buf} - _ce_pos ))}" 2>/dev/null
+  _CM_HINT_SHOW=""
+  _cm_edit_leave
   [ -n "$stty_orig" ] && stty "$stty_orig" 2>/dev/null
   if [ "$rc" -ne 0 ]; then return 1; fi
   _CM_OUT="$_ce_buf"

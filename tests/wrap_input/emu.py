@@ -62,7 +62,7 @@ def pump(t):
             tail += d.decode('utf-8', 'replace'); feed(d.decode('utf-8', 'replace'))
     return True
 pump(1.0)
-for ch in text:                      # a paste: all characters arrive back to back
+for ch in re.findall(r'\x1b\[[A-Z~0-9]*|.', text.replace('<LEFT>', '\x1b[D').replace('<BS>', '\x7f'), re.S):   # a paste: keys arrive back to back
     os.write(fd, ch.encode()); pump(0.004)
 pump(0.6)
 mid = [''.join(r).rstrip() for r in screen]
@@ -73,4 +73,14 @@ print('---- screen while typing (cols=%d) ----' % cols)
 print('\n'.join(r for r in mid if r))
 print('---- after Enter ----')
 print('\n'.join(r for r in end if r))
+res = ''
+for k, r in enumerate(end):
+    if r.startswith('RESULT=['):
+        for q in end[k:]:
+            res += q
+            if q.endswith(']'): break
+        break
+print('RESULT_JOINED=' + res[len('RESULT=['):-1] if res.endswith(']') else 'RESULT_JOINED=?')
+joined = ''.join(r for r in mid if r)
+print('SCREEN_JOINED=' + joined)
 print('PROMPT_ROWS=%d' % prompt_rows)
