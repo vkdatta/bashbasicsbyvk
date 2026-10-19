@@ -1,0 +1,58 @@
+1. ISSUE AS DEFINED BY USER
+"heavy heavy heavy drift between cheat codes, cmdmap, actual commands and menu footer across various menus."
+Case 1 — sw → Bookmarks tab. Footer says "b) Remove", the live suggestion says "b- → Remove (e.g. b-1,3)", but
+"b-11" answered "📌 Buffered 1 item(s) → BOOKMARK (once)". Intended: remove, not buffer.
+Case 2 — delete → back up to cloud → "Name this backup": typing n suggests "…  could become: nf, ns", but nf / ns answer
+"✗ not available here — Enter will cancel", and cc does not list them. Typing u there packed, encrypted and uploaded
+the backup, and only afterwards printed "❌ Invalid command: u — exiting". Expected: u leaves at once.
+Case 3 — api (Links) → open a link: the prompt prints "c) copy link", the footer lists c-N, but typing c answers
+"c → ✗ not available here — Enter will cancel".
+Case 4 — "💳 This backup costs 2 credits … [c] continue · [r] reduce time · [i] increase time · [s] stop:" — pressing c
+printed "❌ Invalid command: c — exiting".
+
+HOW DID YOU DEBUG
+Read AGENTS.md, bashbasicsbyvk_cmdmap_guide.txt, engine/bashbasicsbyvk_cmdmap.sh (resolver, hint, gates, text editor),
+engine/bashbasicsbyvk_cheatcode.sh, the read shim in engine/bashbasicsbyvk_smartmenu.sh, loops/iloop/switch/
+bashbasicsbyvk_switch.sh, the switch map + menucommands, staging backup / fileapi_lib credit gate, api detail prompt.
+Built a small harness that sources the engine, every *commands.sh and puts the cmdmap folders on PATH (the installed app
+has them flat on PATH) and called _cm_resolve / _cm_hint / _cm_gate_text directly: nf and ns resolve to "block" in a text
+prompt while _cm_hint listed them (it only skipped keys wired to block()); [c] / c) typed in a text prompt resolve to
+main "c" (class act) = block; "u" resolves to "block" in main (explicit wire, the IMPL-only fallback to back never
+applied) and to "local" in switch/fx/api (the menu's own Up) = accepted as TEXT, i.e. a backup would have been named "u".
+Read the backup code: `read ... nm` result was never checked, so the abort raised by the gate (_CM_ABORT) did not stop
+the flow; only later echo/read calls were muted, the packing and upload ran, and the abort message came out at the next
+menu redraw. Compared footers / cmdmap / loop case labels per menu with a script (footer keys vs `case` labels vs .map).
+Verified by RUNNING: the harness and tests/cmd_drift.sh (35 checks; it fails on the untouched upload). NOT verified in a
+real terminal / tmux (tmux is not installed here): the on-screen redraw after a cancelled flow was read, not seen.
+tests/cheatcode.sh and tests/loadtime_print.sh already failed 17 / 16 checks on the untouched upload because their
+bootstrap no longer finds the map / commands files (files moved into folders); cheatcode.sh bootstrap repaired, it passes.
+
+CAUSE
+There was no single judge. The same typed key was decided by four different pieces of code:
+ a) _cm_hint's "could become" list only skipped keys wired to block(); the resolver also blocks act commands in a text
+    prompt, so the hint offered keys that Enter rejected.
+ b) Keys a TEXT prompt prints itself ("[c] continue", "c) copy link", "[Y/n, c = cancel]") were never treated as that
+    prompt's own answers (only smart menus did that through _CM_LOCAL); _cm_prompt_has_choices knew only [y/n] shapes.
+ c) "u" in a question depended on how the map wired it (block in main, local in switch/fx/api) instead of the documented
+    rule "u inside a prompt = go back"; a menu's own key (switch s, c) was accepted as plain text inside questions.
+ d) Callers ignored a failed read: the backup flow carried on after a cancelled prompt.
+ e) Switch: footer said "b) Remove", cmdmap said "b- Remove", the loop only removed with "x" and routed b-* to the
+    staging buffer (BOOKMARK). Footer r<N> (loop never handled it; it is e-N) and favourites "rn" (loop: r) were also wrong.
+
+FIX
+engine/bashbasicsbyvk_cmdmap.sh: _cm_resolve — u typed into a text prompt is always "back" (unless the map blocks it
+explicitly); a menu-own key in a text prompt resolves through the main command of the same name, else plain text.
+New _cm_usable (one judge) used by _cm_hint's "could become" and "(also: …)" lists. New _cm_prompt_collect fills _CM_LOCAL
+from the prompt text ([c] label, c) label, Enter) label); _cm_text_read collects before and restores after;
+_cm_gate_text and _cm_gate_multi accept a prompt's own key. _cm_prompt_has_choices also recognises [Y/n, c = cancel].
+_CM_MAP/_CM_MDEPTH/_CM_FLOW get defaults.
+staging/!buffer/fileapi/3 backup/bashbasicsbyvk_staging_backup.sh: every read checks failure and _CM_ABORT and returns 1
+(nothing packed / uploaded / deleted); the "Back up?" answer u is a cancel.
+loops/iloop/switch/bashbasicsbyvk_switch.sh: one case `b|b-*|x` = remove (bookmarks: _sw_remove_paths, favourites:
+_fav_sw_remove, recents: read-only message); b-* no longer reaches staging here; _sw_remove_paths takes b-1,3 / b-a-1-2
+directly, asks y/n, removes only the pointer. Footers now say what the loop handles (b-1,3 · e-N · r).
+favourites/bashbasicsbyvk_favourites.sh: _fav_sw_remove accepts the b-N list.
+cmdmap/switch: switch.map + switchmenucommands.sh gain b and e-, x = "Remove (same as b)".
+cmdmap guide: "ONE TRUTH PER KEY" rules. tests/cmd_drift.sh (new) and tests/cheatcode.sh bootstrap.
+Lesson: a key may be judged in ONE place only (_cm_resolve / _cm_usable); footers, cc, hints and prompts must read that
+judge. Any code that reads an answer must stop when the read fails (the abort travels through the return code).

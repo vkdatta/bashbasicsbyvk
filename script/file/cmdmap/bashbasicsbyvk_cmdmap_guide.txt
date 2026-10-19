@@ -12,7 +12,19 @@ Typed a command that is blocked where you are?
 Typed  u  inside a prompt?              → go back (cancels the prompt).
 Typed  s / h / q  inside a prompt?      → that screen opens; you return to the prompt.
 
-Prompts that print their own answers ([y/n], (a/b/c), [1-3]) are left alone.
+Prompts that print their own answers ([y/n], [Y/n, c = cancel], (a/b/c), [1-3]) are left alone.
+
+ONE TRUTH PER KEY  (footer · cc · suggestion · what Enter does must never disagree)
+    * The keys a prompt prints in its own text — "[c] continue · [r] reduce", "c) copy link   g) new link",
+      "Enter) back" — are THAT prompt's answers and beat the map (same as a smart menu's footer).
+    * u typed into a question (a name, a number, a time) is always "go back": the whole flow stops at once,
+      nothing after it (packing, uploading, deleting) runs.  A caller that reads an answer must stop when
+      the read fails or _CM_ABORT is 1.
+    * A menu's OWN key (switch: s, c, d ...) belongs to that menu's list prompt.  Inside a question it means
+      the main command of the same name (s h q open that screen; c d r answer "Invalid command") or plain
+      text when there is none.
+    * "could become: ..." lists only keys Enter would accept in THAT prompt (_cm_usable — the same judge).
+    * A footer key must be wired in the menu's .map AND handled by its loop.  tests/cmd_drift.sh guards this.
 
 Forgot a command?  Type  cc  (cheat codes) at any prompt: it lists exactly the commands THAT prompt
 accepts (the effective table of its map, filtered by what the prompt kind can run). =lo filters, a

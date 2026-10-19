@@ -61,6 +61,7 @@ declare -gA _CM_MAP_PENDING=()   # map -> file, wiring not parsed yet (parsed on
 _CM_BOOTED=0
 _CM_FLASH=""                    # one-shot message shown in the hint row
 _CM_ABORT=0; _CM_ABORT_MSG=""; _CM_ABORT_DEPTH=0; _CM_ABORT_N=0
+_CM_MAP=""; _CM_MDEPTH=0; _CM_FLOW=0     # set by _cm_ctx_find; defined here so nothing reads them unset
 _CM_MUTE=0
 
 # ------------------------------------------------------------ locating the files
@@ -258,6 +259,11 @@ _cm_resolve() {
     _cm_match "${_ct_kind[i]}" "${_ct_key[i]}" "$t" || continue
     if [ "${#_ct_key[i]}" -gt "$bl" ]; then best=$i; bl=${#_ct_key[i]}; fi
   done
+  # "u" typed into a text prompt (a question inside a flow) is ALWAYS "go back" — the one rule the guide
+  # promises everywhere. A map's own "u" (Up one folder, Up) is about the LIST, never about a question.
+  if [ "$mode" = text ] && [ "$t" = u ] && { [ "$best" -lt 0 ] || [ "${_ct_tgt[best]}" != BLOCK ]; }; then
+    _CM_ACT=back; _CM_KEY=u; _CM_DESC="Go back"; return 0
+  fi
   [ "$best" -lt 0 ] && return 0
   tgt="${_ct_tgt[best]}"; _CM_KEY="${_ct_key[best]}"; _CM_IMPL="${_ct_impl[best]}"
   case "$tgt" in
@@ -277,8 +283,19 @@ _cm_resolve() {
   fi
   # ---- what does a typed command do HERE?
   if [ "$_CM_MAP" = "main" ] && [ "$mode" = "menu" ]; then _CM_ACT=local; return 0; fi
+  if [ "$fromfile" != "bashbasicsbyvk_maincommands.sh" ] && [ "$handler" != back ] && [ "$mode" = text ]; then
+    # A menu's OWN key (switch: s = Settings, c = Create ...) belongs to that menu's LIST prompt. Inside a
+    # question (a name, a number, a time) it means what it means everywhere else: the main command of the
+    # same name (s h q → opens that screen; c d r → "Invalid command"), or plain text when there is none.
+    local md="${_CM_DEF[bashbasicsbyvk_maincommands.sh:$_CM_KEY]-}"
+    if [ -z "$md" ]; then _CM_ACT=none; _CM_KEY=""; _CM_DESC=""; _CM_EX=""; _CM_CLASS=""; _CM_HANDLER=""; return 0; fi
+    tgt="bashbasicsbyvk_maincommands.sh:$_CM_KEY"; d="$md"; _CM_IMPL=0
+    kind="${d%%|*}"; d="${d#*|}"; handler="${d%%|*}"; d="${d#*|}"
+    class="${d%%|*}"; d="${d#*|}"; _CM_DESC="${d%%|*}"; _CM_EX="${d#*|}"; _CM_CLASS="$class"; _CM_HANDLER="$handler"
+    fromfile=bashbasicsbyvk_maincommands.sh
+  fi
   if [ "$fromfile" != "bashbasicsbyvk_maincommands.sh" ]; then
-    # the menu's own command: its loop handles it. In a text prompt it is the flow's business too.
+    # the menu's own command: its loop handles it.
     if [ "$handler" = "back" ]; then _CM_ACT=back; else _CM_ACT=local; fi
     return 0
   fi
@@ -318,6 +335,20 @@ _cm_unescape() {
   return 1
 }
 
+# ------------------------------------------------------------ one judge: would typing KEY here do something?
+# Shared by the live suggestion ("could become: ..."), cc and the gates, so a hint can never offer a key
+# that Enter would then reject.   _cm_usable MODE KEY   -> 0 = accepted (run / local / back), 1 = not
+_cm_usable() {
+  local sa="$_CM_ACT" sk="$_CM_KEY" sd="$_CM_DESC" se="$_CM_EX" sc="$_CM_CLASS" si="$_CM_IMPL" sh="$_CM_HANDLER" rc=1
+  if [ -n "${_CM_LOCAL[${2,,}]+x}" ]; then rc=0
+  else
+    _cm_resolve "$1" "$2"
+    case "$_CM_ACT" in run|local|back) rc=0 ;; esac
+  fi
+  _CM_ACT="$sa"; _CM_KEY="$sk"; _CM_DESC="$sd"; _CM_EX="$se"; _CM_CLASS="$sc"; _CM_IMPL="$si"; _CM_HANDLER="$sh"
+  return $rc
+}
+
 # ------------------------------------------------------------ live suggestion
 _cm_hint_fmt_one() {   # key desc ex
   local s="$1"
@@ -349,11 +380,20 @@ _cm_hint() {
   local more="" i k cnt=0
   # other commands this could still become
   if [ "${#b}" -le 4 ]; then
-    for (( i=0; i<${#_ct_key[@]}; i++ )); do
+    local -A _mseen=()
+    # keys this very prompt prints ("[c] continue", "c) copy link") first, then the map's keys —
+    # and only those the prompt would really accept (same judge as Enter: _cm_usable)
+    for k in "${!_CM_LOCAL[@]}"; do
+      [[ "$k" == "$lb"* && "$k" != "$lb" ]] || continue
+      _mseen["$k"]=1; more+="${more:+, }$k"; cnt=$(( cnt + 1 )); [ "$cnt" -ge 4 ] && break
+    done
+    for (( i=0; i<${#_ct_key[@]} && cnt<4; i++ )); do
       k="${_ct_key[i]}"
       [[ "$k" == "$lb"* && "$k" != "$lb" ]] || continue
       [[ "${_ct_tgt[i]}" == BLOCK ]] && continue
-      more+="${more:+, }$k"; cnt=$(( cnt + 1 )); [ "$cnt" -ge 4 ] && break
+      [ -n "${_mseen[$k]+x}" ] && continue
+      _cm_usable "$mode" "$k" || continue
+      _mseen["$k"]=1; more+="${more:+, }$k"; cnt=$(( cnt + 1 ))
     done
   fi
   local esc=""; [ "$mode" = "text" ] && esc="  ·  @$b to type it as text"
@@ -504,6 +544,7 @@ _cm_gate_multi() {
   [ -n "$t" ] || return 0
   _cm_on || return 0
   [[ "$t" =~ ^[0-9a,\ -]+$ ]] && return 0
+  [ -n "${_CM_LOCAL[${t,,}]+x}" ] && return 0
   [ "$_CM_BOOTED" = 1 ] || _cm_boot
   _cm_table_build "$_CM_MAP"
   if _cm_unescape "$t"; then _buf="$_CM_LIT"; return 0; fi
@@ -550,9 +591,37 @@ _cm_gate_sm() {
 _cm_prompt_has_choices() {
   local p="$1"
   [[ "$p" =~ [\[\(][A-Za-z0-9]([A-Za-z0-9]*)(/[A-Za-z0-9]+)+[\]\)] ]] && return 0
+  [[ "$p" =~ [\[\(][A-Za-z0-9]+(/[A-Za-z0-9]+)+[[:space:]]*, ]] && return 0     # [Y/n, c = cancel the delete]
   [[ "$p" =~ [\[\(][0-9]+-[0-9]+[\]\)] ]] && return 0
   [[ "$p" =~ [Pp]ress\ (any\ )?[Kk]ey ]] && return 0
   return 1
+}
+
+# The keys a PROMPT prints in its own text are that prompt's own answers and beat the map
+# (same rule as a smart menu's footer):   [c] continue · [r] reduce   ·   c) copy link   g) new link   Enter) back
+# Fills _CM_LOCAL (key -> label) from the prompt string.
+_cm_prompt_collect() {
+  local p="$1" rest cell lab rx
+  _CM_LOCAL=()
+  p="${p//$'\n'/   }"
+  rx='\[([A-Za-z0-9-]{1,5})\][[:space:]]+([^·\[]*)'          # [c] continue  ·  [r] reduce
+  rest="$p"
+  while [[ "$rest" =~ $rx ]]; do
+    lab="${BASH_REMATCH[2]}"; lab="${lab%%  *}"; lab="${lab%"${lab##*[![:space:]]}"}"; lab="${lab%:}"
+    _CM_LOCAL["${BASH_REMATCH[1],,}"]="$lab"
+    rest="${rest#*"${BASH_REMATCH[0]}"}"
+  done
+  p="${p//  ·  /$'\n'}"; p="${p//·/$'\n'}"; p="${p//   /$'\n'}"
+  rx='^[[:space:]]*([A-Za-z0-9_-]{1,5})\)[[:space:]]+(.*)$'    # c) copy link
+  while IFS= read -r cell; do
+    if [[ "$cell" =~ $rx ]]; then
+      lab="${BASH_REMATCH[2]}"; lab="${lab%:*}"; lab="${lab%"${lab##*[![:space:]]}"}"
+      _CM_LOCAL["${BASH_REMATCH[1],,}"]="${lab:-answer}"
+    fi
+  done <<< "$p"
+  # numbers are rows / counts, never commands
+  local k; for k in "${!_CM_LOCAL[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] && unset '_CM_LOCAL[$k]'; done
+  return 0
 }
 
 _cm_gate_text() {   # $1 typed  $2 initial text ; sets _CM_OUT ; 0 accept · 3 ran a command (re-prompt) · 4 aborted
@@ -562,6 +631,8 @@ _cm_gate_text() {   # $1 typed  $2 initial text ; sets _CM_OUT ; 0 accept · 3 r
   [ -z "$t" ] && return 0
   [ "$t" = "$2" ] && return 0
   _cm_on || return 0
+  # a key the prompt prints itself is THAT prompt's answer
+  [ -n "${_CM_LOCAL[${t,,}]+x}" ] && return 0
   [ "$_CM_BOOTED" = 1 ] || _cm_boot
   _cm_table_build "$_CM_MAP"
   if _cm_unescape "$t"; then _CM_OUT="$_CM_LIT"; return 0; fi
@@ -707,6 +778,12 @@ _cm_line_edit() {
   return 0
 }
 
+_cm_text_read_done() {   # put back the keys that were known before this prompt (usually none)
+  _CM_LOCAL=()
+  [ -n "$1" ] && eval "${1/declare -A/declare -gA}" 2>/dev/null
+  return 0
+}
+
 # Entry used by the read shim. Returns the exit status the shim should give the caller.
 # Sets _CM_RESULT to the value for the variable.
 _cm_text_read() {   # prompt initial var can_complete
@@ -714,15 +791,17 @@ _cm_text_read() {   # prompt initial var can_complete
   local start="$init"        # what the editor starts with; $init stays "what was already there" for the gate
   _cm_on || return 99
   [ "$_CM_BOOTED" = 1 ] || _cm_boot
+  local _tr_saved; _tr_saved="$(declare -p _CM_LOCAL 2>/dev/null)"
+  _cm_prompt_collect "$prompt"
   while :; do
     _cm_ctx_find
-    _cm_line_edit "$prompt" "$start" "$var" "$cc" || { _CM_RESULT=""; return 1; }
-    if _cm_prompt_has_choices "$prompt"; then _CM_RESULT="$_CM_OUT"; return 0; fi
+    _cm_line_edit "$prompt" "$start" "$var" "$cc" || { _CM_RESULT=""; _cm_text_read_done "$_tr_saved"; return 1; }
+    if _cm_prompt_has_choices "$prompt"; then _CM_RESULT="$_CM_OUT"; _cm_text_read_done "$_tr_saved"; return 0; fi
     _cm_gate_text "$_CM_OUT" "$init"; st=$?
     case "$st" in
-      0) _CM_RESULT="$_CM_OUT"; return 0 ;;
+      0) _CM_RESULT="$_CM_OUT"; _cm_text_read_done "$_tr_saved"; return 0 ;;
       3) init=""; start="${_CC_PREFILL:-}"; _CC_PREFILL=""; [ -n "$start" ] && _CC_HINT_NOW=1; continue ;;   # a command ran (e.g. settings, cc); ask again — cc leaves its pick in the line
-      *) _CM_RESULT=""; return 1 ;;           # aborted: the flow unwinds
+      *) _CM_RESULT=""; _cm_text_read_done "$_tr_saved"; return 1 ;;           # aborted: the flow unwinds
     esac
   done
 }

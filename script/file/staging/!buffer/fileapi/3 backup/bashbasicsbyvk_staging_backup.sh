@@ -35,17 +35,22 @@ _bk_before_delete() {
 
   local a nm alias
   if [ "$mode" = ask ]; then
-    read -e -r -p "🗄️  Back up ${#real[@]} item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: " a
+    # A prompt that was cancelled (u = go back, or a command that is not allowed here) makes read fail and
+    # raises _CM_ABORT: the whole flow stops RIGHT HERE — nothing is packed, uploaded or deleted.
+    read -e -r -p "🗄️  Back up ${#real[@]} item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: " a || return 1
+    [ "${_CM_ABORT:-0}" = 1 ] && return 1
     case "${a,,}" in
-      c|cancel) echo "🚫 Nothing deleted."; return 1 ;;
+      c|cancel|u|back) echo "🚫 Nothing deleted."; return 1 ;;
       n|no)     return 0 ;;
     esac
   fi
 
-  read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm
+  read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm || return 1
+  [ "${_CM_ABORT:-0}" = 1 ] && return 1
   while ! alias=$(_bb_svc_alias "$nm"); do
     echo "   ⚠️  A name may use letters, digits, spaces and . _ @ + -  (up to ~34 characters after the date)."
-    read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm
+    read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm || return 1
+    [ "${_CM_ABORT:-0}" = 1 ] && return 1
   done
 
   _svc_upload backup "$alias" "${real[@]}"
@@ -57,7 +62,7 @@ _bk_before_delete() {
     2) echo "⚠️  No backup was made (you stopped it)." ;;
     *) echo "⚠️  The backup FAILED — nothing was saved to the cloud." ;;
   esac
-  read -e -r -p "   Delete anyway, without a backup? (y/N): " a
+  read -e -r -p "   Delete anyway, without a backup? (y/N): " a || { echo "🚫 Nothing deleted."; return 1; }
   case "${a,,}" in
     y|yes) return 0 ;;
     *)     echo "🚫 Nothing deleted."; return 1 ;;

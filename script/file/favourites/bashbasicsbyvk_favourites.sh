@@ -378,11 +378,17 @@ _fav_sw_build() {                  # _fav_sw_build <dir>  → items + labels (st
   done
 }
 
-_fav_sw_remove() {                 # _fav_sw_remove <dir>
-  local dir; dir=$(_fav_norm "$1")
+_fav_sw_remove() {                 # _fav_sw_remove <dir> [b | b-1,3 | x]
+  local dir raw="${2:-}" spec=""; dir=$(_fav_norm "$1")
+  case "$raw" in [bB]-*) spec="${raw:2}" ;; esac
   [ ${#items[@]} -eq 0 ] && { echo "ℹ️  No favourites here"; return; }
   echo "🗑️  Remove favourite(s) — the files themselves are NOT touched"
-  select_items_common "REMOVE FAVOURITE" allow_a || return
+  if [ -n "$spec" ]; then
+    sp_resolved=(); _sp_resolve_itemlist "$spec" || return
+    selected_items=("${sp_resolved[@]}")
+  else
+    select_items_common "REMOVE FAVOURITE" allow_a || return
+  fi
   _fav_lock
   _fav_cache_key=""; _fav_load "$dir" >/dev/null 2>&1
   local -A drop=()

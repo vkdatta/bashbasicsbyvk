@@ -7,7 +7,7 @@
 #    📌 Bookmarks  ~/.bashbasicsbyvk/switch/   — .swlink bookmark files
 #    🕐 Recents    ~/.bashbasicsbyvk/recents.list — daemon-maintained, read-only
 #    ⭐ Favourites the favourites of the folder you came from (manage them:
-#                  N open/go · x remove · r rename alias · e edit file · e-N file actions).
+#                  N open/go · b remove (b-1,3 · x = same) · r rename alias · e edit file · e-N file actions).
 #                  Adding is done in the file view with  fa.
 #
 #  Execute / scripting has moved to bashbasicsbyvk_functions.sh (fx tab).
@@ -235,9 +235,31 @@ _sw_add_path() {
   echo "✅ Added: $display_name  →  $outer_path"
 }
 
+# b · b-1,3 · b-a-1-2 · x   — ONE remove, whatever the spelling (footer says b, the map says b-, x is the old key).
+# Only the bookmark pointer goes: the folder or file it points to is never touched, so no cloud backup either.
 _sw_remove_paths() {
-  echo "🗑️  Select bookmark(s) to remove:"
-  delete_items
+  local raw="${1:-}" spec="" ans n
+  case "$raw" in [bB]-*) spec="${raw:2}" ;; esac
+  selected_items=()
+  if [ -n "$spec" ]; then
+    $imaginary_mode && { echo "⚠️  Navigate into a group first, then use b-N"; return 0; }
+    sp_resolved=()
+    _sp_resolve_itemlist "$spec" || return 0
+    selected_items=("${sp_resolved[@]}")
+  else
+    echo "🗑️  Select bookmark(s) to remove:"
+    if $imaginary_mode; then select_imaginary_items_common "$path" "$group_prefix" || return 0
+    else select_items_common "REMOVE BOOKMARK" allow_a || return 0; fi
+  fi
+  n=${#selected_items[@]}
+  [ "$n" -eq 0 ] && { echo "ℹ️  Nothing selected"; return 0; }
+  read -e -r -p "Remove $n bookmark(s)? Only the bookmark goes — what it points to is NOT touched. (y/n): " ans || return 0
+  case "${ans,,}" in y|yes) ;; *) echo "Cancelled."; return 0 ;; esac
+  local it removed=0
+  for it in "${selected_items[@]}"; do
+    rm -rf -- "$it" && { _carry_forget "$it"; removed=$((removed+1)); }
+  done
+  echo "✅ Removed $removed bookmark(s)"
 }
 
 # ── Recents: read daemon list ─────────────────────────────────────────────────
@@ -305,13 +327,13 @@ _sw_menu_header_imaginary() {
 }
 
 _sw_menu_footer_bookmarks() {
-  local -a _f=("a:Add current path" "b:Remove" "sw:Exit" "|" "u:Up" "s:Settings" "|" "r<N>:File actions on item N")
+  local -a _f=("a:Add current path" "b:Remove (b-1,3)" "sw:Exit" "|" "u:Up" "s:Settings" "|" "e-N:File actions on item N")
   [ -n "$group_prefix" ] && _f+=("|" "u:Remove last prefix (${group_prefix^^}*)")
   _mc_footer "${_f[@]}"
 }
 
 _sw_menu_footer_favourites() {
-  _mc_footer "N:⭐ open / go" "b:Remove" "rn:Rename (alias)" "e:Edit file" "|" "sw:Exit switch mode" "#(add favourites in the file view:  fa)"
+  _mc_footer "N:⭐ open / go" "b:Remove (b-1,3)" "r:Rename (alias)" "e:Edit file" "|" "sw:Exit switch mode" "#(add favourites in the file view:  fa)"
 }
 
 _sw_menu_footer_recents() {
@@ -663,10 +685,14 @@ switch_menu() {
         fi
         ;;
 
-      x|X)
-        if [ "$_sw_tab" = "favourites" ]; then _fav_sw_remove "$_sw_outer_path"
-        else _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || _sw_remove_paths
-        fi
+      b|b-*|x)
+        # ONE remove for bookmarks and favourites (footer: b) · cmdmap: b-N · x = the old key).
+        # Staging a bookmark (b-) is a FILE-VIEW command; here it would only bookmark a bookmark.
+        case "$_sw_tab" in
+          favourites) _fav_sw_remove "$_sw_outer_path" "$_sw_choice" ;;
+          recents)    _sw_recents_blocked; _sw_do_fresh=false ;;
+          *)          _sw_remove_paths "$_sw_choice" ;;
+        esac
         ;;
 
       e|E)
@@ -721,7 +747,7 @@ switch_menu() {
       d-)           handle_staging_dispatch ;;
       v-)           handle_staging_view ;;
 
-      c-*|m-*|s-*|b-*)
+      c-*|m-*|s-*)
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_staging_stage "$_sw_choice"
         ;;
 
