@@ -48,7 +48,7 @@ _bk_before_delete() {
     read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm
   done
 
-  _svc_upload staging_backup "$alias" "${real[@]}"
+  _svc_upload backup "$alias" "${real[@]}"
   case $? in
     0)
       echo "🗄️  Backed up as '$alias' — kept $(_bb_fmt_duration "$_SVC_TTL")  ·  Home → Backup (bk) to restore."

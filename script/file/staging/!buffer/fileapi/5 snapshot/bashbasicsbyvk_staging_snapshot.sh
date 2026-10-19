@@ -191,7 +191,7 @@ _snap_take() {
   done
   # what was archived is what we remember (a path that kept changing is simply picked up again next time)
   _SVC_SNAP_TGT="$tgt"; _SVC_SNAP_SIG="$csig"; _SVC_QUIET=1
-  _svc_upload staging_snapshot "" "$work/$(basename "$src")"
+  _svc_upload snapshot "" "$work/$(basename "$src")"
   local rc=$?
   _SVC_QUIET=0; _SVC_SNAP_TGT=""; _SVC_SNAP_SIG=""
   rm -rf "$work"; _SNAP_WORK=""

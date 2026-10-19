@@ -1,3 +1,7 @@
+source "bashbasicsbyvk_auth.sh"
+source "bashbasicsbyvk_fileapi_lib.sh"
+source "bashbasicsbyvk_staging_svc.sh"
+source "bashbasicsbyvk_staging_ux.sh"
 source "bashbasicsbyvk_action_confirm_key.sh"
 source "bashbasicsbyvk_lock.sh"
 source "bashbasicsbyvk_staging_shortcut_registry.sh"

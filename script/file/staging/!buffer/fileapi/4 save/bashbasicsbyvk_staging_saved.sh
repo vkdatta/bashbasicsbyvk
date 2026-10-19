@@ -24,7 +24,7 @@ handle_save_upload() {
   # hidden files inside chosen folders: same Settings → Upload hidden rule as up-
   _hidden_decide "${upload_hidden_mode:-follow}" "the save" "${sp_resolved[@]}" || return 1
   _SVC_INC_HIDDEN="$_hid_inc"
-  _svc_upload staging_saved "$alias" "${sp_resolved[@]}"; rc=$?
+  _svc_upload saved "$alias" "${sp_resolved[@]}"; rc=$?
   _SVC_INC_HIDDEN=true
   case $rc in
     0)
