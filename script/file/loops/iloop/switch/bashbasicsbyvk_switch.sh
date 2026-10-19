@@ -55,7 +55,7 @@ _sw_excl_list() {
   local idx=0 line kind value
   echo "━━━ Exclude rules ($( grep -cv '^\s*#\|^\s*$' "$_SW_EXCLUDE_FILE" 2>/dev/null || echo 0 ) active) ━━━"
   while IFS= read -r line; do
-    [[ "$line" =~ ^\s*# || -z "${line// }" ]] && continue
+    [[ "$line" =~ ^[[:space:]]*# || -z "${line// }" ]] && continue
     idx=$(( idx + 1 ))
     read -r kind value <<< "$line"
     case "$kind" in
@@ -130,7 +130,7 @@ _sw_excl_remove() {
   local idx=0 lineno=0 line
   while IFS= read -r line; do
     lineno=$(( lineno + 1 ))
-    [[ "$line" =~ ^\s*# || -z "${line// }" ]] && continue
+    [[ "$line" =~ ^[[:space:]]*# || -z "${line// }" ]] && continue
     idx=$(( idx + 1 ))
     for n in $sorted_nums; do
       [ "$n" -eq "$idx" ] && line_nums+=( "$lineno" )

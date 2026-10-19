@@ -208,7 +208,8 @@ _BB_KEY_RE='^[A-Za-z0-9_-]{43}$'
 # _bb_key_store <id> <key|"">   ("" = forget)
 _bb_key_store() {
   local id="$1" key="$2" tmp
-  [[ "$id" =~ ^[A-Za-z0-9_-]{1,256}$ ]] || return 1
+  # NB: no {n,m} with m>255 in a bash regex: bionic/BSD regcomp (Termux/Android) caps repeats at 255 -> "invalid repetition count(s)". Check length separately.
+  [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] && [ "${#id}" -le 256 ] || return 1
   mkdir -p "$(dirname "$_BB_KEY_FILE")" 2>/dev/null
   tmp="$(umask 077; mktemp "${_BB_KEY_FILE}.XXXXXX" 2>/dev/null)" || return 1
   { [ -f "$_BB_KEY_FILE" ] && awk -F'\t' -v id="$id" '$1 != id' "$_BB_KEY_FILE"
@@ -499,7 +500,8 @@ _bb_link_secret_put() {
   [[ "$id" =~ ^[A-Za-z0-9_-]{43}$ ]] || return 1
   _bb_labelkey_load 2>/dev/null || return 1
   enc=$(_bb_label_enc "$_BB_LK" "$url")
-  [[ "$enc" =~ ^[A-Za-z0-9_-]{60,1500}$ ]] || return 1
+  # length checked separately: {60,1500} breaks on Android/Termux (regex repeat limit 255)
+  [[ "$enc" =~ ^[A-Za-z0-9_-]+$ ]] && [ "${#enc}" -ge 60 ] && [ "${#enc}" -le 1500 ] || return 1
   _BB_CALL_HDRS=()
   _bb_call PUT "/links/$id/secret" "{\"enc\":\"$enc\"}" || return 1
   [ "$_BB_STATUS" = 200 ] || return 1
