@@ -1035,11 +1035,28 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             moves.append((r, n))
         else:
             rest_new.append(n)
-    gone = [r for r in gone if r["rel"] not in claimed]
-    # ── 2. folders and files that are really new ─────────────────────────────────────────────────────
+    # ROOT CAUSE of the Organise disaster: files moved INTO A NEW FOLDER were never matched as moves (only the new
+    # folder itself was looked at), so every one became "delete the old + upload a new" and the old one went to Trash.
+    # Look inside the new folders too, and match those files by inode exactly like the others.
     expanded = []
     for n in rest_new:
         expanded += walk_new(ctx, n)
+    still_new = []
+    for n in expanded:
+        if n.isdir:
+            still_new.append(n)
+            continue
+        key = (n.st.st_dev, n.st.st_ino, "f")
+        cands = [r for r in gone_by_ino.get(key, []) if r["rel"] not in claimed and r["ino"]
+                 and (n.st.st_size, n.st.st_mtime_ns) == (r["lsize"], r["lmt"])]
+        if cands:
+            claimed.add(cands[0]["rel"])
+            moves.append((cands[0], n))
+        else:
+            still_new.append(n)
+    expanded = still_new
+    gone = [r for r in gone if r["rel"] not in claimed]
+    # ── 2. folders and files that are really new ─────────────────────────────────────────────────────
     new_dirs = [n for n in expanded if n.isdir]
     new_files = [n for n in expanded if not n.isdir]
     uploads, skipped, ptr_copies = [], 0, []
@@ -1069,8 +1086,25 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             continue
         uploads.append((r["rel"], est, r))
     total["skipped"] += skipped
+    # SAFETY: an item that vanished from the mirror but whose "new" twin was refused as a placeholder copy is NOT removed
+    # from Drive (that was the second way files were lost: trashed, and never re-uploaded)
+    if skipped:
+        gone = [r for r in gone if not (r["kind"] == "f" and any(
+            u.rel != r["rel"] and name_of(u.rel) == name_of(r["rel"]) for u in new_files if is_placeholder_copy(u.st)))]
     # ── 3. safety net before removing things ─────────────────────────────────────────────────────────
     max_del = int(os.environ.get("BVK_GD_MAX_DELETE", "100"))
+    n_native_gone = sum(1 for r in gone if r["kind"] == "f" and r["gdoc"])
+    if n_native_gone and os.environ.get("BVK_GD_CONFIRM_NATIVE_DELETE", "1") == "1":
+        with bar.paused():
+            ok_n = ask_yes(f"⚠️  {n_native_gone} Google Docs/Sheets/Slides/Forms will be moved to Google Drive Trash. Continue")
+        if not ok_n:
+            say("🚫 Nothing removed from Drive — the folder is listed again from Google Drive.")
+            for r in gone:
+                par = db.get(parent_of(r["rel"]))
+                db.delete_tree(r["rel"])
+                if par is not None:
+                    db.put(rel=par["rel"], listed=0)
+            gone = []
     if len(gone) > max_del:
         with bar.paused():
             ok = ask_yes(f"⚠️  {len(gone)} items are missing from the Drive mirror. Remove them from Google Drive too")

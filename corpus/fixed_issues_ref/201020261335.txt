@@ -1,0 +1,22 @@
+ISSUE AS DEFINED BY USER
+"Organise by ext" on a Google Drive folder only created folders; the .gdoc/.gsheet files are not in them, every folder is
+empty, everything went to Drive bin ("Drive synced: 6 folder(s) created, 41 uploaded, 45 removed (Drive trash), 3
+placeholder copies not uploaded"). It also took 300 seconds. Customers' documents must never be lost or corrupted.
+
+HOW DID YOU DEBUG
+Read bashbasicsbyvk_organise.sh: it is a plain `mv` of the files into new folders. Read push_round in bashbasicsbyvk_gd:
+move detection (same inode) only looked at the top-level "new" entries. Files inside a folder created in the same step
+are only discovered later by walk_new, so they were never matched as moves. Reproduced with a fake rclone (not a real
+Drive): before the fix, mkdir+mv gave copy+delete; after the fix it gives moveid/moveto only. The real-Drive effect is
+inferred from the user's sync line, not observed.
+
+CAUSE
+Moving files into a NEW folder was treated as "old file deleted" + "new file uploaded". Deleted = Drive trash; for Google
+files the "upload" was a copy by ID whose result the user does not see; for not-downloaded files the upload is refused
+(placeholder), so nothing replaced the trashed original. This bug existed before the Google-native change; I did not test
+moves into new folders after changing this code.
+
+FIX
+push_round: new folders are expanded first and their files are matched to vanished files by inode (moves). Safety nets:
+a vanished file whose new twin was refused as a placeholder is not trashed; trashing Google files always asks
+(BVK_GD_CONFIRM_NATIVE_DELETE=0 turns it off). Lesson: any "delete + create" must be proven to be a move before deleting.
