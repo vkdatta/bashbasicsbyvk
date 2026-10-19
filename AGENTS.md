@@ -9,6 +9,8 @@ If a task seems to need breaking a rule, stop and ask the owner. Do not improvis
    `bashbasicsbyvk_` (py, c, h, txt, md, map, list, Makefile, extension-less python/node/bash tools, everything),
    with exactly two exceptions: the entry point `script/o`, and import files (rule 2).
    Directories are not prefixed. Do not create files anywhere else (no new files in the repo root).
+   The only exception is `corpus/fixed_issues_ref/` (rule 5): it sits at the repo root, is not installed, and its
+   files are named by timestamp, not `bashbasicsbyvk_`.
 2. **`_3bvk_` is reserved for import files.** An import file is a `.sh` whose only job is to `source` other files,
    named `_3bvk_import_<topic>.sh` (e.g. `_3bvk_import_engine.sh`). Nothing else may start with `_3bvk_`
    — no helpers, libs, python modules or tools. Use `bashbasicsbyvk_` for those.
@@ -24,6 +26,20 @@ If a task seems to need breaking a rule, stop and ask the owner. Do not improvis
 4. **No `_core` / `_main` suffix unless it is really necessary.** Name a file for what it does
    (`bashbasicsbyvk_gitpush`, `bashbasicsbyvk_recover`). `main` is only allowed as the name of the *main menu*
    (`bashbasicsbyvk_main.map`, `bashbasicsbyvk_maincommands.sh`).
+5. **Write a fixed-issue note whenever you fix a bug (or several).** Add one text file per fix to
+   `corpus/fixed_issues_ref/` (repo root, outside `script/`; not installed by `setup.py`, which only globs `script/`).
+   - Name: the local date-time of the fix as `DDMMYYYYHHMM.txt`, e.g. `201020260021.txt` = 20 Oct 2026, 00:21.
+     If that minute already exists, use the next free minute. Never rename or rewrite old notes.
+   - Contents: exactly these four sections, in this order, with these headings in capitals:
+     `ISSUE AS DEFINED BY USER` (the user's report, near-verbatim, including screens/steps),
+     `HOW DID YOU DEBUG` (what you read/ran and what each step showed),
+     `CAUSE` (the root cause, not the symptom),
+     `FIX` (files and functions changed, what changed, and any lesson for similar code).
+   - Several bugs fixed in one task: one file, the four sections repeated per bug (prefix the headings with `1.`, `2.` ...).
+   - Say honestly in HOW DID YOU DEBUG if something was verified by reading only and not by running.
+   - The corpus is reference for future agents: before debugging, search it (`grep -ril <keyword> corpus/fixed_issues_ref`)
+     for the same symptom or the same file/function.
+   - The naming checks below only scan `script/`, so they do not apply to `corpus/`.
 
 ## How the install works (why names matter)
 

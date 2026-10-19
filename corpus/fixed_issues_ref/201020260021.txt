@@ -1,0 +1,44 @@
+ISSUE AS DEFINED BY USER
+In Find mode (f), after searching file/folder names for "dummy", the results screen
+("Found 5 results", prompt "Action:") ignores `u`. Expected: `u` goes back one step to the
+"Find mode" menu (Find file/folder names / Find inside file contents / ...). Actual: the
+results are redrawn and "Action:" is asked again, nothing else happens. After that, typing
+`cc` opens the cheat-codes screen, which repaints itself in a spamming wave and fills the
+"Select:" prompt with a long run of `q` characters.
+
+HOW DID YOU DEBUG
+1. grep for the results screen text ("Enter item number to navigate") -> only
+   script/file/functions/bashbasicsbyvk_find.sh, function find_menu, `while true; read "Action: "` loop.
+2. That loop does handle `u|U) return`, so the bug had to be before the case statement:
+   `read` is overridden by the smart-menu wrapper (engine/bashbasicsbyvk_smartmenu.sh, read()),
+   which runs every prompt through the command layer (engine/bashbasicsbyvk_cmdmap.sh).
+3. Read _cm_gate_sm: a typed key is accepted as the menu's own key only if the menu PRINTS it
+   ("u) Back" in rows/footer, found by _cm_local_collect). The results screen printed only
+   "q) exit", so `u` fell through to the map (find.map: `u .mapto() back()`), action "back".
+4. For "back" the gate calls _cm_abort, sets _sm_result="" and returns 2: read returns 1 with an
+   empty answer, _CM_ABORT=1 and _CM_MUTE=1 (echo/printf muted).
+5. find_menu ignored read's return code; empty answer hit `*) echo "Invalid..."` (muted, so
+   invisible) and the loop asked again. The abort flag is only cleared when a menu redraws
+   (_cm_abort_report), which never happens inside this loop -> it explains "nothing happens".
+6. `cc` then opens a menu at a deeper depth while _CM_ABORT is still 1: _cm_abort_swallow answers
+   every prompt of it instantly (up to 400 times) -> redraw spam and the `q` run, until the
+   400-iteration safety valve lets go. Same root cause, not a separate bug.
+(Verified by reading the code only; no interactive terminal was available. Syntax checked with bash -n.)
+
+CAUSE
+The results screen did not print a `u)` key, so the command layer turned `u` into a global
+"back" abort. The `Action:` loop in find_menu then spun on the empty answer with the abort flag
+left set and output muted, which later poisoned the next menu (cc).
+
+FIX
+File: script/file/functions/bashbasicsbyvk_find.sh (find_menu)
+- Results footer now prints "Enter item number to navigate" + "u) Back   q) Quit"
+  (same convention as every other screen), so `u` is the menu's own key.
+- find_menu body wrapped in an outer `while true`; `u` in the results loop does `continue 2`
+  = back to the Find mode menu (step 2). `u` in the Find mode menu still `return`s to the list.
+- `read -e -p "Action: " act || return`: if the command layer cancels the flow (blocked
+  command), leave the loop at once instead of spinning with the abort flag set.
+Lesson for similar screens: any prompt loop that handles `u`/`q` itself must PRINT those keys
+as "u) ..." / "q) ..." in its footer, and must check read's return code.
+Known same-pattern spot, not changed (single-shot, cannot spin): the find-and-replace-in-contents
+"Action:" prompt in the same file (_mc_footer without u).

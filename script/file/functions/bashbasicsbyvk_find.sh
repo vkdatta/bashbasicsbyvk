@@ -1,4 +1,5 @@
 find_menu() {
+  while true; do
     _mc_menu "🔍 Find mode in: $path" -- "Find file/folder names" "Find inside file contents" \
       "Find & replace in file/folder names" "Find & replace inside file contents" -- @back_quit
     read -e -p "Select: " ftype
@@ -382,11 +383,14 @@ PYEOF
         fi
     done
 
-    echo "Enter item number to navigate | q) exit"
+    echo "Enter item number to navigate"
+    echo "u) Back   q) Quit"
     while true; do
-        read -e -p "Action: " act
+        # rc!=0 = the command layer cancelled this flow (blocked command): leave at once,
+        # otherwise the empty answer spins here with the abort flag still set
+        read -e -p "Action: " act || return
         case "$act" in
-            u|U) return ;;
+            u|U) continue 2 ;;   # back to the Find mode menu (step 2)
             q|Q) _bvk_quit ;;
             [0-9]*)
                 if [[ $act =~ ^[0-9]+$ ]] && (( act >= 1 && act <= ${#results[@]} )); then
@@ -402,4 +406,5 @@ PYEOF
             *) echo "Invalid. Use a number or q." ;;
         esac
     done
+  done
 }
