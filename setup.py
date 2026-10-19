@@ -34,6 +34,10 @@ resource_files = [
 ]
 
 setup(
+    # explicit empty list turns OFF setuptools flat-layout auto-discovery: the repo has no python
+    # packages (everything under script/ is installed as scripts/data), and a second top-level
+    # folder (corpus/) makes auto-discovery abort with "Multiple top-level packages discovered".
+    packages=[],
     scripts=script_files,
     data_files=[
         ("bashbasicsbyvk", resource_files),
