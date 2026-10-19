@@ -16,7 +16,13 @@ How a Drive profile is shown
     bashbasicsbyvk_gd hydrate PATH...                download the real content of files / folders (absolute mirror paths)
     bashbasicsbyvk_gd copy   SRC DST                 server-side copy inside the Drive (no download), mirror updated
     bashbasicsbyvk_gd clean  [PATH...]               free the disk: downloaded, unchanged files become placeholders again
+    bashbasicsbyvk_gd export PATH... --to DIR [--format F]   the ONLY place a Google file becomes docx/xlsx/pptx/pdf (Google's converter)
+    bashbasicsbyvk_gd recover [PATH]                 read-only scan for damaged Office files + where the good copy is (Trash / versions)
     bashbasicsbyvk_gd status | about | where PATH    information
+
+    Google-native files (Docs, Sheets, Slides, Forms, Drawings) are shown as pointers  Foo.gdoc .gsheet .gslides .gform ...
+    and are copied / moved / renamed / deleted by their Drive ID.  They are never downloaded as Office files, and nothing
+    is ever converted on upload (--drive-import-formats "").
 
     Environment:  BVK_GD_PROFILE_DIR  BVK_GD_REMOTE  (set by the app)   BVK_GD_RCLONE  BVK_GD_TTL  BVK_GD_TYPES
                   BVK_GD_FLAGS (extra rclone flags)  BVK_GD_CONFIRM_MB  BVK_GD_MAX_DELETE  BVK_GD_PERMANENT
@@ -43,6 +49,75 @@ SPARSE_OK = True
 
 class GdError(Exception):
     pass
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  Google-native files (Docs, Sheets, Slides, Forms, Drawings ...)
+#    They are NOT Office files.  They have no bytes of their own, so they are never downloaded, never exported and
+#    never uploaded as a conversion.  The mirror shows each one as a tiny pointer file (like Google Drive for desktop):
+#    Foo.gdoc  Foo.gsheet  Foo.gslides  Foo.gform ...   Copy / move / rename / delete act on the REAL Google file by
+#    its Drive ID.  A Word / Excel / PowerPoint file is only made when the person asks for it (gd.export, or a copy
+#    out of the Drive), through Google's own converter.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_GA = "application/vnd.google-apps."
+NATIVE = {                                    # Drive mime type -> (local extension, open URL, default export format)
+    _GA + "document":     ("gdoc",    "https://docs.google.com/document/d/{id}/edit", "docx"),
+    _GA + "spreadsheet":  ("gsheet",  "https://docs.google.com/spreadsheets/d/{id}/edit", "xlsx"),
+    _GA + "presentation": ("gslides", "https://docs.google.com/presentation/d/{id}/edit", "pptx"),
+    _GA + "form":         ("gform",   "https://docs.google.com/forms/d/{id}/edit", None),
+    _GA + "drawing":      ("gdraw",   "https://docs.google.com/drawings/d/{id}/edit", "pdf"),
+    _GA + "site":         ("gsite",   "https://sites.google.com/d/{id}/edit", None),
+    _GA + "map":          ("gmap",    "https://www.google.com/maps/d/edit?mid={id}", None),
+    _GA + "script":       ("gscript", "https://script.google.com/d/{id}/edit", "json"),
+    _GA + "jam":          ("gjam",    "https://jamboard.google.com/d/{id}/edit", "pdf"),
+}
+GENERIC_NATIVE = ("gfile", "https://drive.google.com/open?id={id}", None)    # a Google file whose kind rclone did not tell
+NATIVE_EXTS = tuple(v[0] for v in NATIVE.values()) + (GENERIC_NATIVE[0],)
+EXPORT_FORMATS = {                             # what Google itself can convert each kind into
+    "gdoc": ("docx", "odt", "pdf", "txt", "html", "rtf", "epub", "md", "zip"),
+    "gsheet": ("xlsx", "ods", "pdf", "csv", "tsv", "html", "zip"),
+    "gslides": ("pptx", "odp", "pdf", "txt"),
+    "gdraw": ("pdf", "svg", "png", "jpg"),
+    "gscript": ("json",), "gjam": ("pdf",),
+}
+DEFAULT_EXPORT = {v[0]: v[2] for v in NATIVE.values() if v[2]}
+POINTER_TAG = "bvk-google-native-pointer"
+_NO_KIND = (_GA + "folder", _GA + "shortcut")
+
+
+def native_ext(name):
+    for e in NATIVE_EXTS:
+        if name.endswith("." + e):
+            return e
+    return ""
+
+
+def native_meta(ctype):
+    return NATIVE.get(ctype, GENERIC_NATIVE)
+
+
+def pointer_bytes(ext, did, remote):
+    url = next((v[1] for v in list(NATIVE.values()) + [GENERIC_NATIVE] if v[0] == ext), GENERIC_NATIVE[1]).format(id=did)
+    return (json.dumps({"url": url, "doc_id": did, "remote": remote, "kind": ext, "tag": POINTER_TAG},
+                       sort_keys=True, indent=1) + "\n").encode()
+
+
+def read_pointer(path):
+    """the pointer a mirror file holds -> dict, or None for anything that is not one of ours"""
+    try:
+        if os.path.getsize(path) > 4096:
+            return None
+        with open(path, "rb") as fh:
+            d = json.loads(fh.read().decode("utf-8"))
+        return d if isinstance(d, dict) and d.get("tag") == POINTER_TAG and d.get("doc_id") else None
+    except (OSError, ValueError):
+        return None
+
+
+def drive_name(local_name):
+    """name Google Drive gives a native file: the pointer extension is ours, Drive has none"""
+    e = native_ext(local_name)
+    return local_name[: -(len(e) + 1)] if e else local_name
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -275,8 +350,12 @@ class Ctx:
         return f"{self.remote}:{rel}"
 
 
-def rclone(ctx, args, check=True, passthrough=False, quiet_ok=()):
-    cmd = [RCLONE, "--ask-password=false", *ctx.flags, *args]
+def rclone(ctx, args, check=True, passthrough=False, quiet_ok=(), export=None):
+    # --drive-export-formats url : Google files are listed as links, so rclone never fabricates .docx/.xlsx/.pptx names
+    #                              (export=<fmt> is passed ONLY by an explicit export, nothing else)
+    # --drive-import-formats ""  : files are uploaded exactly as they are, never converted into Google Docs/Sheets/Slides
+    cmd = [RCLONE, "--ask-password=false", *ctx.flags, "--drive-export-formats", export or "url",
+           "--drive-import-formats", "", *args]
     try:
         with _span("rclone " + str(args[0] if args else "")):      # rclone does not report DNS / TLS / first byte: loadtime probes the host
             if passthrough:
@@ -396,7 +475,7 @@ def is_placeholder_copy(st):
 def list_remote(ctx, rel, recursive=False, did=""):
     """List one Drive folder.  With the folder's Drive ID this is ONE API call at any depth (rclone otherwise
     resolves a/b/c/... one level at a time, every call, because its folder cache dies with the process)."""
-    extra = ["--no-mimetype"] + (["-R"] if recursive else [])
+    extra = ["--metadata"] + (["-R"] if recursive else [])        # Metadata.content-type = the real Drive type
     rc = None
     if did:
         rc, out, err = rclone(ctx, ["lsjson", f"{ctx.remote}:", "--drive-root-folder-id", did, *extra], check=False)
@@ -416,8 +495,16 @@ def list_remote(ctx, rel, recursive=False, did=""):
     res = []
     for e in data:
         p = e.get("Path") or e.get("Name") or ""
-        res.append(dict(path=p, name=e.get("Name") or name_of(p), dir=bool(e.get("IsDir")), id=e.get("ID") or "",
-                        size=int(e.get("Size", 0) or 0), mtime=parse_ts(e.get("ModTime", ""))))
+        nm = e.get("Name") or name_of(p)
+        ent = dict(path=p, name=nm, dir=bool(e.get("IsDir")), id=e.get("ID") or "",
+                   size=int(e.get("Size", 0) or 0), mtime=parse_ts(e.get("ModTime", "")), native="")
+        md = e.get("Metadata") or {}
+        ctype = md.get("content-type") or md.get("mime-type") or ""
+        if not ent["dir"] and ctype not in _NO_KIND and (ctype.startswith(_GA) or (not ctype and ent["size"] < 0)):
+            ext = native_meta(ctype)[0]
+            base = nm[:-4] if nm.endswith(".url") else nm                # rclone shows a Google file as  <name>.url
+            ent.update(native=ext, name=base + "." + ext, path=join(parent_of(p), base + "." + ext), size=0)
+        res.append(ent)
     return res
 
 
@@ -455,6 +542,43 @@ def prune_known(ctx, db, rel):
     with contextlib.suppress(OSError):
         os.rmdir(p)
     db.delete_tree(rel)
+
+
+def write_pointer(path, data, mtime):
+    tmp = path + ".bvk-tmp"
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+    os.replace(tmp, path)
+    os.utime(path, (mtime, mtime))
+
+
+def reconcile_native(ctx, db, rel, crel, ent, row, p, exists, stats):
+    """a Google-native file: the mirror holds a small pointer, never exported content"""
+    data = pointer_bytes(ent["native"], ent["id"], ctx.remote)
+    mt = ent["mtime"] or time.time()
+    if exists and not stat.S_ISREG(os.lstat(p).st_mode):
+        stats["skipped"] += 1
+        return
+    if not exists:
+        if row is not None:
+            db.delete_tree(crel)
+        write_pointer(p, data, mt)
+        db.put(rel=crel, kind="f", size=len(data), mtime=mt, hyd=1, gdoc=1, did=ent["id"], **row_local_state(os.lstat(p)))
+        stats["new"] += 1
+        return
+    st = os.lstat(p)
+    if row is None or row["kind"] != "f":
+        stats["skipped"] += 1                              # a local file with this name that Drive does not know yet
+        return
+    local_modified = (st.st_size, st.st_mtime_ns) != (row["lsize"], row["lmt"])
+    if local_modified and not row["gdoc"]:
+        return                                             # a real file the person made: pushed later
+    cur = read_pointer(p)
+    if cur is None or cur.get("doc_id") != ent["id"] or abs(st.st_mtime - mt) > 1.5:
+        write_pointer(p, data, mt)                         # also repairs a pointer somebody edited
+        stats["changed"] += 1
+    db.put(rel=crel, size=len(data), mtime=mt, hyd=1, gdoc=1, did=ent["id"], **row_local_state(os.lstat(p)))
+    db.put(rel=crel, did=ent["id"])
 
 
 def reconcile_dir(ctx, db, rel, remote, now, stats):
@@ -497,8 +621,11 @@ def reconcile_dir(ctx, db, rel, remote, now, stats):
                 db.put(rel=crel, mtime=ent["mtime"], ino=st.st_ino, dev=st.st_dev, did=ent.get("id", "") or row["did"])
             continue
         # file
+        if ent.get("native"):
+            reconcile_native(ctx, db, rel, crel, ent, row, p, exists, stats)
+            continue
         size = max(ent["size"], 0)
-        gdoc = 1 if ent["size"] < 0 else 0
+        gdoc = 0
         if exists and not stat.S_ISREG(os.lstat(p).st_mode):
             stats["skipped"] += 1
             continue
@@ -805,6 +932,32 @@ def walk_new(ctx, item):
     return out
 
 
+def rclone_rel(row):
+    """the path rclone knows a file by: a Google file is  <name>.url  for rclone, <name>.gdoc etc. in the mirror"""
+    if row["gdoc"] and native_ext(row["rel"]):
+        return join(parent_of(row["rel"]), drive_name(name_of(row["rel"])) + ".url")
+    return row["rel"]
+
+
+def backend_id(ctx, verb, did, dest):
+    rc, out, err = rclone(ctx, ["backend", verb, f"{ctx.remote}:", did, dest], check=False)
+    if rc != 0:
+        tail = [l for l in (err or "").strip().splitlines() if l.strip()][-2:]
+        raise GdError(f"{verb} failed (rclone exit {rc}): " + " | ".join(tail))
+
+
+def copy_id(ctx, did, dest_rel):
+    backend_id(ctx, "copyid", did, dest_rel)
+
+
+def move_one(ctx, r, n):
+    """move / rename inside the Drive.  A Google file moves by its ID: no export, no re-upload, nothing converted."""
+    if r["kind"] == "f" and r["gdoc"] and r["did"]:
+        backend_id(ctx, "moveid", r["did"], join(parent_of(n.rel), drive_name(name_of(n.rel))))
+    else:
+        rclone(ctx, ["moveto", ctx.rpath(rclone_rel(r) if r["kind"] == "f" else r["rel"]), ctx.rpath(n.rel)])
+
+
 def run_levels(items, depth_of, fn, workers=4):
     """run fn(item) in parallel, shallow items before deeper ones; returns [(item, error-or-None)]"""
     res = []
@@ -889,8 +1042,13 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
         expanded += walk_new(ctx, n)
     new_dirs = [n for n in expanded if n.isdir]
     new_files = [n for n in expanded if not n.isdir]
-    uploads, skipped = [], 0
+    uploads, skipped, ptr_copies = [], 0, []
+    known_native = {r["did"]: r for r in db.c.execute("SELECT * FROM e WHERE gdoc=1 AND did<>''").fetchall()}
     for n in new_files:
+        ptr = read_pointer(ctx.abs(n.rel)) if native_ext(n.rel) else None
+        if ptr and ptr["doc_id"] in known_native:          # cp of a Foo.gdoc: copy the Google file itself, by ID
+            ptr_copies.append((n, ptr["doc_id"]))
+            continue
         if is_placeholder_copy(n.st):
             skipped += 1
             say(f"⚠️  Not uploaded (looks like a copy of a not-downloaded file): {n.rel}")
@@ -898,7 +1056,12 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
         uploads.append((n.rel, n.st, None))
     for r, est in modified:
         if r["gdoc"]:
-            say(f"⚠️  '{r['rel']}' is a Google Docs file exported for you; edits to the export are not pushed back.")
+            say(f"⚠️  '{r['rel']}' is a Google file shown as a pointer; its content lives in Google and was left untouched. "
+                f"Open it in Google, or use gd.export to get a Word/Excel/PowerPoint copy.")
+            with contextlib.suppress(OSError):
+                d = pointer_bytes(native_ext(r["rel"]) or GENERIC_NATIVE[0], r["did"], ctx.remote)
+                write_pointer(ctx.abs(r["rel"]), d, r["mtime"] or time.time())
+                db.put(rel=r["rel"], size=len(d), **row_local_state(os.lstat(ctx.abs(r["rel"]))))
             continue
         if is_placeholder_copy(est):
             skipped += 1
@@ -939,8 +1102,7 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             did = True
             db.put(rel=it.rel, kind="d", mtime=it.st.st_mtime, ino=it.st.st_ino, dev=it.st.st_dev,
                    dmt=it.st.st_mtime_ns, listed=time.time())
-    for it, err in run_levels(moves, lambda m: m[1].rel.count("/"),
-                              lambda m: rclone(ctx, ["moveto", ctx.rpath(m[0]["rel"]), ctx.rpath(m[1].rel)])):
+    for it, err in run_levels(moves, lambda m: m[1].rel.count("/"), lambda m: move_one(ctx, m[0], m[1])):
         r, n = it
         if err:
             fail(n.rel, err)
@@ -955,6 +1117,15 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             db.delete_tree(n.rel)
             db.rename_tree(r["rel"], n.rel)
             db.put(rel=n.rel, ino=n.st.st_ino, dev=n.st.st_dev)           # lsize/lmt unchanged -> edits show as modified
+    for n, did_src in ptr_copies:                                        # Google files copied in the mirror
+        try:
+            copy_id(ctx, did_src, join(parent_of(n.rel), drive_name(name_of(n.rel))))
+            total["up"] += 1
+            did = True
+            db.put(rel=n.rel, kind="f", size=n.st.st_size, mtime=n.st.st_mtime, hyd=1, gdoc=1, did="", **row_local_state(n.st))
+            db.put(rel=parent_of(n.rel), listed=0)                       # the next listing gives the copy its own ID
+        except GdError as e:
+            fail(n.rel, str(e))
     if uploads:
         listing = os.path.join(ctx.tmp, f"up-{os.getpid()}.list")
         with open(listing, "w") as fh:
@@ -991,13 +1162,13 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
     if file_rm:
         listing = os.path.join(ctx.tmp, f"rm-{os.getpid()}.list")
         with open(listing, "w") as fh:
-            fh.write("\n".join(r["rel"] for r in file_rm) + "\n")
+            fh.write("\n".join(rclone_rel(r) for r in file_rm) + "\n")
         bar.msg = f"Removing {len(file_rm)} file(s) from Google Drive"
         rc, _, err = rclone(ctx, ["delete", ctx.rpath(""), "--files-from-raw", listing, *extra], check=False)
         os.unlink(listing)
         if rc != 0:
             for r in file_rm:                                              # per file: tells which one failed
-                rc1, _, e1 = rclone(ctx, ["deletefile", ctx.rpath(r["rel"]), *extra], check=False)
+                rc1, _, e1 = rclone(ctx, ["deletefile", ctx.rpath(rclone_rel(r)), *extra], check=False)
                 if rc1 not in (0, 4):                                      # 4 = already gone
                     fail(r["rel"], (e1.strip().splitlines() or ["delete failed"])[-1])
                     continue
@@ -1037,10 +1208,18 @@ def cmd_copy(ctx, args):
     bar = Bar(f"Copying inside Google Drive · {name_of(src)}").start()
     ctx.bar = bar
     try:
-        if row["kind"] == "f":
+        if row["kind"] == "f" and row["gdoc"] and row["did"]:
+            copy_id(ctx, row["did"], join(parent_of(dst), drive_name(name_of(dst))))        # the Google file itself
+        elif row["kind"] == "f":
             rclone(ctx, ["copyto", ctx.rpath(src), ctx.rpath(dst)])
         else:
-            rclone(ctx, ["copy", ctx.rpath(src), ctx.rpath(dst)])
+            sync_dir(ctx, db, src, force=True, recursive=True)                               # know every Google file inside
+            rclone(ctx, ["mkdir", ctx.rpath(dst)])
+            rclone(ctx, ["copy", ctx.rpath(src), ctx.rpath(dst), "--drive-skip-gdocs", "--create-empty-src-dirs"])
+            for r in sorted(db.under(src), key=lambda r: r["rel"]):
+                if r["kind"] == "f" and r["gdoc"] and r["did"]:
+                    inner = r["rel"][len(src) + 1:]
+                    copy_id(ctx, r["did"], join(join(dst, parent_of(inner)) if parent_of(inner) else dst, drive_name(name_of(inner))))
         sync_dir(ctx, db, parent_of(dst), force=True)
         d2 = db.get(dst)
         if d2 is not None and d2["kind"] == "d":
@@ -1048,6 +1227,193 @@ def cmd_copy(ctx, args):
     finally:
         bar.stop()
     return 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  export: the ONLY place a Google file becomes a Word / Excel / PowerPoint / PDF file  (Google's own converter)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def _valid_export(path, fmt):
+    import zipfile
+    if os.path.getsize(path) == 0:
+        return False
+    if fmt in ("docx", "xlsx", "pptx", "odt", "ods", "odp", "epub", "zip"):
+        return zipfile.is_zipfile(path)
+    if fmt == "pdf":
+        with open(path, "rb") as fh:
+            return fh.read(5) == b"%PDF-"
+    return True
+
+
+def export_one(ctx, row, dest_file, fmt):
+    ext = native_ext(row["rel"])
+    if fmt not in EXPORT_FORMATS.get(ext, ()):
+        raise GdError(f"{name_of(row['rel'])}: Google cannot convert a .{ext} file to .{fmt} "
+                      f"(possible: {', '.join(EXPORT_FORMATS.get(ext, ())) or 'nothing — open it in Google'})")
+    stage = tempfile.mkdtemp(prefix="ex-", dir=ctx.tmp)
+    try:
+        base = drive_name(name_of(row["rel"]))
+        rpath = ctx.rpath(join(parent_of(row["rel"]), base + "." + fmt))
+        out = os.path.join(stage, "out." + fmt)
+        rc, _, err = rclone(ctx, ["copyto", rpath, out, "--ignore-size", "--ignore-checksum"], check=False, export=fmt)
+        if rc != 0 or not os.path.isfile(out):
+            tail = [l for l in (err or "").strip().splitlines() if l.strip()][-2:]
+            raise GdError(f"{name_of(row['rel'])}: export failed — " + (" | ".join(tail) or f"rclone exit {rc}"))
+        if not _valid_export(out, fmt):
+            raise GdError(f"{name_of(row['rel'])}: Google returned an invalid .{fmt}; nothing was written")
+        os.makedirs(os.path.dirname(dest_file) or ".", exist_ok=True)
+        os.replace(out, dest_file) if os.stat(out).st_dev == os.stat(os.path.dirname(dest_file) or ".").st_dev \
+            else shutil.move(out, dest_file)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
+def cmd_export(ctx, args):
+    """export PATH... --to DIR [--format F] [--remove-pointers]   (files and folders; only Google files are converted)"""
+    db = DB(ctx)
+    todo, bad = [], 0
+    for path in args.paths:
+        rel = ctx.rel(path)
+        row = db.get(rel)
+        if row is None:
+            say(f"❌ unknown in Drive: {rel}")
+            bad += 1
+            continue
+        if row["kind"] == "d":
+            sync_dir(ctx, db, rel, force=True, recursive=True)
+            for r in sorted(db.under(rel), key=lambda r: r["rel"]):
+                if r["kind"] == "f" and r["gdoc"]:
+                    todo.append((r, join(name_of(rel), r["rel"][len(rel) + 1:])))
+        elif row["gdoc"]:
+            todo.append((row, name_of(rel)))
+        else:
+            say(f"ℹ️  {name_of(rel)} is not a Google file — it is an ordinary file, nothing to convert.")
+    done = 0
+    for row, inner in todo:
+        ext = native_ext(row["rel"])
+        fmt = args.format or DEFAULT_EXPORT.get(ext)
+        if not fmt:
+            say(f"⚠️  {name_of(row['rel'])}: Google has no file format for this kind (open it in Google).")
+            bad += 1
+            continue
+        target_dir = os.path.join(args.to, parent_of(inner)) if parent_of(inner) else args.to
+        stem = drive_name(name_of(inner))
+        dest = os.path.join(target_dir, stem + "." + fmt)
+        if os.path.exists(dest):
+            n = 1
+            while os.path.exists(os.path.join(target_dir, f"{stem}{n}.{fmt}")):
+                n += 1
+            dest = os.path.join(target_dir, f"{stem}{n}.{fmt}")
+        try:
+            with Bar(f"Converting {name_of(row['rel'])} with Google → .{fmt}"):
+                export_one(ctx, row, dest, fmt)
+        except GdError as e:
+            say(f"❌ {e}")
+            bad += 1
+            continue
+        done += 1
+        print(dest)
+        if args.remove_pointers:                       # a copy-out already carried the pointer along: drop it
+            ptr = os.path.join(target_dir, name_of(inner))
+            if read_pointer(ptr):
+                with contextlib.suppress(OSError):
+                    os.unlink(ptr)
+    if done:
+        say(f"✅ {done} Google file(s) converted by Google — the Drive copies are unchanged.")
+    return 1 if bad else 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  recover: find files that older versions of this tool damaged, and where the good copy can still be
+#     READ-ONLY: nothing in Drive is changed.  It writes <profile-dir>/recover-report.tsv
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_OOXML = (".docx", ".xlsx", ".pptx")
+_ZIPPED = _OOXML + (".odt", ".ods", ".odp", ".epub")
+
+
+def _damage(path, name):
+    """why a downloaded Office file is broken, or '' when it is fine"""
+    import zipfile
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return "could not be read"
+    if size == 0:
+        return "empty (0 bytes)"
+    with open(path, "rb") as fh:
+        head = fh.read(65536)
+    if head.count(b"\0") == len(head):
+        return "only zero bytes (a not-downloaded placeholder was uploaded)"
+    if not zipfile.is_zipfile(path):
+        return "not a valid Office/zip file (truncated or wrong content)"
+    try:
+        with zipfile.ZipFile(path) as z:
+            bad = z.testzip()
+            if bad:
+                return f"damaged inside ({bad})"
+            if name.lower().endswith(_OOXML) and "[Content_Types].xml" not in z.namelist():
+                return "zip without [Content_Types].xml (not a real Word/Excel/PowerPoint file)"
+    except Exception as e:
+        return f"unreadable zip ({e.__class__.__name__})"
+    return ""
+
+
+def cmd_recover(ctx, args):
+    base = ctx.rel(args.path) if args.path else ""
+    say(f"🔎 Listing Office files under {ctx.remote}:/{base} ...")
+    rc, out, err = rclone(ctx, ["lsjson", ctx.rpath(base), "-R", "--files-only", "--metadata"], check=False)
+    if rc != 0:
+        raise GdError("could not list the Drive: " + ((err or "").strip().splitlines() or ["?"])[-1])
+    files = []
+    for e in json.loads(out or "[]"):
+        ct = (e.get("Metadata") or {}).get("content-type", "")
+        p = e.get("Path", "")
+        if p.lower().endswith(_ZIPPED) and not ct.startswith(_GA):
+            files.append((p, int(e.get("Size", 0) or 0), e.get("ID", "")))
+    # what is in the Drive trash (a Google file that an older version replaced by an export lands there)
+    rc, tout, _ = rclone(ctx, ["lsjson", ctx.rpath(base), "-R", "--files-only", "--metadata", "--drive-trashed-only"], check=False)
+    trashed = {}
+    if rc == 0:
+        for e in json.loads(tout or "[]"):
+            if ((e.get("Metadata") or {}).get("content-type", "")).startswith(_GA):
+                nm = e.get("Path", "")
+                trashed[os.path.splitext(nm[:-4] if nm.endswith(".url") else nm)[0]] = nm
+    if not files:
+        say("✅ No Office files found there.")
+        return 0
+    total = sum(f[1] for f in files)
+    if total > int(os.environ.get("BVK_GD_CONFIRM_MB", "200")) * 1024 * 1024 and not args.yes:
+        if not ask_yes(f"☁️  Download {len(files)} file(s), {fmt_size(total)} to check them (nothing is changed in Drive)?"):
+            say("🚫 Cancelled.")
+            return 4
+    stage = tempfile.mkdtemp(prefix="rc-", dir=ctx.tmp)
+    broken = []
+    try:
+        for i, (p, size, fid) in enumerate(files, 1):
+            with Bar(f"Checking {i}/{len(files)} · {name_of(p)}"):
+                dst = os.path.join(stage, "f")
+                if os.path.exists(dst):
+                    os.unlink(dst)
+                rc, _, e = rclone(ctx, ["copyto", ctx.rpath(join(base, p)), dst, "--ignore-size", "--ignore-checksum"], check=False)
+            why = _damage(dst, p) if rc == 0 and os.path.isfile(dst) else "could not be downloaded"
+            if why and why != "could not be downloaded":
+                stem = os.path.splitext(join(base, p))[0]
+                broken.append((join(base, p), size, why, trashed.get(stem, "")))
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    rep_path = os.path.join(ctx.pdir, "recover-report.tsv")
+    with open(rep_path, "w") as fh:
+        fh.write("path\tsize\tproblem\tgoogle_file_in_trash\n")
+        for b in broken:
+            fh.write("\t".join(str(x) for x in b) + "\n")
+    say(f"📋 Checked {len(files)} Office file(s): {len(broken)} damaged.   Report: {rep_path}")
+    for pth, size, why, tr in broken[:40]:
+        say(f"   ✗ {pth}  ({fmt_size(size)}) — {why}" + (f"\n       ↳ the original Google file is in Drive Trash as '{tr}': restore it there" if tr else ""))
+    if len(broken) > 40:
+        say(f"   … and {len(broken) - 40} more in the report")
+    if broken:
+        say("   Restore: Drive web → Trash → Restore the Google original (if listed above, kept 30 days), or on the damaged "
+            "file: right-click → Manage versions → download/restore an earlier version.")
+    return 1 if broken else 0
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -1129,13 +1495,16 @@ def main(argv=None):
     cl = sub.add_parser("clean"); cl.add_argument("paths", nargs="*")
     sub.add_parser("status"); sub.add_parser("about")
     w = sub.add_parser("where"); w.add_argument("path")
+    rc_ = sub.add_parser("recover"); rc_.add_argument("path", nargs="?", default=""); rc_.add_argument("--yes", action="store_true")
+    ex = sub.add_parser("export"); ex.add_argument("paths", nargs="+"); ex.add_argument("--to", required=True)
+    ex.add_argument("--format", default=""); ex.add_argument("--remove-pointers", action="store_true")
     args = ap.parse_args(argv)
     try:
         if args.cmd == "remotes":
             return cmd_remotes(args)
         ctx = Ctx()
         return {"sync": cmd_sync, "push": cmd_push, "hydrate": cmd_hydrate, "copy": cmd_copy, "clean": cmd_clean,
-                "status": cmd_status, "about": cmd_about, "where": cmd_where}[args.cmd](ctx, args)
+                "status": cmd_status, "about": cmd_about, "where": cmd_where, "export": cmd_export, "recover": cmd_recover}[args.cmd](ctx, args)
     except GdError as e:
         msg = str(e)
         if msg.startswith("__notfound__:"):

@@ -1,0 +1,43 @@
+1. ISSUE AS DEFINED BY USER
+The gdrive folder sits in script/file/ root; its correct place is the iloop/fx google drive fx folder.
+When a Google Drive is opened in the terminal, native Google Docs and Google Forms are shown as .docx and Google
+Sheets as .xlsx (Slides as .pptx), although they are not. When an action (move, copy, ...) is done on them they are
+really uploaded to Drive as docx/xlsx/pptx, not as the Google file. Drive then shows them as docx and offers "convert to
+Google Docs"; converting gives "corrupted". Users complain that many files became corrupted. Google-native files must stay
+Google-native: no change of extension or content, not even a bit. If the user wants a local copy, use Google's own
+conversion; Drive operations must never do it. Also: how to recover files that are already corrupted.
+
+HOW DID YOU DEBUG
+1. find/grep for gdrive: script/file/gdrive/bashbasicsbyvk_gdrive.sh (session layer), and the python engine
+   script/file/loops/iloop/fx/google_drive_fx/open_drive/bashbasicsbyvk_gd (all rclone calls).
+2. Read list_remote / reconcile_dir / cmd_hydrate / push_round / cmd_copy. Every rclone call used rclone's DEFAULT
+   --drive-export-formats (docx,xlsx,pptx,svg), so rclone lists a Google Doc as "Foo.docx" with size -1. The engine kept
+   such rows (gdoc=1) as sparse zero-byte placeholders named Foo.docx.
+3. Followed what actions do to such a row: move/rename -> `rclone moveto remote:Foo.docx remote:Bar.docx` (turns the Google
+   file into a real docx via export + upload); copy -> `copyto` (same); a copy/move out or a "modified" detection ->
+   upload of the placeholder (size claimed, zero bytes) -> a real .docx full of zeros = "corrupted" on conversion;
+   dir copy -> `rclone copy` exports every Google file below it as a real Office file.
+4. Nothing was run against a real Drive (no rclone / no network here). Verified with a fake rclone that records the calls
+   and answers lsjson/backend/copyto/delete: after the fix no moveto/copyto/copy touches a Google file, renames use
+   `backend moveid`, copies use `backend copyid`, listing has no .docx names, and the export validator rejects bad zips.
+   `backend copyid/moveid`, `--metadata` content-type and delete-by-name.url are written from rclone's documented behaviour
+   and still need one real-Drive smoke test (rclone >= 1.64 for --metadata).
+
+CAUSE
+Google-native files were modelled as "files with an Office name". Drive operations (move/copy/upload) therefore moved Office
+export names and uploaded placeholder bytes instead of acting on the Google file, producing real but broken docx/xlsx/pptx
+files and removing the original Google file.
+
+FIX
+- Moved script/file/gdrive/ -> script/file/loops/iloop/fx/google_drive_fx/gdrive/ (lookup path in _gd_locate updated).
+- bashbasicsbyvk_gd: every rclone call now passes `--drive-export-formats url` (Google files are listed as links, never
+  as Office names) and `--drive-import-formats ""` (nothing is converted on upload). Listing asks for --metadata and
+  recognises Google files by their Drive content-type. They are shown as pointer files Foo.gdoc/.gsheet/.gslides/.gform/
+  .gdraw/... (tiny JSON with the Google URL and ID), never downloaded. Move/rename -> `backend moveid`, copy ->
+  `backend copyid` (also for a cp of a pointer in the mirror and for folder copies, with --drive-skip-gdocs for the rest),
+  delete by the name rclone knows. Edits to a pointer are repaired and never pushed.
+- Export is the only conversion: `export` command (gd.export in the app) uses Google's converter, checks the result is a
+  valid zip/PDF, and is also used when copying/moving OUT of the Drive (a move is cancelled for a file Google cannot convert).
+- `recover` (gd.recover): read-only scan for damaged Office files (empty, all zero, bad zip, no [Content_Types].xml) and for
+  the original Google file in Drive Trash. Report: <profile>/recover-report.tsv.
+- Lesson: never let a tool address a cloud-native object by a converted name; address it by ID and convert only on request.

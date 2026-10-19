@@ -18,6 +18,13 @@
 #     gd.scan       list the WHOLE Drive below this folder (folder item counts become real)
 #     gd.clean      free disk: downloaded, unchanged files become placeholders again
 #     gd.push       push pending changes now                     gd.sw switch to another profile
+#     gd.export NAME... [FORMAT] [DIR]   Word/Excel/PowerPoint/PDF copy of a Google file, made by GOOGLE's converter
+#
+#  Google Docs / Sheets / Slides / Forms / Drawings are NOT Office files, so they are never shown or handled as such:
+#    • they appear as pointers  Foo.gdoc  Foo.gsheet  Foo.gslides  Foo.gform ...  (a few hundred bytes, no content)
+#    • copy / move / rename / delete act on the real Google file by its Drive ID — nothing is downloaded, exported
+#      or re-uploaded, and nothing is converted on upload either
+#    • a docx/xlsx/pptx is only made when the person asks: gd.export, or copying/moving OUT of the Drive
 #
 #  Uses: bashbasicsbyvk_loadingbar.sh (_lb_run), bashbasicsbyvk_gd (python), rclone
 # ════════════════════════════════════════════════════════════════════════════
@@ -85,7 +92,7 @@ _gd_locate() {
   _GD_PY="$(command -v python3 || command -v python)"
   [ -n "$_GD_PY" ] || { echo "❌ Google Drive needs Python 3."; return 1; }
   local d
-  for d in "${SCRIPT_DIR:-}" "$_GD_SRC_DIR" "$_GD_SRC_DIR/../loops/iloop/fx/google_drive_fx/open_drive"; do
+  for d in "${SCRIPT_DIR:-}" "$_GD_SRC_DIR" "$_GD_SRC_DIR/../open_drive"; do
     [ -n "$d" ] && [ -f "$d/bashbasicsbyvk_gd" ] && { _GD_MAIN="$d/bashbasicsbyvk_gd"; return 0; }
   done
   echo "❌ bashbasicsbyvk_gd not found (looked in \$SCRIPT_DIR and $_GD_SRC_DIR)."; return 1
@@ -403,7 +410,14 @@ _gd_install_wrappers() {
         local it all_in=true any_in=false
         for it in "$@"; do if _gd_in_tree "$it"; then any_in=true; else all_in=false; fi; done
         if _gd_in_tree "$dest" && $all_in; then _gd_copy_inside "$dest" "$@"; return; fi
-        if $any_in; then _gd_hydrate "$@" || return 1; fi
+        if $any_in; then
+          _gd_hydrate "$@" || return 1
+          if ! _gd_in_tree "$dest"; then       # leaving the Drive: Google files become Office files, by Google's converter
+            _gd_orig_perform_copy "$dest" "$@"; local rc=$?
+            _gd_export_out "$dest" "$@"
+            return $rc
+          fi
+        fi
       fi
       _gd_orig_perform_copy "$dest" "$@"
     }
@@ -412,7 +426,20 @@ _gd_install_wrappers() {
   if _gd_rename_fn perform_move _gd_orig_perform_move; then
     perform_move() {
       local dest="$1"; shift
-      if [ "$_GD_ACTIVE" = 1 ] && ! _gd_in_tree "$dest"; then _gd_hydrate "$@" || return 1; fi
+      if [ "$_GD_ACTIVE" = 1 ] && ! _gd_in_tree "$dest"; then
+        _gd_hydrate "$@" || return 1
+        # convert FIRST: if Google cannot convert a file, it is not moved (a move would trash the only real copy)
+        local -a mv=() it; local n
+        for it in "$@"; do
+          if _gd_in_tree "$it" && [ -n "$(_gd_native_in "$it")" ]; then
+            if _gd_export_out "$dest" "$it"; then mv+=("$it"); else echo "🚫 Not moved (stays in Google Drive): ${it##*/}"; fi
+          else mv+=("$it"); fi
+        done
+        [ "${#mv[@]}" -gt 0 ] || return 1
+        _gd_orig_perform_move "$dest" "${mv[@]}"; local rc=$?
+        _gd_strip_pointers "$dest" "${mv[@]}"
+        return $rc
+      fi
       _gd_orig_perform_move "$dest" "$@"
     }
   fi
@@ -467,6 +494,56 @@ rclone() {
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  Google files leaving the Drive: converted by Google's own converter, on request only
+# ═════════════════════════════════════════════════════════════════════════════
+_gd_native_in() {          # prints the first Google pointer in/at $1 (empty when none)
+  local f
+  if [ -f "$1" ]; then case "$1" in *.gdoc|*.gsheet|*.gslides|*.gform|*.gdraw|*.gsite|*.gmap|*.gscript|*.gjam|*.gfile) printf '%s' "$1" ;; esac; return 0; fi
+  [ -d "$1" ] || return 0
+  f="$(find "$1" -type f \( -name '*.gdoc' -o -name '*.gsheet' -o -name '*.gslides' -o -name '*.gform' -o -name '*.gdraw' -o -name '*.gsite' -o -name '*.gmap' -o -name '*.gscript' -o -name '*.gjam' -o -name '*.gfile' \) -print -quit 2>/dev/null)"
+  printf '%s' "$f"
+}
+
+# _gd_export_out DEST ITEM...   Google files among the items → Word/Excel/PowerPoint/PDF in DEST (the pointer copy is removed)
+_gd_export_out() {
+  local dest="$1"; shift
+  local -a list=(); local it
+  for it in "$@"; do _gd_in_tree "$it" && [ -n "$(_gd_native_in "$it")" ] && list+=("$it"); done
+  [ "${#list[@]}" -gt 0 ] || return 0
+  echo "☁️  Google files leave the Drive: Google converts them (Docs→docx, Sheets→xlsx, Slides→pptx)"
+  _gd_py export "${list[@]}" --to "$dest" --remove-pointers >/dev/null
+}
+
+# after a move out: pointers that travelled along would be dead links — drop them (export put the real files there)
+_gd_strip_pointers() {
+  local dest="$1"; shift
+  local it base
+  for it in "$@"; do
+    base="${it##*/}"
+    [ -e "$dest/$base" ] || continue
+    if [ -d "$dest/$base" ]; then
+      find "$dest/$base" -type f -name '*.g*' -size -5k -exec grep -l 'bvk-google-native-pointer' {} + 2>/dev/null | while IFS= read -r f; do rm -f -- "$f"; done
+    elif grep -q 'bvk-google-native-pointer' "$dest/$base" 2>/dev/null; then rm -f -- "$dest/$base"
+    fi
+  done
+}
+
+# gd.export NAME... [FORMAT] [DIR]   (FORMAT = docx xlsx pptx pdf odt ods odp txt csv html ... ; DIR defaults to where you opened the Drive from)
+_gd_export_cmd() {
+  local -a w=() names=(); local fmt="" dest="" t
+  read -ra w <<< "$1"; w=("${w[@]:1}")
+  for t in "${w[@]}"; do
+    if [ -d "$t" ] && [ -z "$dest" ] && [ "${#names[@]}" -gt 0 ] && [ ! -e "$path/$t" ]; then dest="$t"
+    elif [[ "$t" =~ ^(docx|xlsx|pptx|pdf|odt|ods|odp|txt|csv|tsv|html|rtf|epub|md|zip|svg|png|jpg|json)$ ]] && [ ! -e "$path/$t" ]; then fmt="$t"
+    else names+=("$t"); fi
+  done
+  [ "${#names[@]}" -gt 0 ] || { echo "Usage: gd.export NAME... [docx|xlsx|pptx|pdf|...] [DIR]   — Google converts; the Drive copy stays untouched"; return 0; }
+  [ -n "$dest" ] || dest="$_GD_ORIG_PATH"; [ -d "$dest" ] || dest="$HOME"
+  local -a abs=(); for t in "${names[@]}"; do case "$t" in /*) abs+=("$t") ;; *) abs+=("$path/$t") ;; esac; done
+  _gd_py export "${abs[@]}" ${fmt:+--format "$fmt"} --to "$dest" | sed 's/^/   📄 /'
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  gd commands (typed in the main screen while a Drive is open)
 # ═════════════════════════════════════════════════════════════════════════════
 _gd_info() {
@@ -485,11 +562,15 @@ _gd_info() {
   echo
   echo "   gd.rf  list this folder again    gd.scan  list the whole Drive below here    gd.clean  free disk"
   echo "   gd.push  push pending changes    gd.sw  switch profile                        gdx  leave Google Drive"
+  echo "   gd.export NAME [docx|xlsx|pptx|pdf] [DIR]  Google converts a Doc/Sheet/Slides to Office/PDF (Drive copy untouched)"
+  echo "   gd.recover  read-only scan of this folder (and below) for damaged .docx/.xlsx/.pptx and where the good copy is"
+  echo "   Docs/Sheets/Slides/Forms show as .gdoc .gsheet .gslides .gform — they are Google files, never converted by Drive operations."
   echo "   Everything else (c d r m- c- z uz- t f up- ux- ...) works as in any folder; changes go to Drive right after."
 }
 
 handle_gd_cmd() {
   local c="${1,,}" a
+  c="${c%% *}"
   if [ "$_GD_ACTIVE" != 1 ]; then
     echo "ℹ️  No Google Drive is open — fx → google_drive_fx → open google drive"
     return 0
@@ -506,6 +587,8 @@ handle_gd_cmd() {
       read -e -r -p "   Free the downloaded content of this whole Drive? (y/N): " a
       case "$a" in [yY]|[yY][eE][sS]) _gd_push; local r; r="$(_gd_py clean)"; echo "✅ ${r%%$'\t'*} file(s) freed (≈ ${r#*$'\t'} bytes of disk)." ;; *) echo "🚫 Cancelled" ;; esac ;;
     gd.push) _gd_push && echo "✅ Nothing pending." ;;
+    gd.export|gd.ex) _gd_export_cmd "$1" ;;
+    gd.recover) _gd_py recover "$path" ;;
     gd.sw|gd.switch) _inner_run gdp ;;
     gd.q|gd.quota) _gd_py about ;;
     *) echo "❓ Unknown Drive command. gd shows the list." ;;
