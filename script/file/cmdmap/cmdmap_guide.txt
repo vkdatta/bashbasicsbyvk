@@ -14,6 +14,12 @@ Typed  s / h / q  inside a prompt?      → that screen opens; you return to the
 
 Prompts that print their own answers ([y/n], (a/b/c), [1-3]) are left alone.
 
+Forgot a command?  Type  cc  (cheat codes) at any prompt: it lists exactly the commands THAT prompt
+accepts (the effective table of its map, filtered by what the prompt kind can run). =lo filters, a
+number picks; the command is then typed into the prompt for you and waits for Enter.
+(engine/bashbasicsbyvk_cheatcode.sh — a new main command needs no extra work: it shows up in cc once
+it is wired.)
+
 FILES  (script/file/cmdmap/)
   maincommands.sh        every main command, defined once:
                            cmd_def ID KIND HANDLER CLASS "description" ["example"]

@@ -922,6 +922,16 @@ _multi_prompt_loop() {
   done
 }
 
+# cc types a command into this prompt (text that is not numbers is judged by the gate on Enter)
+_multi_type_key() {
+  local key="$1"
+  _is_ctrl_char "$key" && return 0
+  _buf="${_buf:0:_pos}${key}${_buf:_pos}"
+  _pos=$(( _pos + 1 ))
+  _multi_sync
+}
+_multi_type_text() { _buf="$1"; _pos=${#_buf}; _multi_sync; }
+
 _multi_prompt_loop_raw() {
   local key seq _rc
   _buf=""
@@ -931,6 +941,7 @@ _multi_prompt_loop_raw() {
   trap '_vp_on_resize' WINCH
   _multi_render
   _lt_ready text
+  [ -n "${_CC_PREFILL:-}" ] && _cc_replay _multi_type_key _multi_type_text
 
   while true; do
     IFS= read -rsn1 -t "$_vp_poll_cur" key

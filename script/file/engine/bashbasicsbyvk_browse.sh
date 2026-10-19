@@ -652,6 +652,25 @@ _read_choice() {
   _read_choice_raw
 }
 
+# one typed character: the live "=" filter gets it first, otherwise it goes into the buffer
+_rc_type_key() {
+  local key="$1"
+  _is_ctrl_char "$key" && return 0
+  if ! _filter_on_char "$key"; then
+    _buf="${_buf:0:_pos}${key}${_buf:_pos}"
+    _pos=$(( _pos + 1 ))
+    _print_input_line
+    _sync_highlight_from_buf
+  fi
+  return 0
+}
+# a whole text at once (what cc types in)
+_rc_type_text() {
+  _buf="$1"; _pos=${#_buf}
+  _print_input_line
+  _sync_highlight_from_buf
+}
+
 _read_choice_raw() {
   choice=""
   _can_nav=false
@@ -671,6 +690,8 @@ _read_choice_raw() {
   local key seq _rc
   _print_input_line
   _lt_ready menu
+  # cc: the command picked from the cheat-code list is typed in for you (it does not run until Enter)
+  [ -n "${_CC_PREFILL:-}" ] && _cc_replay _rc_type_key _rc_type_text
 
   while true; do
     IFS= read -rsn1 -t "$_vp_poll_cur" key
@@ -758,13 +779,7 @@ _read_choice_raw() {
       $'\x01') _nav_jump_to 1 ;;
       $'\x05') _nav_jump_to "$_vp_n" ;;
       *)
-        _is_ctrl_char "$key" && continue
-        if ! _filter_on_char "$key"; then
-          _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-          _pos=$(( _pos + 1 ))
-          _print_input_line
-          _sync_highlight_from_buf
-        fi ;;
+        _rc_type_key "$key" ;;
     esac
   done
 

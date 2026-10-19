@@ -69,3 +69,4 @@ sast       .mapto()  sast       from maincommands.sh
 kl         .mapto()  block()
 print      .mapto()  print      from maincommands.sh
 loadtime   .mapto()  loadtime   from maincommands.sh
+cc         .mapto()  cc         from maincommands.sh

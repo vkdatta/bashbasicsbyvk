@@ -198,10 +198,11 @@ _st_draw() {
 
   # footer = suggested commands (same two-step style as the main menu)
   if (( _st_depth > 1 )); then f1="u) Back   q) Close settings   ↑↓) Move"; else f1="u) Back to main menu   q) Close   ↑↓) Move"; fi
+  [ -n "${_st_f1_custom:-}" ] && f1="$_st_f1_custom"          # cc: its own footer
   case "$_st_cnt" in
     0) if [ -n "${fq:-}" ]; then f2="No match for =$fq   (= + enter clears)"; else f2="Nothing to choose here"; fi ;;
-    1) f2="Type 1, then enter to choose" ;;
-    *) f2="Type 1-$_st_cnt, then enter to choose" ;;
+    1) f2="Type 1, then enter to ${_st_verb:-choose}" ;;
+    *) f2="Type 1-$_st_cnt, then enter to ${_st_verb:-choose}" ;;
   esac
   if [ -z "${fq:-}" ] && (( _st_cnt > 1 )); then f2="$f2   =) Filter"; fi
   if [[ "$hint" == *"←/→"* ]]; then f2="clr) Clear all"; fi
@@ -287,7 +288,8 @@ _st_run() {
   local cur=-1 top=0 prev=0 n buf="" num path_title fq="" need=1 page="${_vp_page_step:-10}"
   local parent_title="${_st_title_now:-}"
   _st_depth=$(( _st_depth + 1 ))
-  if (( _st_depth > 1 )); then path_title="Settings › $title"; else path_title="$title"; fi
+  # a sub screen shows its way in ("Settings › Sort order"); _st_crumb="" drops the prefix (cc)
+  if (( _st_depth > 1 )) && [ -n "${_st_crumb-Settings}" ]; then path_title="${_st_crumb-Settings} › $title"; else path_title="$title"; fi
   _st_title_now="$path_title"
   _st_quit=0
   _st_tty_raw
@@ -348,6 +350,15 @@ _st_run() {
             _st_wipe; _st_tty_cooked
             bvk_main_exec "${buf,,}"
             _st_tty_raw; buf=""; cur=-1; continue ;;
+          cc)
+            # cheat codes: the list of what this screen accepts; the pick is typed into the line below
+            [ "${_CC_OPEN:-0}" = 1 ] && { buf=""; continue; }
+            _st_wipe; _st_tty_cooked
+            _CC_CTX=st bvk_main_exec cc
+            _st_tty_raw
+            buf="${_CC_PREFILL:-}"; _CC_PREFILL=""; fq=""
+            [[ "$buf" == =* ]] && fq="${buf:1}"
+            cur=-1; top=0; continue ;;
         esac
         _ltl=""; (( cur >= 0 )) && _ltl="${_st_lbl[$cur]}"
         _lt_enter "${buf:-enter}" "$_ltl"

@@ -431,18 +431,24 @@ bvk_main_exec() {
     -auth)  auth_menu ;;
     print)  bvk_print_cmd ;;
     loadtime|loadtime\ *) bvk_loadtime_cmd "$c" ;;
+    cc)     bvk_cc_cmd ;;
     *)      return 1 ;;
   esac
 }
+# $2 = where the command was typed: menu (a list prompt) | text (a prompt inside a flow).  `cc` reads it
+# to list only what that prompt would accept.
+_CM_RUN_MODE=menu
 _cm_run_main() {
   local h="${_CM_HANDLER:-bvk_main_exec}"
   [ "$h" = "-" ] && h=bvk_main_exec
+  _CM_RUN_MODE="${2:-menu}"
   "$h" "$1"
 }
 
 # ------------------------------------------------------------ gate for MENUS (_read_choice)
 # returns 0 = accept $choice ;  1 = re-prompt (a message was printed, caller redraws)
 _cm_gate_choice() {
+  _CC_PREFILL=""
   [ -n "$choice" ] || return 0
   [[ "$choice" == __* ]] && return 0
   _cm_on || return 0
@@ -452,7 +458,7 @@ _cm_gate_choice() {
   _cm_resolve menu "$choice"
   case "$_CM_ACT" in
     none|local) return 0 ;;
-    run)   _cm_run_main "$choice"; return 1 ;;
+    run)   _cm_run_main "$choice" menu; return 1 ;;
     back)  choice="${_CM_MAP_BACK[$_CM_MAP]:-u}"; return 0 ;;
     block) echo "❌ Invalid command: $choice — not available in ${_CM_MAP}"; return 1 ;;
   esac
@@ -504,6 +510,7 @@ _cm_local_collect() {   # reads the caller's _sm_rows_text/_sm_rows_token/_sm_ft
 # uses the caller's _buf.  returns 0 = accept · 1 = a command ran, ask again
 _cm_gate_multi() {
   local t="$_buf"
+  _CC_PREFILL=""
   [ -n "$t" ] || return 0
   _cm_on || return 0
   [[ "$t" =~ ^[0-9a,\ -]+$ ]] && return 0
@@ -513,7 +520,7 @@ _cm_gate_multi() {
   _cm_resolve text "$t"
   case "$_CM_ACT" in
     none|local) return 0 ;;
-    run)   _cm_run_main "$t"; return 1 ;;
+    run)   _cm_run_main "$t" text; return 1 ;;
     back)  _cm_abort "↩️  Back"; _buf=""; return 0 ;;
     block) _cm_abort "❌ Invalid command: $t — exiting"; _buf=""; return 0 ;;
   esac
@@ -525,6 +532,7 @@ _cm_gate_multi() {
 # returns 0 = accept ; 1 = re-run the menu ; 2 = flow aborted (var stays empty)
 _cm_gate_sm() {
   local t="$_sm_result" lt tok
+  _CC_PREFILL=""
   [ -n "$t" ] || return 0
   _cm_on || return 0
   lt="${t,,}"
@@ -540,7 +548,7 @@ _cm_gate_sm() {
   _cm_resolve text "$t"
   case "$_CM_ACT" in
     none|local) return 0 ;;
-    run)   _cm_run_main "$t"; _CM_REDRAW_FRESH=1; return 1 ;;
+    run)   _cm_run_main "$t" text; _CM_REDRAW_FRESH=1; return 1 ;;
     back)  _cm_abort "↩️  Back"; _sm_result=""; return 2 ;;
     block) _cm_abort "❌ Invalid command: $t — exiting"; _sm_result=""; return 2 ;;
   esac
@@ -560,6 +568,7 @@ _cm_prompt_has_choices() {
 _cm_gate_text() {   # $1 typed  $2 initial text ; sets _CM_OUT ; 0 accept · 3 ran a command (re-prompt) · 4 aborted
   local t="$1"
   _CM_OUT="$t"
+  _CC_PREFILL=""
   [ -z "$t" ] && return 0
   [ "$t" = "$2" ] && return 0
   _cm_on || return 0
@@ -569,7 +578,7 @@ _cm_gate_text() {   # $1 typed  $2 initial text ; sets _CM_OUT ; 0 accept · 3 r
   _cm_resolve text "$t"
   case "$_CM_ACT" in
     none|local) return 0 ;;
-    run)   _cm_run_main "$t"; return 3 ;;
+    run)   _cm_run_main "$t" text; return 3 ;;
     back)  _cm_abort "↩️  Back"; _CM_OUT=""; return 4 ;;
     block) _cm_abort "❌ Invalid command: $t — exiting"; _CM_OUT=""; return 4 ;;
   esac
@@ -622,6 +631,11 @@ _cm_line_edit() {
   builtin printf '%s%s' "$_ce_prompt" "$_ce_buf"
   builtin printf '\n\033[1A'                       # reserve the hint row (scrolls if at the bottom)
   _cm_edit_draw
+  # text that cc just typed in for you: show what it does, like any typed command
+  if [ "${_CC_HINT_NOW:-0}" = 1 ]; then
+    _CC_HINT_NOW=0
+    if [ "$no_cmds" = 0 ] && [ -n "$_ce_buf" ]; then _cm_hint "$_ce_buf" text; _cm_hint_row "$_hint_want"; _cm_edit_draw; fi
+  fi
   while :; do
     IFS= builtin read -rsn1 key; rc=$?
     if [ "$rc" -ne 0 ]; then _ce_buf=""; _CM_OUT=""; break; fi
@@ -670,16 +684,17 @@ _cm_line_edit() {
 # Sets _CM_RESULT to the value for the variable.
 _cm_text_read() {   # prompt initial var can_complete
   local prompt="$1" init="$2" var="$3" cc="$4" st
+  local start="$init"        # what the editor starts with; $init stays "what was already there" for the gate
   _cm_on || return 99
   [ "$_CM_BOOTED" = 1 ] || _cm_boot
   while :; do
     _cm_ctx_find
-    _cm_line_edit "$prompt" "$init" "$var" "$cc" || { _CM_RESULT=""; return 1; }
+    _cm_line_edit "$prompt" "$start" "$var" "$cc" || { _CM_RESULT=""; return 1; }
     if _cm_prompt_has_choices "$prompt"; then _CM_RESULT="$_CM_OUT"; return 0; fi
     _cm_gate_text "$_CM_OUT" "$init"; st=$?
     case "$st" in
       0) _CM_RESULT="$_CM_OUT"; return 0 ;;
-      3) init=""; continue ;;                 # a command ran (e.g. settings); ask again
+      3) init=""; start="${_CC_PREFILL:-}"; _CC_PREFILL=""; [ -n "$start" ] && _CC_HINT_NOW=1; continue ;;   # a command ran (e.g. settings, cc); ask again — cc leaves its pick in the line
       *) _CM_RESULT=""; return 1 ;;           # aborted: the flow unwinds
     esac
   done

@@ -6,3 +6,4 @@ Every link page shows who shared it (mail + d3) with a Copy button and a Report 
 
 print  - capture the screen as drawn (copy to clipboard or save as txt); works in every menu.
 loadtime [N|all|full] - what consumed the time since the previous screen, ranked, with network timings. VK_LOADTIME=0 disables.
+cc     - cheat codes: a list of every command the current prompt accepts. =lo filters it, pick a row and the command is typed into the prompt for you; nothing runs until you press Enter (c- waits for its numbers: c-1-5). Works in every menu and prompt.

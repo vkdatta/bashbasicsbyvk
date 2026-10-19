@@ -57,6 +57,7 @@ It has two parts:
 - **Compress:** `z-` and `uz-` for zip and unzip of multiple items.
 - **Project maps:** `p-` generates a text map of any path.
 - **Debug helpers:** `print` captures the screen exactly as drawn (copy or save as txt) and works at every prompt. `loadtime` shows what consumed the time between the previous screen and this one, ranked, with network phases (DNS/TCP/TLS/wait/download); `loadtime N`, `loadtime all`, `loadtime full` for more. `VK_LOADTIME=0` turns the recorder off.
+- **Cheat codes (`cc`):** forget a command name? `cc` lists every command the *current* prompt accepts (a menu, the item picker, a Settings screen each get their own list), in the same style as Settings. Filter with `=lo`, pick a number, and the command is typed into the prompt you came from. It never runs by itself: `c-` stays in the prompt so you can finish it (`c-1-5`) and press Enter.
 - **Functions (`fx`):** built-in CSV-driven operations plus your own scripts, exportable and importable.
 - **Transfer (`t`):** local copy/move, and Google Drive or Cloud Shell through your own `rclone` / `gcloud` login.
 - **Interface:** sort, group (Settings → Group by: year → month → date → ext, drawn as a tree of headers; grouped natively by the C helper), file details, colours, timezone, instant pop / carpet draws (no animation delay), settings that reset cleanly.

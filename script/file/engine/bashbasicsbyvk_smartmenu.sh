@@ -616,6 +616,14 @@ _sm_range() { if [ "$1" = "$2" ]; then builtin echo "$1"; else builtin echo "$1-
 # ------------------------------------------------------------
 # the interactive loop
 # ------------------------------------------------------------
+# cc types a command into this menu's prompt
+_sm_type_key() {
+  local key="$1"
+  _is_ctrl_char "$key" && return 0
+  _buf="${_buf:0:_pos}${key}${_buf:_pos}"; _pos=$(( _pos + 1 )); _sm_after_edit
+}
+_sm_type_text() { _buf="$1"; _pos=${#_buf}; _sm_after_edit; }
+
 _sm_run() {
   local key _rc n
   _buf=""; _pos=0; _hl_index=0
@@ -666,6 +674,7 @@ _sm_run() {
 
   stty -icanon -echo min 1 time 0 2>/dev/null
   _lt_ready smart
+  [ -n "${_CC_PREFILL:-}" ] && _cc_replay _sm_type_key _sm_type_text
   while true; do
     IFS= builtin read -rsn1 -t "${_vp_poll_cur:-0.5}" key
     _rc=$?
