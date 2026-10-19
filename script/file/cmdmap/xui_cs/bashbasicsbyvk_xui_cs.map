@@ -1,0 +1,12 @@
+# bashbasicsbyvk_xui_cs.map — wiring for the Cloud Surf screen
+# Chosen by _cm_ctx_find when _XUI_PFX=cs (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_cs
+@kind   menu
+@back   u
+@parent xui
+
+cs         .mapto()  cs         from bashbasicsbyvk_xui_csmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_csmenucommands.sh
+x-         .mapto()  x-         from bashbasicsbyvk_xui_csmenucommands.sh
+e-         .mapto()  e-         from bashbasicsbyvk_xui_csmenucommands.sh
+r-         .mapto()  r-         from bashbasicsbyvk_xui_csmenucommands.sh

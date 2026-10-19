@@ -183,7 +183,18 @@ _st_readkey() {
 # The cursor is left at the end of the "Select:" line (no trailing newline).
 _st_draw() {
   local rows cols n=${#_st_lbl[@]} vis i out="" line mark val f1 f2 marks=0 nl=$'\r\033[2K'
-  rows=$(_term_rows); cols=$(_term_cols)
+  # The block is erased by moving up exactly $prev lines, so it must NEVER be taller than the
+  # terminal really is.  _term_rows is a cache that only the main list refreshes; a nested prompt
+  # (find results "Action:", cc ...) opens this screen with whatever size was true minutes ago, and on a
+  # phone the keyboard / extra-keys row changes it all the time.  A too-tall block makes the cursor-up
+  # clamp at the top of the screen and EVERY redraw leaves its first lines behind (the header stacks up
+  # once per keypress).  So: re-read the real size when the screen opens and after every WINCH.
+  if [ "${_ST_SIZE_STALE:-1}" = 1 ]; then
+    declare -F _vp_probe_size >/dev/null 2>&1 && _vp_probe_size
+    _ST_SIZE_STALE=0
+  fi
+  if [ "${_vp_rows_now:-0}" -gt 0 ] 2>/dev/null; then rows=$_vp_rows_now; cols=$_vp_cols_now
+  else rows=$(_term_rows); cols=$(_term_cols); fi
   vis=$(( rows - 12 )); (( vis < 3 )) && vis=3; (( vis > n )) && vis=$n
   if (( cur >= 0 )); then
     (( cur < top )) && top=$cur
@@ -293,6 +304,11 @@ _st_run() {
   _st_title_now="$path_title"
   _st_quit=0
   _st_tty_raw
+  # terminal resized while this screen is open (keyboard, extra keys, rotation): re-measure on the next draw.
+  # Whatever WINCH trap the caller had (_multi_prompt_loop has one) is put back when we leave.
+  local _st_old_winch; _st_old_winch=$(trap -p WINCH)
+  _ST_SIZE_STALE=1
+  trap '_ST_SIZE_STALE=1' WINCH
 
   while :; do
     # rows are rebuilt only when something changed (a choice, a filter edit) — never for plain
@@ -387,6 +403,8 @@ _st_run() {
   if (( prev > 0 )); then
     if (( _st_depth > 1 )); then _st_wipe; else builtin printf '\r\033[2KSelect: %s' "$buf"; fi
   fi
+  if [ -n "$_st_old_winch" ]; then eval "$_st_old_winch"; else trap - WINCH; fi
+  _ST_SIZE_STALE=1                      # the caller's size may differ again by the time we are back in it
   _st_depth=$(( _st_depth - 1 ))
   _st_title_now="$parent_title"
   if (( _st_depth == 0 )); then _st_tty_cooked; _st_stty=""; fi

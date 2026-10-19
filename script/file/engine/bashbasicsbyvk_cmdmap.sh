@@ -194,6 +194,12 @@ _cm_ctx_find() {
   done
   _CM_FLOW=$flow
   [ -z "$_CM_MAP" ] && _CM_MAP="main"
+  # rbam / nf / cs share ONE loop (_xui_loop) and differ only by screen: each screen owns a map
+  # (xui_rb · xui_nf · xui_cs, parent xui) so its own commands (rf · r- · x- · ux ...) are not
+  # blocked by the generic xui map.
+  if [ "$_CM_MAP" = xui ] && [ -n "${_XUI_PFX:-}" ] && [ -n "${_CM_MAP_KIND[xui_${_XUI_PFX}]+x}" ]; then
+    _CM_MAP="xui_${_XUI_PFX}"
+  fi
   return 0
 }
 
@@ -715,6 +721,7 @@ _cm_lint() {
   for k in "${!_CM_DEF[@]}"; do [[ "$k" == bashbasicsbyvk_maincommands.sh:* ]] && mainkeys+=("${k#bashbasicsbyvk_maincommands.sh:}"); done
   for m in "${_CM_MAP_NAMES[@]}"; do
     [ "$m" = main ] && continue
+    [ "${_CM_MAP_PARENT[$m]:-main}" != main ] && continue   # child map (xui_rb ...): the parent is wired in full
     local wired=$'\n'
     while IFS= read -r line; do
       [ -z "$line" ] && continue

@@ -14,3 +14,9 @@ _lt_b "load switchmenucommands"; source "bashbasicsbyvk_switchmenucommands.sh"; 
 _lt_b "load transfermenucommands"; source "bashbasicsbyvk_transfermenucommands.sh"; _lt_e
 _lt_b "load upgrademenucommands"; source "bashbasicsbyvk_upgrademenucommands.sh"; _lt_e
 _lt_b "load xuimenucommands"; source "bashbasicsbyvk_xuimenucommands.sh"; _lt_e
+_lt_b "load authmenucommands"; source "bashbasicsbyvk_authmenucommands.sh"; _lt_e
+_lt_b "load auth_submenucommands"; source "bashbasicsbyvk_auth_submenucommands.sh"; _lt_e
+_lt_b "load auth_usermenucommands"; source "bashbasicsbyvk_auth_usermenucommands.sh"; _lt_e
+_lt_b "load xui_rbmenucommands"; source "bashbasicsbyvk_xui_rbmenucommands.sh"; _lt_e
+_lt_b "load xui_csmenucommands"; source "bashbasicsbyvk_xui_csmenucommands.sh"; _lt_e
+_lt_b "load xui_nfmenucommands"; source "bashbasicsbyvk_xui_nfmenucommands.sh"; _lt_e

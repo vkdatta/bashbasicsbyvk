@@ -1,0 +1,76 @@
+# bashbasicsbyvk_auth.map — wiring for the 'auth' menu
+@menu   auth
+@func   auth_menu
+@kind   menu
+@back   u
+@parent main
+
+u          .mapto()  u          from bashbasicsbyvk_authmenucommands.sh
+q          .mapto()  q          from bashbasicsbyvk_authmenucommands.sh
+c          .mapto()  c          from bashbasicsbyvk_authmenucommands.sh
+l          .mapto()  l          from bashbasicsbyvk_authmenucommands.sh
+ui         .mapto()  ui         from bashbasicsbyvk_authmenucommands.sh
+r          .mapto()  r          from bashbasicsbyvk_authmenucommands.sh
+r-         .mapto()  r-         from bashbasicsbyvk_authmenucommands.sh
+ux         .mapto()  ux         from bashbasicsbyvk_authmenucommands.sh
+ux-        .mapto()  ux-        from bashbasicsbyvk_authmenucommands.sh
+h          .mapto()  h          from bashbasicsbyvk_maincommands.sh
+s          .mapto()  s          from bashbasicsbyvk_maincommands.sh
+i          .mapto()  i          from bashbasicsbyvk_maincommands.sh
+-h         .mapto()  -h         from bashbasicsbyvk_maincommands.sh
+-u         .mapto()  block()
+-auth      .mapto()  -auth      from bashbasicsbyvk_maincommands.sh
+cd         .mapto()  block()
+sw         .mapto()  block()
+fx         .mapto()  block()
+api        .mapto()  block()
+bk         .mapto()  block()
+sv         .mapto()  block()
+sn         .mapto()  block()
+rbam       .mapto()  block()
+nf         .mapto()  block()
+cs         .mapto()  block()
+gd         .mapto()  block()
+gdx        .mapto()  block()
+d          .mapto()  block()
+t          .mapto()  block()
+f          .mapto()  block()
+z          .mapto()  block()
+fs         .mapto()  block()
+forceshow  .mapto()  block()
+ns         .mapto()  block()
+fa         .mapto()  block()
+rf         .mapto()  block()
+l-         .mapto()  block()
+ul-        .mapto()  block()
+z-         .mapto()  block()
+uz-        .mapto()  block()
+p-         .mapto()  block()
+c-         .mapto()  block()
+m-         .mapto()  block()
+s-         .mapto()  block()
+b-         .mapto()  block()
+d-         .mapto()  block()
+v-         .mapto()  block()
+do-        .mapto()  block()
+c2c-       .mapto()  block()
+up-        .mapto()  block()
+save-      .mapto()  block()
+snap-      .mapto()  block()
+scr-sync   .mapto()  block()
+=          .mapto()  =          from bashbasicsbyvk_maincommands.sh
+.s         .mapto()  block()
+.us        .mapto()  block()
+.r         .mapto()  block()
+.d         .mapto()  block()
+.dm        .mapto()  block()
+.ai        .mapto()  block()
+health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
+disk       .mapto()  disk       from bashbasicsbyvk_maincommands.sh
+ram        .mapto()  ram        from bashbasicsbyvk_maincommands.sh
+clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
+loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
+cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
+kl         .mapto()  block()

@@ -1,0 +1,14 @@
+# bashbasicsbyvk_xui_rb.map — wiring for the RBAM screen
+# Chosen by _cm_ctx_find when _XUI_PFX=rb (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_rb
+@kind   menu
+@back   u
+@parent xui
+
+rbam       .mapto()  rbam       from bashbasicsbyvk_xui_rbmenucommands.sh
+ui         .mapto()  ui         from bashbasicsbyvk_xui_rbmenucommands.sh
+ux         .mapto()  ux         from bashbasicsbyvk_xui_rbmenucommands.sh
+r-         .mapto()  r-         from bashbasicsbyvk_xui_rbmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_rbmenucommands.sh
+sd         .mapto()  sd         from bashbasicsbyvk_xui_rbmenucommands.sh
+sd-        .mapto()  sd-        from bashbasicsbyvk_xui_rbmenucommands.sh

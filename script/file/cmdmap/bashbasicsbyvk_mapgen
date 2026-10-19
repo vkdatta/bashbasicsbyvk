@@ -22,6 +22,22 @@ if ROOT is None:
     ROOT = os.path.join(d, "script") if os.path.isdir(os.path.join(d, "script")) else HERE
 OUT = HERE
 
+# Two layouts exist: the SOURCE TREE keeps one sub folder per menu (cmdmap/<menu>/...), the INSTALLED
+# bin folder is flat.  Every path below goes through menu_path() so both work, and a new menu gets its
+# own sub folder when the tree layout is in use.
+TREE = os.path.isdir(os.path.join(OUT, "main"))
+
+def menu_path(menu, fname):
+    flat = os.path.join(OUT, fname)
+    if os.path.isfile(flat):
+        return flat
+    sub = os.path.join(OUT, menu, fname)
+    if os.path.isfile(sub) or TREE:
+        if not DRY and TREE:
+            os.makedirs(os.path.join(OUT, menu), exist_ok=True)
+        return sub
+    return flat
+
 DEFAULT_DESC = {
     "u": "Back", "q": "Quit", "rf": "Refresh the list", "-h": "Help", "disk": "Disk usage", "ram": "Memory usage",
     "x": "Close", "b": "Back", "h": "Home", "c": "Create", "r": "Remove", "l": "Link", "m": "Move",
@@ -37,7 +53,7 @@ def read_defs(path):
             defs[m.group(1)] = dict(kind=m.group(2), handler=m.group(3), cls=m.group(4), desc=m.group(5) or "", ex=m.group(6) or "")
     return defs
 
-main_defs = read_defs(os.path.join(OUT, "bashbasicsbyvk_maincommands.sh"))
+main_defs = read_defs(menu_path("main", "bashbasicsbyvk_maincommands.sh"))
 
 # ---------------------------------------------------------------- find function sources
 sources = {}
@@ -70,7 +86,7 @@ def file_footer_labels(lines):
                 lab.setdefault(k, v.replace("_", " "))
     return lab
 
-SUBJ = re.compile(r'^case\s+"?\$\{?([A-Za-z_0-9]+)\}?"?\s+in')
+SUBJ = re.compile(r'^case\s+"?\$\{?([A-Za-z_0-9]+)(?:,,|\^\^|:-)?\}?"?\s+in')
 ARM = re.compile(r'^\s*([^\s()#;][^()]*?)\)\s*(?:[^)]|$)')
 
 def harvest(lines):
@@ -151,8 +167,8 @@ for raw in open(os.path.join(OUT, "bashbasicsbyvk_menus.list"), encoding="utf-8"
     raw = raw.split("#")[0].strip()
     if not raw: continue
     name, func, kind, back = [x.strip() for x in raw.split("|")]
-    mapf = os.path.join(OUT, f"bashbasicsbyvk_{name}.map")
-    cmdf = os.path.join(OUT, f"bashbasicsbyvk_{name}menucommands.sh")
+    mapf = menu_path(name, f"bashbasicsbyvk_{name}.map")
+    cmdf = menu_path(name, f"bashbasicsbyvk_{name}menucommands.sh")
     cmdsfile = f"bashbasicsbyvk_{name}menucommands.sh"
     local, labels, uses_filter, body_text = [], {}, False, ""
     if func != "-":
@@ -213,7 +229,7 @@ for raw in open(os.path.join(OUT, "bashbasicsbyvk_menus.list"), encoding="utf-8"
             if id_ == "u":
                 lines_out.append(f"{id_:<10} .mapto()  back()\n")
                 continue
-            if kind == "menu" and not local and cls not in ("nav", "util", "tool", "filter"):
+            if kind == "menu" and not local and not body_text and cls not in ("nav", "util", "tool", "filter"):
                 lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()\n")
                 continue
             if cls in ("nav", "util", "tool"):

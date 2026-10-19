@@ -17,3 +17,6 @@ home     | home_menu              | menu   | u
 settings | settings_menu          | menu   | u
 prompt   | -                      | prompt | u
 rename   | _rename_single_mutation| prompt | u
+auth      | auth_menu              | menu   | u
+auth_sub  | _bvk_auth_sub_menu     | menu   | u
+auth_user | _bvk_auth_user_menu    | menu   | u
