@@ -8,7 +8,7 @@
 #  .s.show [all]  .s.clr  .s.shown
 #  .r                    open the rule book (create / edit / delete / rename inside it)
 #
-#  Matching is done by _3bvk_select_core (python3).  This file only handles
+#  Matching is done by bashbasicsbyvk_select_expr (python3).  This file only handles
 #  the prompts, the CSV pickers (existing open_csv_menu), storage and output.
 #
 #  Storage (plain text, user-editable, same style as buffers / swlinks):
@@ -31,8 +31,8 @@ _sel_ensure_store() {
 # Run the python engine. Usage: _sel_core <args...>
 _sel_core() {
   local core
-  core="$(command -v _3bvk_select_core 2>/dev/null)"
-  [ -z "$core" ] && core="$_SEL_HERE/_3bvk_select_core"
+  core="$(command -v bashbasicsbyvk_select_expr 2>/dev/null)"
+  [ -z "$core" ] && core="$_SEL_HERE/bashbasicsbyvk_select_expr"
   BVK_RULES_DIR="$_SEL_RULES_DIR" python3 "$core" "$@"
 }
 

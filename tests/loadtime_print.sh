@@ -36,7 +36,7 @@ w T $((t0+2000000)) 0 1 "" "loadtime" "Settings|"      # a tool command: never a
 w T $((t0+3000000)) 0 1 "" "u" "Settings|"
 w R $((t0+3010000)) 0 1 "" "main" "menu"
 export BVK_LT_PROBE=0
-rep="$(python3 -I "$E/_3bvk_loadtime_core" "$L" --pick 2 --cols 100)"
+rep="$(python3 -I "$E/bashbasicsbyvk_loadtime_report" "$L" --pick 2 --cols 100)"
 has "$rep" "LOADTIME — main → Settings" && ok "report: previous → current screen" || bad "report header"
 has "$rep" "TOTAL  320 ms" && ok "report: total = Enter → ready" || bad "report total"
 has "$rep" "TLS handshake" && has "$rep" "60.0 ms" && ok "report: TLS handshake time" || bad "report TLS"
@@ -44,11 +44,11 @@ has "$rep" "server wait" && has "$rep" "160 ms" && ok "report: server wait / fir
 has "$rep" "BACKGROUND" && ok "report: background work listed apart" || bad "report background"
 first="$(grep -n 'TIMELINE' <<<"$rep" | head -1 | cut -d: -f1)"; has "$rep" "RANKED BY TIME CONSUMED" && ok "report: ranking section" || bad "ranking"
 rank1="$(grep -m1 '#1 ' <<<"$rep")"; has "$rank1" "curl api.example.com" && ok "report: slowest first" || { bad "rank order"; echo "$rank1"; }
-one="$(python3 -I "$E/_3bvk_loadtime_core" "$L" --pick 1 --cols 100)"
+one="$(python3 -I "$E/bashbasicsbyvk_loadtime_report" "$L" --pick 1 --cols 100)"
 has "$one" "main → Settings" && ok "report: the loadtime command itself is skipped (latest = main → Settings)" || bad "tool command not skipped"
-all="$(python3 -I "$E/_3bvk_loadtime_core" "$L" --pick all)"
+all="$(python3 -I "$E/bashbasicsbyvk_loadtime_report" "$L" --pick all)"
 has "$all" "shell → main" && has "$all" "main → Settings" && ok "report: loadtime all" || bad "loadtime all"
-none="$(python3 -I "$E/_3bvk_loadtime_core" "$T/empty" --pick 1)"; has "$none" "Nothing measured yet" && ok "report: no data is explained" || bad "empty log"
+none="$(python3 -I "$E/bashbasicsbyvk_loadtime_report" "$T/empty" --pick 1)"; has "$none" "Nothing measured yet" && ok "report: no data is explained" || bad "empty log"
 
 # ---- (3) recorder -----------------------------------------------------------------------
 rec="$(bash -c '

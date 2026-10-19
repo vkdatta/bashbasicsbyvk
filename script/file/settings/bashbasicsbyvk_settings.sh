@@ -63,7 +63,21 @@ unset snapshot_enabled
 unset snapshot_interval_seconds
 unset snapshot_keep_seconds
 
-[ -f "$SETTINGS_FILE" ] && source "$SETTINGS_FILE"
+# Reads a settings file written by save_settings (key=value or key="value", one per line).
+# It is DATA, not code: nothing in the file is ever executed, and only lower-case keys are assigned.
+_bvk_settings_read() {
+  local _f="$1" _line _k _v
+  [ -f "$_f" ] || return 1
+  while IFS= read -r _line || [ -n "$_line" ]; do
+    [[ "$_line" =~ ^([a-z][a-z0-9_]*)=(.*)$ ]] || continue
+    _k="${BASH_REMATCH[1]}"; _v="${BASH_REMATCH[2]}"
+    if [[ "$_v" == \"*\" && ${#_v} -ge 2 ]]; then _v="${_v:1:${#_v}-2}"; fi
+    printf -v "$_k" '%s' "$_v"
+  done < "$_f"
+  return 0
+}
+
+[ -f "$SETTINGS_FILE" ] && _bvk_settings_read "$SETTINGS_FILE"
 
 : "${show_hidden_files:=$DEFAULT_SHOW_HIDDEN_FILES}"
 : "${index_mode_threshold:=$DEFAULT_INDEX_MODE_THRESHOLD}"

@@ -4,10 +4,10 @@
 #
 #  Three kinds of file feed this layer (all under  cmdmap/):
 #
-#    maincommands.sh        every MAIN command, defined once:
+#    bashbasicsbyvk_maincommands.sh        every MAIN command, defined once:
 #                             cmd_def ID KIND HANDLER CLASS "description" ["example"]
-#    <menu>menucommands.sh  the commands that exist ONLY in that menu (same cmd_def)
-#    <menu>.map             the WIRING of one menu / prompt:
+#    bashbasicsbyvk_<menu>menucommands.sh  the commands that exist ONLY in that menu (same cmd_def)
+#    bashbasicsbyvk_<menu>.map             the WIRING of one menu / prompt:
 #
 #                             @menu   upgrade
 #                             @func   upgrade_menu          # which function owns it
@@ -15,8 +15,8 @@
 #                             @back   u                     # key that leaves this menu
 #                             @parent main                  # inherited map (default main)
 #
-#                             p-   .mapto()  p-  from maincommands.sh
-#                             i-   .mapto()  k-  from upgrademenucommands.sh
+#                             p-   .mapto()  p-  from bashbasicsbyvk_maincommands.sh
+#                             i-   .mapto()  k-  from bashbasicsbyvk_upgrademenucommands.sh
 #                             z    .mapto()  block()        # blocked in this menu
 #                             u    .mapto()  back()         # "go back" (prompts)
 #
@@ -101,31 +101,16 @@ _cm_find() {   # name -> _CM_FOUND (and stdout)
 
 # ------------------------------------------------------------ definitions
 # cmd_def ID KIND HANDLER CLASS "description" ["example"]
-# Registered under the file currently being sourced (_CM_SRC_FILE).
-_CM_SRC_FILE=""
+# Registered under the basename of the file that calls it (a *commands.sh, loaded by _3bvk_import_cmdmap.sh).
 cmd_def() {
   local id="$1" kind="$2" handler="$3" class="$4" desc="${5:-}" ex="${6:-}"
-  _CM_DEF["$_CM_SRC_FILE:$id"]="$kind|$handler|$class|$desc|$ex"
-}
-
-declare -gA _CM_LOADED=()
-_cm_load_defs() {   # basename of a *commands.sh  (each file is sourced exactly once)
-  [ -n "${_CM_LOADED[$1]+x}" ] && return 0
-  _CM_LOADED["$1"]=1
-  _cm_scan
-  local f="${_CM_PATHS[$1]-}"
-  [ -n "$f" ] || return 1
-  _CM_SRC_FILE="$1"
-  # shellcheck disable=SC1090
-  source "$f"
-  _CM_SRC_FILE=""
+  _CM_DEF["${BASH_SOURCE[1]##*/}:$id"]="$kind|$handler|$class|$desc|$ex"
 }
 
 # ------------------------------------------------------------ loading the .map files
 _cm_boot() {
   [ "$_CM_BOOTED" = 1 ] && return 0
   _CM_BOOTED=1
-  _cm_load_defs maincommands.sh
   _cm_scan
   local f
   for f in "${_CM_MAPFILES[@]}"; do _cm_parse_map "$f" head; done   # headers only: cheap
@@ -162,14 +147,13 @@ _cm_parse_map() {   # $1 file  $2 = head (directives only, stop at the first wir
           elif [ "${BASH_REMATCH[2]}" = "back()" ]; then tgt="BACK"
           else
             id="${BASH_REMATCH[3]}"; srcfile="${BASH_REMATCH[4]}"
-            _cm_load_defs "$srcfile"
             tgt="$srcfile:$id"
           fi
           case "$tgt" in
             BLOCK|BACK)
               # the kind of a blocked key is the kind of the main command it shadows
               if [[ "$key" == *'*' ]]; then kd=prefix; key="${key%\*}"
-              else _cm_kind_of_tgt "maincommands.sh:$key"; kd="$_CM_KIND"; fi ;;
+              else _cm_kind_of_tgt "bashbasicsbyvk_maincommands.sh:$key"; kd="$_CM_KIND"; fi ;;
             *) _cm_kind_of_tgt "$tgt"; kd="$_CM_KIND" ;;
           esac
           lines+="$key|$kd|$tgt|$n"$'\n'
@@ -282,12 +266,12 @@ _cm_resolve() {
   local fromfile="${tgt%%:*}" in_main=0
   [ "${_ct_map[best]}" = "main" ] && in_main=1
   # a "tool" (print, loadtime) works at EVERY prompt: it only reads state, it never changes where you are
-  if [ "$class" = tool ] && [ "$fromfile" = maincommands.sh ] && declare -F "$handler" >/dev/null 2>&1; then
+  if [ "$class" = tool ] && [ "$fromfile" = bashbasicsbyvk_maincommands.sh ] && declare -F "$handler" >/dev/null 2>&1; then
     _CM_ACT=run; return 0
   fi
   # ---- what does a typed command do HERE?
   if [ "$_CM_MAP" = "main" ] && [ "$mode" = "menu" ]; then _CM_ACT=local; return 0; fi
-  if [ "$fromfile" != "maincommands.sh" ]; then
+  if [ "$fromfile" != "bashbasicsbyvk_maincommands.sh" ]; then
     # the menu's own command: its loop handles it. In a text prompt it is the flow's business too.
     if [ "$handler" = "back" ]; then _CM_ACT=back; else _CM_ACT=local; fi
     return 0
@@ -312,9 +296,9 @@ _cm_resolve() {
 _cm_is_main_word() {
   local t="${1,,}" k d
   for k in "${!_CM_DEF[@]}"; do
-    [[ "$k" == maincommands.sh:* ]] || continue
+    [[ "$k" == bashbasicsbyvk_maincommands.sh:* ]] || continue
     d="${_CM_DEF[$k]}"
-    _cm_match "${d%%|*}" "${k#maincommands.sh:}" "$t" && return 0
+    _cm_match "${d%%|*}" "${k#bashbasicsbyvk_maincommands.sh:}" "$t" && return 0
   done
   return 1
 }
@@ -717,7 +701,7 @@ _cm_show() {
       BACK)  act=back;  desc="go back";   from="${_ct_map[i]}" ;;
       *)  d="${_CM_DEF[$tgt]-}"; desc="${d#*|*|*|}"; desc="${desc%%|*}"
           act="${d#*|}"; act="${act%%|*}"; [ "$act" = "-" ] && act="loop"; [ -z "$d" ] && act="UNDEF"
-          from="${tgt%%:*}"; from="${from%commands.sh}" ;;
+          from="${tgt%%:*}"; from="${from#bashbasicsbyvk_}"; from="${from%commands.sh}" ;;
     esac
     printf '%-10s %-7s %-8s %-7s %s%s\n' "${_ct_key[i]}" "${_ct_kind[i]}" "$act" "$from" "$desc" "$([ "${_ct_impl[i]}" = 1 ] && printf '   [inherited – not wired here]')"
   done
@@ -728,7 +712,7 @@ _cm_lint() {
   _cm_boot; _cm_ensure_all
   local m k d bad=0 id line key tgt
   local -a mainkeys=()
-  for k in "${!_CM_DEF[@]}"; do [[ "$k" == maincommands.sh:* ]] && mainkeys+=("${k#maincommands.sh:}"); done
+  for k in "${!_CM_DEF[@]}"; do [[ "$k" == bashbasicsbyvk_maincommands.sh:* ]] && mainkeys+=("${k#bashbasicsbyvk_maincommands.sh:}"); done
   for m in "${_CM_MAP_NAMES[@]}"; do
     [ "$m" = main ] && continue
     local wired=$'\n'

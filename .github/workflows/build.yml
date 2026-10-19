@@ -30,8 +30,8 @@ jobs:
       - name: Build bvk-ls
         working-directory: script/file/engine/bvk-ls
         run: |
-          chmod +x build.sh
-          REQUIRE_ANDROID=1 ./build.sh
+          chmod +x bashbasicsbyvk_build.sh
+          REQUIRE_ANDROID=1 ./bashbasicsbyvk_build.sh
 
       - name: Verify binaries
         working-directory: script/file/engine/bvk-ls

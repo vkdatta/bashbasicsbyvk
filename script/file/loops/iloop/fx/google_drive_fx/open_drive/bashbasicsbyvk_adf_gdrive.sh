@@ -6,7 +6,7 @@
 #
 #  Shows the rclone profiles (remotes of type "drive") and opens the one you pick as the main screen:
 #  your files in Google Drive, listed like a local folder, with every native command working on them.
-#  The work lives in bashbasicsbyvk_gdrive.sh (session) and _3bvk_gd_main (python / rclone).
+#  The work lives in bashbasicsbyvk_gdrive.sh (session) and bashbasicsbyvk_gd (python / rclone).
 # ════════════════════════════════════════════════════════════════════════════
 
 declare -ga _GDP_NAME=() _GDP_TYPE=() _GDP_LAST=()

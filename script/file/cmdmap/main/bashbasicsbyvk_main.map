@@ -1,0 +1,71 @@
+# bashbasicsbyvk_main.map — wiring for the 'main' menu
+@menu   main
+@kind   menu
+@back   q
+@parent main
+
+q          .mapto()  q          from bashbasicsbyvk_maincommands.sh
+u          .mapto()  u          from bashbasicsbyvk_maincommands.sh
+h          .mapto()  h          from bashbasicsbyvk_maincommands.sh
+s          .mapto()  s          from bashbasicsbyvk_maincommands.sh
+i          .mapto()  i          from bashbasicsbyvk_maincommands.sh
+-h         .mapto()  -h         from bashbasicsbyvk_maincommands.sh
+-u         .mapto()  -u         from bashbasicsbyvk_maincommands.sh
+-auth      .mapto()  -auth      from bashbasicsbyvk_maincommands.sh
+cd         .mapto()  cd         from bashbasicsbyvk_maincommands.sh
+sw         .mapto()  sw         from bashbasicsbyvk_maincommands.sh
+fx         .mapto()  fx         from bashbasicsbyvk_maincommands.sh
+api        .mapto()  api        from bashbasicsbyvk_maincommands.sh
+bk         .mapto()  bk         from bashbasicsbyvk_maincommands.sh
+sv         .mapto()  sv         from bashbasicsbyvk_maincommands.sh
+sn         .mapto()  sn         from bashbasicsbyvk_maincommands.sh
+rbam       .mapto()  rbam       from bashbasicsbyvk_maincommands.sh
+nf         .mapto()  nf         from bashbasicsbyvk_maincommands.sh
+cs         .mapto()  cs         from bashbasicsbyvk_maincommands.sh
+gd         .mapto()  gd         from bashbasicsbyvk_maincommands.sh
+gdx        .mapto()  gdx        from bashbasicsbyvk_maincommands.sh
+c          .mapto()  c          from bashbasicsbyvk_maincommands.sh
+d          .mapto()  d          from bashbasicsbyvk_maincommands.sh
+r          .mapto()  r          from bashbasicsbyvk_maincommands.sh
+t          .mapto()  t          from bashbasicsbyvk_maincommands.sh
+f          .mapto()  f          from bashbasicsbyvk_maincommands.sh
+z          .mapto()  z          from bashbasicsbyvk_maincommands.sh
+fs         .mapto()  fs         from bashbasicsbyvk_maincommands.sh
+forceshow  .mapto()  forceshow  from bashbasicsbyvk_maincommands.sh
+ns         .mapto()  ns         from bashbasicsbyvk_maincommands.sh
+fa         .mapto()  fa         from bashbasicsbyvk_maincommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_maincommands.sh
+l-         .mapto()  l-         from bashbasicsbyvk_maincommands.sh
+ul-        .mapto()  ul-        from bashbasicsbyvk_maincommands.sh
+z-         .mapto()  z-         from bashbasicsbyvk_maincommands.sh
+uz-        .mapto()  uz-        from bashbasicsbyvk_maincommands.sh
+p-         .mapto()  p-         from bashbasicsbyvk_maincommands.sh
+c-         .mapto()  c-         from bashbasicsbyvk_maincommands.sh
+m-         .mapto()  m-         from bashbasicsbyvk_maincommands.sh
+s-         .mapto()  s-         from bashbasicsbyvk_maincommands.sh
+b-         .mapto()  b-         from bashbasicsbyvk_maincommands.sh
+d-         .mapto()  d-         from bashbasicsbyvk_maincommands.sh
+v-         .mapto()  v-         from bashbasicsbyvk_maincommands.sh
+do-        .mapto()  do-        from bashbasicsbyvk_maincommands.sh
+c2c-       .mapto()  c2c-       from bashbasicsbyvk_maincommands.sh
+up-        .mapto()  up-        from bashbasicsbyvk_maincommands.sh
+ux-        .mapto()  ux-        from bashbasicsbyvk_maincommands.sh
+save-      .mapto()  save-      from bashbasicsbyvk_maincommands.sh
+snap-      .mapto()  snap-      from bashbasicsbyvk_maincommands.sh
+scr-sync   .mapto()  scr-sync   from bashbasicsbyvk_maincommands.sh
+=          .mapto()  =          from bashbasicsbyvk_maincommands.sh
+.s         .mapto()  .s         from bashbasicsbyvk_maincommands.sh
+.us        .mapto()  .us        from bashbasicsbyvk_maincommands.sh
+.r         .mapto()  .r         from bashbasicsbyvk_maincommands.sh
+.d         .mapto()  .d         from bashbasicsbyvk_maincommands.sh
+.dm        .mapto()  .dm        from bashbasicsbyvk_maincommands.sh
+.ai        .mapto()  .ai        from bashbasicsbyvk_maincommands.sh
+health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
+disk       .mapto()  disk       from bashbasicsbyvk_maincommands.sh
+ram        .mapto()  ram        from bashbasicsbyvk_maincommands.sh
+clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
+print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
+loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
+cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh

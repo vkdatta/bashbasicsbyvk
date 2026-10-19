@@ -1,0 +1,50 @@
+COMMAND MAP — how every prompt in bashbasicsbyvk is wired
+=========================================================
+
+One rule: a typed word that is a command ALWAYS beats the natural action of
+the prompt. To type such a word as plain text, put @ in front:
+
+    s     → Settings                 @s   → the text  s
+    @@s   → the text  @s             @john → stays  @john  (not a command word)
+
+Typed a command that is blocked where you are?
+    ❌ Invalid command: z — exiting     → the whole flow is cancelled, the menu redraws.
+Typed  u  inside a prompt?              → go back (cancels the prompt).
+Typed  s / h / q  inside a prompt?      → that screen opens; you return to the prompt.
+
+Prompts that print their own answers ([y/n], (a/b/c), [1-3]) are left alone.
+
+Forgot a command?  Type  cc  (cheat codes) at any prompt: it lists exactly the commands THAT prompt
+accepts (the effective table of its map, filtered by what the prompt kind can run). =lo filters, a
+number picks; the command is then typed into the prompt for you and waits for Enter.
+(engine/bashbasicsbyvk_cheatcode.sh — a new main command needs no extra work: it shows up in cc once
+it is wired.)
+
+FILES  (script/file/cmdmap/)
+  bashbasicsbyvk_maincommands.sh        every main command, defined once:
+                           cmd_def ID KIND HANDLER CLASS "description" ["example"]
+  bashbasicsbyvk_<menu>menucommands.sh  commands that exist only in that menu (handler "-" = its own loop)
+  bashbasicsbyvk_<menu>.map             the wiring of one menu / prompt
+  bashbasicsbyvk_menus.list             which function owns which map (input of the generator)
+
+.map SYNTAX
+  @menu upgrade            @func upgrade_menu        @kind menu|prompt
+  @back u                  @parent main
+
+  p-   .mapto()  p-  from bashbasicsbyvk_maincommands.sh          # use the main command
+  i-   .mapto()  k-  from bashbasicsbyvk_upgrademenucommands.sh   # this menu's own command, other key
+  z    .mapto()  block()                           # main command blocked here
+  u    .mapto()  back()                            # "go back"
+
+  To reuse a key differently in one menu (say p- = paste in menu x), wire it in
+  bashbasicsbyvk_x.map:   p-  .mapto()  p-  from bashbasicsbyvk_xmenucommands.sh   — it overrides main there only.
+
+TOOLS
+  o --map-show [menu]     the effective table of a menu (own + inherited, with source)
+  o --map-lint            every main command a map has not wired explicitly
+  o --map-gen             write missing lines into every map (never edits existing ones)
+                          (= python3 cmdmap/bashbasicsbyvk_mapgen [--dry])
+
+ADDING A MAIN COMMAND:  add one cmd_def line to bashbasicsbyvk_maincommands.sh, run  o --map-gen
+(every map gets an explicit line: usable commands wired, others block()), then review.
+Switch the layer off:  export VK_CMDMAP=0      Plain readline prompts:  export VK_CMD_EDITOR=0

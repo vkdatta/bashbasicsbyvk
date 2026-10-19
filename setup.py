@@ -7,7 +7,7 @@ all_paths = [
     if "__pycache__" not in p.split(os.sep) and not p.endswith((".pyc", ".pyo"))
 ]
 
-# C sources (script/file/engine/bvk-ls/{src,include}, Makefile, build.sh) are build-time only:
+# C sources (script/file/engine/bvk-ls/{src,include}, bashbasicsbyvk_Makefile, bashbasicsbyvk_build.sh) are build-time only:
 # they ship in the sdist but must not be installed as executable scripts.
 _BVK_SRC = os.sep + "bvk-ls" + os.sep
 def _is_bvk_src(f):

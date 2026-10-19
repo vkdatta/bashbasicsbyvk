@@ -1,0 +1,77 @@
+# bashbasicsbyvk_fx.map — wiring for the 'fx' menu
+@menu   fx
+@func   functions_menu
+@kind   menu
+@back   u
+@parent main
+
+fx         .mapto()  fx         from bashbasicsbyvk_fxmenucommands.sh
+sw         .mapto()  sw         from bashbasicsbyvk_fxmenucommands.sh
+q          .mapto()  q          from bashbasicsbyvk_fxmenucommands.sh
+-h         .mapto()  -h         from bashbasicsbyvk_fxmenucommands.sh
+u          .mapto()  u          from bashbasicsbyvk_fxmenucommands.sh
+forceshow  .mapto()  forceshow  from bashbasicsbyvk_fxmenucommands.sh
+c          .mapto()  c          from bashbasicsbyvk_fxmenucommands.sh
+d          .mapto()  d          from bashbasicsbyvk_fxmenucommands.sh
+l-         .mapto()  l-         from bashbasicsbyvk_fxmenucommands.sh
+ul-        .mapto()  ul-        from bashbasicsbyvk_fxmenucommands.sh
+t          .mapto()  t          from bashbasicsbyvk_fxmenucommands.sh
+z          .mapto()  z          from bashbasicsbyvk_fxmenucommands.sh
+r          .mapto()  r          from bashbasicsbyvk_fxmenucommands.sh
+f          .mapto()  f          from bashbasicsbyvk_fxmenucommands.sh
+s          .mapto()  s          from bashbasicsbyvk_fxmenucommands.sh
+disk       .mapto()  disk       from bashbasicsbyvk_fxmenucommands.sh
+ram        .mapto()  ram        from bashbasicsbyvk_fxmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_fxmenucommands.sh
+d-         .mapto()  d-         from bashbasicsbyvk_fxmenucommands.sh
+v-         .mapto()  v-         from bashbasicsbyvk_fxmenucommands.sh
+p-         .mapto()  p-         from bashbasicsbyvk_fxmenucommands.sh
+c-         .mapto()  c-         from bashbasicsbyvk_fxmenucommands.sh
+m-         .mapto()  m-         from bashbasicsbyvk_fxmenucommands.sh
+s-         .mapto()  s-         from bashbasicsbyvk_fxmenucommands.sh
+e-         .mapto()  e-         from bashbasicsbyvk_fxmenucommands.sh
+ux         .mapto()  ux         from bashbasicsbyvk_fxmenucommands.sh
+udf.export .mapto()  udf.export from bashbasicsbyvk_fxmenucommands.sh
+ui         .mapto()  ui         from bashbasicsbyvk_fxmenucommands.sh
+udf.import .mapto()  udf.import from bashbasicsbyvk_fxmenucommands.sh
+h          .mapto()  h          from bashbasicsbyvk_maincommands.sh
+i          .mapto()  i          from bashbasicsbyvk_maincommands.sh
+-u         .mapto()  -u         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+-auth      .mapto()  -auth      from bashbasicsbyvk_maincommands.sh
+cd         .mapto()  block()
+api        .mapto()  block()
+bk         .mapto()  block()
+sv         .mapto()  block()
+sn         .mapto()  block()
+rbam       .mapto()  block()
+nf         .mapto()  block()
+cs         .mapto()  block()
+gd         .mapto()  block()
+gdx        .mapto()  block()
+fs         .mapto()  block()
+ns         .mapto()  block()
+fa         .mapto()  block()
+z-         .mapto()  z-         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+uz-        .mapto()  block()
+b-         .mapto()  block()
+do-        .mapto()  do-        from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+c2c-       .mapto()  block()
+up-        .mapto()  block()
+ux-        .mapto()  ux-        from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+save-      .mapto()  block()
+snap-      .mapto()  block()
+scr-sync   .mapto()  block()
+=          .mapto()  =          from bashbasicsbyvk_maincommands.sh
+.s         .mapto()  block()
+.us        .mapto()  block()
+.r         .mapto()  block()
+.d         .mapto()  block()
+.dm        .mapto()  block()
+.ai        .mapto()  block()
+health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
+clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+kl         .mapto()  block()
+print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
+loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
+cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh

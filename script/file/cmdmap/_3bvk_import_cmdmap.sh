@@ -1,0 +1,16 @@
+_lt_b "load maincommands"; source "bashbasicsbyvk_maincommands.sh"; _lt_e
+_lt_b "load apimenucommands"; source "bashbasicsbyvk_apimenucommands.sh"; _lt_e
+_lt_b "load findmenucommands"; source "bashbasicsbyvk_findmenucommands.sh"; _lt_e
+_lt_b "load fxmenucommands"; source "bashbasicsbyvk_fxmenucommands.sh"; _lt_e
+_lt_b "load homemenucommands"; source "bashbasicsbyvk_homemenucommands.sh"; _lt_e
+_lt_b "load infinitymenucommands"; source "bashbasicsbyvk_infinitymenucommands.sh"; _lt_e
+_lt_b "load organisemenucommands"; source "bashbasicsbyvk_organisemenucommands.sh"; _lt_e
+_lt_b "load promptmenucommands"; source "bashbasicsbyvk_promptmenucommands.sh"; _lt_e
+_lt_b "load renamemenucommands"; source "bashbasicsbyvk_renamemenucommands.sh"; _lt_e
+_lt_b "load rulesmenucommands"; source "bashbasicsbyvk_rulesmenucommands.sh"; _lt_e
+_lt_b "load settingsmenucommands"; source "bashbasicsbyvk_settingsmenucommands.sh"; _lt_e
+_lt_b "load snapshotmenucommands"; source "bashbasicsbyvk_snapshotmenucommands.sh"; _lt_e
+_lt_b "load switchmenucommands"; source "bashbasicsbyvk_switchmenucommands.sh"; _lt_e
+_lt_b "load transfermenucommands"; source "bashbasicsbyvk_transfermenucommands.sh"; _lt_e
+_lt_b "load upgrademenucommands"; source "bashbasicsbyvk_upgrademenucommands.sh"; _lt_e
+_lt_b "load xuimenucommands"; source "bashbasicsbyvk_xuimenucommands.sh"; _lt_e

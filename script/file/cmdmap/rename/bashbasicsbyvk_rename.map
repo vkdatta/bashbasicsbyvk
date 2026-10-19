@@ -1,0 +1,72 @@
+# bashbasicsbyvk_rename.map — wiring for the 'rename' prompt
+@menu   rename
+@func   _rename_single_mutation
+@kind   prompt
+@back   u
+@parent main
+
+q          .mapto()  q          from bashbasicsbyvk_maincommands.sh
+u          .mapto()  back()
+h          .mapto()  h          from bashbasicsbyvk_maincommands.sh
+s          .mapto()  s          from bashbasicsbyvk_maincommands.sh
+i          .mapto()  block()
+-h         .mapto()  block()
+-u         .mapto()  block()
+-auth      .mapto()  block()
+cd         .mapto()  block()
+sw         .mapto()  block()
+fx         .mapto()  block()
+api        .mapto()  block()
+bk         .mapto()  block()
+sv         .mapto()  block()
+sn         .mapto()  block()
+rbam       .mapto()  block()
+nf         .mapto()  block()
+cs         .mapto()  block()
+gd         .mapto()  block()
+gdx        .mapto()  block()
+c          .mapto()  block()
+d          .mapto()  block()
+r          .mapto()  block()
+t          .mapto()  block()
+f          .mapto()  block()
+z          .mapto()  block()
+fs         .mapto()  block()
+forceshow  .mapto()  block()
+ns         .mapto()  block()
+fa         .mapto()  block()
+rf         .mapto()  block()
+l-         .mapto()  block()
+ul-        .mapto()  block()
+z-         .mapto()  block()
+uz-        .mapto()  block()
+p-         .mapto()  block()
+c-         .mapto()  block()
+m-         .mapto()  block()
+s-         .mapto()  block()
+b-         .mapto()  block()
+d-         .mapto()  block()
+v-         .mapto()  block()
+do-        .mapto()  block()
+c2c-       .mapto()  block()
+up-        .mapto()  block()
+ux-        .mapto()  block()
+save-      .mapto()  block()
+snap-      .mapto()  block()
+scr-sync   .mapto()  block()
+=          .mapto()  block()
+.s         .mapto()  block()
+.us        .mapto()  block()
+.r         .mapto()  block()
+.d         .mapto()  block()
+.dm        .mapto()  block()
+.ai        .mapto()  block()
+health     .mapto()  block()
+disk       .mapto()  block()
+ram        .mapto()  block()
+clear      .mapto()  block()
+sast       .mapto()  block()
+kl         .mapto()  block()
+print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
+loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
+cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh

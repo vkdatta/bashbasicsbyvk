@@ -5,7 +5,7 @@ handle_refresh() {
 
     hash -r
 
-    source "$HOME/.bashrc"
+    # no "source ~/.bashrc" here: the interactive bash started below reads it itself
 
     exec bash -l -c 'cd -- "$1" && exec bash' bash "$saved_path"
 }

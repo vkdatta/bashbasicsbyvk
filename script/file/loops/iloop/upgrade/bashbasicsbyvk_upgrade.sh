@@ -18,7 +18,7 @@
 #      ~/.bashbasicsbyvk/upgrade/installed
 #  and marks that row  ★ installed.  Installing by other means is not seen.
 #
-#  Install itself is _3bvk_upgrade_core <ref>  (pip install git+<repo>@<ref>);
+#  Install itself is bashbasicsbyvk_upgrade_install <ref>  (pip install git+<repo>@<ref>);
 #  with no <ref> it installs the default branch, exactly as before.
 #
 #  Env:  BVK_UPG_REPO=owner/name   (default vkdatta/bashbasicsbyvk)
@@ -228,9 +228,9 @@ _upg_do_install() {              # _upg_do_install <ref|main> <label>
   [ -n "$inst" ] && [ "$inst" = "$ref" ] && echo "   (this is already the installed version — it will be reinstalled)"
   read -e -r -p "   Continue? (y/N): " ans
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
-  core="$(command -v _3bvk_upgrade_core 2>/dev/null)"
-  [ -n "$core" ] || core="$SCRIPT_DIR/_3bvk_upgrade_core"
-  if [ ! -f "$core" ]; then echo "❌ _3bvk_upgrade_core not found"; return 1; fi
+  core="$(command -v bashbasicsbyvk_upgrade_install 2>/dev/null)"
+  [ -n "$core" ] || core="$SCRIPT_DIR/bashbasicsbyvk_upgrade_install"
+  if [ ! -f "$core" ]; then echo "❌ bashbasicsbyvk_upgrade_install not found"; return 1; fi
   if [ "$ref" = main ]; then bash "$core"; else bash "$core" "$ref"; fi
   local rc=$?
   if [ $rc -eq 0 ]; then

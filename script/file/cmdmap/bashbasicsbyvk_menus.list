@@ -1,0 +1,19 @@
+# bashbasicsbyvk_menus.list — which function owns which map.   map | function | kind | back-key
+# bashbasicsbyvk_mapgen reads this, finds the function's source, harvests the commands its
+# loop handles and writes  bashbasicsbyvk_<map>.map  +  bashbasicsbyvk_<map>menucommands.sh  (never overwriting hand edits).
+main     | -                      | menu   | q
+upgrade  | upgrade_menu           | menu   | u
+switch   | switch_menu            | menu   | u
+fx       | functions_menu         | menu   | u
+rules    | rules_menu             | menu   | u
+api      | api_menu               | menu   | u
+snapshot | snapshot_menu          | menu   | u
+xui      | _xui_loop              | menu   | u
+find     | find_menu              | menu   | u
+transfer | transfer_menu          | menu   | u
+organise | organise_menu          | menu   | u
+infinity | infinity_stones_menu   | menu   | u
+home     | home_menu              | menu   | u
+settings | settings_menu          | menu   | u
+prompt   | -                      | prompt | u
+rename   | _rename_single_mutation| prompt | u

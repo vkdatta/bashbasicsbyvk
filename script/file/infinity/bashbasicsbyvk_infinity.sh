@@ -36,12 +36,12 @@ infinity_stones_menu() {
     case "$is_choice" in
     u|U|"") return ;;
     q|Q) _bvk_quit ;;
-      1) python "$SCRIPT_DIR/_3bvk_xtract_core" "$path" ;;
-      2) python "$SCRIPT_DIR/_3bvk_js_audit_core" "$path" ;;
-      3) bash "$SCRIPT_DIR/_3bvk_py_audit_core" "$path" ;;
-      4) bash "$SCRIPT_DIR/_3bvk_gitpush_core" "$path" ;;
-      5) python "$SCRIPT_DIR/_3bvk_gen_sql_core" "$path" ;;
-      6) bash "$SCRIPT_DIR/_3bvk_localhost_core" "$path" ;;
+      1) python "$SCRIPT_DIR/bashbasicsbyvk_xtract" "$path" ;;
+      2) python "$SCRIPT_DIR/bashbasicsbyvk_js_audit" "$path" ;;
+      3) bash "$SCRIPT_DIR/bashbasicsbyvk_py_audit" "$path" ;;
+      4) bash "$SCRIPT_DIR/bashbasicsbyvk_gitpush" "$path" ;;
+      5) python "$SCRIPT_DIR/bashbasicsbyvk_gen_sql" "$path" ;;
+      6) bash "$SCRIPT_DIR/bashbasicsbyvk_localhost" "$path" ;;
       *) _bvk_invalid; continue ;;      # redraw THIS menu, not the parent
     esac
     return

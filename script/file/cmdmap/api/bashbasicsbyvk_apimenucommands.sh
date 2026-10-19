@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# bashbasicsbyvk_apimenucommands.sh — commands that exist ONLY in the 'api' menu (handler '-' = its own loop).
+# Edit the descriptions: they are the live suggestion text.
+cmd_def api      exact   -  local  "Close"
+cmd_def bk       exact   -  local  "Close"
+cmd_def sv       exact   -  local  "Close"
+cmd_def u        exact   -  local  "Exit"
+cmd_def fx       exact   -  local  "Functions (fx) — CSV-driven actions"
+cmd_def sw       exact   -  local  "Switch — recents & tabs"
+cmd_def .r       exact   -  local  "Rule book"
+cmd_def -u       exact   -  local  "Upgrade loop"
+cmd_def q        exact   -  local  "Quit"
+cmd_def -h       exact   -  local  "Help"
+cmd_def rf       exact   -  local  "Refresh"
+cmd_def r-       prefix  -  local  "Restore a backup / saved item" "r-2"
+cmd_def c-       prefix  -  local  "Stage COPY" "c-1,3"
+cmd_def g-       prefix  -  local  "New address for a link" "g-2"
+cmd_def k-       prefix  -  local  "Change a link's key" "k-2"
+cmd_def a-       prefix  -  local  "Set an alias" "a-2"
+cmd_def e-       prefix  -  local  "Edit a link" "e-2"
+cmd_def x-       prefix  -  local  "Delete a link for good" "x-2"
+cmd_def disk     exact   -  local  "Disk usage"
+cmd_def ram      exact   -  local  "Memory usage"

@@ -3,9 +3,9 @@
 
   bashbasicsbyvk_mapgen [--root DIR] [--dry]
 
-Reads  menus.list  and the project sources, and for every menu writes
-    <menu>menucommands.sh   the commands only that menu's loop handles   (cmd_def …)
-    <menu>.map              the wiring: every main command is listed EXPLICITLY
+Reads  bashbasicsbyvk_menus.list  and the project sources, and for every menu writes
+    bashbasicsbyvk_<menu>menucommands.sh   the commands only that menu's loop handles   (cmd_def …)
+    bashbasicsbyvk_<menu>.map   the wiring: every main command is listed EXPLICITLY
 It only ever ADDS lines.  Anything already in a file (descriptions you wrote,
 a block() you chose, a re-mapped key) is kept exactly as it is.
 """
@@ -37,7 +37,7 @@ def read_defs(path):
             defs[m.group(1)] = dict(kind=m.group(2), handler=m.group(3), cls=m.group(4), desc=m.group(5) or "", ex=m.group(6) or "")
     return defs
 
-main_defs = read_defs(os.path.join(OUT, "maincommands.sh"))
+main_defs = read_defs(os.path.join(OUT, "bashbasicsbyvk_maincommands.sh"))
 
 # ---------------------------------------------------------------- find function sources
 sources = {}
@@ -147,13 +147,13 @@ def write(path, text, append):
 
 # ---------------------------------------------------------------- per menu
 report = []
-for raw in open(os.path.join(OUT, "menus.list"), encoding="utf-8"):
+for raw in open(os.path.join(OUT, "bashbasicsbyvk_menus.list"), encoding="utf-8"):
     raw = raw.split("#")[0].strip()
     if not raw: continue
     name, func, kind, back = [x.strip() for x in raw.split("|")]
-    mapf = os.path.join(OUT, f"{name}.map")
-    cmdf = os.path.join(OUT, f"{name}menucommands.sh")
-    cmdsfile = f"{name}menucommands.sh"
+    mapf = os.path.join(OUT, f"bashbasicsbyvk_{name}.map")
+    cmdf = os.path.join(OUT, f"bashbasicsbyvk_{name}menucommands.sh")
+    cmdsfile = f"bashbasicsbyvk_{name}menucommands.sh"
     local, labels, uses_filter, body_text = [], {}, False, ""
     if func != "-":
         src, lines = find_function(func)
@@ -183,13 +183,13 @@ for raw in open(os.path.join(OUT, "menus.list"), encoding="utf-8"):
     wired = existing_wires(mapf)
     lines_out = []
     if not os.path.isfile(mapf):
-        lines_out.append(f"# {name}.map — wiring for the '{name}' {kind}\n@menu   {name}\n"
+        lines_out.append(f"# bashbasicsbyvk_{name}.map — wiring for the '{name}' {kind}\n@menu   {name}\n"
                          + (f"@func   {func}\n" if func != "-" else "")
                          + f"@kind   {kind}\n@back   {back}\n@parent main\n\n")
     if name == "main":
         for id_, d in main_defs.items():
             if id_.lower() in wired: continue
-            lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh\n")
+            lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh\n")
     else:
         local_keys = {k.lower() for k, _ in local}
         # this menu's own commands
@@ -204,7 +204,7 @@ for raw in open(os.path.join(OUT, "menus.list"), encoding="utf-8"):
             if kind == "prompt":
                 # prompts: only navigation is allowed out of a prompt; everything else is blocked
                 if id_ in ("s", "h", "q") or cls == "tool":
-                    lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh\n")
+                    lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh\n")
                 elif id_ == "u":
                     lines_out.append(f"{id_:<10} .mapto()  back()\n")
                 else:
@@ -214,18 +214,18 @@ for raw in open(os.path.join(OUT, "menus.list"), encoding="utf-8"):
                 lines_out.append(f"{id_:<10} .mapto()  back()\n")
                 continue
             if kind == "menu" and not local and cls not in ("nav", "util", "tool", "filter"):
-                lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh   # AUTO: loop not analysed — decide: keep or block()\n")
+                lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()\n")
                 continue
             if cls in ("nav", "util", "tool"):
-                lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh\n")
+                lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh\n")
             elif cls == "filter":
-                if uses_filter: lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh\n")
+                if uses_filter: lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh\n")
                 else:           lines_out.append(f"{id_:<10} .mapto()  block()\n")
             else:
                 key_rx = re.escape(id_.rstrip("-")) if id_.endswith("-") else re.escape(id_)
                 mentioned = bool(re.search(r'(?<![\w.-])' + key_rx + r'(?![\w])', body_text)) if body_text else False
                 if mentioned and id_ not in ("u", "c", "d", "r", "t", "f", "z", "s", "i", "h", "q"):
-                    lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from maincommands.sh   # loop mentions it — kept as before\n")
+                    lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before\n")
                 else:
                     lines_out.append(f"{id_:<10} .mapto()  block()\n")
     if lines_out:

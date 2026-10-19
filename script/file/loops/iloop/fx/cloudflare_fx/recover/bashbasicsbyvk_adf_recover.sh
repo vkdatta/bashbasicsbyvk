@@ -2,7 +2,7 @@
 # bashbasicsbyvk_adf_recover.sh
 # adf-staging='cloudflare_fx/recover_workers'
 # ════════════════════════════════════════════════════════════════════════════
-#  ADF — recover      (the ONE button; everything else lives in _3bvk_recover_*.py)
+#  ADF — recover      (the ONE button; everything else lives in bashbasicsbyvk_recover_*.py)
 #
 #  fx → recover  does, in the folder the navigator is showing (the "navigation path"):
 #    1. finds CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID in that folder (.dev.vars, .env, …) — asks only if missing
@@ -23,9 +23,9 @@ _rcv_locate() {
   [ -n "$_RCV_PY" ] || { echo "❌ recover needs Python 3."; return 1; }
   local d
   for d in "${SCRIPT_DIR:-}" "$_RCV_DIR" "$_RCV_DIR/recover"; do
-    [ -n "$d" ] && [ -f "$d/_3bvk_recover_main" ] && { _RCV_MAIN="$d/_3bvk_recover_main"; return 0; }
+    [ -n "$d" ] && [ -f "$d/bashbasicsbyvk_recover" ] && { _RCV_MAIN="$d/bashbasicsbyvk_recover"; return 0; }
   done
-  echo "❌ _3bvk_recover_main not found (looked in \$SCRIPT_DIR and $_RCV_DIR)."; return 1
+  echo "❌ bashbasicsbyvk_recover not found (looked in \$SCRIPT_DIR and $_RCV_DIR)."; return 1
 }
 
 # run the python entry for the navigation path, credentials handed over via its environment only

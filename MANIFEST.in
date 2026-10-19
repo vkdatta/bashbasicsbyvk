@@ -1,1 +1,1 @@
-recursive-include script *.c *.h Makefile build.sh .gitignore bvk-ls-linux-* bvk-ls-android-*
+recursive-include script *.c *.h bashbasicsbyvk_Makefile bashbasicsbyvk_build.sh .gitignore bvk-ls-linux-* bvk-ls-android-*

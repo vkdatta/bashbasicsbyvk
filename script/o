@@ -4,9 +4,10 @@ source "bashbasicsbyvk_loadtime.sh"      # first: so that even the loading of th
 _lt_init
 
 _lt_b "load import_engine"; source "_3bvk_import_engine.sh"; _lt_e
+_lt_b "load import_cmdmap"; source "_3bvk_import_cmdmap.sh"; _lt_e
 _lt_b "load import_functions"; source "_3bvk_import_functions.sh"; _lt_e
 _lt_b "load import_staging"; source "_3bvk_import_staging.sh"; _lt_e
-_lt_b "load import_services"; source "_3bvk_import_services.sh"; _lt_e
+_lt_b "load import_fileapi"; source "_3bvk_import_fileapi.sh"; _lt_e
 _lt_b "load import_select"; source "_3bvk_import_select.sh"; _lt_e
 
 _lt_b "load run"; source "bashbasicsbyvk_run.sh"; _lt_e
@@ -19,6 +20,7 @@ _lt_b "load switch"; source "bashbasicsbyvk_switch.sh"; _lt_e
 _lt_b "load upgrade"; source "bashbasicsbyvk_upgrade.sh"; _lt_e
 _lt_b "load api"; source "bashbasicsbyvk_api.sh"; _lt_e
 _lt_b "load functions"; source "bashbasicsbyvk_functions.sh"; _lt_e
+_lt_b "load import_fx"; source "_3bvk_import_fx.sh"; _lt_e
 _lt_b "load infinity"; source "bashbasicsbyvk_infinity.sh"; _lt_e
 _lt_b "load telemetry"; source "bashbasicsbyvk_telemetry.sh"; _lt_e
 _lt_b "load auth"; source "bashbasicsbyvk_auth.sh"; _lt_e

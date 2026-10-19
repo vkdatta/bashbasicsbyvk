@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bashbasicsbyvk_shortcut_registry.sh
+# bashbasicsbyvk_staging_shortcut_registry.sh
 #
 # Central index for all .shortcut files — eliminates the recursive find
 # in _sync_shortcuts_for_rename. The rename sync becomes an O(shortcuts)

@@ -20,10 +20,9 @@
 #                 → y/n again → (choice 2 only) the 6-digit action key
 #
 #  Registry: ~/.bashbasicsbyvk/locks.list  (one absolute path per line)
-#  Needs:    _sp_resolve_itemlist (staging helpers), action_confirm_key.sh
+#  Needs:    _sp_resolve_itemlist (staging helpers), bashbasicsbyvk_action_confirm_key.sh
 # ════════════════════════════════════════════════════════════════════════════
 
-source "action_confirm_key.sh" 2>/dev/null || true
 
 _LK_DIR="${HOME}/.bashbasicsbyvk"
 _LK_FILE="${_LK_DIR}/locks.list"

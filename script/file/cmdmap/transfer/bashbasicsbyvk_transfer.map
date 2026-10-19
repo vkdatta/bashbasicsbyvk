@@ -1,0 +1,72 @@
+# bashbasicsbyvk_transfer.map — wiring for the 'transfer' menu
+@menu   transfer
+@func   transfer_menu
+@kind   menu
+@back   u
+@parent main
+
+q          .mapto()  q          from bashbasicsbyvk_maincommands.sh
+u          .mapto()  back()
+h          .mapto()  h          from bashbasicsbyvk_maincommands.sh
+s          .mapto()  s          from bashbasicsbyvk_maincommands.sh
+i          .mapto()  i          from bashbasicsbyvk_maincommands.sh
+-h         .mapto()  -h         from bashbasicsbyvk_maincommands.sh
+-u         .mapto()  -u         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+-auth      .mapto()  -auth      from bashbasicsbyvk_maincommands.sh
+cd         .mapto()  cd         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+sw         .mapto()  sw         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+fx         .mapto()  fx         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+api        .mapto()  api        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+bk         .mapto()  bk         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+sv         .mapto()  sv         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+sn         .mapto()  sn         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+rbam       .mapto()  rbam       from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+nf         .mapto()  nf         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+cs         .mapto()  cs         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+gd         .mapto()  gd         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+gdx        .mapto()  gdx        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+c          .mapto()  c          from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+d          .mapto()  d          from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+r          .mapto()  r          from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+t          .mapto()  t          from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+f          .mapto()  f          from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+z          .mapto()  z          from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+fs         .mapto()  fs         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+forceshow  .mapto()  forceshow  from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+ns         .mapto()  ns         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+fa         .mapto()  fa         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+rf         .mapto()  rf         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+l-         .mapto()  l-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+ul-        .mapto()  ul-        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+z-         .mapto()  z-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+uz-        .mapto()  uz-        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+p-         .mapto()  p-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+c-         .mapto()  c-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+m-         .mapto()  m-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+s-         .mapto()  s-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+b-         .mapto()  b-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+d-         .mapto()  d-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+v-         .mapto()  v-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+do-        .mapto()  do-        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+c2c-       .mapto()  c2c-       from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+up-        .mapto()  up-        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+ux-        .mapto()  ux-        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+save-      .mapto()  save-      from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+snap-      .mapto()  snap-      from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+scr-sync   .mapto()  scr-sync   from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+=          .mapto()  block()
+.s         .mapto()  .s         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.us        .mapto()  .us        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.r         .mapto()  .r         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.d         .mapto()  .d         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.dm        .mapto()  .dm        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+.ai        .mapto()  .ai        from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
+disk       .mapto()  disk       from bashbasicsbyvk_maincommands.sh
+ram        .mapto()  ram        from bashbasicsbyvk_maincommands.sh
+clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
+loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
+cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh

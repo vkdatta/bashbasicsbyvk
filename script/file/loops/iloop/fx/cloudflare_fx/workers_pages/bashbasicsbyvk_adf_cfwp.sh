@@ -2,7 +2,7 @@
 # bashbasicsbyvk_adf_cfwp.sh
 # adf-staging='cloudflare_fx/workers and pages'
 # ════════════════════════════════════════════════════════════════════════════
-#  ADF — cloudflare workers and pages      (the ONE button; the work lives in _3bvk_cfwp_* + _3bvk_recover_*)
+#  ADF — cloudflare workers and pages      (the ONE button; the work lives in bashbasicsbyvk_cfwp_* + bashbasicsbyvk_recover_*)
 #
 #  fx → cloudflare_fx → workers and pages  does, in the folder the navigator is showing (the "navigation path"):
 #    1. finds CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID in that folder (.dev.vars, .env, …) — asks only if missing
@@ -28,9 +28,9 @@ _cfw_locate() {
   [ -n "$_CFW_PY" ] || { echo "❌ Cloudflare workers and pages needs Python 3."; return 1; }
   local d
   for d in "${SCRIPT_DIR:-}" "$_CFW_DIR" "$_CFW_DIR/workers_pages"; do
-    [ -n "$d" ] && [ -f "$d/_3bvk_cfwp_main" ] && { _CFW_MAIN="$d/_3bvk_cfwp_main"; return 0; }
+    [ -n "$d" ] && [ -f "$d/bashbasicsbyvk_cfwp" ] && { _CFW_MAIN="$d/bashbasicsbyvk_cfwp"; return 0; }
   done
-  echo "❌ _3bvk_cfwp_main not found (looked in \$SCRIPT_DIR and $_CFW_DIR)."; return 1
+  echo "❌ bashbasicsbyvk_cfwp not found (looked in \$SCRIPT_DIR and $_CFW_DIR)."; return 1
 }
 
 # python for the navigation path, credentials handed over via its environment only (TZ is already exported by the app)

@@ -1,0 +1,77 @@
+# bashbasicsbyvk_switch.map — wiring for the 'switch' menu
+@menu   switch
+@func   switch_menu
+@kind   menu
+@back   u
+@parent main
+
+sw         .mapto()  sw         from bashbasicsbyvk_switchmenucommands.sh
+fx         .mapto()  fx         from bashbasicsbyvk_switchmenucommands.sh
+xe         .mapto()  xe         from bashbasicsbyvk_switchmenucommands.sh
+clr        .mapto()  clr        from bashbasicsbyvk_switchmenucommands.sh
+q          .mapto()  q          from bashbasicsbyvk_switchmenucommands.sh
+-h         .mapto()  -h         from bashbasicsbyvk_switchmenucommands.sh
+u          .mapto()  u          from bashbasicsbyvk_switchmenucommands.sh
+forceshow  .mapto()  forceshow  from bashbasicsbyvk_switchmenucommands.sh
+a          .mapto()  a          from bashbasicsbyvk_switchmenucommands.sh
+x          .mapto()  x          from bashbasicsbyvk_switchmenucommands.sh
+e          .mapto()  e          from bashbasicsbyvk_switchmenucommands.sh
+c          .mapto()  c          from bashbasicsbyvk_switchmenucommands.sh
+d          .mapto()  d          from bashbasicsbyvk_switchmenucommands.sh
+l-         .mapto()  l-         from bashbasicsbyvk_switchmenucommands.sh
+ul-        .mapto()  ul-        from bashbasicsbyvk_switchmenucommands.sh
+t          .mapto()  t          from bashbasicsbyvk_switchmenucommands.sh
+z          .mapto()  z          from bashbasicsbyvk_switchmenucommands.sh
+r          .mapto()  r          from bashbasicsbyvk_switchmenucommands.sh
+f          .mapto()  f          from bashbasicsbyvk_switchmenucommands.sh
+s          .mapto()  s          from bashbasicsbyvk_switchmenucommands.sh
+cd         .mapto()  cd         from bashbasicsbyvk_switchmenucommands.sh
+disk       .mapto()  disk       from bashbasicsbyvk_switchmenucommands.sh
+ram        .mapto()  ram        from bashbasicsbyvk_switchmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_switchmenucommands.sh
+d-         .mapto()  d-         from bashbasicsbyvk_switchmenucommands.sh
+v-         .mapto()  v-         from bashbasicsbyvk_switchmenucommands.sh
+c-         .mapto()  c-         from bashbasicsbyvk_switchmenucommands.sh
+m-         .mapto()  m-         from bashbasicsbyvk_switchmenucommands.sh
+s-         .mapto()  s-         from bashbasicsbyvk_switchmenucommands.sh
+b-         .mapto()  b-         from bashbasicsbyvk_switchmenucommands.sh
+p-         .mapto()  p-         from bashbasicsbyvk_switchmenucommands.sh
+h          .mapto()  h          from bashbasicsbyvk_maincommands.sh
+i          .mapto()  i          from bashbasicsbyvk_maincommands.sh
+-u         .mapto()  -u         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+-auth      .mapto()  -auth      from bashbasicsbyvk_maincommands.sh
+api        .mapto()  block()
+bk         .mapto()  block()
+sv         .mapto()  block()
+sn         .mapto()  block()
+rbam       .mapto()  block()
+nf         .mapto()  block()
+cs         .mapto()  block()
+gd         .mapto()  block()
+gdx        .mapto()  block()
+fs         .mapto()  block()
+ns         .mapto()  block()
+fa         .mapto()  fa         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+z-         .mapto()  z-         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+uz-        .mapto()  block()
+do-        .mapto()  do-        from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+c2c-       .mapto()  block()
+up-        .mapto()  up-        from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+ux-        .mapto()  block()
+save-      .mapto()  save-      from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+snap-      .mapto()  block()
+scr-sync   .mapto()  block()
+=          .mapto()  =          from bashbasicsbyvk_maincommands.sh
+.s         .mapto()  .s         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
+.us        .mapto()  block()
+.r         .mapto()  block()
+.d         .mapto()  block()
+.dm        .mapto()  block()
+.ai        .mapto()  block()
+health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
+clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+kl         .mapto()  block()
+print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
+loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
+cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh

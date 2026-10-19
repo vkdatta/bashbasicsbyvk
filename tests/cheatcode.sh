@@ -43,7 +43,7 @@ for mp in main upgrade switch fx rules api home settings find; do
 done
 
 _CM_MAP=upgrade; _CM_RUN_MODE=menu; _cc_collect
-_cm_table_build upgrade; own="$(for i in "${!_ct_key[@]}"; do [ "${_ct_tgt[i]%%:*}" = upgrademenucommands.sh ] && echo "${_ct_key[i]}"; done | head -1)"
+_cm_table_build upgrade; own="$(for i in "${!_ct_key[@]}"; do [ "${_ct_tgt[i]%%:*}" = bashbasicsbyvk_upgrademenucommands.sh ] && echo "${_ct_key[i]}"; done | head -1)"
 [ -z "$own" ] || { inlist "$own" && ok "a menu's own command ($own) is listed" || bad "own command $own missing"; }
 
 _CC_CTX=st; _cc_collect; _CC_CTX=""

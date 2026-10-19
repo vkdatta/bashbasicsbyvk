@@ -715,7 +715,7 @@ INVALIDATE_DELAY    = 2.0     # debounce for folder-size invalidation
 STATUS_EVERY        = 15
 
 def _load_sibling(name):
-    """Import _3bvk_*.py that sits next to this script (flat install or repo)."""
+    """Import bashbasicsbyvk_*.py that sits next to this script (flat install or repo)."""
     try:
         import importlib.util
         path = os.path.join(os.path.dirname(os.path.realpath(__file__)), name + ".py")
@@ -926,8 +926,8 @@ def _p4_start():
         os.nice(10)                      # never compete with the user's work
     except (OSError, AttributeError):
         pass
-    _fav_lib = _load_sibling("_3bvk_fav_lib")
-    _idx_lib = _load_sibling("_3bvk_index_lib")
+    _fav_lib = _load_sibling("bashbasicsbyvk_fav_lib")
+    _idx_lib = _load_sibling("bashbasicsbyvk_index_lib")
     if _idx_lib is not None:
         try:
             _idx = _idx_lib.Index()

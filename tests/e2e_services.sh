@@ -33,7 +33,7 @@ printf '%s\n' "$UUID" > "$_BVK_TELEMETRY_DIR/uuid"; printf '%s\n' "$SIG" > "$_BV
 
 # ---- client under test ----
 source "bashbasicsbyvk_auth.sh"
-source "bashbasicsbyvk_svc_core.sh"; source "bashbasicsbyvk_backup.sh"; source "bashbasicsbyvk_saved.sh"; source "bashbasicsbyvk_snapshot.sh"
+source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_backup.sh"; source "bashbasicsbyvk_staging_saved.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
 WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")
 # the user's key chain, made the way -auth makes it: dinons (never sent) wrap a random FEK; only the wrapped FEK is on the server
 DINONS=$(_bvk_auth_gen_codes 29); FEK_HEX=$(_bvk_auth_gen_fek)
@@ -222,7 +222,7 @@ echo "── 5. background process ──"
 rm -f "$_SNAP_LASTRUN" "$_SNAP_NOTICE"; echo v4 >> "$T/work/watch/f.txt"; sleep 1.1; touch "$T/work/watch/f.txt"
 n2=$(q1 "select count(*) from snapshots")
 cat > "$T/o_sim.sh" <<EOS
-source "bashbasicsbyvk_auth.sh"; source "bashbasicsbyvk_svc_core.sh"; source "bashbasicsbyvk_snapshot.sh"
+source "bashbasicsbyvk_auth.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
 WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")
 _bb_get_credentials() { export FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" FILEAPI_BASHBASICS_KEY="$APIKEY"; P_DINONS="$DINONS"; return 0; }
 _snap_daemon_start

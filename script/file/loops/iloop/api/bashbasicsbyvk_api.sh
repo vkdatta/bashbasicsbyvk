@@ -28,7 +28,7 @@
 #  Server routes used:  GET /links · POST /links/<id>/expiry · POST /links/<id>/alias · POST /links/<id>/regenerate · DELETE /links/<id>   (full credentials)
 #
 #  Uses (from the main app): _vp_* viewport, _read_choice_filtered, _inner_run, _filter_reset_state,
-#  _bvk_quit, parse_selection, and _bb_* helpers from _3bvk_fileapi_lib.sh
+#  _bvk_quit, parse_selection, and _bb_* helpers from bashbasicsbyvk_fileapi_lib.sh
 # ════════════════════════════════════════════════════════════════════════════
 
 declare -ga _API_ID=() _API_KIND=() _API_ALIAS=() _API_BYTES=() _API_CREATED=() _API_EXPIRES=()
@@ -233,7 +233,7 @@ _api_do_alias() {
 
 # ── copy / rebuild links ──────────────────────────────────────────────────────
 # A link = <server>/<id>#k=<key>. The id is on the server; the key is kept on this computer (link_keys,
-# see _3bvk_fileapi_lib.sh) from the moment a link is made. So any link can be copied or rebuilt at will —
+# see bashbasicsbyvk_fileapi_lib.sh) from the moment a link is made. So any link can be copied or rebuilt at will —
 # nothing is uploaded again. Links made before this feature have no stored key: attach it once with
 # k-N (paste the old link) and they work too.
 

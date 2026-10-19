@@ -5,7 +5,7 @@
 #
 #  While a Drive is open the main screen shows it exactly like a local folder:
 #    • the Drive is mirrored into  ~/.bashbasicsbyvk/gdrive/<profile>/tree/
-#      (folders = real folders, files = free placeholders of the right size and date; see _3bvk_gd_main)
+#      (folders = real folders, files = free placeholders of the right size and date; see bashbasicsbyvk_gd)
 #    • every native command works on it:  c  d  r  l-  m-  c-  s-  b-  d-  v-  p-  z  z-  uz-  t  f  up-  ux-  .s  .r  .d  fa
 #    • content is downloaded the moment something reads it (open, copy out, zip, upload link ...)
 #    • whatever you did is pushed to Google Drive right after (create · delete · rename · move · edit · zip ...)
@@ -19,7 +19,7 @@
 #     gd.clean      free disk: downloaded, unchanged files become placeholders again
 #     gd.push       push pending changes now                     gd.sw switch to another profile
 #
-#  Uses: bashbasicsbyvk_loadingbar.sh (_lb_run), _3bvk_gd_main (python), rclone
+#  Uses: bashbasicsbyvk_loadingbar.sh (_lb_run), bashbasicsbyvk_gd (python), rclone
 # ════════════════════════════════════════════════════════════════════════════
 
 _bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
@@ -86,9 +86,9 @@ _gd_locate() {
   [ -n "$_GD_PY" ] || { echo "❌ Google Drive needs Python 3."; return 1; }
   local d
   for d in "${SCRIPT_DIR:-}" "$_GD_SRC_DIR" "$_GD_SRC_DIR/../loops/iloop/fx/google_drive_fx/open_drive"; do
-    [ -n "$d" ] && [ -f "$d/_3bvk_gd_main" ] && { _GD_MAIN="$d/_3bvk_gd_main"; return 0; }
+    [ -n "$d" ] && [ -f "$d/bashbasicsbyvk_gd" ] && { _GD_MAIN="$d/bashbasicsbyvk_gd"; return 0; }
   done
-  echo "❌ _3bvk_gd_main not found (looked in \$SCRIPT_DIR and $_GD_SRC_DIR)."; return 1
+  echo "❌ bashbasicsbyvk_gd not found (looked in \$SCRIPT_DIR and $_GD_SRC_DIR)."; return 1
 }
 
 _gd_need_rclone() {
@@ -155,8 +155,7 @@ _gd_settings_enter() {
   _GD_SETSAVE[__file]="${SETTINGS_FILE:-}"
   SETTINGS_FILE="$ph/config"
   if [ -f "$SETTINGS_FILE" ]; then
-    # shellcheck disable=SC1090
-    source "$SETTINGS_FILE"
+    _bvk_settings_read "$SETTINGS_FILE"
   else
     declare -F save_settings >/dev/null 2>&1 && save_settings
   fi

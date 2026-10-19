@@ -3,9 +3,10 @@
 # Used by the file menu's "Delete File". Honours locks (l-N): a locked item
 # needs the normal confirmation AND the 6-digit action key.
 
-source "bashbasicsbyvk_lock.sh"        # also loads action_confirm_key.sh
-source "bashbasicsbyvk_staging_shortcut_registry.sh"
-source "bashbasicsbyvk_backup.sh"        # Backup service: copy to the cloud before deleting
+# lock, action_confirm_key, shortcut registry and the Backup service come from the import file
+# (flat pip install: it sits next to this script on PATH).
+# shellcheck disable=SC1090
+source "_3bvk_import_cmd_delete.sh" || { echo "❌ Error: cannot load _3bvk_import_cmd_delete.sh (reinstall bashbasicsbyvk)." >&2; exit 1; }
 
 _bvk_delete_main() {
   local target="$1" confirm
