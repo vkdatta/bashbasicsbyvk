@@ -275,7 +275,9 @@ local_navigator() {
       n|N)
         if [ "$mode" == "dest" ]; then
           read -e -p "📂 New folder name: " new_dir_name
-          if [ -n "$new_dir_name" ]; then
+          if [ -n "$new_dir_name" ] && _bvk_name_too_long "$new_dir_name"; then
+            _bvk_name_refuse "$new_dir_name" "Folder"
+          elif [ -n "$new_dir_name" ]; then
             mkdir -p "$nav_path/$new_dir_name"
             echo "✅ Created: $nav_path/$new_dir_name"
             nav_path="$nav_path/$new_dir_name"

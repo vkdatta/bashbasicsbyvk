@@ -91,6 +91,9 @@ _compress_paths() {
   arc_name="${arc_name%.tgz}"
   arc_name="${arc_name%.zip}"
 
+  if [ "$fmt" = "zip" ]; then _arc_chk="${arc_name}.zip"; else _arc_chk="${arc_name}.tar.gz"; fi
+  if _bvk_name_too_long "$_arc_chk"; then _bvk_name_refuse "$arc_name" "Archive"; return; fi
+
   # ── Build archive path ───────────────────────────────────────────────────
   local arc_path
   if [ "$fmt" = "zip" ]; then

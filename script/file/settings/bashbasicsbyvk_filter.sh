@@ -215,7 +215,8 @@ _filter_snapshot() {
 }
 
 _filter_apply() {
-  local q="${_filter_query,,}"
+  # a file name is at most 255 bytes: a longer query (a big paste) can match nothing — do not run it against every row
+  local q; if [ "${#_filter_query}" -gt 255 ]; then q=$'\001'; else q="${_filter_query,,}"; fi
   local hm="${filter_hidden_mode:-respect}"
   # Recursive: search every sub-folder below the navigation path. With nothing
   # typed yet there is nothing to search for, so the normal list stays.
@@ -328,7 +329,7 @@ PYEOF
 }
 
 _imag_filter_apply() {
-  local q="${_imag_filter_query,,}"
+  local q; if [ "${#_imag_filter_query}" -gt 255 ]; then q=$'\001'; else q="${_imag_filter_query,,}"; fi   # longer than any file name: matches nothing
   local threshold="${index_mode_threshold:-200}"
 
   # ── Recursive: matches from all sub-folders, always listed flat ────────
@@ -513,7 +514,7 @@ _filter_on_char() {
       # "==" only means something where a recursive search is possible
       if [ "$_buf" = "=" ] && [ "$key" = "=" ] && ! _filter_rec_context; then return 0; fi
       _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-      _pos=$(( _pos + 1 ))
+      _pos=$(( _pos + ${#key} ))
       _imag_filter_query="${_buf:1}"
       # recursive query: only collect the text, the search runs on Enter
       if _filter_deferred_buf; then _print_input_line; return 0; fi
@@ -549,7 +550,7 @@ _filter_on_char() {
     # "==" only means something where a recursive search is possible
     if [ "$_buf" = "=" ] && [ "$key" = "=" ] && ! _filter_rec_context; then return 0; fi
     _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-    _pos=$(( _pos + 1 ))
+    _pos=$(( _pos + ${#key} ))
     # recursive query ("==text", or "=text" with Search depth On): only collect the
     # text — walking the whole tree per keystroke is far too slow. Enter runs it.
     if _filter_deferred_buf; then _print_input_line; return 0; fi

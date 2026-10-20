@@ -1,8 +1,9 @@
 create_files() {
   read -e -p "📄 Enter filenames (separated by ,): " filelist
   IFS=',' read -ra files <<< "$filelist"
+  local skipped=0
   for file in "${files[@]}"; do
-    file=$(echo "$file" | xargs)
+    file="${file#"${file%%[![:space:]]*}"}"; file="${file%"${file##*[![:space:]]}"}"
     [ -z "$file" ] && continue
 
     local base ext newname count target
@@ -21,18 +22,25 @@ create_files() {
       count=$((count+1))
     done
 
+    if _bvk_name_too_long "$newname"; then _bvk_name_refuse "$newname" "File"; skipped=$((skipped+1)); continue; fi
     touch "$path/$newname"
     echo "✅ Created file: $newname"
   done
+  [ "$skipped" -gt 0 ] && echo " $skipped file(s) not created because their names exceed 255 bytes (the accepted standard)."
+  return 0
 }
 
 create_dirs() {
   read -e -p "📂 Enter folder names (separated by ,): " dirlist
   IFS=',' read -ra dirs <<< "$dirlist"
+  local skipped=0
   for dir in "${dirs[@]}"; do
+    if _bvk_name_too_long "$dir"; then _bvk_name_refuse "$dir" "Folder"; skipped=$((skipped+1)); continue; fi
     mkdir -p "$path/$dir"
     echo "✅ Created folder: $dir"
   done
+  [ "$skipped" -gt 0 ] && echo " $skipped folder(s) not created because their names exceed 255 bytes (the accepted standard)."
+  return 0
 }
 
 handle_create() {

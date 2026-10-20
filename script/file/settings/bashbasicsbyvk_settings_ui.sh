@@ -149,9 +149,11 @@ _st_tty_raw() {
   [ -t 0 ] || return 0
   [ -n "$_st_stty" ] || _st_stty=$(stty -g 2>/dev/null)
   stty -icanon -echo min 1 time 0 2>/dev/null
+  _bvk_paste_on
 }
 # cooked again (echo on) for anything that asks a question with  read
 _st_tty_cooked() {
+  _bvk_paste_off
   [ -t 0 ] && [ -n "$_st_stty" ] && stty "$_st_stty" 2>/dev/null
   return 0
 }
@@ -161,6 +163,7 @@ _st_tty_cooked() {
 _st_readkey() {
   local c
   _st_k="other"; _st_d=""
+  if [ "${_ST_PEND_ENTER:-0}" = 1 ]; then _ST_PEND_ENTER=0; _st_k=enter; return; fi
   IFS= read -rsn1 c || { _st_k="q"; _st_d="q"; _st_k=char; return; }
   case "$c" in
     "")            _st_k=enter ;;
@@ -168,6 +171,7 @@ _st_readkey() {
     $'\177'|$'\b') _st_k=bksp ;;
     $'\033')
       if _read_key_seq; then
+        if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _st_k=paste; _st_d="$_BVK_PASTE"; return; fi
         _key_name "$_esc"
         case "$_kname" in
           up|down|left|right|home|end|pgup|pgdn) _st_k="$_kname" ;;
@@ -176,6 +180,10 @@ _st_readkey() {
       fi ;;                           # bare Esc does nothing (like the main menu)
     [[:print:]])   _st_k=char; _st_d="$c" ;;
   esac
+  # a paste without the bracketed-paste markers: the bytes already waiting are part of it (see viewport.sh)
+  if [ "$_st_k" = char ] || [ "$_st_k" = space ] || [ "$_st_k" = enter ]; then
+    if _bvk_paste_burst "${c:-$'\n'}"; then _st_k=paste; _st_d="$_BVK_PASTE"; [ "$_BVK_PASTE_ENTER" = 1 ] && _st_k=pasteenter; fi
+  fi
 }
 
 # Draw the block in place.  Uses the caller's (_st_run) locals:
@@ -346,6 +354,12 @@ _st_run() {
         if [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
         elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
         else buf+="$_st_d"; _st_follow; need=0; fi ;;
+      paste|pasteenter)
+        # a pasted text goes into the row in ONE step; it is accepted only by the user's own Enter
+        if [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; fq="${buf:1}"; cur=-1; top=0
+        elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
+        else buf+="$_st_d"; _st_follow; need=0; fi
+        [ "$_st_k" = pasteenter ] && _ST_PEND_ENTER=1 ;;    # typed text + Enter that arrived together: the Enter comes next
       left|right)
         (( cur >= 0 )) && _st_selectable "$cur" && { _lt_enter "$_st_k" "${_st_lbl[$cur]}"; "$act" "$cur" "$_st_k"; }
         ;;

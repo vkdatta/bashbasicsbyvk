@@ -110,6 +110,8 @@ _map_deliver() {
       fi
       if [ -z "$filename" ]; then
         echo "🚫 Cancelled — no file name entered."
+      elif _bvk_name_too_long "$filename"; then
+        _bvk_name_refuse "$filename" "File"
       else
         local target="$path/$filename"
         case "$filename" in /*) target="$filename" ;; "~"/*) target="$HOME/${filename#\~/}" ;; esac

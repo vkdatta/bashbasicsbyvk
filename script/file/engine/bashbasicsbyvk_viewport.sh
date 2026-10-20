@@ -54,6 +54,13 @@ _bvk_dispw() {   # $1 text -> _BVK_W = display cells (ANSI colour codes ignored,
   local s="$1" i c cp w=0 n
   while [[ "$s" == *$'\033'* ]] && [[ "$s" =~ $'\033'\[[0-9\;?]*[A-Za-z] ]]; do s="${s/"${BASH_REMATCH[0]}"/}"; done
   if _bvk_is_ascii "$s"; then _BVK_W=${#s}; return 0; fi
+  if (( ${#s} > 2000 )); then
+    # a huge text (a big paste): in a multibyte locale every step over 100 000 characters is slow, so measure it bytewise.
+    # printable ASCII = 1 cell each; any other character is 2-4 bytes for 1-2 cells, so half its bytes is a fair estimate.
+    local LC_ALL=C rest
+    rest="${s//[ -~]/}"                       # (two statements: LC_ALL must be set BEFORE this runs)
+    _BVK_W=$(( ${#s} - ${#rest} + (${#rest} + 1) / 2 )); return 0
+  fi
   n=${#s}
   for (( i=0; i<n; i++ )); do
     c="${s:i:1}"
@@ -99,7 +106,10 @@ _bvk_fit_input() {
   (( avail < 4 )) && avail=4
   len=${#b}; (( pos > len )) && pos=$len; (( pos < 0 )) && pos=0
   if ! _bvk_is_ascii "$b"; then                   # wide chars: leave room for their second cell
-    for (( i=0; i<len; i++ )); do c="${b:i:1}"; _bvk_dispw "$c"; (( _BVK_W > 1 )) && wide=$(( wide + 1 )); done
+    # only the part around the cursor can be on screen: a 100 000-character paste must not be measured char by char
+    local ws=0 we=$len
+    if (( len > cols * 4 )); then ws=$(( pos - cols * 2 )); (( ws < 0 )) && ws=0; we=$(( ws + cols * 4 )); (( we > len )) && we=$len; fi
+    for (( i=ws; i<we; i++ )); do c="${b:i:1}"; _bvk_dispw "$c"; (( _BVK_W > 1 )) && wide=$(( wide + 1 )); done
     avail=$(( avail - wide )); (( avail < 4 )) && avail=4
   fi
   s=${_BVK_FIT_S:-0}; (( s < 0 || s > len )) && s=0
@@ -223,6 +233,8 @@ _vp_usable() {
 _vp_fit() {
   local text="$1" limit s i c
   _vp_usable; limit=$_vp_usable_w
+  # a text far longer than the screen (a big paste shown in a header) is cut first: measuring 100 000 characters one by one takes minutes
+  (( ${#text} > limit * 20 )) && text="${text:0:limit*10}"
   _vp_cells "$text"
   if (( _vp_w <= limit )); then _vp_line="$text"; return 0; fi
   # too wide in CELLS: cut the plain text cell by cell and end with …
@@ -434,15 +446,15 @@ _vp_build_chrome() {
 
   # header: drop trailing blanks (the rule follows immediately, no linebreak between)
   _n=${#_vp_hdr_arr[@]}
-  while (( _n > 0 )) && [ -z "${_vp_hdr_arr[$((_n-1))]// /}" ]; do _n=$(( _n - 1 )); done
+  while (( _n > 0 )) && [[ "${_vp_hdr_arr[$((_n-1))]}" != *[![:space:]]* ]]; do _n=$(( _n - 1 )); done
   _vp_hdr_arr=("${_vp_hdr_arr[@]:0:_n}")
 
   # footer: drop blanks at both edges, then frame it with one linebreak above and one below
   _n=${#_vp_ftr_arr[@]}
-  while (( _n > 0 )) && [ -z "${_vp_ftr_arr[$((_n-1))]// /}" ]; do _n=$(( _n - 1 )); done
+  while (( _n > 0 )) && [[ "${_vp_ftr_arr[$((_n-1))]}" != *[![:space:]]* ]]; do _n=$(( _n - 1 )); done
   _vp_ftr_arr=("${_vp_ftr_arr[@]:0:_n}")
   _i=0
-  while (( _i < _n )) && [ -z "${_vp_ftr_arr[$_i]// /}" ]; do _i=$(( _i + 1 )); done
+  while (( _i < _n )) && [[ "${_vp_ftr_arr[$_i]}" != *[![:space:]]* ]]; do _i=$(( _i + 1 )); done
   _vp_ftr_arr=("${_vp_ftr_arr[@]:_i}")
   if (( ${#_vp_ftr_arr[@]} > 0 )); then
     _vp_ftr_arr=("" "${_vp_ftr_arr[@]}" "")
@@ -751,6 +763,102 @@ _read_key_seq() {
   return 0
 }
 
+# ------------------------------------------------------------------------------------------------
+# PASTE  — one paste = ONE edit, never a replay of keystrokes
+# ------------------------------------------------------------------------------------------------
+# Every input row (Select: · Item numbers: · smart menus · typed-line prompts · settings) reads one key at a time.
+# A pasted text used to arrive as thousands of "keys": each one redrew the row (the "someone is typing" animation) and
+# every line break was taken as Enter. Now:
+#   1. bracketed paste is switched on while a row is open: the terminal wraps a paste in ESC[200~ ... ESC[201~, so the
+#      whole text is read in one go and its line breaks are text, never Enter;
+#   2. terminals that do not send those markers: a burst of bytes that is already waiting when a key is read is the same
+#      paste — it is swallowed in one read. (A lone "text" + Enter that arrives together is still just typing + Enter.)
+# The text goes into the row in ONE insert + ONE redraw. Line breaks and tabs become a space, other control bytes
+# are dropped, nothing else is changed. Only the user pressing Enter ever accepts a row.
+_BVK_PASTE=""        # the text of the last paste
+_BVK_PASTE_ENTER=0   # 1 = the burst was "typed text + Enter" (not a paste): the caller accepts the row after inserting it
+_bvk_paste_on()  { [ -t 1 ] && builtin printf '\033[?2004h'; return 0; }
+_bvk_paste_off() { [ -t 1 ] && builtin printf '\033[?2004l'; return 0; }
+
+# _bvk_paste_clean TEXT -> _BVK_PASTE
+# (tr, not ${t//x/y}: in a UTF-8 locale bash's pattern replace is quadratic — 100 000 characters would take minutes)
+_bvk_paste_clean() {
+  local t="$1"
+  case "$t" in *[[:cntrl:]]*)
+    t="$(builtin printf '%s' "$t" | LC_ALL=C tr -s '\r\n' '\n\n' | LC_ALL=C tr '\n\t' '  ' | LC_ALL=C tr -d '\000-\037\177')"
+    ;;
+  esac
+  _BVK_PASTE="$t"
+}
+
+# the ESC[200~ marker was just read: take everything up to ESC[201~ -> _BVK_PASTE (cleaned)
+_bvk_paste_bracketed() {
+  local chunk="" all="" tail="" rc
+  while :; do
+    chunk=""
+    IFS= builtin read -rs -d $'\033' -t 2 chunk; rc=$?
+    all+="$chunk"
+    if [ "$rc" -eq 0 ]; then
+      tail=""; IFS= builtin read -rs -n5 -t 0.5 tail
+      [ "$tail" = "[201~" ] && break
+      all+="$tail"                       # a stray ESC inside the paste: keep going
+    else
+      [ "$rc" -gt 128 ] && [ -n "$chunk" ] && continue   # still arriving
+      break                              # silence or EOF: take what came
+    fi
+  done
+  while [[ "$all" == *[$'\r\n'] ]]; do all="${all%[$'\r\n']}"; done   # the closing line break of a copied block is not text
+  _bvk_paste_clean "$all"
+}
+
+# _bvk_paste_burst KEY  — KEY was just read (a printable char, or a line break for Enter).
+#   returns 0 and sets _BVK_PASTE (+ _BVK_PASTE_ENTER) when more input was already waiting; 1 = a single key, nothing swallowed
+_bvk_paste_burst() {
+  local first="$1" rest="" chunk rc t body nl=$'\n'
+  builtin read -t 0 2>/dev/null || return 1
+  while builtin read -t 0 2>/dev/null; do
+    chunk=""
+    IFS= builtin read -rs -d '' -n 65536 -t 0.05 chunk; rc=$?
+    rest+="$chunk"
+    [ "$rc" -le 128 ] && [ "$rc" -ne 0 ] && break
+  done
+  [ -z "$rest" ] && return 1
+  rest="${rest%%$'\033'*}"               # an arrow key that came right behind the text: not part of it
+  t="$first$rest"
+  # "typed text + Enter" that arrived in one piece (scripts, key macros): text, then Enter — the row is accepted by that Enter
+  body="$t"; while [[ "$body" == *[$'\r\n'] ]]; do body="${body%[$'\r\n']}"; done
+  _BVK_PASTE_ENTER=0
+  if [ "$body" != "$t" ] && [[ "$body" != *[$'\r\n']* ]]; then _BVK_PASTE_ENTER=1; t="$body"
+  else
+    while [[ "$t" == *[$'\r\n'] ]]; do t="${t%[$'\r\n']}"; done      # a paste's closing line break is not an Enter either
+  fi
+  _bvk_paste_clean "$t"
+  return 0
+}
+
+# ------------------------------------------------------------------------------------------------
+# NAME LENGTH — a file / folder name is at most 255 BYTES (the filesystem standard). Never create or rename past it.
+# ------------------------------------------------------------------------------------------------
+# _bvk_name_too_long NAME   0 = some part of NAME (each "/"-separated part) is longer than 255 bytes
+_bvk_name_too_long() {
+  local LC_ALL=C part rest="$1"
+  while :; do
+    part="${rest%%/*}"
+    [ "${#part}" -gt 255 ] && return 0
+    [[ "$rest" == */* ]] || return 1
+    rest="${rest#*/}"
+  done
+}
+# _bvk_name_bytes NAME  -> _BVK_NB (its length in bytes)
+_bvk_name_bytes() { local LC_ALL=C; _BVK_NB=${#1}; }
+# _bvk_name_refuse NAME [folder|file]   prints why it was not created / renamed
+_bvk_name_refuse() {
+  local n="$1" kind="${2:-name}" shown
+  _bvk_name_bytes "$n"
+  shown="${n:0:30}"; [ "${#n}" -gt 30 ] && shown="${shown}..."
+  builtin printf ' %s "%s" was not created: its name is %s bytes, over the 255-byte limit (255 characters for plain ASCII names) that every filesystem accepts.\n' "$kind" "$shown" "$_BVK_NB" >&2
+}
+
 _key_name() {
   local s="$1" fin body num
   _kname=""
@@ -793,6 +901,7 @@ _key_name() {
 # _bvk_quit — the universal  q  : leave the whole app (same as q in the main
 # menu).  u (back / up one level) is handled by each menu itself.
 _bvk_quit() {
+  _bvk_paste_off
   if ${_sw_did_switch:-false}; then declare -F _gd_before_exec >/dev/null && _gd_before_exec; cd "$path" && exec "$SHELL"; else exit 0; fi
 }
 
@@ -838,10 +947,13 @@ if indices:
 PYEOF
 }
 
+# a big paste (text with letters / words in it) is not a selection: never parse it char by char
+_multi_is_big_text() { [ "${#_buf}" -gt 2000 ] && [[ "$_buf" == *[!0-9\ ,.a-]* ]]; }
 _multi_compute_set() {
   _msel_set=()
   local idx
   _vp_count
+  _multi_is_big_text && return 0
   local _b="${_buf// /}"
   if [ "${_multi_allow_a:-false}" == "true" ] && [[ "$_b" == "a" ]]; then
     for idx in $(seq 1 "$_vp_n"); do _msel_set["$idx"]=1; done
@@ -898,6 +1010,7 @@ _multi_render() {
 
 _multi_cursor_index() {
   local bounds s e num
+  _multi_is_big_text && return 1
   bounds=$(_multi_number_token_bounds) || return 1
   [ -z "$bounds" ] && return 1
   read -r s e <<< "$bounds"
@@ -1005,6 +1118,14 @@ _multi_type_key() {
   _multi_sync
 }
 _multi_type_text() { _buf="$1"; _pos=${#_buf}; _multi_sync; }
+# a paste: ONE insert, ONE redraw
+_multi_paste_text() {
+  local t="$1"
+  [ -z "$t" ] && return 0
+  _buf="${_buf:0:_pos}${t}${_buf:_pos}"
+  _pos=$(( _pos + ${#t} ))
+  _multi_sync
+}
 
 _multi_prompt_loop_raw() {
   local key seq _rc
@@ -1013,6 +1134,7 @@ _multi_prompt_loop_raw() {
 
   stty -icanon -echo min 1 time 0 2>/dev/null
   trap '_vp_on_resize' WINCH
+  _bvk_paste_on
   _multi_render
   _lt_ready text
   [ -n "${_CC_PREFILL:-}" ] && _cc_replay _multi_type_key _multi_type_text
@@ -1029,6 +1151,7 @@ _multi_prompt_loop_raw() {
     _vp_poll_active
     if [[ "$key" == $'\x1b' ]]; then
       _read_key_seq || continue
+      if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _multi_paste_text "$_BVK_PASTE"; continue; fi
       _key_name "$_esc"
       case "$_kname" in
         up)   _multi_adjust_number_at_cursor up ;;
@@ -1052,6 +1175,14 @@ _multi_prompt_loop_raw() {
         *) : ;;
       esac
       continue
+    fi
+
+    if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
+      if _bvk_paste_burst "${key:-$'\n'}"; then
+        _multi_paste_text "$_BVK_PASTE"
+        [ "$_BVK_PASTE_ENTER" = 1 ] && break
+        continue
+      fi
     fi
 
     case "$key" in
@@ -1078,6 +1209,7 @@ _multi_prompt_loop_raw() {
   done
 
   trap - WINCH
+  _bvk_paste_off
   stty "$_orig_stty" 2>/dev/null
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
   echo

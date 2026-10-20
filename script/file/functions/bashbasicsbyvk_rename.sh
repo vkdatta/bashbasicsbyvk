@@ -46,11 +46,15 @@ _rn_flush_deferred() {
 # Return codes:
 #   0  success
 #   1  mv failed (OS error)
+#   3  new name is over 255 bytes: caller prints the limit message (_bvk_name_refuse)
 #   2  real conflict — caller should print "already exists"
 # ---------------------------------------------------------------------------
 _do_rename_mv() {
   local old_path="$1"
   local new_path="$2"
+
+  # over 255 bytes: refuse (rc 3) - the caller says so
+  _bvk_name_too_long "${new_path##*/}" && return 3
 
   if [ -e "$new_path" ]; then
     local real_old real_new
@@ -108,6 +112,7 @@ rename_item() {
   case $rc in
     0) echo "✅ Renamed: $(basename "$target") → $newname" ;;
     2) echo "⚠️  '$newname' already exists — skipped" ;;
+    3) _bvk_name_refuse "$newname" "Name"; echo " Not renamed: names over 255 bytes are not accepted." ;;
   esac
   return $rc
 }
@@ -134,6 +139,7 @@ _rename_single_mutation() {
       echo "Renaming a shortcut only changes the shortcut's name — the original is untouched."
       read -e -p "New display name (blank = cancel): " new_name
       [ -z "$new_name" ] && echo "🚫 Skipped" && continue
+      if _bvk_name_too_long "${new_name}.shortcut"; then _bvk_name_refuse "$new_name" "Shortcut"; echo " Not renamed: names over 255 bytes are not accepted."; continue; fi
 
       local tmp_file
       tmp_file=$(mktemp)
@@ -167,6 +173,7 @@ echo "✅ Shortcut renamed: $cur_name → $new_name"
     case $rc in
       0) echo "✅ Renamed: $bn → $new_name" ;;
       2) echo "⚠️  '$new_name' already exists — skipped" ;;
+      3) _bvk_name_refuse "$new_name" "Name"; echo " Not renamed: names over 255 bytes are not accepted." ;;
     esac
   done
 }
@@ -226,6 +233,7 @@ _rename_multi_mutation() {
       case $rc in
         0) renamed=1; ok=$((ok + 1)) ;;
         2) fail_names+=("$old_name"); fail_reasons+=("row $((row_idx+1)): target \"$new_name\" already exists") ;;
+        3) fail_names+=("$old_name"); fail_reasons+=("row $((row_idx+1)): not renamed - the new name exceeds 255 bytes (the accepted standard)") ;;
         *) errmsg=""
            [ -s "$errf" ] && IFS= read -r errmsg < "$errf"
            fail_names+=("$old_name"); fail_reasons+=("row $((row_idx+1)): rename failed${errmsg:+ — $errmsg}") ;;

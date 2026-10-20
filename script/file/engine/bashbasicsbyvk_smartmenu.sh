@@ -628,6 +628,12 @@ _sm_type_key() {
   _buf="${_buf:0:_pos}${key}${_buf:_pos}"; _pos=$(( _pos + 1 )); _sm_after_edit
 }
 _sm_type_text() { _buf="$1"; _pos=${#_buf}; _sm_after_edit; }
+# a paste: ONE insert, ONE redraw
+_sm_paste_text() {
+  local t="$1"
+  [ -z "$t" ] && return 0
+  _buf="${_buf:0:_pos}${t}${_buf:_pos}"; _pos=$(( _pos + ${#t} )); _sm_after_edit
+}
 
 _sm_run() {
   local key _rc n
@@ -678,6 +684,7 @@ _sm_run() {
   fi
 
   stty -icanon -echo min 1 time 0 2>/dev/null
+  _bvk_paste_on
   _lt_ready smart
   [ -n "${_CC_PREFILL:-}" ] && _cc_replay _sm_type_key _sm_type_text
   while true; do
@@ -697,6 +704,7 @@ _sm_run() {
 
     if [[ "$key" == $'\x1b' ]]; then
       _read_key_seq || continue
+      if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _sm_paste_text "$_BVK_PASTE"; continue; fi
       _key_name "$_esc"
       if $multi; then
         # arrows move a cursor row; they do NOT overwrite the buffer
@@ -729,6 +737,14 @@ _sm_run() {
         esac
       fi
       continue
+    fi
+
+    if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
+      if _bvk_paste_burst "${key:-$'\n'}"; then
+        _sm_paste_text "$_BVK_PASTE"
+        [ "$_BVK_PASTE_ENTER" = 1 ] && break
+        continue
+      fi
     fi
 
     case "$key" in
@@ -770,6 +786,7 @@ _sm_run() {
     esac
   done
 
+  _bvk_paste_off
   [ -n "${_orig_stty:-}" ] && stty "$_orig_stty" 2>/dev/null
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
   builtin echo

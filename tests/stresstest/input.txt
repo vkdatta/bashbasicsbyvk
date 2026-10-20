@@ -1,0 +1,169 @@
+there is a heavy heavy heavy drift between
+
+1. cheat codes
+2. cmdmap
+3. actual commands 
+4. menu footer
+
+across various menus, need a tight audit and lively fix.
+
+here are the test cases
+
+case 1
+
+sw menu bookmrks
+
+🔀 SWITCH  [📌 Bookmarks]   🕐 Recents   ⭐ Favourites   ←/→ tabs
+📂 /data/data/com.termux/files/home/.bashbasicsbyvk/switch [loaded by c]
+   ─────────────────────────────
+  1) 📄 bashbasicsbyvk.swlink
+  2) 📄 datta.swlink
+  3) 📄 datta1.swlink
+  4) 📄 downloads.swlink
+  5) 📄 dpad.swlink
+  6) 📁 ggh
+  7) 📄 github.swlink
+  8) 📄 js_audit.swlink
+  9) 📄 LICENSE.swlink
+ 10) 📄 othertools.swlink
+ 11) 📄 src.swlink
+   ─────────────────────────────
+
+a) Add current path   b) Remove   sw) Exit
+u) Up   s) Settings
+r<N>) File actions on item N
+Select:
+
+here b command says remove
+
+even suggestion says 
+
+Select: b-
+b-  →  Remove  (e.g. b-1,3)
+
+but b-11 did buffer instead of remove. what the hell?
+
+Select: b-11
+📌 Buffered 1 item(s) → BOOKMARK (once) — BOOKMARK (once) buffer now holds 1 item(s). Use v- to review, d- to apply (cleared automatically after d- applies it).
+
+menu specific commands override general commands and we even drew a cmdmap for the exact cases like this but there's drift.
+
+intended behaviour is remove.  not buffer here.
+
+
+case 2
+
+delete menu 
+
+📂 Location: /data/data/com.termux/files/home/github/bashbasicsbyvk [loaded by c]                                          ─────────────────────────────
+  1) 📄 AGENTS.md                                                                                                         2) 📁 corpus                                                                                                            3) 📄 LICENSE
+  4) 📄 llms-full.txt                                                                                                     5) 📄 llms.txt                                                                                                          6) 📄 MANIFEST.in
+  7) 📄 pyproject.toml                                                                                                    8) 📄 README.md                                                                                                         9) 📁 script
+ 10) 📄 SECURITY.md                                                                                                      11) 📄 setup.cfg                                                                                                        12) ⚙️ setup.py
+ 13) 📁 tests                                                                                                              ─────────────────────────────                                                                                        
+DELETE (ranges: 1-10,15-20,33   a = all   a-1-5,7 = all except)                                                         up/down ±1, PgUp/PgDn ±10, Home/End first/last, left/right move cursor                                                                                                                                                                          Item numbers: 1                                                                                                         Are you really sure you want to delete the selected files? This action can't be undone. (y/n): y                        🗄️  Back up 1 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
+🗄️  Name this backup (Enter = just the date and time): n                                                                 …  could become: nf, ns
+
+
+it is saying could become nf or ns but what's nf and ns?
+
+let's go to cc to see what's that 
+
+Name this backup (Enter = just the date and time): cc                                                                                                                                                                                        🎮 Cheat codes · main
+                                                                                                                           ─────────────────────────────                                                                                          1) q                      Close the app ›
+  2) h                      Home — recents, bookmarks, favourites ›                                                       3) s                      Settings ›                                                                                    4) i                      Infinity stones — extra tools ›
+  5) -h                     Help ›                                                                                        6) -auth                  Account, billing, credits ›                                                                   7) health                 What is active on this machine ›
+  8) disk                   Disk usage ›                                                                                  9) ram                    Memory usage ›                                                                               10) clear                  Forget the command cache (hash -r) ›
+ 11) sast                   Static security scan ›                                                                       12) print                  Print what is on screen — copy it or save as txt ›                                           13) loadtime               Load time: what each screen change cost (loadtime 2 · loadtime all) ›
+ 14) cc                     Cheat codes — pick a command, it lands in the prompt ›                                         ─────────────────────────────                                                                                        
+u) Back   ↑↓) Move                                                                                                      Type 1-14, then enter to put it in the prompt   =) Filter                                                               
+Select:
+
+interesting. cc doesn't mention nf or ns.
+
+lets test 
+
+Item numbers: 2
+Are you really sure you want to delete the selected files? This action can't be undone. (y/n): y
+🗄️  Back up 1 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
+🗄️  Name this backup (Enter = just the date and time): nf
+nf  →  ✗ not available here — Enter will cancel  ·  @nf to type it as text
+
+it says even suggestion that nf is not available, bit why the hell then it is giving in first place in suggestion.
+
+same for ns
+
+now I'm trying to exit with u
+
+  Name this backup (Enter = just the date and time): u
+📦 Packing tar.gz → 🔐 Encrypting  0.0 MB packed  (0s)
+[██████████████████████] 100%  3/3 KB
+  ✅ 3 KB in 1s  (avg 3 KB/s)
+❌ Invalid command: u — exiting
+
+
+what the hell. it should have been directly existing instead if oacking or uploading.
+
+case 3
+
+links menu
+
+in footer it shows c is available to copy a link
+
+when i go there
+
+LINKS (api)   💳 balance: 999994139 credits
+   soonest expiry first · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine
+   ─────────────────────────────
+  1) 📦 (no alias) zw7Yefwf…           245 B      9m 51s left   until 2026-10-20 03:21 IST
+  2) 📦 testcase                         245 B     11m 15s left   until 2026-10-20 03:22 IST
+  3) 📦 (no alias) zvCvLrXz…           245 B      29m 1s left   until 2026-10-20 03:40 IST
+  4) 📦 (no alias) h60eHlMC…          2.7 KB     38m 10s left   until 2026-10-20 03:49 IST
+  5) 📦 (no alias) RMe7adcN…          2.7 KB      53m 7s left   until 2026-10-20 04:04 IST
+  6) 📦 (no alias) GomXKxy4…        135.3 KB  1d 19h 41m left   until 2026-10-21 22:52 IST
+  7) 📦 backup2 12102026 0554pm         1.3 MB  4d 15h 44m left   until 2026-10-24 18:55 IST
+  8) 📦 package code                  246.9 MB    5d 0h 7m left   until 2026-10-25 03:18 IST
+   ─────────────────────────────
+
+[Links]  8 active   🕐 times in Asia/Kolkata · IST (UTC+05:30)  (change: s → Timezone)
+N) Open   c-N) Copy link (c-1,3-5)   g-N) New address   a-N) Alias   e-N) Expiry   x-N) Nuke
+rf) Refresh   u) Exit   api) Close
+
+Select: 1
+📦 (no alias) zw7Yefwf…   (file upload, 245 B)
+   created : 2026-10-20 02:21 IST
+   expires : 2026-10-20 03:21 IST   (9m left)
+   life    : 1h in total · 49m used · paid for 1 hour(s)
+   nuke now: no refund (whole days only — nothing unused is worth a full day)
+   c) copy link   g) regenerate link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: c
+c  →  ✗ not available here — Enter will cancel  ·  @c to type it as text
+
+what the hell. like seriously
+
+like this there are many other drifts in the app due to constant uodates and no single unified wiring.
+
+needs urgent audit and fix
+
+
+another example
+
+
+Item numbers: 1,2
+Are you really sure you want to delete the selected files? This action can't be undone. (y/n): y
+🗄️  Back up 2 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
+🗄️  Name this backup (Enter = just the date and time):
+📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)
+📦 Packing tar.gz → 🔐 Encrypting  1.2 MB packed  (0s)
+   1 MB after tar.gz + encryption, in 1 blob(s).
+💳 This backup costs 2 credits for 30d — balance 999994139 → 999994137.
+   [c] continue  ·  [r] reduce time  ·  [i] increase time  ·  [s] stop:
+
+i pressed c now
+
+❌ Invalid command: c — exiting
+
+
+what the hell again
+
+see the drifts and regressions.
+we can't continue to make more chnages to our project without fixing this critical issues at urgent 

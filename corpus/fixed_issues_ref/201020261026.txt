@@ -1,0 +1,41 @@
+ISSUE AS DEFINED BY USER
+Pasting a large paragraph (tests/stresstest/input.txt, which is bare stress data, not an instruction) into any menu input
+treats every new line as Enter, and the text appears with a "typing animation" as if someone typed it. Wanted: a paste is
+ONE direct text input in every echo/print/read row (Select:, Item numbers:, y/n, Enter name:, ...), accepted only when the
+user presses Enter; even 100000 characters. The "=" filter (live oninput) must not get stuck on a large paste starting
+with "=". Files/folders must not be created or renamed over 255 bytes: say so and that they were not created.
+
+HOW DID YOU DEBUG
+Read the key loops: _read_choice_raw (browse), _multi_prompt_loop_raw (viewport), _sm_run (smartmenu), _cm_line_edit
+(cmdmap), _st_readkey (settings). All read ONE key at a time with `read -rsn1`, redraw after every key, and take the empty
+key (what a newline gives) as Enter. Reproduced in a pty (tests/paste_input/driver.py) on the ORIGINAL code: the first
+pasted line was accepted as Enter after 42 redraws. After the fix, ran the REAL app (script/o, flat-installed) in a pty and
+pasted 10 KB and 100 000 chars (plain and starting with "="), bracketed and not: one redraw burst, one "Invalid
+selection" on Enter, no cascade. Profiled slow cases with xtrace + $EPOCHREALTIME gaps. NOT run: smartmenu loop (_sm_run)
+and settings paste path were patched the same way but only the main menu, settings Select: row and create menu were
+exercised; Windows terminals / terminals without bracketed paste were only simulated (one big write, no markers).
+
+CAUSE
+1. A paste arrives as thousands of keys: one redraw each (the animation) and each newline = empty key = Enter, so the
+   rest spilled into later prompts.
+2. Large text was slow in many unrelated places, all per-character loops or ${var//x/y} (quadratic in a UTF-8 locale):
+   _bvk_fit_input, _bvk_dispw, _vp_fit/_vp_cells (header showing the filter query), _vp_build_chrome (${x// /}),
+   _cm_hint/_cm_resolve (regex per command over the whole buffer), _multi_compute_set (parse_selection),
+   _filter_apply (query matched against every row).
+3. No length check on names typed by the user.
+
+FIX
+Viewport: new _bvk_paste_on/_off, _bvk_paste_bracketed, _bvk_paste_burst, _bvk_paste_clean (tr, not ${//}). Bracketed paste
+(ESC[200~..ESC[201~) is enabled while a row is open; without the markers, bytes already waiting after a key are swallowed as
+the paste ("text"+Enter arriving together is still typing+Enter). Line breaks/tabs become one space, other control bytes are
+dropped. One insert + one redraw per paste: _rc_paste_text (browse), _multi_paste_text, _sm_paste_text, _cm_edit_paste,
+settings key kind "paste". "=" paste: first "=" opens the filter, the rest goes in at once (_filter_on_char now takes a
+multi-char key). Terminal mode is restored in loop exits, _bvk_quit and the EXIT trap in o.
+Speed: width scan limited to the cursor window, bytewise estimate for texts >2000 chars, header text cut before measuring,
+no hint/command matching/selection parsing/filter matching for text >255 chars (nothing can match), free-text editor shows a
+huge text on ONE scrolling row instead of wrapping over hundreds of rows. Lesson: never loop or ${//} over user text of
+unbounded size; in bash `local LC_ALL=C v` expands v BEFORE LC_ALL is set (use two statements).
+Names: _bvk_name_too_long / _bvk_name_refuse (bytes, every "/" part) used in create_files, create_dirs, _do_rename_mv (new
+rc 3, handled by rename_item, _rename_single_mutation and the CSV batch), shortcut rename, transfer "New folder name", staging
+map save, upload save-as, archive name. The message says the name is over 255 bytes and was not created/renamed.
+Tests: tests/paste_input/run.sh (pty driver on cm/browse/multi, bracketed and not, 10 KB and 100000 chars).

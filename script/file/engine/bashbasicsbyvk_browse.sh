@@ -670,6 +670,27 @@ _rc_type_key() {
   fi
   return 0
 }
+# a pasted text: ONE insert, ONE redraw (never key by key). "=" starts the live filter, which also gets the text in one piece.
+_rc_paste_text() {
+  local t="$1"
+  [ -z "$t" ] && return 0
+  if [ -z "$_buf" ] && [ "${t:0:1}" = "=" ]; then
+    if _filter_on_char "="; then t="${t:1}"; fi   # the filter starts (snapshot, hint) ... (if it did not: "=" stays part of the text)
+    [ -z "$t" ] && return 0
+    _filter_on_char "$t" || { _buf="${_buf:0:_pos}${t}${_buf:_pos}"; _pos=$(( _pos + ${#t} )); }   # ... and takes the rest at once
+    _print_input_line
+    return 0
+  fi
+  if [[ "$_buf" == =* ]]; then
+    _filter_on_char "$t" || { _buf="${_buf:0:_pos}${t}${_buf:_pos}"; _pos=$(( _pos + ${#t} )); }
+    _print_input_line
+    return 0
+  fi
+  _buf="${_buf:0:_pos}${t}${_buf:_pos}"
+  _pos=$(( _pos + ${#t} ))
+  _print_input_line
+  _sync_highlight_from_buf
+}
 # a whole text at once (what cc types in)
 _rc_type_text() {
   _buf="$1"; _pos=${#_buf}
@@ -690,6 +711,7 @@ _read_choice_raw() {
 
   stty -icanon -echo min 1 time 0 2>/dev/null
   trap '_vp_on_resize' WINCH
+  _bvk_paste_on
 
   _buf=""
   _pos=0
@@ -726,6 +748,7 @@ _read_choice_raw() {
     _vp_poll_active
     if [[ "$key" == $'\x1b' ]]; then
       _read_key_seq || continue
+      if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _rc_paste_text "$_BVK_PASTE"; continue; fi
       _key_name "$_esc"
       case "$_kname" in
         up)
@@ -771,6 +794,15 @@ _read_choice_raw() {
       continue
     fi
 
+    # a paste that came without the bracketed-paste markers: the bytes already waiting are part of it (see viewport.sh)
+    if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
+      if _bvk_paste_burst "${key:-$'\n'}"; then
+        _rc_paste_text "$_BVK_PASTE"
+        [ "$_BVK_PASTE_ENTER" = 1 ] && break
+        continue
+      fi
+    fi
+
     case "$key" in
       ""|$'\r') break ;;
       $'\x7f'|$'\x08')
@@ -790,6 +822,7 @@ _read_choice_raw() {
   done
 
   trap - WINCH
+  _bvk_paste_off
   stty "$_orig_stty" 2>/dev/null
   # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "$_hint_cur" ]; then

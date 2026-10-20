@@ -252,8 +252,10 @@ _cm_match() {   # kind key typed(lowercase)
 #   block   known command, not usable here         → invalid command
 # plus _CM_KEY (matched key) _CM_DESC _CM_EX _CM_CLASS _CM_IMPL (1 = inherited without a wire)
 _cm_resolve() {
-  local mode="$1" t="${2,,}" i best=-1 bl=-1 tgt d kind handler class
+  local mode="$1" t="$2" i best=-1 bl=-1 tgt d kind handler class
   _CM_ACT=none; _CM_KEY=""; _CM_DESC=""; _CM_EX=""; _CM_CLASS=""; _CM_IMPL=0; _CM_HANDLER=""
+  [ "${#t}" -gt 255 ] && return 0          # no command is that long: it is plain text (a big paste is never matched row by row)
+  t="${t,,}"
   local n=${#_ct_key[@]}
   for (( i=0; i<n; i++ )); do
     _cm_match "${_ct_kind[i]}" "${_ct_key[i]}" "$t" || continue
@@ -366,6 +368,7 @@ _cm_hint() {
     _CM_FLASH=""
   fi
   [ -z "$b" ] && return 0
+  [ "${#b}" -gt 255 ] && return 0          # a big paste: no hint (and no per-command matching)
   _cm_on || return 0
   [ "$_CM_BOOTED" = 1 ] || _cm_boot
   _cm_table_build "${_CM_MAP:-main}"
@@ -683,6 +686,16 @@ _cm_edit_draw() {   # redraw the whole prompt + text; long text WRAPS onto the n
     return 0
   fi
   _bvk_cols; W=$_BVK_COLS
+  # a very long text (a big paste) is not wrapped over hundreds of rows: it stays ONE row that scrolls with the cursor
+  if (( ${#_ce_buf} > W * 6 )); then
+    _bvk_fit_input "$lastp" "$_ce_buf" "$_ce_pos"
+    builtin printf '\r'; [ "$_CE_ROW" -gt 0 ] && builtin printf '\033[%dA' "$_CE_ROW"
+    builtin printf '\033[J%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"
+    [ "$_BVK_FIT_BACK" -gt 0 ] && builtin printf '\033[%dD' "$_BVK_FIT_BACK"
+    _bvk_dispw "${_BVK_FIT_PROMPT}${_BVK_FIT}"
+    _CE_ROW=0; _CE_ENDROW=0; _CE_ENDCOL=$(( _BVK_W % W )); _CE_FULL=0
+    return 0
+  fi
   _bvk_dispw "$lastp"; pw=$_BVK_W
   _bvk_dispw "$_ce_buf"; bw=$_BVK_W
   T=$(( pw + bw ))
@@ -716,6 +729,12 @@ _cm_edit_leave() {
   _CE_ROW=0
 }
 
+_cm_edit_paste() {   # insert a pasted text at the cursor (the caller's _ce_buf/_ce_pos)
+  local t="$1"
+  [ -z "$t" ] && return 0
+  _ce_buf="${_ce_buf:0:_ce_pos}${t}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos + ${#t} ))
+}
+
 # _cm_line_edit PROMPT INITIAL VAR EDIT(1|0)   ->  0 ok · 1 EOF/aborted
 _cm_line_edit() {
   local _ce_prompt="$1" init="$2" var="$3" can_complete="$4"
@@ -729,6 +748,7 @@ _cm_line_edit() {
   _CE_ROW=0; _CM_HINT_SHOW=""
   # lines above the prompt row are printed once; the prompt row + text are (re)drawn by _cm_edit_draw, which counts wrapped rows
   [[ "$_ce_prompt" == *$'\n'* ]] && builtin printf '%s\n' "${_ce_prompt%$'\n'*}"
+  _bvk_paste_on
   _cm_edit_draw
   # text that cc just typed in for you: show what it does, like any typed command
   if [ "${_CC_HINT_NOW:-0}" = 1 ]; then
@@ -745,6 +765,7 @@ _cm_line_edit() {
         case "$seq" in '['*[A-Za-z~]|O[A-Za-z]) break ;; esac
       done
       case "$seq" in
+        '[200~') _bvk_paste_bracketed; _cm_edit_paste "$_BVK_PASTE" ;;   # a paste: ONE insert, ONE redraw (line breaks are text)
         '[D') [ "$_ce_pos" -gt 0 ] && _ce_pos=$(( _ce_pos - 1 )) ;;
         '[C') [ "$_ce_pos" -lt "${#_ce_buf}" ] && _ce_pos=$(( _ce_pos + 1 )) ;;
         '[H'|'[1~'|OH) _ce_pos=0 ;;
@@ -752,6 +773,16 @@ _cm_line_edit() {
         '[3~') [ "$_ce_pos" -lt "${#_ce_buf}" ] && _ce_buf="${_ce_buf:0:_ce_pos}${_ce_buf:_ce_pos+1}" ;;
       esac
     else
+      # a paste that came without the bracketed-paste markers: the bytes already waiting are part of it (see viewport.sh)
+      if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
+        if _bvk_paste_burst "${key:-$'\n'}"; then
+          _cm_edit_paste "$_BVK_PASTE"
+          [ "$_BVK_PASTE_ENTER" = 1 ] && break
+          if [ "$no_cmds" = 0 ]; then _cm_hint "$_ce_buf" text; else _hint_want=""; fi
+          _CM_HINT_SHOW="$_hint_want"; _cm_edit_draw
+          continue
+        fi
+      fi
       case "$key" in
         ""|$'\r'|$'\n') break ;;
         $'\x7f'|$'\x08') [ "$_ce_pos" -gt 0 ] && { _ce_buf="${_ce_buf:0:_ce_pos-1}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos - 1 )); } ;;
@@ -770,6 +801,7 @@ _cm_line_edit() {
     _cm_edit_draw
   done
   # leave: wipe the hint row, put the cursor after the text, newline
+  _bvk_paste_off
   _CM_HINT_SHOW=""
   _cm_edit_leave
   [ -n "$stty_orig" ] && stty "$stty_orig" 2>/dev/null

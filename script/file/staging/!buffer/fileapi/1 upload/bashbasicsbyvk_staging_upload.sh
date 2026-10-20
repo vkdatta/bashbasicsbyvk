@@ -1016,6 +1016,9 @@ handle_do_import() {
       if [[ "$fname" == */* || "$fname" == "." || "$fname" == ".." ]]; then
         echo "❌ Invalid file name."; rm -f "$plain_tmp"; return 1
       fi
+      if _bvk_name_too_long "$fname"; then
+        _bvk_name_refuse "$fname" "File"; rm -f "$plain_tmp"; return 1
+      fi
       if [ -e "$path/$fname" ]; then
         echo "❌ $path/$fname already exists — refusing to overwrite."; rm -f "$plain_tmp"; return 1
       fi
