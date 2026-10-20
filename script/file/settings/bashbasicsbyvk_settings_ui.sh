@@ -267,7 +267,7 @@ _st_draw() {
   out+="$nl${f2:0:cols-1}"$'\n'
   out+="$nl"$'\n'                                         # linebreak under the footer
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
-  if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "Select: " "$buf" "${#buf}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
+  if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "${_st_msg:+$_st_msg  }Select: " "$buf" "${#buf}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
   else out+="${nl}Select: $buf"$'\033[J'; fi
   builtin printf '\033[?2026h%s\033[?2026l' "$out"
   prev=$(( vis + 10 ))
@@ -338,6 +338,7 @@ _st_run() {
     _lt_e
     _lt_ready settings "$path_title"
     _st_readkey
+    _st_msg=""                                   # the "too large" note lasts until the next key
     need=1
     case "$_st_k" in
       up)    need=0; _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
@@ -351,12 +352,16 @@ _st_run() {
         if [[ "$buf" == =* ]]; then fq="${buf:1}"; cur=-1; top=0
         else _st_follow; need=0; fi ;;
       char)
-        if [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
+        if (( ${#buf} >= ${_BVK_MAX_INPUT:-2000} )); then _st_msg="[too large: max ${_BVK_MAX_INPUT:-2000}]"
+        elif [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
         elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
         else buf+="$_st_d"; _st_follow; need=0; fi ;;
       paste|pasteenter)
         # a pasted text goes into the row in ONE step; it is accepted only by the user's own Enter
-        if [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; fq="${buf:1}"; cur=-1; top=0
+        if (( ${#buf} + ${#_st_d} > ${_BVK_MAX_INPUT:-2000} )); then _st_msg="[too large: $(( ${#buf} + ${#_st_d} )) chars, max ${_BVK_MAX_INPUT:-2000}, not accepted]"; _st_d=""; fi
+        _st_d="${_st_d//$'\n'/ }"                                   # this row is one line: line breaks become spaces
+        if [ -z "$_st_d" ]; then :
+        elif [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; fq="${buf:1}"; cur=-1; top=0
         elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
         else buf+="$_st_d"; _st_follow; need=0; fi
         [ "$_st_k" = pasteenter ] && _ST_PEND_ENTER=1 ;;    # typed text + Enter that arrived together: the Enter comes next

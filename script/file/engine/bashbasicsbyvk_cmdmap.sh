@@ -687,7 +687,7 @@ _cm_edit_draw() {   # redraw the whole prompt + text; long text WRAPS onto the n
   fi
   _bvk_cols; W=$_BVK_COLS
   # a very long text (a big paste) is not wrapped over hundreds of rows: it stays ONE row that scrolls with the cursor
-  if (( ${#_ce_buf} > W * 6 )); then
+  if (( ${#_ce_buf} > W * ( ${_vp_rows_now:-24} > 14 ? ${_vp_rows_now:-24} - 8 : 6 ) )); then
     _bvk_fit_input "$lastp" "$_ce_buf" "$_ce_pos"
     builtin printf '\r'; [ "$_CE_ROW" -gt 0 ] && builtin printf '\033[%dA' "$_CE_ROW"
     builtin printf '\033[J%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"
@@ -732,6 +732,12 @@ _cm_edit_leave() {
 _cm_edit_paste() {   # insert a pasted text at the cursor (the caller's _ce_buf/_ce_pos)
   local t="$1"
   [ -z "$t" ] && return 0
+  if (( ${#_ce_buf} + ${#t} > ${_BVK_MAX_INPUT:-2000} )); then
+    _ce_deny="Too large: $(( ${#_ce_buf} + ${#t} )) characters (limit ${_BVK_MAX_INPUT:-2000}). Not accepted; nothing was changed."
+    _bvk_paste_drain
+    return 0
+  fi
+  t="${t//$'\n'/ }"                                   # a typed-line prompt is one logical line: its line breaks become spaces
   _ce_buf="${_ce_buf:0:_ce_pos}${t}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos + ${#t} ))
 }
 
@@ -739,7 +745,7 @@ _cm_edit_paste() {   # insert a pasted text at the cursor (the caller's _ce_buf/
 _cm_line_edit() {
   local _ce_prompt="$1" init="$2" var="$3" can_complete="$4"
   local _ce_buf="$init" _ce_pos=${#init} key seq rc stty_orig mode=text
-  local no_cmds=0
+  local no_cmds=0 _ce_deny=""
   _cm_prompt_has_choices "$_ce_prompt" && no_cmds=1
   _CM_HINT_CUR=""
   stty_orig=$(stty -g 2>/dev/null)
@@ -779,7 +785,7 @@ _cm_line_edit() {
           _cm_edit_paste "$_BVK_PASTE"
           [ "$_BVK_PASTE_ENTER" = 1 ] && break
           if [ "$no_cmds" = 0 ]; then _cm_hint "$_ce_buf" text; else _hint_want=""; fi
-          _CM_HINT_SHOW="$_hint_want"; _cm_edit_draw
+          _CM_HINT_SHOW="$_hint_want"; [ -n "$_ce_deny" ] && { _CM_HINT_SHOW="$_ce_deny"; _ce_deny=""; }; _cm_edit_draw
           continue
         fi
       fi
@@ -793,11 +799,12 @@ _cm_line_edit() {
         $'\x04') [ -z "$_ce_buf" ] && { _CM_OUT=""; rc=1; break; } ;;
         $'\t') [ "$can_complete" = 1 ] && _cm_complete ;;
         [[:cntrl:]]) : ;;
-        *) _ce_buf="${_ce_buf:0:_ce_pos}${key}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos + 1 )) ;;
+        *) if (( ${#_ce_buf} >= ${_BVK_MAX_INPUT:-2000} )); then _ce_deny="Too large: over ${_BVK_MAX_INPUT:-2000} characters. Not accepted."
+           else _ce_buf="${_ce_buf:0:_ce_pos}${key}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos + 1 )); fi ;;
       esac
     fi
     if [ "$no_cmds" = 0 ]; then _cm_hint "$_ce_buf" text; else _hint_want=""; fi
-    _CM_HINT_SHOW="$_hint_want"
+    _CM_HINT_SHOW="$_hint_want"; [ -n "$_ce_deny" ] && { _CM_HINT_SHOW="$_ce_deny"; _ce_deny=""; }
     _cm_edit_draw
   done
   # leave: wipe the hint row, put the cursor after the text, newline

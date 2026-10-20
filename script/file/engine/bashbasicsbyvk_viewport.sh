@@ -127,6 +127,7 @@ _bvk_fit_input() {
   _BVK_FIT="$t"
   t="${b:pos:$(( s + tc - pos > 0 ? s + tc - pos : 0 ))}"
   _bvk_dispw "$t"; _BVK_FIT_BACK=$_BVK_W
+  _bvk_dispw "$_BVK_FIT"; _BVK_FIT_COL=$(( pw + _BVK_W - _BVK_FIT_BACK ))     # the cursor's column (the notice puts it back there)
 }
 
 _vp_check_resize() {
@@ -764,6 +765,121 @@ _read_key_seq() {
 }
 
 # ------------------------------------------------------------------------------------------------
+# MULTI-ROW INPUT — a text that does not fit one row (or has line breaks) is shown in full, wrapped, as a block of rows
+# ------------------------------------------------------------------------------------------------
+# The block starts on the prompt's own row and grows downward (at most _BLK_MAXVIS rows are shown; the window follows the
+# cursor). Left/right/typing move the cursor INSIDE it, across rows. Up/down/PgUp/PgDn/Home/End still move the list:
+# the loops call _bvk_blk_park first (cursor back on the first row) so every row-relative repaint stays correct.
+_BVK_MAX_INPUT=2000          # an input longer than this is refused, whatever menu it is typed or pasted into
+_BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0; _BLK_MAXVIS=6; _BVK_FIT_COL=0
+
+_bvk_blk_reset() {           # back to a plain one-row prompt: wipe the extra rows
+  if (( ${_BLK_ROWS:-1} > 1 )); then
+    builtin printf '\r'; (( _BLK_CROW > 0 )) && builtin printf '\033[%dA' "$_BLK_CROW"
+    builtin printf '\033[J'; _hint_cur=""
+  fi
+  _BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0
+}
+_bvk_blk_park() {            # cursor back on the block's first row (before something repaints list rows relative to it)
+  (( ${_BLK_ROWS:-1} > 1 )) || return 0
+  builtin printf '\r'; (( _BLK_CROW > 0 )) && builtin printf '\033[%dA' "$_BLK_CROW"
+  _BLK_CROW=0
+}
+_bvk_blk_leave() {           # the prompt is being left: cursor to the block's last row, so the next echo lands below it
+  local d=$(( ${_BLK_ROWS:-1} - 1 - ${_BLK_CROW:-0} ))
+  (( d > 0 )) && builtin printf '\033[%dB' "$d"
+  (( ${_BLK_ROWS:-1} > 1 )) && builtin printf '\r'
+  _BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0
+}
+
+# _bvk_row_multi PROMPT TEXT CURSOR
+#   returns 1 when everything fits ONE row (nothing drawn: the caller draws the row as before);
+#   returns 0 after drawing the whole text as a block of rows with the cursor at CURSOR.
+_bvk_row_multi() {
+  local p="$1" b="$2" pos="$3" cols pw len i o line ll cap chunk cl rest first=1 k R crow=0 ccol up out t found=0 top nvis maxv
+  _bvk_cols; cols=$_BVK_COLS
+  [[ "$p" == *$'\n'* ]] && { _bvk_blk_reset; return 1; }
+  _bvk_dispw "$p"; pw=$_BVK_W
+  if [[ "$b" != *$'\n'* ]]; then
+    _bvk_dispw "$b"
+    if (( pw + _BVK_W < cols - 1 )); then _bvk_blk_reset; return 1; fi
+  fi
+  len=${#b}; (( pos > len )) && pos=$len; (( pos < 0 )) && pos=0
+  local -a rs=() rl=() rc=()
+  i=0
+  while :; do
+    rest="${b:i}"; line="${rest%%$'\n'*}"; ll=${#line}; o=0
+    while :; do
+      cap=$(( cols - 1 - (first == 1 ? pw : 0) )); (( cap < 4 )) && cap=4
+      chunk="${line:o:cap}"
+      if ! _bvk_is_ascii "$chunk"; then               # wide characters take two cells: shrink the chunk to fit
+        _bvk_dispw "$chunk"
+        while (( _BVK_W > cap && ${#chunk} > 1 )); do chunk="${chunk%?}"; _bvk_dispw "$chunk"; done
+      fi
+      cl=${#chunk}; first=0
+      rs+=( $(( i + o )) ); rl+=( "$cl" ); o=$(( o + cl ))
+      if (( o >= ll )); then rc+=( 0 ); break; else rc+=( 1 ); fi
+    done
+    i=$(( i + ll + 1 ))
+    (( i > len )) && break
+  done
+  R=${#rs[@]}
+  for (( k=0; k<R; k++ )); do                          # which row holds the cursor
+    if (( pos < rs[k] + rl[k] )) || { (( pos == rs[k] + rl[k] )) && (( rc[k] == 0 )); }; then crow=$k; found=1; break; fi
+  done
+  (( found )) || crow=$(( R - 1 ))
+  t="${b:rs[crow]:pos-rs[crow]}"; _bvk_dispw "$t"; ccol=$(( (crow == 0 ? pw : 0) + _BVK_W ))
+  maxv=${_BLK_MAXVIS:-6}; top=${_BLK_TOP:-0}           # the window of rows that is shown follows the cursor
+  (( top > R - maxv )) && top=$(( R - maxv )); (( top < 0 )) && top=0
+  (( crow < top )) && top=$crow
+  (( crow >= top + maxv )) && top=$(( crow - maxv + 1 ))
+  nvis=$(( R - top )); (( nvis > maxv )) && nvis=$maxv
+  _BLK_TOP=$top
+  out=$'\r'; (( _BLK_CROW > 0 )) && out+=$'\033['"$_BLK_CROW"A
+  out+=$'\033[J'
+  for (( k=top; k<top+nvis; k++ )); do
+    (( k > top )) && out+=$'\r\n'
+    (( k == 0 )) && out+="$p"
+    out+="${b:rs[k]:rl[k]}"
+  done
+  up=$(( nvis - 1 - (crow - top) )); (( up > 0 )) && out+=$'\033['"$up"A
+  out+=$'\r'; (( ccol > 0 )) && out+=$'\033['"$ccol"C
+  builtin printf '%s' "$out"
+  _BLK_ROWS=$nvis; _BLK_CROW=$(( crow - top )); _hint_cur=""; _BVK_FIT_COL=$ccol
+  return 0
+}
+
+# moving the cursor inside the text: a plain one-row text just steps the cursor; a block is redrawn (it may scroll / change row)
+# _bvk_cursor_to NEWPOS REDRAW_FN
+_bvk_cursor_to() {
+  local old="$_pos" lo hi
+  _pos="$1"
+  if (( ${_BLK_ROWS:-1} > 1 )); then "$2"; return 0; fi
+  if (( _pos > old )); then lo=$old; hi=$_pos; else lo=$_pos; hi=$old; fi
+  _bvk_dispw "${_buf:lo:hi-lo}"
+  if (( _pos > old )); then builtin printf '\033[%dC' "$_BVK_W"; else builtin printf '\033[%dD' "$_BVK_W"; fi
+}
+
+# the limit: _bvk_room N = N more characters still fit into _buf
+_bvk_room() { (( ${#_buf} + $1 <= _BVK_MAX_INPUT )); }
+# a one-line red notice on the row under the input (it stays until the next key); the cursor is put back where it was
+_bvk_notice() {
+  local down=$(( ${_BLK_ROWS:-1} - 1 - ${_BLK_CROW:-0} ))
+  (( down > 0 )) && builtin printf '\033[%dB' "$down"
+  builtin printf '\n\r\033[2K\033[1;31m%s\033[0m\033[%dA\r' "$1" $(( down + 1 ))
+  (( ${_BVK_FIT_COL:-0} > 0 )) && builtin printf '\033[%dC' "$_BVK_FIT_COL"
+  _hint_cur="__notice__"
+}
+# after refusing a paste: swallow whatever is still arriving from it (a terminal without paste markers sends it in pieces)
+_bvk_paste_drain() { local junk; while IFS= builtin read -rs -d '' -n 65536 -t 0.15 junk; do :; done; return 0; }
+# refuse: nothing was added; redraw the row and say why.   _bvk_too_large TOTAL_CHARS REDRAW_FN [drain]
+_bvk_too_large() {
+  [ "${3:-}" = drain ] && _bvk_paste_drain
+  "$2"
+  _bvk_notice "Too large: $1 characters (limit $_BVK_MAX_INPUT). Not accepted; nothing was changed."
+}
+
+# ------------------------------------------------------------------------------------------------
 # PASTE  — one paste = ONE edit, never a replay of keystrokes
 # ------------------------------------------------------------------------------------------------
 # Every input row (Select: · Item numbers: · smart menus · typed-line prompts · settings) reads one key at a time.
@@ -780,12 +896,12 @@ _BVK_PASTE_ENTER=0   # 1 = the burst was "typed text + Enter" (not a paste): the
 _bvk_paste_on()  { [ -t 1 ] && builtin printf '\033[?2004h'; return 0; }
 _bvk_paste_off() { [ -t 1 ] && builtin printf '\033[?2004l'; return 0; }
 
-# _bvk_paste_clean TEXT -> _BVK_PASTE
+# _bvk_paste_clean TEXT -> _BVK_PASTE   (line breaks are KEPT: a paste stays multi-line; CR dropped, tab -> space, other control bytes dropped)
 # (tr, not ${t//x/y}: in a UTF-8 locale bash's pattern replace is quadratic — 100 000 characters would take minutes)
 _bvk_paste_clean() {
   local t="$1"
   case "$t" in *[[:cntrl:]]*)
-    t="$(builtin printf '%s' "$t" | LC_ALL=C tr -s '\r\n' '\n\n' | LC_ALL=C tr '\n\t' '  ' | LC_ALL=C tr -d '\000-\037\177')"
+    t="$(builtin printf '%s' "$t" | LC_ALL=C tr -d '\r' | LC_ALL=C tr '\t' ' ' | LC_ALL=C tr -d '\000-\011\013\014\016-\037\177')"
     ;;
   esac
   _BVK_PASTE="$t"
@@ -816,11 +932,12 @@ _bvk_paste_bracketed() {
 _bvk_paste_burst() {
   local first="$1" rest="" chunk rc t body nl=$'\n'
   builtin read -t 0 2>/dev/null || return 1
-  while builtin read -t 0 2>/dev/null; do
+  while :; do                           # keep taking input until it has been quiet for a moment: the WHOLE paste, however it was chunked
     chunk=""
-    IFS= builtin read -rs -d '' -n 65536 -t 0.05 chunk; rc=$?
+    IFS= builtin read -rs -d '' -n 65536 -t 0.06 chunk; rc=$?
     rest+="$chunk"
-    [ "$rc" -le 128 ] && [ "$rc" -ne 0 ] && break
+    if [ "$rc" -gt 128 ]; then [ -z "$chunk" ] && break; continue; fi
+    [ "$rc" -ne 0 ] && break
   done
   [ -z "$rest" ] && return 1
   rest="${rest%%$'\033'*}"               # an arrow key that came right behind the text: not part of it
@@ -967,11 +1084,12 @@ _multi_compute_set() {
 }
 
 _multi_print_input_line() {
-  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
-  builtin printf '\r\033[K'
   local _mp back
   if [ "$_vp_mode" == "imaginary" ]; then _BVK_SCR_PROMPT="Group numbers:"; _mp="Group numbers: "
   else _BVK_SCR_PROMPT="Item numbers:"; _mp="Item numbers: "; fi
+  _bvk_row_multi "$_mp" "$_buf" "$_pos" && return 0       # a text that does not fit one row: shown in full, as a block of rows
+  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
+  builtin printf '\r\033[K'
   _bvk_fit_input "$_mp" "$_buf" "$_pos"                  # one row only: a long paste must not wrap
   builtin printf '%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
   [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
@@ -1020,6 +1138,7 @@ _multi_cursor_index() {
 }
 
 _multi_sync() {
+  _bvk_blk_park                                      # list rows are repainted relative to the first input row
   local -A _old_set=()
   local k
   for k in "${!_msel_set[@]}"; do _old_set["$k"]=1; done
@@ -1122,6 +1241,7 @@ _multi_type_text() { _buf="$1"; _pos=${#_buf}; _multi_sync; }
 _multi_paste_text() {
   local t="$1"
   [ -z "$t" ] && return 0
+  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _multi_print_input_line drain; return 0; }
   _buf="${_buf:0:_pos}${t}${_buf:_pos}"
   _pos=$(( _pos + ${#t} ))
   _multi_sync
@@ -1162,14 +1282,12 @@ _multi_prompt_loop_raw() {
         end)  _multi_adjust_number_at_cursor end ;;
         right)
           if [ "$_pos" -lt "${#_buf}" ]; then
-            _pos=$(( _pos + 1 ))
-            builtin printf '\033[1C'
+            _bvk_cursor_to $(( _pos + 1 )) _multi_print_input_line
           fi
           ;;
         left)
           if [ "$_pos" -gt 0 ]; then
-            _pos=$(( _pos - 1 ))
-            builtin printf '\033[1D'
+            _bvk_cursor_to $(( _pos - 1 )) _multi_print_input_line
           fi
           ;;
         *) : ;;
@@ -1201,6 +1319,7 @@ _multi_prompt_loop_raw() {
       *)
         # never let stray control bytes into the buffer
         _is_ctrl_char "$key" && continue
+        _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _multi_print_input_line; continue; }
         _buf="${_buf:0:_pos}${key}${_buf:_pos}"
         _pos=$(( _pos + 1 ))
         _multi_sync
@@ -1211,6 +1330,7 @@ _multi_prompt_loop_raw() {
   trap - WINCH
   _bvk_paste_off
   stty "$_orig_stty" 2>/dev/null
+  _bvk_blk_leave
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
   echo
   _lt_enter "$_buf"

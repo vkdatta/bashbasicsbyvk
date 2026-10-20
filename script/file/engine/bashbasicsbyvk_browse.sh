@@ -553,9 +553,11 @@ _input_hint_sync() {
 }
 
 _print_input_line() {
+  _BVK_SCR_PROMPT="Select:"
+  # a text that does not fit one row (a paste, line breaks) is shown in full as a block of rows (see _bvk_row_multi)
+  if declare -F _bvk_row_multi >/dev/null 2>&1 && _bvk_row_multi "Select: " "$_buf" "$_pos"; then return 0; fi
   _input_hint_sync
   builtin printf '\r\033[K'
-  _BVK_SCR_PROMPT="Select:"
   local back
   if declare -F _bvk_fit_input >/dev/null 2>&1; then
     _bvk_fit_input "Select: " "$_buf" "$_pos"            # one row only (see _bvk_fit_input in viewport.sh)
@@ -598,6 +600,7 @@ _nav_jump_to() {
 
 _sync_highlight_from_buf() {
   $_can_nav || return
+  (( ${_BLK_ROWS:-1} > 1 )) && return 0      # a multi-row text is never a selection (and the list repaint is row-relative)
   _vp_count
   (( _vp_n == 0 )) && return
   # prefix = letters/digits then 1-2 dashes (ux- up- z- m- c2c- ...); a trailing " as <alias>" is ignored
@@ -662,6 +665,7 @@ _read_choice() {
 _rc_type_key() {
   local key="$1"
   _is_ctrl_char "$key" && return 0
+  _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _print_input_line; return 0; }
   if ! _filter_on_char "$key"; then
     _buf="${_buf:0:_pos}${key}${_buf:_pos}"
     _pos=$(( _pos + 1 ))
@@ -674,6 +678,7 @@ _rc_type_key() {
 _rc_paste_text() {
   local t="$1"
   [ -z "$t" ] && return 0
+  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _print_input_line drain; return 0; }   # over 2000 characters: refused, redrawn
   if [ -z "$_buf" ] && [ "${t:0:1}" = "=" ]; then
     if _filter_on_char "="; then t="${t:1}"; fi   # the filter starts (snapshot, hint) ... (if it did not: "=" stays part of the text)
     [ -z "$t" ] && return 0
@@ -750,6 +755,7 @@ _read_choice_raw() {
       _read_key_seq || continue
       if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _rc_paste_text "$_BVK_PASTE"; continue; fi
       _key_name "$_esc"
+      case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
       case "$_kname" in
         up)
           if $_can_nav; then
@@ -781,16 +787,17 @@ _read_choice_raw() {
           if [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ]; then
             choice="__sw_tab_right__"; break
           elif [ "$_pos" -lt "${#_buf}" ]; then
-            _pos=$(( _pos + 1 )); builtin printf '\033[1C'
+            _bvk_cursor_to $(( _pos + 1 )) _print_input_line
           fi ;;
         left)
           if [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ]; then
             choice="__sw_tab_left__"; break
           elif [ "$_pos" -gt 0 ]; then
-            _pos=$(( _pos - 1 )); builtin printf '\033[1D'
+            _bvk_cursor_to $(( _pos - 1 )) _print_input_line
           fi ;;
         *) : ;;
       esac
+      case "$_kname" in up|down|pgup|pgdn|home|end) (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line ;; esac
       continue
     fi
 
@@ -824,6 +831,7 @@ _read_choice_raw() {
   trap - WINCH
   _bvk_paste_off
   stty "$_orig_stty" 2>/dev/null
+  _bvk_blk_leave
   # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "$_hint_cur" ]; then
     _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'

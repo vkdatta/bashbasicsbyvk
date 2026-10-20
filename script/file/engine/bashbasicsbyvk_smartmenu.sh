@@ -446,8 +446,9 @@ _sm_compute_msel() {
 _sm_is_hl_multi() { [ -n "${_msel_set[$1]+x}" ]; }
 
 _sm_input_fn() {
-  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
   _BVK_SCR_PROMPT="${_sm_prompt##*$'\n'}"
+  if declare -F _bvk_row_multi >/dev/null 2>&1 && _bvk_row_multi "$_sm_prompt" "$_buf" "$_pos"; then return 0; fi   # too long for one row: shown in full
+  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
   local back
   if declare -F _bvk_fit_input >/dev/null 2>&1; then
     _bvk_fit_input "$_sm_prompt" "$_buf" "$_pos"        # one row only (see _bvk_fit_input in viewport.sh)
@@ -632,6 +633,7 @@ _sm_type_text() { _buf="$1"; _pos=${#_buf}; _sm_after_edit; }
 _sm_paste_text() {
   local t="$1"
   [ -z "$t" ] && return 0
+  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _sm_input_fn drain; return 0; }
   _buf="${_buf:0:_pos}${t}${_buf:_pos}"; _pos=$(( _pos + ${#t} )); _sm_after_edit
 }
 
@@ -706,6 +708,7 @@ _sm_run() {
       _read_key_seq || continue
       if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _sm_paste_text "$_BVK_PASTE"; continue; fi
       _key_name "$_esc"
+      case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
       if $multi; then
         # arrows move a cursor row; they do NOT overwrite the buffer
         case "$_kname" in
@@ -716,9 +719,9 @@ _sm_run() {
           home) _sm_move_cursor "$(_sm_next_selectable 1 1)" ;;
           end)  _sm_move_cursor "$(_sm_next_selectable "$n" -1)" ;;
           right)
-            if [ "$_pos" -lt "${#_buf}" ]; then _pos=$(( _pos + 1 )); builtin printf '\033[1C'; fi ;;
+            if [ "$_pos" -lt "${#_buf}" ]; then _bvk_cursor_to $(( _pos + 1 )) _sm_input_fn; fi ;;
           left)
-            if [ "$_pos" -gt 0 ]; then _pos=$(( _pos - 1 )); builtin printf '\033[1D'; fi ;;
+            if [ "$_pos" -gt 0 ]; then _bvk_cursor_to $(( _pos - 1 )) _sm_input_fn; fi ;;
           *) : ;;
         esac
       else
@@ -730,12 +733,13 @@ _sm_run() {
           home) _sm_set_index "$(_sm_next_selectable 1 1)" ;;
           end)  _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
           right)
-            if [ "$_pos" -lt "${#_buf}" ]; then _pos=$(( _pos + 1 )); builtin printf '\033[1C'; fi ;;
+            if [ "$_pos" -lt "${#_buf}" ]; then _bvk_cursor_to $(( _pos + 1 )) _sm_input_fn; fi ;;
           left)
-            if [ "$_pos" -gt 0 ]; then _pos=$(( _pos - 1 )); builtin printf '\033[1D'; fi ;;
+            if [ "$_pos" -gt 0 ]; then _bvk_cursor_to $(( _pos - 1 )) _sm_input_fn; fi ;;
           *) : ;;
         esac
       fi
+      case "$_kname" in up|down|pgup|pgdn|home|end) (( ${_BLK_ROWS:-1} > 1 )) && _sm_input_fn ;; esac
       continue
     fi
 
@@ -753,6 +757,7 @@ _sm_run() {
         if $multi; then _sm_toggle_cursor          # Space toggles cursor row
         else
           _is_ctrl_char " " && continue
+          _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _sm_input_fn; continue; }
           _buf="${_buf:0:_pos} ${_buf:_pos}"; _pos=$(( _pos + 1 )); _sm_after_edit
         fi
         ;;
@@ -779,6 +784,7 @@ _sm_run() {
       $'\x05') $multi || _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
       *)
         _is_ctrl_char "$key" && continue
+        _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _sm_input_fn; continue; }
         _buf="${_buf:0:_pos}${key}${_buf:_pos}"
         _pos=$(( _pos + 1 ))
         _sm_after_edit
@@ -788,6 +794,7 @@ _sm_run() {
 
   _bvk_paste_off
   [ -n "${_orig_stty:-}" ] && stty "$_orig_stty" 2>/dev/null
+  _bvk_blk_leave
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
   builtin echo
 
