@@ -21,7 +21,9 @@
 #    7  sub-commands      scan count meta dsize window groups hashscan gfilter
 #                         on a scratch folder (ASCII + Unicode) and on the current folder
 #    8  python fallback   is the fallback itself healthy
-#    9  verdict           the root cause + what to fix
+#    9  FileAPI engine    Go (bvk-xfer) or Node?  every candidate checked like section 5, a real pack → decrypt round trip,
+#                         a network check (DNS · CA roots · TLS · HTTP/2), and the log of every time the app fell back to Node
+#    10 verdict           the root cause + what to fix
 #
 #  Exit code 3 from groups / hashscan / gfilter is NOT a fault: it means "this folder
 #  has non-ASCII names, ask Python".  health labels it so you can tell it apart.
@@ -246,6 +248,212 @@ _hl_subcommands() {
 }
 
 # ── the report ────────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+#  FileAPI engine: Go (bvk-xfer) or Node.  Same method as the drill engine above: say WHY, never just "it fell back".
+# ════════════════════════════════════════════════════════════════════════════
+declare -a _HL_XF=()                          # root causes for the FileAPI engine: "what|fix"
+_hl_xf() { _HL_XF+=("$1|$2"); }
+
+# load the fileapi lib (it owns _bvk_xfer_bin) if this shell has not yet
+_bvk_need_xfer() {
+  declare -F _bvk_xfer_bin >/dev/null 2>&1 && return 0
+  source "bashbasicsbyvk_fileapi_lib.sh" >/dev/null 2>&1
+  declare -F _bvk_xfer_bin >/dev/null 2>&1
+}
+
+# the two engines in one glance → _LANG_DRILL (C|Python) _LANG_FA (Go|Node)
+_bvk_lang_resolve() {
+  if _bvk_go_bin 2>/dev/null; then _LANG_DRILL=C; else _LANG_DRILL=Python; fi
+  if _bvk_need_xfer && _bvk_xfer_bin; then _LANG_FA=Go; else _LANG_FA=Node; fi
+}
+
+bvk_lang() {
+  _bvk_lang_resolve
+  printf 'Drill Engine: %s\n' "$_LANG_DRILL"
+  printf 'FileAPI Engine: %s\n' "$_LANG_FA"
+  if [ "$_LANG_DRILL" = Python ]; then
+    printf '   ↳ Drill is on Python: %s\n' "${_BVK_GO_WHY:-the C engine could not be used}"
+  fi
+  if [ "$_LANG_FA" = Node ]; then
+    if declare -F _bvk_xfer_bin >/dev/null 2>&1; then printf '   ↳ FileAPI is on Node: %s\n' "${_BVK_XFER_WHY:-the Go engine could not be used}"
+    else printf '   ↳ FileAPI is on Node: the FileAPI files (bashbasicsbyvk_fileapi_lib.sh) are not installed/loadable\n'; fi
+  fi
+  if [ "$_LANG_DRILL" = Python ] || [ "$_LANG_FA" = Node ]; then printf '   🔧 run  health  for the full reason and the fix\n'; fi
+}
+
+# Check ONE bvk-xfer candidate.  0 = it runs and answers "bvk-xfer ok".  Sets _HL_WHY / _HL_FIX otherwise.
+_hl_check_xfer() {                            # _hl_check_xfer <path> <expected-mach>
+  local b="$1" xm="$2" sz mode rc err out
+  _HL_WHY=""; _HL_FIX=""
+  if [ -z "$b" ]; then _HL_WHY="not found"; return 1; fi
+  _hl_info "path   : $b"
+  [ -e "$b" ] || { _HL_WHY="file does not exist"; return 1; }
+  [ -f "$b" ] || { _HL_WHY="exists but is not a regular file"; return 1; }
+  sz="$(wc -c <"$b" 2>/dev/null | tr -d ' ')"
+  mode="$(stat -c '%A' "$b" 2>/dev/null || ls -l "$b" 2>/dev/null | cut -c1-10)"
+  _hl_info "size   : ${sz:-?} bytes   mode: ${mode:-?}"
+  if [ "${sz:-0}" -eq 0 ]; then _HL_WHY="file is empty (0 bytes) — truncated copy or failed build"; _HL_FIX="re-install; check the build step that creates bvk-xfer-*"; return 1; fi
+  if _hl_elf "$b"; then
+    _hl_info "ELF    : $_HL_ELF"
+    local em="${_HL_ELF#*:}"; em="${em%%:*}"
+    if [ -n "$xm" ] && [ "$em" != "$xm" ]; then
+      _HL_WHY="built for $em but this machine is $xm"
+      _HL_FIX="ship/choose bvk-xfer-<os>-$xm (bashbasicsbyvk_build.sh in engine/bvk-xfer builds all six)"; return 1
+    fi
+  else
+    _HL_WHY="not an ELF executable (a text/HTML error page saved as a binary, or a Git-LFS pointer?)"
+    _HL_FIX="re-install; check the file begins with 'ELF': head -c 4 $b"; return 1
+  fi
+  if [ ! -x "$b" ]; then
+    _HL_WHY="no execute permission"; _HL_FIX="chmod +x $b"; return 1
+  fi
+  if _hl_noexec "$b"; then
+    _hl_warn "this filesystem is mounted noexec"
+    _HL_WHY="noexec mount — the OS refuses to run files from here"; _HL_FIX="copy it to an exec-able dir (e.g. \$PREFIX/bin) and run it from there"; return 1
+  fi
+  err="$(mktemp 2>/dev/null || echo /tmp/.hlx.$$)"
+  local t=""; command -v timeout >/dev/null 2>&1 && t="timeout 5"
+  out="$($t "$b" selftest 2>"$err")"; rc=$?
+  err="$(cat "$err" 2>/dev/null; rm -f "$err" 2>/dev/null)"
+  if [ "$rc" -eq 0 ] && [ "$out" = "bvk-xfer ok" ]; then _hl_info "selftest: ok"; return 0; fi
+  _hl_explain "$rc" "$err" "$b"
+  _HL_WHY="${_HL_WHY//bvk-ls/bvk-xfer}"; _HL_FIX="${_HL_FIX//bvk-ls/bvk-xfer}"; _HL_FIX="${_HL_FIX//count \$HOME 0/selftest}"
+  return 1
+}
+
+# a real pack on a scratch folder, then decrypt + gunzip + read the tar with NODE (the reference implementation of the format): proves compat
+_hl_xfer_roundtrip() {                         # _hl_xfer_roundtrip <bin>
+  local b="$1" w out key tot nb rc; w="$(mktemp -d 2>/dev/null)" || { _hl_warn "no scratch dir (mktemp failed)"; return 1; }
+  mkdir -p "$w/stage/d" "$w/out"
+  printf 'hello-bvk-xfer-health-check-60-bytes-of-plain-text-0123456789!\n' > "$w/stage/héllo.txt"
+  printf 'x' > "$w/stage/d/inner.txt"
+  out="$( cd "$w/stage" && printf './héllo.txt\0./d\0./d/inner.txt\0' | "$b" pack --out "$w/out" --name health.tar.gz --level 6 --chunk 1048576 --rc "$w/rc" --warn "$w/warn" 2>"$w/err" )"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    _hl_bad "pack exited $rc: $(head -n 2 "$w/err" 2>/dev/null | tr '\n' ' ')"
+    _hl_xf "bvk-xfer pack fails on a scratch folder (exit $rc)" "run by hand:  cd $w/stage && printf './x\\0' | $b pack --out $w/out --name t"
+    return 1
+  fi
+  key="$(printf '%s\n' "$out" | sed -n 1p)"; tot="$(printf '%s\n' "$out" | sed -n 2p)"; nb="$(printf '%s\n' "$out" | sed -n 3p)"
+  [ "${#key}" -eq 43 ] && _hl_ok "pack: key is 43 chars, $nb blob(s), $tot cipher bytes" || { _hl_bad "pack printed an odd key (${#key} chars)"; return 1; }
+  [ -f "$w/out/blob0" ] && [ -f "$w/out/manifest.enc" ] && _hl_ok "pack: blob0 and manifest.enc written" || { _hl_bad "pack did not write blob0/manifest.enc"; return 1; }
+  [ "$(cat "$w/rc" 2>/dev/null)" = 0 ] && _hl_ok "pack: no files changed or unreadable while packing" || _hl_warn "pack reported rc=$(cat "$w/rc" 2>/dev/null)"
+  if command -v node >/dev/null 2>&1; then
+    local v; v="$(BK="$key" D="$w/out" node -e '
+      const c=require("crypto"),fs=require("fs"),z=require("zlib");
+      const k=Buffer.from(process.env.BK,"base64url"),dec=(f,aad)=>{const b=fs.readFileSync(process.env.D+"/"+f);
+        const d=c.createDecipheriv("aes-256-gcm",k,b.subarray(0,12));d.setAuthTag(b.subarray(b.length-16));d.setAAD(Buffer.from(aad));
+        return Buffer.concat([d.update(b.subarray(12,b.length-16)),d.final()]);};
+      const m=JSON.parse(dec("manifest.enc","bbvk4|manifest"));
+      const tar=z.gunzipSync(dec("blob0","bbvk4|blob|0")).toString("latin1");
+      process.stdout.write((m.version===4&&m.format==="tar.gz"&&m.blobCount===1&&tar.includes("inner.txt")&&tar.includes("hello-bvk-xfer")?"ok":"bad:"+JSON.stringify(m)));
+    ' 2>&1)"
+    if [ "$v" = ok ]; then _hl_ok "round trip: Node decrypts + gunzips + reads what Go packed (format compatible)"
+    else _hl_bad "round trip FAILED — Node could not read what Go packed: ${v:0:200}"
+         _hl_xf "bvk-xfer pack output is not readable by the download side" "rebuild bvk-xfer from the same commit as the app; compare AAD strings (bbvk4|blob|N, bbvk4|manifest) in pack.go"; fi
+  else
+    _hl_info "node not installed: round trip against the reference implementation skipped"
+  fi
+  local j; j="$(printf '{"a":"x\\u2014y","b":{"c":1},"n":null}' | "$b" jget a)"
+  [ "$j" = "x—y" ] && _hl_ok "jget: JSON escapes decoded" || { _hl_bad "jget printed '$j' for \\u2014 (expected an em dash)"; _hl_xf "bvk-xfer jget mis-decodes JSON" "rebuild bvk-xfer"; }
+  rm -rf "$w" 2>/dev/null
+  return 0
+}
+
+_hl_xfer_report() {
+  local _m _os _o _d b i
+  _hl_h "9  FileAPI engine (Go or Node)"
+  _bvk_need_xfer || { _hl_bad "bashbasicsbyvk_fileapi_lib.sh cannot be loaded here — the FileAPI commands themselves are not installed"; _hl_xf "fileapi lib not found" "reinstall bashbasicsbyvk (pip install -U)"; }
+  if [ -z "${_BVK_XFER_BIN+x}" ]; then _hl_info "_BVK_XFER_BIN : (not probed yet in this shell)"
+  elif [ -z "$_BVK_XFER_BIN" ]; then _hl_warn "_BVK_XFER_BIN is EMPTY — the probe failed once in this session and stays cached (restart 'o' after fixing)"
+  else _hl_ok "_BVK_XFER_BIN = $_BVK_XFER_BIN"; fi
+  [ -n "${_BVK_XFER_WHY:-}" ] && _hl_info "recorded reason : $_BVK_XFER_WHY"
+  _hl_info "BVK_NO_XFER=${BVK_NO_XFER:-0}"
+  if [ "${BVK_NO_XFER:-0}" = 1 ]; then
+    _hl_bad "BVK_NO_XFER=1 — the Go engine is disabled by an environment variable"
+    _hl_xf "BVK_NO_XFER=1 is set in the environment" "unset BVK_NO_XFER (check ~/.bashrc / ~/.profile)"
+  fi
+  case "$(uname -m)" in aarch64|arm64) _m=arm64 ;; x86_64|amd64) _m=amd64 ;; armv7*|armv8l) _m=arm ;; *) _m="" ;; esac
+  case "${OSTYPE:-}" in *android*) _os=android ;; *) case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac ;; esac
+  if [ -z "$_m" ]; then
+    _hl_bad "CPU '$(uname -m)' has no bvk-xfer build (supported: arm64, amd64, arm)"
+    _hl_xf "unsupported CPU '$(uname -m)'" "add it to _bvk_xfer_bin and engine/bvk-xfer/bashbasicsbyvk_build.sh"
+  else
+    _hl_ok "this machine should use:  bvk-xfer-$_os-$_m"
+  fi
+  _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
+  local -a lbl=("bvk-xfer on PATH") cand=("$(command -v bvk-xfer 2>/dev/null)") whys=() fixes=()
+  if [ -n "$_m" ]; then
+    lbl+=("install data dir" "bvk-xfer-$_os-$_m on PATH")
+    cand+=("$_d/../bashbasicsbyvk/bin/bvk-xfer-$_os-$_m" "$(command -v "bvk-xfer-$_os-$_m" 2>/dev/null)")
+  fi
+  _HL_XBIN=""
+  for i in "${!cand[@]}"; do
+    printf '\n  [%d] %s\n' "$((i+1))" "${lbl[$i]}"
+    if _hl_check_xfer "${cand[$i]}" "$_m"; then
+      _hl_ok "usable"; [ -z "$_HL_XBIN" ] && _HL_XBIN="${cand[$i]}"
+    else
+      _hl_info "✗ ${_HL_WHY:-unusable}"; [ -n "$_HL_FIX" ] && _hl_fix "$_HL_FIX"
+      whys+=("${lbl[$i]}: ${_HL_WHY}"); fixes+=("${_HL_FIX}")
+    fi
+  done
+  local -a hits=(); local t=""; command -v timeout >/dev/null 2>&1 && t="timeout 8"
+  while IFS= read -r b; do [ -n "$b" ] && hits+=("$b"); done < <($t find ${_d:+"$_d/.."} "${PREFIX:-/nonexistent}" "$HOME/.local" /usr/local -maxdepth 5 -type f -name 'bvk-xfer*' 2>/dev/null | sort -u)
+  if [ "${#hits[@]}" -eq 0 ]; then
+    _hl_bad "no bvk-xfer file anywhere under the install prefixes"
+    _hl_xf "no bvk-xfer binary was installed at all" "the installed version predates the Go engine, or the build step that makes bvk-xfer-* did not run (engine/bvk-xfer/bashbasicsbyvk_build.sh) — upgrade with -u and re-check"
+  else
+    printf '\n'; for b in "${hits[@]}"; do _hl_info "found: $b"; done
+  fi
+  if [ -n "$_HL_XBIN" ]; then
+    printf '\n'; _hl_info "real work with $_HL_XBIN:"
+    _hl_xfer_roundtrip "$_HL_XBIN"
+    printf '\n'; _hl_info "network (the same DNS / CA / TLS code the upload uses):"
+    local nl st
+    nl="$(timeout 20 "$_HL_XBIN" netcheck "${WORKER_URL:-https://fileapi.bashbasics.workers.dev}" 2>&1)"
+    while IFS= read -r st; do [ -z "$st" ] && continue
+      case "$st" in
+        ERR\ dns*)  _hl_bad "$st"; _hl_xf "Go cannot resolve the server name (${st#ERR dns })" "this machine has no usable DNS; Termux: check \$PREFIX/etc/resolv.conf, or allow outgoing UDP/TCP 53; the app falls back to Node's resolver meanwhile" ;;
+        ERR\ tls*)  _hl_bad "$st"
+                    case "$st" in *"unknown authority"*|*"certificate"*) _hl_xf "Go does not trust the server certificate (${st#ERR tls })" "no CA bundle found: Termux  pkg install ca-certificates ; Linux  install ca-certificates ; or set SSL_CERT_FILE=/path/to/cert.pem" ;;
+                                  *) _hl_xf "TLS handshake fails (${st#ERR tls })" "a proxy / captive portal / blocked port 443, or a clock far from real time (date)" ;; esac ;;
+        ERR\ http*) _hl_bad "$st"; _hl_xf "HTTPS request fails (${st#ERR http })" "firewall or proxy; try: curl -sI ${WORKER_URL:-https://fileapi.bashbasics.workers.dev}" ;;
+        ERR*)       _hl_bad "$st" ;;
+        roots\ 0)   _hl_bad "$st — no CA certificates loaded"; _hl_xf "no CA certificates found for Go" "Termux  pkg install ca-certificates ; Linux install ca-certificates ; or set SSL_CERT_FILE" ;;
+        tls\ *\ TLS*http/1.1) _hl_warn "$st — HTTP/1.1 only: uploads still work but blobs cannot share one connection (slower)" ;;
+        *)          _hl_info "$st" ;;
+      esac
+    done <<<"$nl"
+  else
+    printf '\n'; _hl_info "round trip and network checks skipped — no working bvk-xfer (see the candidates above)"
+  fi
+  printf '\n'; _hl_info "fallback tools:"
+  if command -v node >/dev/null 2>&1; then _hl_ok "node $(node -v 2>/dev/null) (the fallback engine itself is available)"
+  else _hl_bad "node not found — if Go is not usable too, uploads cannot work at all"; _hl_xf "neither Go nor Node is usable for FileAPI" "install either: pkg install nodejs  (or fix bvk-xfer)"; fi
+  local log="${HOME}/.bashbasicsbyvk/xfer.log"
+  if [ -s "$log" ]; then
+    printf '\n'; _hl_info "last times the app used Node / the resumable path (newest last — $log):"
+    tail -n 8 "$log" | sed 's/^/       /'
+  else
+    printf '\n'; _hl_info "no fallback has been recorded yet (nothing in $log)"
+  fi
+  # engine verdict
+  printf '\n'
+  if [ -n "$_HL_XBIN" ] && [ "${#_HL_XF[@]}" -eq 0 ]; then
+    _hl_ok "FileAPI engine: Go is HEALTHY ($_HL_XBIN)"
+    [ -s "$log" ] && grep -q ' node-engine ' "$log" 2>/dev/null && _hl_info "older log lines saying node-engine are from before it was fixed (or from a shell that had BVK_NO_XFER=1)"
+    _hl_info "an upload that fails half-way is handed to the resumable path (log: go-fallback) — that is by design, nothing is lost"
+  else
+    _hl_bad "FILEAPI IS USING NODE (or cannot run)"
+    [ -z "$_HL_XBIN" ] && for i in "${!whys[@]}"; do _hl_info "  • ${whys[$i]}"; done
+    local fnd; for fnd in "${_HL_XF[@]}"; do _hl_info "ROOT CAUSE: ${fnd%%|*}"; _hl_fix "${fnd#*|}"; done
+    if [ -z "$_HL_XBIN" ] && [ "${#_HL_XF[@]}" -eq 0 ]; then
+      for i in "${!whys[@]}"; do
+        case "${whys[$i]}" in *"not found"|*"does not exist") ;; *) _hl_info "ROOT CAUSE: ${whys[$i]}"; [ -n "${fixes[$i]}" ] && _hl_fix "${fixes[$i]}"; break ;; esac
+      done
+    fi
+  fi
+}
+
 _hl_report() {
   local _m="" _os="" _o _d b i
   echo "🩺 bashbasicsbyvk health — C engine (bvk-ls) vs Python fallback"
@@ -356,7 +564,9 @@ _hl_report() {
     _hl_bad "python3 not found — neither C nor Python can list files"
   fi
 
-  _hl_h "9  verdict"
+  _hl_xfer_report
+
+  _hl_h "10  verdict"
   if [ -n "$_HL_BIN" ] && [ "${#_HL_FINDINGS[@]}" -eq 0 ]; then
     _hl_ok "C engine is HEALTHY: $_HL_BIN"
     if [ "${_BVK_LOAD_SRC:-}" = py ] || [ "${_BVK_META_SRC:-}" = py ]; then

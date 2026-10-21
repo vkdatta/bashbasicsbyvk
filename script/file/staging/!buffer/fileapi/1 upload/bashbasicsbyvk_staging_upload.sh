@@ -144,10 +144,17 @@ _bb_link_store_and_explain() {
   local url="$1" base id d3 mail="${FILEAPI_BASHBASICS_EMAIL:-}"
   if [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" != "0" ]; then
     base="${url%%#*}"; base="${base%/}"; id="${base##*/}"
-    if _bb_link_secret_put "$id" "$url"; then
-      echo "☁️  Kept (encrypted — the server cannot read it) in Home → Links: copy it again with  c-N  from any device."
+    if [ "${FILEAPI_BASHBASICS_LINK_SYNC:-0}" = 1 ]; then
+      if _bb_link_secret_put "$id" "$url"; then
+        echo "☁️  Kept (encrypted — the server cannot read it) in Home → Links: copy it again with  c-N  from any device."
+      else
+        echo "📜  Not kept in the cloud (needs your dinons on this computer, or the server was unreachable). It is still saved on this computer."
+      fi
     else
-      echo "📜  Not kept in the cloud (needs your dinons on this computer, or the server was unreachable). It is still saved on this computer."
+      # fetching the key chain + storing the encrypted link takes a few round trips: do it in the background, nothing to wait for
+      ( _bb_link_secret_put "$id" "$url" >/dev/null 2>&1 ) >/dev/null 2>&1 &
+      disown 2>/dev/null
+      echo "☁️  Saving it (encrypted — the server cannot read it) to Home → Links in the background: copy it again with  c-N  from any device."
     fi
   fi
   d3=$(_bb_d3 "${FILEAPI_BASHBASICS_DISEPS:-}")
@@ -529,10 +536,14 @@ _bb_upload_commit() {
 
 _up_do_multipart_upload() {
   local -a paths=("$@")
-  _crypto_check || return 1
-  if ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; then
-    echo "❌ 'tar' and 'gzip' are required for up- (pkg install tar gzip)."
-    return 1
+  local use_go=0; _bvk_xfer_bin && use_go=1             # the Go engine packs, encrypts and sends; node / tar / gzip are only the fallback
+  if [ $use_go = 0 ]; then
+    _bb_xfer_note node-engine "${_BVK_XFER_WHY:-engine unavailable}"
+    _crypto_check || return 1
+    if ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; then
+      echo "❌ 'tar' and 'gzip' are required for up- (pkg install tar gzip)."
+      return 1
+    fi
   fi
   local -a gz=(gzip)
   command -v pigz &>/dev/null && gz=(pigz)          # parallel gzip when available
@@ -573,13 +584,21 @@ _up_do_multipart_upload() {
   # find lists regular files + folders only (symlinks inside the tree are skipped, as before);
   # tar -h resolves the staging symlinks at the top level.  tar's exit status goes to $rcfile.
   local packout
-  packout=$(
-    cd "$stage" || exit 1
-    _hid_find0 "$hid_inc" 1 "${rel_items[@]}" 2>> "$errfile" \
-      | { tar --null --no-recursion -h -T - -cf - 2>> "$errfile"; echo $? > "$rcfile"; } \
-      | "${gz[@]}" "-$lvl" -c \
-      | _crypto_stream_pack "$tmpdir" "$arcname"
-  )
+  if [ $use_go = 1 ]; then
+    packout=$(
+      cd "$stage" || exit 1
+      _hid_find0 "$hid_inc" 1 "${rel_items[@]}" 2>> "$errfile" \
+        | "$_BVK_XFER_BIN" pack --out "$tmpdir" --name "$arcname" --level "$lvl" --chunk "$_BB_PACK_BYTES" --rc "$rcfile" --warn "$errfile"
+    )
+  else
+    packout=$(
+      cd "$stage" || exit 1
+      _hid_find0 "$hid_inc" 1 "${rel_items[@]}" 2>> "$errfile" \
+        | { tar --null --no-recursion -h -T - -cf - 2>> "$errfile"; echo $? > "$rcfile"; } \
+        | "${gz[@]}" "-$lvl" -c \
+        | _crypto_stream_pack "$tmpdir" "$arcname"
+    )
+  fi
 
   local key total_size nblobs tar_rc
   key=$(printf '%s' "$packout" | sed -n '1p')
@@ -614,10 +633,59 @@ _up_do_multipart_upload() {
   # ---- price check: cost 1 → silent; more → continue / reduce time / increase time / stop ----
   _bb_get_credentials >/dev/null 2>&1 && { _bb_credit_gate "$total_size" "This upload" || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }; }
 
+  # ---- FAST PATH (Go engine): ONE request for a small upload (blob + manifest + commit), otherwise init rides on blob 0 and the commit on the last
+  # blob, with the blobs in between in parallel on one connection — about 2 round trips in all, whatever the size.  Auth, size and credits are
+  # checked by the server on the very first request.  Anything that goes wrong half-way is handed to the resumable path below (nothing is lost).
+  local fast_id="" fout fverdict fkey
+  if [ $use_go = 1 ] && _bb_get_credentials >/dev/null 2>&1; then
+    _bb_alias_prepare
+    local fcfg fh fconc fbudget="${FILEAPI_BASHBASICS_INFLIGHT_MB:-64}" fbsz=$_BB_PACK_BYTES
+    [[ "$fbudget" =~ ^[0-9]{1,4}$ ]] && [ "$fbudget" -ge 4 ] || fbudget=64
+    fconc=$(( fbudget * 1048576 / fbsz )); [ "$fconc" -lt 2 ] && fconc=2; [ "$fconc" -gt 16 ] && fconc=16
+    [[ "${FILEAPI_BASHBASICS_PARALLEL:-}" =~ ^[0-9]{1,2}$ ]] && [ "$FILEAPI_BASHBASICS_PARALLEL" -ge 1 ] && fconc=$FILEAPI_BASHBASICS_PARALLEL
+    fcfg=$({ _bb_auth_cfg
+             _bb_link_cfg
+             [ -n "${_BB_OVERSIZE_OK:-}" ] && _bb_cfg_header X-Confirm-Oversized yes
+             for fh in "${_BB_COMMIT_HDRS[@]}"; do _bb_cfg_header "${fh%%:*}" "${fh#*: }"; done
+             true; })
+    [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s)..."
+    fout=$("$_BVK_XFER_BIN" send --dir "$tmpdir" --url "$WORKER_URL" --est "$total_size" --n "$nblobs" --conc "$fconc" <<<"$fcfg")
+    fverdict=$(printf '%s\n' "$fout" | sed -n '1p')
+    case "${fverdict%%$'\t'*}" in
+      OK)
+        local final_url deducted balance expires
+        final_url=$(printf '%s\n' "$fout" | sed -n '2p'); deducted=$(printf '%s\n' "$fout" | sed -n '3p')
+        balance=$(printf '%s\n' "$fout" | sed -n '4p');   expires=$(printf '%s\n' "$fout" | sed -n '5p')
+        _up_cleanup
+        _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
+        _announce_link "${final_url}#k=${key}"
+        [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
+        _bb_print_expiry "$expires"
+        return 0 ;;
+      REFUSED)
+        local fst fer fmsg
+        IFS=$'\t' read -r _ fst fer fmsg <<<"$fverdict"
+        if [ "$fer" != oversized_confirmation_required ]; then      # that one is a question, not a refusal: the old path asks it
+          echo "❌ ${fmsg:-The server refused the upload (HTTP $fst).}" >&2
+          [ "$fst" = 401 ] && echo "🔁 Fix the active user with  -auth  inside 'o', then try again." >&2
+          _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1
+        fi ;;
+      FALLBACK)
+        local fwhy; IFS=$'\t' read -r _ fast_id fwhy <<<"$fverdict"
+        [ "$fast_id" = "-" ] && fast_id=""
+        _bb_xfer_note go-fallback "${fwhy:-interrupted}${fast_id:+ (upload $fast_id continued on the resumable path)}"
+        [ "${_SVC_QUIET:-0}" = 1 ] || echo "↪️  Switching to the resumable path (${fwhy:-interrupted})…" >&2 ;;
+    esac
+  fi
+
   # ---- Phase 1: init (auth + credit precheck) → the unique service id; the encrypted blobs move to the pending folder ----
   local init_out id token pdir
-  init_out=$(_bb_upload_init "$total_size" "$nblobs") || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }
-  id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
+  if [ -n "$fast_id" ]; then
+    id="$fast_id"; token="resume"                        # the server already knows this upload (init rode on blob 0): just continue it
+  else
+    init_out=$(_bb_upload_init "$total_size" "$nblobs") || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }
+    id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
+  fi
   if [ -z "$id" ] || [ -z "$token" ]; then
     echo "❌ Upload init failed (no id returned)"; _up_cleanup; return 1
   fi
@@ -625,7 +693,7 @@ _up_do_multipart_upload() {
   tmpdir=""; _up_cleanup
 
   # ---- Phase 2 + 3: send what the server lacks (waits out a lost connection) → commit.  Ctrl-C / kill / offline keep it in Pending. ----
-  [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
+  [ -t 2 ] || [ $use_go = 1 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
   _pn_complete "$pdir" 0; local prc=$?
   if [ $prc -ne 0 ]; then
     [ $prc -ge 20 ] && echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"

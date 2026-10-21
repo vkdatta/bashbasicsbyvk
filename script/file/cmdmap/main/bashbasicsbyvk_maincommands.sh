@@ -77,6 +77,7 @@ cmd_def .dm      word   -              act    "Background daemon"
 cmd_def .ai      word   -              act    "Ask the AI for a command" ".ai delete all pyc"
 # ── tools ──────────────────────────────────────────────────────
 cmd_def health   exact  bvk_main_exec  util   "What is active on this machine"
+cmd_def lang     exact  bvk_main_exec  util   "Which engines run: Drill (C or Python) · FileAPI (Go or Node)"
 cmd_def disk     exact  bvk_main_exec  util   "Disk usage"
 cmd_def ram      exact  bvk_main_exec  util   "Memory usage"
 cmd_def clear    exact  bvk_main_exec  util   "Forget the command cache (hash -r)"

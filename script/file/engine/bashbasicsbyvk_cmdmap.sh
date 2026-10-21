@@ -463,6 +463,7 @@ bvk_main_exec() {
     disk)   df -h ;;
     ram)    free -h ;;
     health) bvk_health ;;
+    lang)   bvk_lang ;;
     clear)  hash -r ;;
     sast)   bashbasicsbyvk_sast ;;
     -auth)  auth_menu ;;

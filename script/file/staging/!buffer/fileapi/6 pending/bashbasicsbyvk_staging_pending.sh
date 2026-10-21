@@ -88,6 +88,7 @@ _pn_status() {
 
 # ── talking to the server ──────────────────────────────────────────────────────
 _pn_jf() {      # _pn_jf <json> <field>  → strings as they are, objects as JSON
+  if _bvk_xfer_bin; then "$_BVK_XFER_BIN" jget -o "$2" <<<"$1"; return; fi
   node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(d)[process.argv[1]];process.stdout.write(v===undefined||v===null?"":typeof v==="object"?JSON.stringify(v):String(v))}catch(e){}})' "$2" <<<"$1"
 }
 # POST /pending/<id>/resume → _PN_TOKEN _PN_DONE _PN_DONE_ITEMS.   0 ok · 2 credits · 4 gone · 5 offline · 1 other

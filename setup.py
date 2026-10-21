@@ -10,15 +10,16 @@ all_paths = [
 # C sources (script/file/engine/bvk-ls/{src,include}, bashbasicsbyvk_Makefile, bashbasicsbyvk_build.sh) are build-time only:
 # they ship in the sdist but must not be installed as executable scripts.
 _BVK_SRC = os.sep + "bvk-ls" + os.sep
+_XFER_SRC = os.sep + "bvk-xfer" + os.sep      # the Go transfer engine (go.mod, *.go, build script, prebuilt bvk-xfer-<os>-<arch>)
 def _is_bvk_src(f):
-    return _BVK_SRC in f
+    return _BVK_SRC in f or _XFER_SRC in f
 
 # Prebuilt bvk-ls-linux-<arch> / bvk-ls-android-<arch> binaries are installed as data files, not scripts:
 # setuptools reads scripts as text to rewrite shebangs, which is unsafe for ELF.
 binary_files = [
     f for f in all_paths
     if os.path.isfile(f) and _is_bvk_src(f)
-    and os.path.basename(f).startswith(("bvk-ls-linux-", "bvk-ls-android-"))
+    and os.path.basename(f).startswith(("bvk-ls-linux-", "bvk-ls-android-", "bvk-xfer-linux-", "bvk-xfer-android-"))
 ]
 script_files = [
     f for f in all_paths

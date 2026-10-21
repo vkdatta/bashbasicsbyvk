@@ -27,13 +27,20 @@ jobs:
             gcc-arm-linux-gnueabihf \
             libc6-dev-armhf-cross
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+
+      # ── bvk-ls: the C drill engine ─────────────────────────────────────────
       - name: Build bvk-ls
         working-directory: script/file/engine/bvk-ls
         run: |
           chmod +x bashbasicsbyvk_build.sh
           REQUIRE_ANDROID=1 ./bashbasicsbyvk_build.sh
 
-      - name: Verify binaries
+      - name: Verify bvk-ls
         working-directory: script/file/engine/bvk-ls
         run: |
           file bvk-ls-linux-arm64
@@ -48,6 +55,49 @@ jobs:
           readelf -lW bvk-ls-android-arm64 | grep -q PHDR
           readelf -lW bvk-ls-android-arm64 | grep -q INTERP
 
+      # ── bvk-xfer: the Go FileAPI engine (pack · send · jget · netcheck) ─────
+      - name: Vet bvk-xfer
+        working-directory: script/file/engine/bvk-xfer
+        run: |
+          go vet ./...
+
+      - name: Build bvk-xfer
+        working-directory: script/file/engine/bvk-xfer
+        run: |
+          chmod +x bashbasicsbyvk_build.sh
+          REQUIRE_ANDROID=1 ./bashbasicsbyvk_build.sh
+
+      - name: Verify bvk-xfer
+        working-directory: script/file/engine/bvk-xfer
+        run: |
+          file bvk-xfer-linux-arm64
+          file bvk-xfer-linux-amd64
+          file bvk-xfer-linux-arm
+          file bvk-xfer-android-arm64
+          file bvk-xfer-android-amd64
+          file bvk-xfer-android-arm
+
+          # the linux builds are pure Go: fully static, runnable anywhere
+          file bvk-xfer-linux-amd64 | grep -q "statically linked"
+          file bvk-xfer-linux-arm64 | grep -q "statically linked"
+          file bvk-xfer-linux-arm   | grep -q "statically linked"
+
+          # the Android builds (NDK) are normal bionic executables: they need PT_PHDR + PT_INTERP
+          readelf -lW bvk-xfer-android-arm64 | grep -q PHDR
+          readelf -lW bvk-xfer-android-arm64 | grep -q INTERP
+
+          # run the one we can run on this machine: it must pass the same self-test the app uses
+          test "$(./bvk-xfer-linux-amd64 selftest)" = "bvk-xfer ok"
+          printf '{"a":"x\\u2014y"}' | ./bvk-xfer-linux-amd64 jget a | grep -q "x—y"
+
+          # a real pack on a scratch folder: key (43 chars), cipher size, blob count; blob0 + manifest.enc written
+          w="$(mktemp -d)"; mkdir -p "$w/s" "$w/o"
+          printf 'hello\n' > "$w/s/a.txt"
+          out="$(cd "$w/s" && printf './a.txt\0' | "$OLDPWD/bvk-xfer-linux-amd64" pack --out "$w/o" --name t.tar.gz --rc "$w/rc")"
+          test "$(printf '%s\n' "$out" | sed -n 1p | wc -c)" -eq 43
+          test "$(printf '%s\n' "$out" | sed -n 3p)" = 1
+          test -f "$w/o/blob0" && test -f "$w/o/manifest.enc"
+
       - name: Commit generated binaries
         run: |
           git config user.name "BashBasics Builder"
@@ -59,7 +109,13 @@ jobs:
             script/file/engine/bvk-ls/bvk-ls-linux-arm \
             script/file/engine/bvk-ls/bvk-ls-android-arm64 \
             script/file/engine/bvk-ls/bvk-ls-android-amd64 \
-            script/file/engine/bvk-ls/bvk-ls-android-arm
+            script/file/engine/bvk-ls/bvk-ls-android-arm \
+            script/file/engine/bvk-xfer/bvk-xfer-linux-arm64 \
+            script/file/engine/bvk-xfer/bvk-xfer-linux-amd64 \
+            script/file/engine/bvk-xfer/bvk-xfer-linux-arm \
+            script/file/engine/bvk-xfer/bvk-xfer-android-arm64 \
+            script/file/engine/bvk-xfer/bvk-xfer-android-amd64 \
+            script/file/engine/bvk-xfer/bvk-xfer-android-arm
 
           if ! git diff --cached --quiet; then
             COMMIT_MESSAGE="$(git log -1 --format=%s)"

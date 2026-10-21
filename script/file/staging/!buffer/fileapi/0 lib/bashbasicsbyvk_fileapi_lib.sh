@@ -38,8 +38,54 @@ _bb_auth_cfg() {
   _bb_cfg_header X-User-Key    "$FILEAPI_BASHBASICS_KEY"
 }
 
+# ── bvk-xfer: the Go engine (pack · send · jget).  One static binary per OS/CPU, found like bvk-ls; when it is missing or refuses to run, every
+# caller silently uses the old node path, so a machine without it only loses speed, never function.
+#   BVK_NO_XFER=1 switches it off on purpose.      _bvk_xfer_bin → sets _BVK_XFER_BIN (empty = not available)
+_BVK_XFER_WHY=""
+_bvk_xfer_bin() {
+  if [ -z "${_BVK_XFER_BIN+x}" ]; then
+    _BVK_XFER_BIN=""; _BVK_XFER_WHY=""
+    if [ "${BVK_NO_XFER:-0}" = 1 ]; then
+      _BVK_XFER_WHY="BVK_NO_XFER=1 is set — the Go engine is switched off on purpose"
+    else
+      local _m _os _o _d _b _out
+      case "$(uname -m)" in
+        aarch64|arm64) _m=arm64 ;; x86_64|amd64) _m=amd64 ;; armv7*|armv8l) _m=arm ;;
+        *) _m=""; _BVK_XFER_WHY="no bvk-xfer build for CPU '$(uname -m)'" ;;
+      esac
+      case "$OSTYPE" in
+        *android*) _os=android ;;
+        *) case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac ;;
+      esac
+      if [ -n "$_m" ]; then
+        _BVK_XFER_WHY="no bvk-xfer-$_os-$_m binary found (looked next to 'o' and on PATH)"
+        _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
+        for _b in "$(command -v bvk-xfer 2>/dev/null)" "$_d/../bashbasicsbyvk/bin/bvk-xfer-$_os-$_m" "$(command -v "bvk-xfer-$_os-$_m" 2>/dev/null)"; do
+          [ -n "$_b" ] && [ -f "$_b" ] || continue
+          [ -x "$_b" ] || chmod +x "$_b" 2>/dev/null
+          [ -x "$_b" ] || { _BVK_XFER_WHY="$_b exists but is not executable"; continue; }
+          _out="$("$_b" selftest 2>&1)"
+          [ "$_out" = "bvk-xfer ok" ] || { _BVK_XFER_WHY="$_b failed its self-test (run: health)"; continue; }
+          _BVK_XFER_BIN="$_b"; _BVK_XFER_WHY=""; break
+        done
+      fi
+    fi
+  fi
+  [ -n "$_BVK_XFER_BIN" ]
+}
+
+# one line per time the app had to use Node (or hand a Go upload to the resumable path), read by `health`:  <date> <event> <why>
+_bb_xfer_note() {
+  local f="${HOME}/.bashbasicsbyvk/xfer.log"
+  mkdir -p "${f%/*}" 2>/dev/null
+  printf '%s %s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" "${2//$'\n'/ }" >> "$f" 2>/dev/null
+  if [ "$(wc -l < "$f" 2>/dev/null || echo 0)" -gt 300 ]; then tail -n 150 "$f" > "$f.n" 2>/dev/null && mv -f "$f.n" "$f"; fi
+  return 0
+}
+
 _bb_json_get() {
   local json="$1" field="$2"
+  if _bvk_xfer_bin; then "$_BVK_XFER_BIN" jget "$field" <<< "$json"; return; fi
   node -e '
     let d = "";
     process.stdin.on("data", c => d += c);
@@ -358,12 +404,30 @@ _bb_ask_time() {
 # A time chosen here applies to this one operation (_BB_TTL_OVERRIDE). Returns 1 = stop.
 # Settings → File API → Credits → "Ask before spending credits" = off skips all of this (the server still enforces your balance).
 _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
+
+# _bb_price_is_one <bytes> <ttl-seconds>  → 0 when the server's price is CERTAINLY 1 credit (so the prompt would stay silent anyway and the
+# /estimate round trip can be skipped).  Same formula as the server (ledger.js creditsForHours): credits = max(1, ceil(max(mb/1024*hours, ceil(hours/minPeriod(mb)))))
+# — and 1 only when mb*hours <= 1024 and hours <= minPeriod(mb); under 10 GB, so never the 1.2x rate.  Anything unsure → 1 (ask the server).
+_bb_price_is_one() {
+  local bytes="$1" ttl="$2" mb hours minp
+  [[ "$bytes" =~ ^[1-9][0-9]*$ ]] && [[ "$ttl" =~ ^[0-9]+$ ]] || return 1
+  [ "$bytes" -lt $((10*1024*1024*1024)) ] || return 1
+  mb=$(( (bytes + 1048575) / 1048576 )); [ "$mb" -ge 1 ] || mb=1
+  hours=$(( (ttl + 3599) / 3600 )); [ "$hours" -ge 1 ] || hours=1
+  if   [ "$mb" -le 5 ];   then minp=720
+  elif [ "$mb" -le 50 ];  then minp=168
+  elif [ "$mb" -le 500 ]; then minp=24
+  else minp=1; fi
+  [ "$hours" -le "$minp" ] && [ $((mb * hours)) -le 1024 ]
+}
+
 _bb_credit_gate() {
   local bytes="$1" what="${2:-this operation}" svc="${3:-}" ttl a guard=0
   _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
   [ "$(_bb_cfg_val credit_prompts show)" = "skip" ] && return 0
   [[ "$bytes" =~ ^[1-9][0-9]*$ ]] || return 0
   ttl=$(_bb_svc_ttl "$svc")
+  _bb_price_is_one "$bytes" "$ttl" && return 0         # certainly 1 credit: nothing to ask, no round trip (the server still enforces your balance)
   while [ "$guard" -lt 25 ]; do
     guard=$((guard + 1))
     _bb_estimate "$bytes" "$ttl" || return 0          # cannot price it → the server decides at upload
