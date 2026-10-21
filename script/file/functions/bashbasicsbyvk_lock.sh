@@ -119,11 +119,11 @@ _lk_cmd() {
   local mode="$1" raw="$2" itemlist="${2#*-}"
   local verb="l-N"; [ "$mode" = unlock ] && verb="ul-N"
   if [ -z "$itemlist" ] || [ "$itemlist" = "$raw" ]; then
-    echo "⚠️  Usage: $verb   e.g. ${verb/N/1}  ${verb/N/1,3}  ${verb/N/2-5}  ${verb/N/a}"
+    echo "🔴  Usage: $verb   e.g. ${verb/N/1}  ${verb/N/1,3}  ${verb/N/2-5}  ${verb/N/a}"
     return 1
   fi
   if ${imaginary_mode:-false}; then
-    echo "⚠️  Too many items to index directly — narrow the view before using $verb."
+    echo "🔴  Too many items to index directly — narrow the view before using $verb."
     return 1
   fi
   _sp_resolve_itemlist "$itemlist" || return 1
@@ -150,11 +150,11 @@ _lk_cmd() {
   if [ "$mode" = lock ]; then
     if   [ "$n" -eq 1 ]; then echo "🔒 Locked: ${done_names[0]}  (can't be deleted from this app until ul-N)"
     elif [ "$n" -gt 1 ]; then echo "🔒 Locked $n items: $(_lk_join "${done_names[@]}")"; fi
-    [ "$s" -gt 0 ] && echo "ℹ️  Already locked: $(_lk_join "${skipped[@]}")"
+    [ "$s" -gt 0 ] && echo "📜  Already locked: $(_lk_join "${skipped[@]}")"
   else
     if   [ "$n" -eq 1 ]; then echo "🔐 unlocked: ${done_names[0]}"
     elif [ "$n" -gt 1 ]; then echo "🔐 unlocked $n items: $(_lk_join "${done_names[@]}")"; fi
-    [ "$s" -gt 0 ] && echo "ℹ️  Not locked: $(_lk_join "${skipped[@]}")"
+    [ "$s" -gt 0 ] && echo "📜  Not locked: $(_lk_join "${skipped[@]}")"
   fi
   return 0
 }
@@ -236,7 +236,7 @@ _lk_confirm_delete() {
   local -a final=()
   if [ "$choice" = skip ]; then
     final=("${free[@]}")
-    if [ "${#final[@]}" -eq 0 ]; then echo "ℹ️  Everything selected is locked — nothing to delete"; return 1; fi
+    if [ "${#final[@]}" -eq 0 ]; then echo "📜  Everything selected is locked — nothing to delete"; return 1; fi
     read -e -p "Delete ${#final[@]} unlocked item(s), keeping ${#prot[@]} locked? (y/n): " ans
   else
     final=("${selected_items[@]}")
@@ -260,11 +260,11 @@ _lk_file_cmd() {             # _lk_file_cmd lock|unlock <path>
   [ -e "$f" ] || [ -L "$f" ] || { echo "❌ Not found: $f"; return 1; }
   _lk_load; _lk_norm "$f"
   if [ "$mode" = lock ]; then
-    if [ -n "${_LK_SET[$_lk_n]+x}" ]; then echo "ℹ️  Already locked: $name"; return 0; fi
+    if [ -n "${_LK_SET[$_lk_n]+x}" ]; then echo "📜  Already locked: $name"; return 0; fi
     _LK_SET["$_lk_n"]=1
     _lk_save && echo "🔒 Locked: $name  (can't be deleted from this app until unlocked)" || echo "❌ Could not write $_LK_FILE"
   else
-    if [ -z "${_LK_SET[$_lk_n]+x}" ]; then echo "ℹ️  Not locked: $name"; return 0; fi
+    if [ -z "${_LK_SET[$_lk_n]+x}" ]; then echo "📜  Not locked: $name"; return 0; fi
     unset "_LK_SET[$_lk_n]"
     _lk_save && echo "🔐 unlocked: $name" || echo "❌ Could not write $_LK_FILE"
   fi

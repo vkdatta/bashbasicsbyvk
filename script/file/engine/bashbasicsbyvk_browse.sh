@@ -457,11 +457,32 @@ handle_selection() {
   fi
 }
 
+# ── the status row:   c | ⏰ <notifications> | 📣 <unfinished uploads> ─────────────────────────────────────────
+# The first field is the engine that listed this folder: c (native binary) or py (Python fallback) - the old
+# "[loaded by c]" tag, moved here (BVK_SHOW_SRC=0 or nothing loaded yet shows –).  The two numbers come from tiny caches
+# (_nf_cnt_get / _pn_count_cached), so drawing the header never waits for the network or scans folders.
+_bvk_hdr_lang() {
+  _bvk_src_tag_v
+  case "$_bst_out" in *"by py]"*) _HDR_LANG=py ;; *"by c]"*) _HDR_LANG=c ;; *) _HDR_LANG="–" ;; esac
+}
+_bvk_hdr_status() {
+  local nf="–" pn=0
+  if declare -F _nf_cnt_get >/dev/null 2>&1; then _nf_cnt_get; nf="$_NF_CNT"; fi
+  if declare -F _pn_count_cached >/dev/null 2>&1; then _pn_count_cached; pn="$_PN_CNT"; fi
+  _bvk_hdr_lang
+  printf '%s | ⏰ %s | 📣 %s' "$_HDR_LANG" "$nf" "$pn"
+}
+
+#   c | ⏰ 0 | 📣 0
+#
+#   📂 cd path: /data/data/com.termux/files/home          <- the real folder (what  cd / u  act on)
+#   ☁️ nav path: /data/data/com.termux/files/home         <- where you are browsing (Drive / group / filter marks go here; the loaded-by tag is now the first field of the status row)
 _menu_header() {
   echo
+  _bvk_hdr_status; echo
+  echo
   _gd_view_path "$path"      # Google Drive open: show the Drive path, not the mirror folder
-  local _hdr_loc="📂 Location: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
-  _bvk_src_tag_v; _hdr_loc+="$_bst_out"
+  local _hdr_loc="☁️ nav path: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
   if [ -n "$_filter_query" ]; then
     if ${imaginary_mode:-false}; then
       local _itot=0 _ch
@@ -479,6 +500,7 @@ _menu_header() {
       fi
     fi
   fi
+  echo "📂 cd path: $path"
   echo "$_hdr_loc"
 }
 
@@ -547,9 +569,9 @@ _input_hint_sync() {
   _hint_cur="$_hint_want"
   if [ -n "$_hint_want" ]; then
     declare -F _bvk_clip >/dev/null 2>&1 && { _bvk_clip "$_hint_want"; _hint_want_shown="$_BVK_CLIP"; } || _hint_want_shown="$_hint_want"
-    builtin printf '\n\r\033[2K\033[2m%s\033[0m\033[1A\r' "$_hint_want_shown"
+    _bvk_hint_paint "$_hint_want_shown"
   else
-    builtin printf '\n\r\033[2K\033[1A\r'
+    _bvk_hint_paint ""
   fi
 }
 
@@ -835,7 +857,7 @@ _read_choice_raw() {
   _bvk_blk_leave
   # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "$_hint_cur" ]; then
-    _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'
+    _hint_cur=""; _bvk_hint_leave
   fi
   echo
 

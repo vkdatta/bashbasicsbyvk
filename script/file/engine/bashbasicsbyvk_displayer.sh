@@ -991,7 +991,7 @@ _shortcut_display_parts() {
   sc_target=$(_shortcut_read_field "$sc_file" "SHORTCUT_TARGET")
   [ -z "$sc_name" ] && sc_name="${sc_file##*/}" && sc_name="${sc_name%.shortcut}"
   local _broken=""
-  [ -n "$sc_target" ] && [ ! -e "$sc_target" ] && _broken=" ⚠️ (broken)"
+  [ -n "$sc_target" ] && [ ! -e "$sc_target" ] && _broken=" 🔴 (broken)"
   if [ "$sc_type" == "dir" ]; then _sc_icon="🔑"; else _sc_icon="🗝️"; fi
   _sc_display="${sc_name}${_broken}"
 }

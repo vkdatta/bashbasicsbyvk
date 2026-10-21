@@ -224,7 +224,7 @@ _snap_cycle() {
     _snap_take "$tgt" "$kind" "$p" "$lsig"; rc=$?
     if [ $rc -eq 3 ]; then
       paused=1
-      printf '⚠️  Snapshots paused: %s. Add credits, or lower the keep time / raise the interval (Settings → File API → Snapshots).\n' "${_BB_GATE_MSG:-not enough credits}" > "$_SNAP_NOTICE"
+      printf '🔴  Snapshots paused: %s. Add credits, or lower the keep time / raise the interval (Settings → File API → Snapshots).\n' "${_BB_GATE_MSG:-not enough credits}" > "$_SNAP_NOTICE"
       _snap_log "paused: ${_BB_GATE_MSG:-not enough credits}"
       break
     fi
@@ -304,21 +304,21 @@ _snap_daemon_start() {
 handle_snap_add() {
   local raw="$1"
   _bb_split_alias "${raw#snap-}" || return 1
-  [ -n "$_BB_LINK_ALIAS" ] && { echo "ℹ️  Snapshots cannot be renamed — they are named AS ON <date> <time>."; _BB_LINK_ALIAS=""; }
+  [ -n "$_BB_LINK_ALIAS" ] && { echo "📜  Snapshots cannot be renamed — they are named AS ON <date> <time>."; _BB_LINK_ALIAS=""; }
   _sp_guard_and_resolve "$_BB_ITEMLIST" "snap-" || return 1
   _crypto_check || return 1
   _bb_get_credentials || return 1
   local it p tgt kind sig bytes count added=0 have
   for it in "${sp_resolved[@]}"; do
     p=$(readlink -f -- "$it" 2>/dev/null || realpath "$it" 2>/dev/null)
-    [ -n "$p" ] && [ -e "$p" ] || { echo "⚠️  Skipping (not found): $it"; continue; }
-    if [ "$p" = "/" ]; then echo "⚠️  Skipping '/' — pick folders or files."; continue; fi
-    case "$p" in "$_SNAP_DIR"|"$_SNAP_DIR"/*|"$_SNAP_TMPROOT"|"$_SNAP_TMPROOT"/*) echo "⚠️  Skipping (snapshots' own folder): $p"; continue ;; esac
+    [ -n "$p" ] && [ -e "$p" ] || { echo "🔴  Skipping (not found): $it"; continue; }
+    if [ "$p" = "/" ]; then echo "🔴  Skipping '/' — pick folders or files."; continue; fi
+    case "$p" in "$_SNAP_DIR"|"$_SNAP_DIR"/*|"$_SNAP_TMPROOT"|"$_SNAP_TMPROOT"/*) echo "🔴  Skipping (snapshots' own folder): $p"; continue ;; esac
     [ -d "$p" ] && kind=d || kind=f
     tgt=$(_snap_sha256 "$p")
     have=$(_snap_target_line "$tgt")
-    if [ -n "$have" ]; then echo "ℹ️  Already on the list: $p"; continue; fi
-    if [ "$(_snap_target_count)" -ge "$_SNAP_MAX_TARGETS" ]; then echo "⚠️  At most $_SNAP_MAX_TARGETS files/folders per device."; break; fi
+    if [ -n "$have" ]; then echo "📜  Already on the list: $p"; continue; fi
+    if [ "$(_snap_target_count)" -ge "$_SNAP_MAX_TARGETS" ]; then echo "🔴  At most $_SNAP_MAX_TARGETS files/folders per device."; break; fi
     read -r sig bytes count <<<"$(_snap_sig "$p")"
     _snap_target_set "$tgt" "$kind" "$p" 0 "" 0
     added=$((added + 1))
@@ -333,7 +333,7 @@ handle_snap_add() {
   if _snap_dev_hdrs; then
     local lk; lk=$(_snap_labelkey) && _snap_reconcile "$lk" >/dev/null 2>&1
   else
-    echo "ℹ️  This computer's id is not registered with the server yet (needs internet once) — it will be on the next start."
+    echo "📜  This computer's id is not registered with the server yet (needs internet once) — it will be on the next start."
   fi
   rm -f "$_SNAP_LASTRUN"          # first snapshot soon, not after a whole interval
   _snap_daemon_start
@@ -399,14 +399,14 @@ _snap_menu_device_view() {   # one device: its watched paths, and its snapshots
           read -e -r -p "   Stop snapshotting '${T_PATH[$((n-1))]}'? Existing snapshots stay until they expire. (y/N): " a
           case "${a,,}" in y|yes)
             _BB_CALL_HDRS=(); _bb_call DELETE "/snapshots/targets/$dev/${T_ID[$((n-1))]}" || true
-            if [ "$_BB_STATUS" = 200 ]; then echo "✅ Removed from the list."; [ "$is_self" = 1 ] && _snap_target_drop "${T_ID[$((n-1))]}"
+            if [ "$_BB_STATUS" = 200 ]; then echo "💫 Removed from the list."; [ "$is_self" = 1 ] && _snap_target_drop "${T_ID[$((n-1))]}"
             else echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")"; fi ;;
           esac
-        else echo "⚠️  Usage: x-2"; fi ;;
+        else echo "🔴  Usage: x-2"; fi ;;
       *)
         if [[ "$a" =~ ^[0-9]+$ ]] && [ "$a" -ge 1 ] && [ "$a" -le ${#T_ID[@]} ]; then
           _snap_menu_snaps "$lk" "$dev" "${T_ID[$((a-1))]}" "${T_PATH[$((a-1))]}"
-        else echo "⚠️  Not an option."; fi ;;
+        else echo "🔴  Not an option."; fi ;;
     esac
   done
 }
@@ -445,13 +445,13 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
       x-*|e-*)
         local verb="${a:0:1}" spec=""; n="${a#*-}"
         if [ "$verb" = e ]; then local nn="${n%%[[:space:]]*}"; [ "$nn" != "$n" ] && spec="${n#*[[:space:]]}"; n="$nn"; fi
-        if ! [[ "$n" =~ ^[0-9]+$ ]] || [ "$n" -lt 1 ] || [ "$n" -gt ${#S_ID[@]} ]; then echo "⚠️  Pick a number from the list."; continue; fi
+        if ! [[ "$n" =~ ^[0-9]+$ ]] || [ "$n" -lt 1 ] || [ "$n" -gt ${#S_ID[@]} ]; then echo "🔴  Pick a number from the list."; continue; fi
         i=$((n-1))
         if [ "$verb" = x ]; then
           read -e -r -p "   Nuke $(_snap_name "${S_AT[$i]}") now? (y/N): " a
           case "${a,,}" in y|yes)
             _BB_CALL_HDRS=(); _bb_call DELETE "/links/${S_ID[$i]}" || true
-            [ "$_BB_STATUS" = 200 ] && echo "✅ Nuked." || echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;;
+            [ "$_BB_STATUS" = 200 ] && echo "💫 Nuked." || echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;;
           esac
         else
           _snap_extend "${S_ID[$i]}" "${S_AT[$i]}" "${S_EXP[$i]}" "$spec"
@@ -460,7 +460,7 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
         if [[ "$a" =~ ^[0-9]+$ ]] && [ "$a" -ge 1 ] && [ "$a" -le ${#S_ID[@]} ]; then
           i=$((a-1)); local nm; nm=$(_snap_name "${S_AT[$i]}")
           _svc_restore snapshot "${S_ID[$i]}" "$nm" "${path:-$PWD}/$nm"
-        else echo "⚠️  Not an option."; fi ;;
+        else echo "🔴  Not an option."; fi ;;
     esac
   done
 }
@@ -473,7 +473,7 @@ _snap_extend() {             # _snap_extend <id> <taken-ms> <expires-ms> [spec] 
     read -e -r -p "   New time (u = back): " spec
     case "${spec,,}" in u|q|"") return 0 ;; esac
   fi
-  total=$(_bb_resolve_time "$cur" "$spec"); case $? in 1) echo "⚠️  Use e.g. 2d · +12h · -1d."; return 1 ;; 2) echo "⚠️  Between 1 minute and 30 days."; return 1 ;; esac
+  total=$(_bb_resolve_time "$cur" "$spec"); case $? in 1) echo "🔴  Use e.g. 2d · +12h · -1d."; return 1 ;; 2) echo "🔴  Between 1 minute and 30 days."; return 1 ;; esac
   if [ "$(_bb_cfg_val credit_prompts show)" != skip ] && [ "$total" -gt "$cur" ]; then
     _BB_CALL_HDRS=(); _bb_call POST "/links/$id/expiry" "{\"totalSeconds\":$total,\"dryRun\":true}"
     if [ "$_BB_STATUS" = 200 ]; then
@@ -492,7 +492,7 @@ _snap_extend() {             # _snap_extend <id> <taken-ms> <expires-ms> [spec] 
     fi
   fi
   _BB_CALL_HDRS=(); _bb_call POST "/links/$id/expiry" "{\"totalSeconds\":$total}"
-  if [ "$_BB_STATUS" = 200 ]; then echo "✅ Now gone at $(_bb_fmt_when "$(_bb_json_get "$_BB_BODY" expiresAt)")   |   Balance: $(_bb_json_get "$_BB_BODY" balance)"
+  if [ "$_BB_STATUS" = 200 ]; then echo "💫 Now gone at $(_bb_fmt_when "$(_bb_json_get "$_BB_BODY" expiresAt)")   |   Balance: $(_bb_json_get "$_BB_BODY" balance)"
   else echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")"; fi
 }
 
@@ -502,7 +502,7 @@ snapshot_menu() {
   _bb_get_credentials || return 1
   local lk a n i
   if ! _snap_dev_hdrs; then
-    echo "ℹ️  This computer's id is not registered yet (it is created and signed by the server on the first start with internet)."
+    echo "📜  This computer's id is not registered yet (it is created and signed by the server on the first start with internet)."
     echo "   Other devices are still listed below."
   fi
   while :; do
@@ -529,7 +529,7 @@ snapshot_menu() {
         if [[ "$a" =~ ^[0-9]+$ ]] && [ "$a" -ge 1 ] && [ "$a" -le ${#SNAP_D_ID[@]} ]; then
           i=$((a-1))
           _snap_menu_device_view "$lk" "${SNAP_D_ID[$i]}" "${SNAP_D_LABEL[$i]:-device} · ${SNAP_D_ID[$i]:0:8}" "$( [ "${SNAP_D_ID[$i]}" = "$SNAP_D_SELF" ] && echo 1 || echo 0 )"
-        else echo "⚠️  Not an option."; fi ;;
+        else echo "🔴  Not an option."; fi ;;
     esac
   done
 }

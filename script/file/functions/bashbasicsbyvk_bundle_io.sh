@@ -42,7 +42,7 @@ _bz_export() {
   local -a ent=("$@"); [ ${#ent[@]} -gt 0 ] || ent=(.)
   _bz_need zip || return 1
   if [ -z "$(cd "$src" && find "${ent[@]}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-    echo "ℹ️  No $pl to export"; return 1
+    echo "📜  No $pl to export"; return 1
   fi
 
   local base out n=1
@@ -123,7 +123,7 @@ _bz_import() {
     fi
   done <<<"$list"
   if [ $((nf + nd)) -eq 0 ]; then
-    echo "ℹ️  '${zf##*/}' contains no $pl"; return 1
+    echo "📜  '${zf##*/}' contains no $pl"; return 1
   fi
 
   echo ""
@@ -147,9 +147,9 @@ _bz_import() {
   fi
 
   if unzip -q "$mode" "$zf" -x "$manifest" -d "$store"; then
-    [ -n "${_BZ_QUIET:-}" ] || echo "✅ Imported into $store"
+    [ -n "${_BZ_QUIET:-}" ] || echo "💫 Imported into $store"
     return 0
   fi
-  echo "⚠️  Import finished with errors (some entries may have been skipped)"
+  echo "🔴  Import finished with errors (some entries may have been skipped)"
   return 1
 }

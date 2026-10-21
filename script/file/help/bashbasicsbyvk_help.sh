@@ -18,7 +18,7 @@ open_help() {
   elif command -v open >/dev/null 2>&1; then
     open "$HELP_FILE"
   else
-    echo "⚠️ No opener found (termux-open / xdg-open / open)."
+    echo "🔴 No opener found (termux-open / xdg-open / open)."
     echo "File is at: $HELP_FILE"
     return 1
   fi

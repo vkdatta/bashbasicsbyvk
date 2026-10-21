@@ -151,12 +151,12 @@ _upg_tab_label() {
 
 _upg_menu_header() {
   echo
-  printf '⬆️  UPGRADE  %s   ←/→ tabs\n' "$(_upg_tab_label)"
+  printf '🔼  UPGRADE  %s   ←/→ tabs\n' "$(_upg_tab_label)"
   local inst; inst="$(_upg_installed)"
   if [ -n "$inst" ]; then printf '   installed: %s\n' "$inst"
   else printf '   installed: (not recorded yet — install once from here and it will be)\n'; fi
-  if [ "$_upg_tab" = stable ] && [ -n "$_UPG_S_ERR" ]; then printf '   ⚠️  %s — rf to retry\n' "$_UPG_S_ERR"; fi
-  if [ "$_upg_tab" = tags ]   && [ -n "$_UPG_T_ERR" ]; then printf '   ⚠️  %s — rf to retry\n' "$_UPG_T_ERR"; fi
+  if [ "$_upg_tab" = stable ] && [ -n "$_UPG_S_ERR" ]; then printf '   🔴  %s — rf to retry\n' "$_UPG_S_ERR"; fi
+  if [ "$_upg_tab" = tags ]   && [ -n "$_UPG_T_ERR" ]; then printf '   🔴  %s — rf to retry\n' "$_UPG_T_ERR"; fi
   if [ "$_upg_tab" = stable ] && [ -z "$_UPG_S_ERR" ] && [ "${#items[@]}" -eq 0 ]; then
     printf '   No stable releases are published yet — try the Tags tab, or m for the latest main.\n'
   fi
@@ -215,7 +215,7 @@ _upg_tab_redraw() {
 _upg_pick() {                    # _upg_pick <N>  → _upg_ref
   local num="$1"
   if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt "${#items[@]}" ]; then
-    echo "⚠️  Invalid version number: $num"; return 1
+    echo "🔴  Invalid version number: $num"; return 1
   fi
   _upg_ref="${items[$((num-1))]}"
   return 0
@@ -223,7 +223,7 @@ _upg_pick() {                    # _upg_pick <N>  → _upg_ref
 
 _upg_do_install() {              # _upg_do_install <ref|main> <label>
   local ref="$1" label="$2" ans core inst; inst="$(_upg_installed)"
-  echo "⬆️  Install $label"
+  echo "🔼  Install $label"
   [ -n "$inst" ] && [ "$inst" != "$ref" ] && echo "   currently installed: $inst"
   [ -n "$inst" ] && [ "$inst" = "$ref" ] && echo "   (this is already the installed version — it will be reinstalled)"
   read -e -r -p "   Continue? (y/N): " ans
@@ -235,7 +235,7 @@ _upg_do_install() {              # _upg_do_install <ref|main> <label>
   local rc=$?
   if [ $rc -eq 0 ]; then
     _upg_record "$ref"
-    echo "✅ Installed $label — quit and start  o  again to run it."
+    echo "💫 Installed $label — quit and start  o  again to run it."
     return 0
   fi
   echo "❌ pip exited with $rc — the installed version was not recorded."
@@ -321,7 +321,7 @@ _upg_cmd_refresh() {
 
 _upg_help() {
   cat <<'HLP'
-⬆️  UPGRADE  (-u)   ← / → switch tabs
+🔼  UPGRADE  (-u)   ← / → switch tabs
  📦 Stable        published GitHub releases, newest first
  🧪 Tags (beta)   every git tag, newest first (✓ stable = also a release)
  N install version N (asks first) · i-N description · m install latest main

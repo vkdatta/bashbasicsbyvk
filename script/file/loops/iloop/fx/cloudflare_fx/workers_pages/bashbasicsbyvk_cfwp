@@ -40,7 +40,7 @@ JOBS = max(1, int(os.environ.get("BVK_RECOVER_JOBS", "6") or 6))     # items rec
 
 def _progress(futs, labels, status_of):
     """Live line each time an item finishes: [k/N] icon label."""
-    icon = {"ok": "✅", "skipped": "⏭️", "failed": "❌"}
+    icon = {"ok": "💫", "skipped": "⏭️", "failed": "❌"}
     idx = {f: i for i, f in enumerate(futs)}
     for k, f in enumerate(as_completed(futs), 1):
         Report(None).echo(f"── [{k}/{len(futs)}] {icon.get(status_of(f.result()), '')} {labels[idx[f]]}")
@@ -126,7 +126,7 @@ def main(argv=None):
     print(f"\nNavigation path: {nav}\nItems          : " + ", ".join(f"{t} {n}" for t, n in items))
     results = recover_batch(nav, items, token, account)
     print(f"\n{'=' * 70}\nSummary")
-    icon = {"ok": "✅", "skipped": "⏭️ ", "failed": "❌"}
+    icon = {"ok": "💫", "skipped": "⏭️ ", "failed": "❌"}
     for typ, name, status, detail in results:
         print(f"  {icon[status]} {typ} {name}: {detail}")
     return 0 if all(s == "ok" for _, _, s, _ in results) else 1

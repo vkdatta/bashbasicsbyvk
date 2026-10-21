@@ -54,7 +54,7 @@ _bvk_is_ascii() { local LC_ALL=C; [[ "$1" != *[!\ -~]* ]]; }
 # _vp_cpw <codepoint> -> _VP_CPW = 0 | 1 | 2.  EVERY width measurement in the app (_bvk_dispw, _vp_cells, so every
 # prompt caret, row fit and erase count) goes through THIS function.  Never write another range table.
 # It follows wcwidth / Unicode: a character is 2 cells only when it is a wide (East Asian W/F) character or has
-# Emoji_Presentation=Yes (📁 👤 ✅ ❌ ⭐ ...).  Emoji that are text-by-default (🗄 🗑 👁 🖥 ⚠ ℹ ✏ ⚙ ⏱ ...) are 1 cell even
+# Emoji_Presentation=Yes (📁 👤 💫 🔴 ✅ ❌ ⭐ ...).  Emoji that are text-by-default (🗄 🗑 👁 🖥 ⚠ ℹ ✏ ⚙ ⏱ ◀ ▶ ...) are 1 cell even
 # when followed by U+FE0F: Termux and most terminals draw them 1 cell wide, and U+FE0F itself adds nothing.
 # (Counting 🗄️ as 2 put the caret one cell too far right, "hello |", on every prompt that began with such an emoji.)
 _VP_TEXT_EMOJI=" 1F321 1F324-1F32C 1F336 1F37D 1F396-1F397 1F399-1F39B 1F39E-1F39F 1F3CB-1F3CE 1F3D4-1F3DF 1F3F3 1F3F5 1F3F7 1F43F 1F441 1F4FD 1F549-1F54A 1F56F-1F570 1F573-1F579 1F587 1F58A-1F58D 1F590 1F5A5 1F5A8 1F5B1-1F5B2 1F5BC 1F5C2-1F5C4 1F5D1-1F5D3 1F5DC-1F5DE 1F5E1 1F5E3 1F5E8 1F5EF 1F5F3 1F5FA 1F6CB 1F6CD-1F6CF 1F6E0-1F6E5 1F6E9 1F6F0 1F6F3 "
@@ -429,7 +429,7 @@ _vp_prime_rows_run() {
   else
     _vp_disp_ok=false
     [ -n "$BVK_VP_DEBUG" ] && \
-      echo "⚠️  display_items emitted ${#_dl[@]} lines for $_vp_n items — using _item_line_text" >&2
+      echo "🔴  display_items emitted ${#_dl[@]} lines for $_vp_n items — using _item_line_text" >&2
   fi
   return 0
 }
@@ -471,7 +471,7 @@ _vp_mark_sel() {
 #     ───────────
 #     <linebreak>
 #     footer
-#     <linebreak>
+#     <suggestion row>      (menus with a typed prompt: the live suggestion; others: a linebreak)
 #     Select:
 #
 # The linebreak above the footer and the one after it are added HERE, so no menu has
@@ -479,6 +479,11 @@ _vp_mark_sel() {
 #   header : trailing blank lines are dropped, nothing is appended
 #   footer : leading + trailing blank lines are dropped, one is put before and
 #            one after.  An empty header / footer adds nothing.
+# which prompts have the suggestion row (between the footer and "Select:")
+_vp_wants_hint_row() {
+  case "${_vp_input_fn:-}" in _print_input_line|_sm_input_fn|_multi_print_input_line) return 0 ;; esac
+  return 1
+}
 _vp_build_chrome() {
   local _i _n
   _vp_probe_size; _vp_cols="$_vp_cols_now"     # live width BEFORE header/footer wrap to it
@@ -498,7 +503,8 @@ _vp_build_chrome() {
   while (( _i < _n )) && [[ "${_vp_ftr_arr[$_i]}" != *[![:space:]]* ]]; do _i=$(( _i + 1 )); done
   _vp_ftr_arr=("${_vp_ftr_arr[@]:_i}")
   if (( ${#_vp_ftr_arr[@]} > 0 )); then
-    _vp_ftr_arr=("" "${_vp_ftr_arr[@]}" "")
+    if _vp_wants_hint_row; then _vp_ftr_arr=("" "${_vp_ftr_arr[@]}")        # the suggestion row IS the linebreak below the footer
+    else _vp_ftr_arr=("" "${_vp_ftr_arr[@]}" ""); fi
   fi
 
   _vp_top_n=${#_vp_hdr_arr[@]}
@@ -545,12 +551,10 @@ _vp_geometry() {
   _vp_hdr_show=$_vp_top_n
   _vp_ftr_show=$_vp_footer_n
 
-  # Select-prompt screens keep ONE spare row under the prompt: hints ("type to filter live")
-  # and the loading bar are drawn there, never on the line being typed on.
+  # Select-prompt screens keep ONE suggestion row ABOVE the prompt (between the footer and "Select:"): hints ("type to filter live",
+  # "s → Settings"), notices and the loading bar are drawn there, never on the line being typed on.
   _vp_hint_row=0
-  [ "${_vp_input_fn:-}" = "_print_input_line" ] && _vp_hint_row=1
-  [ "${_vp_input_fn:-}" = "_sm_input_fn" ] && _vp_hint_row=1
-  [ "${_vp_input_fn:-}" = "_multi_print_input_line" ] && _vp_hint_row=1
+  _vp_wants_hint_row && _vp_hint_row=1
 
   min_rows=3
   (( _vp_R > 0 && _vp_R < min_rows )) && min_rows=$_vp_R
@@ -574,7 +578,7 @@ _vp_geometry() {
   (( _vp_page > _vp_R )) && _vp_page=$_vp_R
   _vp_rows_printed=$_vp_page
   (( _vp_n == 0 )) && _vp_rows_printed=1
-  _blk_h=$(( _vp_hdr_show + _vp_ind + _vp_rows_printed + _vp_ind + _vp_ftr_show + 1 ))
+  _blk_h=$(( _vp_hdr_show + _vp_ind + _vp_rows_printed + _vp_ind + _vp_ftr_show + _vp_hint_row + 1 ))
 }
 
 _vp_ensure_visible() {
@@ -683,6 +687,8 @@ _vp_emit() {
   fi
 
   for line in "${_vp_ftr_out[@]}"; do _vp_fit "$line"; _vp_el "$_vp_line"; done
+  # the suggestion row: sits between the footer and the "Select:" line (see _bvk_hint_paint)
+  if (( ${_vp_hint_row:-0} )); then _vp_el ""; _hint_cur="?"; fi   # the row was just redrawn blank: the next sync repaints the suggestion
 
   # frame is complete — one write; ?2026 = synchronized output (terminals that lack it ignore it)
   builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
@@ -764,7 +770,7 @@ _vp_filter_header_line() {
   printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "$(_filter_total_count)"
 }
 
-_vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + 1 )); }
+_vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + _vp_hint_row + 1 )); }
 
 _vp_repaint_row() {
   local i="$1" r="$1" line
@@ -879,6 +885,7 @@ _bvk_row_multi() {
   nvis=$(( R - top )); (( nvis > maxv )) && nvis=$maxv
   _BLK_TOP=$top
   out=$'\r'; (( _BLK_CROW > 0 )) && out+=$'\033['"$_BLK_CROW"A
+  [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ] && out+=$'\033[1A\r\033[2K\033[1B'   # the block replaces the suggestion
   out+=$'\033[J'
   for (( k=top; k<top+nvis; k++ )); do
     (( k > top )) && out+=$'\r\n'
@@ -906,7 +913,29 @@ _bvk_cursor_to() {
 # the limit: _bvk_room N = N more characters still fit into _buf
 _bvk_room() { (( ${#_buf} + $1 <= _BVK_MAX_INPUT )); }
 # a one-line red notice on the row under the input (it stays until the next key); the cursor is put back where it was
+# ── the suggestion row ─────────────────────────────────────────────────────────────────────────────────────
+# ONE row directly above the "Select:" line (between the footer and the prompt):
+#     u) Up   cd) Change directory   q) Quit
+#     h) Home   s) Settings   -h) Help   -u) Upgrade
+#     <suggestion>
+#     Select: _
+# It is part of the drawn block (_vp_hint_row, counted in _blk_h / _vp_dist), so painting it never scrolls the screen.
+# The cursor is on row _BLK_CROW of the prompt block; it ends where it started (column 0).
+_bvk_hint_paint() {   # $1 text ("" = wipe)  $2 sgr (default dim)
+  local up=$(( ${_BLK_CROW:-0} + 1 )) sgr="${2:-2}"
+  if [ -n "$1" ]; then builtin printf '\033[%dA\r\033[2K\033[%sm%s\033[0m\033[%dB\r' "$up" "$sgr" "$1" "$up"
+  else builtin printf '\033[%dA\r\033[2K\033[%dB\r' "$up" "$up"; fi
+}
+_bvk_hint_leave() {   # the prompt is being left (cursor on the block's LAST row): wipe the row above its FIRST row
+  local up=${_BLK_ROWS:-1}
+  builtin printf '\033[%dA\r\033[2K\033[%dB\r' "$up" "$up"
+}
 _bvk_notice() {
+  if [ "${_vp_hint_row:-0}" = 1 ]; then
+    _bvk_hint_paint "$1" "1;31"
+    (( ${_BVK_FIT_COL:-0} > 0 )) && builtin printf '\033[%dC' "$_BVK_FIT_COL"
+    _hint_cur="__notice__"; return 0
+  fi
   local down=$(( ${_BLK_ROWS:-1} - 1 - ${_BLK_CROW:-0} ))
   (( down > 0 )) && builtin printf '\033[%dB' "$down"
   builtin printf '\n\r\033[2K\033[1;31m%s\033[0m\033[%dA\r' "$1" $(( down + 1 ))
@@ -1385,7 +1414,7 @@ _multi_prompt_loop_raw() {
   _bvk_paste_off
   stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
-  if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
+  if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; _bvk_hint_leave; fi
   echo
   _lt_enter "$_buf"
 }

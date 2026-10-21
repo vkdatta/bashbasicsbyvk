@@ -62,10 +62,10 @@ class App:
         except Exception: pass
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-def on_main(a):  return a.alive and 'Location:' in a.text().split('Select')[-2 if False else 0] or (a.alive and 'Location:' in a.text())
+def on_main(a):  return a.alive and 'nav path:' in a.text().split('Select')[-2 if False else 0] or (a.alive and 'nav path:' in a.text())
 def on_home(a):  return a.alive and 'Home' in a.text() and 'Local Surf' in a.text() and 'Cloud Surf' in a.text()
 def last_screen(a):
-    t = a.text(); i = max(t.rfind('Location:'), t.rfind('Home\n'))
+    t = a.text(); i = max(t.rfind('nav path:'), t.rfind('Home\n'))
     return t
 
 results = []
@@ -84,7 +84,7 @@ def last_header(a):
     # the lowest header line on screen
     best = ''
     for l in a.scr.lines():
-        if 'Location:' in l: best = 'MAIN'
+        if 'nav path:' in l: best = 'MAIN'
         elif l.strip().startswith('🏠 Home') or l.strip() == 'Home': best = 'HOME'
         elif 'LINKS' in l: best = 'LINKS'
     return best

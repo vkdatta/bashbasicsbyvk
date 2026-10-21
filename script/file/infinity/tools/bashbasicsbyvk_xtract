@@ -23,7 +23,7 @@ def check_dependencies():
         if choice == 'y':
             try:
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl"])
-                print("✅ openpyxl installed successfully!")
+                print("💫 openpyxl installed successfully!")
                 return True
             except:
                 print("🚨 Installation failed. CSV export will still work")
@@ -134,7 +134,7 @@ def manual_table_extraction(table):
         else:
             return None
     except Exception as e:
-        print(f"    ⚠️ Table extraction error: {str(e)}")
+        print(f"    🔴 Table extraction error: {str(e)}")
         return None
 
 def extract_content_robust(url, content_type, classes=None, ids=None, link_classes=None):
@@ -171,7 +171,7 @@ def extract_content_robust(url, content_type, classes=None, ids=None, link_class
         
         return results
     except Exception as e:
-        print(f"⚠️ Error fetching {url}: {str(e)}")
+        print(f"🔴 Error fetching {url}: {str(e)}")
         return []
 
 def extract_url(url, content_type, classes=None, ids=None, link_classes=None, num_pages=1):
@@ -195,13 +195,13 @@ def extract_url(url, content_type, classes=None, ids=None, link_classes=None, nu
             )
             
             if not content:
-                print(f"    ⚠️ No content found on page {page}")
+                print(f"    🔴 No content found on page {page}")
                 continue
             
             if content_type == 'tables':
                 for i, df in enumerate(content):
                     all_content.append(df)
-                    print(f"    ✅ Extracted table {i+1} ({len(df)} rows)")
+                    print(f"    💫 Extracted table {i+1} ({len(df)} rows)")
             
             elif content_type == 'links':
                 for link in content:
@@ -210,7 +210,7 @@ def extract_url(url, content_type, classes=None, ids=None, link_classes=None, nu
                     # ADDENDUM: track which parent URL each link came from
                     link['source_url'] = target_url
                 all_content.extend(content)
-                print(f"    ✅ Extracted {len(content)} links")
+                print(f"    💫 Extracted {len(content)} links")
                 
             time.sleep(1.5)
             
@@ -337,19 +337,19 @@ def build_link_rows_recursive(url, target_depth, current_depth=0,
             url, 'links', classes=classes, ids=ids, link_classes=link_classes
         )
     except Exception as e:
-        print(f"{indent}   ⚠️ Error: {e}")
+        print(f"{indent}   🔴 Error: {e}")
         return []
 
     if not content:
-        print(f"{indent}   ⚠️ No links found.")
+        print(f"{indent}   🔴 No links found.")
         return []
 
     # Cap to avoid runaway requests
     if len(content) > link_cap:
-        print(f"{indent}   ⚠️ Found {len(content)} links — capping to {link_cap} to prevent explosion.")
+        print(f"{indent}   🔴 Found {len(content)} links — capping to {link_cap} to prevent explosion.")
         content = content[:link_cap]
     else:
-        print(f"{indent}   ✅ Found {len(content)} links.")
+        print(f"{indent}   💫 Found {len(content)} links.")
 
     paths = []
     for idx, link in enumerate(content):
@@ -416,7 +416,7 @@ def build_links_dataframe(source_url, source_text, recursion_depth,
             source_url, recursion_depth, 0, classes, ids, link_classes,
             visited=set(), link_cap=link_cap
         )
-        print(f"\n✅ Recursion complete. Total paths collected: {len(paths)}")
+        print(f"\n💫 Recursion complete. Total paths collected: {len(paths)}")
         rows = []
         for path in paths:
             row = [source_url, source_text]
@@ -459,7 +459,7 @@ def save_content(content, content_type, output_path, source_url=None,
         if output_path.endswith('.csv'):
             # ADDENDUM: CSV no longer supported — silently redirect to XLSX
             xlsx_path = os.path.splitext(output_path)[0] + '.xlsx'
-            print(f"ℹ️  CSV format replaced with XLSX → {xlsx_path}")
+            print(f"📜  CSV format replaced with XLSX → {xlsx_path}")
             return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
         
         elif output_path.endswith('.xlsx'):
@@ -478,20 +478,20 @@ def save_content(content, content_type, output_path, source_url=None,
             # ADDENDUM: Any other extension → redirect to XLSX
             base = os.path.splitext(output_path)[0] if '.' in os.path.basename(output_path) else output_path
             xlsx_path = base + '.xlsx'
-            print(f"ℹ️  Unsupported format replaced with XLSX → {xlsx_path}")
+            print(f"📜  Unsupported format replaced with XLSX → {xlsx_path}")
             return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
     
     elif content_type == 'links':
         if output_path.endswith('.txt'):
             # ADDENDUM: TXT no longer supported — redirect to XLSX
             xlsx_path = os.path.splitext(output_path)[0] + '.xlsx'
-            print(f"ℹ️  TXT format replaced with XLSX → {xlsx_path}")
+            print(f"📜  TXT format replaced with XLSX → {xlsx_path}")
             return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
         
         elif output_path.endswith('.csv'):
             # ADDENDUM: CSV no longer supported — redirect to XLSX
             xlsx_path = os.path.splitext(output_path)[0] + '.xlsx'
-            print(f"ℹ️  CSV format replaced with XLSX → {xlsx_path}")
+            print(f"📜  CSV format replaced with XLSX → {xlsx_path}")
             return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
             
         elif output_path.endswith('.xlsx'):
@@ -537,7 +537,7 @@ def save_content(content, content_type, output_path, source_url=None,
             # ADDENDUM: Any other extension → redirect to XLSX
             base = os.path.splitext(output_path)[0] if '.' in os.path.basename(output_path) else output_path
             xlsx_path = base + '.xlsx'
-            print(f"ℹ️  Unsupported format replaced with XLSX → {xlsx_path}")
+            print(f"📜  Unsupported format replaced with XLSX → {xlsx_path}")
             return save_content(content, content_type, xlsx_path, source_url, source_text, recursion_depth)
     
     return False
@@ -578,7 +578,7 @@ def main():
                 )
                 if recursion_depth < 0:
                     recursion_depth = 0
-                print(f"✅ Recursion depth set to {recursion_depth}")
+                print(f"💫 Recursion depth set to {recursion_depth}")
                 print(f"   Output columns: Source URL | Source Text | L0 Link | L0 Text"
                       + "".join([f" | L{d} Link | L{d} Text" for d in range(1, recursion_depth + 1)]))
                 try:
@@ -588,11 +588,11 @@ def main():
                         link_cap = RECURSION_LINK_CAP
                 except ValueError:
                     link_cap = RECURSION_LINK_CAP
-                print(f"✅ Link cap: {link_cap} per page | Est. max requests: ~{link_cap ** (recursion_depth+1)}")
+                print(f"💫 Link cap: {link_cap} per page | Est. max requests: ~{link_cap ** (recursion_depth+1)}")
             except ValueError:
                 recursion_depth = 1
                 link_cap = RECURSION_LINK_CAP
-                print("⚠️  Invalid input. Using recursion depth 1.")
+                print("🔴  Invalid input. Using recursion depth 1.")
     # ─────────────────────────────────────────────────────────────────────────
 
     mode = input("\nSingle URL or Multiple URLs? (1/2): ").strip()
@@ -768,7 +768,7 @@ def main():
                                 
                                 print(f"  💾 Added sheet: {sheet_name}")
                             else:
-                                print(f"  ⚠️ No content for {url}")
+                                print(f"  🔴 No content for {url}")
                         
                         workbook.save(filename)
                         print(f"\n💾 Saved Excel with {len(workbook.sheetnames)} sheets: {os.path.abspath(filename)}")
@@ -802,7 +802,7 @@ def main():
                         if not df.empty:
                             all_dfs.append(df)
                         else:
-                            print(f"  ⚠️ No content for {url}")
+                            print(f"  🔴 No content for {url}")
                     
                     if all_dfs:
                         combined_df = pd.concat(all_dfs, ignore_index=True)
@@ -837,7 +837,7 @@ def main():
                     if not df.empty:
                         save_content(df, content_type, filename, url, "Given Link", recursion_depth)
                     else:
-                        print(f"  ⚠️ No content for {url}")
+                        print(f"  🔴 No content for {url}")
                 else:
                     content = extract_url(
                         url, content_type, 
@@ -850,9 +850,9 @@ def main():
                     if content:
                         save_content(content, content_type, filename, url, "Given Link", recursion_depth)
                     else:
-                        print(f"  ⚠️ No content for {url}")
+                        print(f"  🔴 No content for {url}")
     
-    print("\n✅ Extraction complete! Happy analyzing!")
+    print("\n💫 Extraction complete! Happy analyzing!")
     print("="*50 + "\n")
 
 if __name__ == "__main__":

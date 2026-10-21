@@ -48,9 +48,9 @@ _fxdel_run_selected() {
   done
 
   if [ ${#failed[@]} -eq 0 ]; then
-    echo "✅ Deleted $ok out of $total item(s). I can feel the space 🚀"
+    echo "💫 Deleted $ok out of $total item(s). I can feel the space 🚀"
   else
-    echo "⚠️  Deleted $ok out of $total item(s)."
+    echo "🔴  Deleted $ok out of $total item(s)."
     echo "❌ Failed (${#failed[@]}):"
     for item in "${failed[@]}"; do echo "  • $item"; done
   fi

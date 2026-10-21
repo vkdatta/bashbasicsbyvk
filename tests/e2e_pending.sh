@@ -150,7 +150,7 @@ chk "row removed" "$(q1 "select count(*) from pending_ops")" "0"
 chk "no new backup, nothing charged for it" "$(q1 "select count(*) from links where svc='backup'")" "3"
 
 echo "── 6. stopping a FINISHED upload cannot delete it ──"
-out=$(_pn_stop "$BID" 2>&1); has "refused / nothing to stop" "$out" "ℹ️"
+out=$(_pn_stop "$BID" 2>&1); has "refused / nothing to stop" "$out" "📜"
 chk "the finished backup is still there" "$(q1 "select count(*) from links where svc='backup' and id='$BID'")" "1"
 
 echo "── 7. the Pending menu rows ──"

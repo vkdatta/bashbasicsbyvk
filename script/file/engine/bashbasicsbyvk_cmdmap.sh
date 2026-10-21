@@ -491,7 +491,7 @@ _cm_gate_choice() {
   _cm_on || return 0
   [ "$_CM_BOOTED" = 1 ] || _cm_boot
   _cm_table_build "$_CM_MAP"
-  if [[ "$choice" == @* ]]; then echo "⚠️  '@' only escapes text typed into a prompt — nothing to escape here"; return 1; fi
+  if [[ "$choice" == @* ]]; then echo "🔴  '@' only escapes text typed into a prompt — nothing to escape here"; return 1; fi
   _cm_resolve menu "$choice"
   case "$_CM_ACT" in
     none|local) return 0 ;;

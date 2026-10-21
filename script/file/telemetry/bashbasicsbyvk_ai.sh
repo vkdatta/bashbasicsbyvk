@@ -48,9 +48,9 @@ if not d.get("ok"):
         "invalid_credentials": "❌ Email or API key is incorrect.",
         "auth_required":   "❌ Email and API key required.",
         "rate_limited":    "⏳ Too many attempts, wait a minute.",
-        "ai_unavailable":  "⚠️  " + d.get("message", "AI unavailable."),
+        "ai_unavailable":  "🔴  " + d.get("message", "AI unavailable."),
         "unsafe_or_invalid_sql": "🛡️  Blocked: the AI produced a query that is not a plain read-only SELECT on active_users (" + str(d.get("reason","")) + "). Try rephrasing.",
-        "sql_error":       "⚠️  The generated SQL failed: " + str(d.get("message","")),
+        "sql_error":       "🔴  The generated SQL failed: " + str(d.get("message","")),
         "insufficient_credits": "💳 " + str(d.get("message","Not enough credits.")),
         "ip_blocked":      "⛔ " + str(d.get("message","Blocked.")),
     }
@@ -59,11 +59,11 @@ if not d.get("ok"):
     sys.exit(3 if err in ("invalid_credentials", "auth_required") else 1)
 
 if d.get("kind") == "none":
-    print("ℹ️ ", d.get("message", "Not a usage-statistics question, no report was run.")); sys.exit(0)
+    print("📜 ", d.get("message", "Not a usage-statistics question, no report was run.")); sys.exit(0)
 cols, rows = d.get("columns", []), d.get("rows", [])
 print("🧠 SQL:", d["sql"])
 if not rows:
-    print("ℹ️  No rows."); sys.exit(0)
+    print("📜  No rows."); sys.exit(0)
 
 q = question.lower()
 fmt = "xlsx" if re.search(r"excel|xlsx|spreadsheet", q) else "csv" if "csv" in q else None
@@ -87,7 +87,7 @@ if fmt:
             wb.save(base + ".xlsx")
             print(f"📗 Saved {len(rows)} rows -> {base}.xlsx"); sys.exit(0)
         except ImportError:
-            print("⚠️  openpyxl not installed (pip install openpyxl); saving CSV instead.")
+            print("🔴  openpyxl not installed (pip install openpyxl); saving CSV instead.")
     with open(base + ".csv", "w", newline="") as f:
         w = csv.writer(f); w.writerow(cols); w.writerows(matrix)
     print(f"📄 Saved {len(rows)} rows -> {base}.csv"); sys.exit(0)
@@ -99,7 +99,7 @@ line = lambda r: "  ".join(str(v).ljust(widths[i]) for i, v in enumerate(r))
 print(line(cols)); print("  ".join("-" * w for w in widths))
 for r in shown: print(line(r))
 if len(matrix) > 50: print(f"… {len(matrix)-50} more rows (add 'in excel' to get all)")
-if d.get("truncated"): print("⚠️  Result capped at 1000 rows.")
+if d.get("truncated"): print("🔴  Result capped at 1000 rows.")
 PY
 }
 
@@ -112,7 +112,7 @@ except Exception: print("❌ Unexpected response from the server."); sys.exit(2)
 if not d.get("ok"): print("❌", d.get("message") or d.get("error", "failed")); sys.exit(1)
 rows = d.get("rows", [])
 print(f"💳 Balance: {d.get('balance','?')} credits")
-if not rows: print("ℹ️  No ledger entries in this period."); sys.exit(0)
+if not rows: print("📜  No ledger entries in this period."); sys.exit(0)
 cols = ["date", "type", "credits", "balance", "note"]
 w = [max(len(c), *(len(str(r.get(c, ""))) for r in rows[:100])) for c in cols]
 print("  ".join(c.ljust(w[i]) for i, c in enumerate(cols))); print("  ".join("-"*x for x in w))
@@ -139,7 +139,7 @@ if rows:
     print("  ".join(c.ljust(w[i]) for i, c in enumerate(cols))); print("  ".join("-" * x for x in w))
     for r in rows: print("  ".join(cell(r, c).rjust(w[i]) if c in ("count", "amount") else cell(r, c).ljust(w[i]) for i, c in enumerate(cols)))
 else:
-    print("ℹ️  No revenue in this period.")
+    print("📜  No revenue in this period.")
 print("\nTOTAL  " + "   ".join(f"{c} {v}" for c, v in d.get("totals", {}).items()))
 print("(admin MODIFIED invoices are listed but not added; credit notes are subtracted)")
 PY
@@ -198,7 +198,7 @@ print(json.dumps({"mode": m, "q": q, "from": iso(f), "to": iso(t), "format": fmt
                   "today": today, "extensions": exts}))
 PY
 
-  echo "🤖 Thinking…"
+  echo "🔮 Thinking…"
   _bb_auth_cfg | curl -s --max-time 40 "${_BB_CURL_OPTS[@]}" -K - -D "$hdr" \
       -X POST "$_BVK_AI_URL" -H 'Content-Type: application/json' \
       --data-binary @"$body" -o "$resp" 2>/dev/null
@@ -229,7 +229,7 @@ PY
           else
             echo "🛡️  The AI suggested something outside the allowed command list, so it was dropped. Try rephrasing."
           fi ;;
-        NONE) echo "ℹ️  ${cmd}" ;;
+        NONE) echo "📜  ${cmd}" ;;
         *)    echo "❌ ${cmd}" ;;
       esac ;;
   esac

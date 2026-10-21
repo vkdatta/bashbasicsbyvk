@@ -35,7 +35,7 @@ action_confirm_key() {
 
   echo
   echo "============================================================"
-  echo "⚠️  $heading"
+  echo "🔴  $heading"
   for line in "$@"; do echo "$line"; done
   echo "============================================================"
   echo

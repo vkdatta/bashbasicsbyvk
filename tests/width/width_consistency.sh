@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Caret / width guard.  bash tests/width/width_consistency.sh
-# (1) known characters measure like a real terminal (wcwidth): 🗄️ 👁️ ⚠️ ℹ️ = 1 cell, 📁 ✅ ❌ = 2 (a wrong width put the caret
+# (1) known characters measure like a real terminal (wcwidth): 🗄️ 👁️ ⚠️ ℹ️ ◀️ ▶️ = 1 cell, 📁 💫 🔴 📜 🔼 🔽 🔮 ❌ = 2 (a wrong width put the caret
 #     one cell to the right on every prompt that starts with 🗄️)
 # (2) _bvk_dispw (caret / fit) and _vp_cells (menus) always agree
 # (3) every non-ASCII character used in a read -p / prompt string in script/ is measured identically by both
@@ -16,9 +16,9 @@ chk() {  # text expected label
 }
 chk "🗄️" 1 "file cabinet + VS16"
 chk "🗄️  Back up" 10 "backup prompt start"
-chk "👁️" 1 "eye + VS16"; chk "⚠️" 1 "warning"; chk "ℹ️" 1 "info"; chk "✏️" 1 "pencil"; chk "⚙️" 1 "gear"; chk "⏱️" 1 "stopwatch"
+chk "👁️" 1 "eye + VS16"; chk "⚠️" 1 "warning (text-default)"; chk "ℹ️" 1 "info (text-default)"; chk "◀️" 1 "left triangle"; chk "▶️" 1 "right triangle"; chk "✏️" 1 "pencil"; chk "⚙️" 1 "gear"; chk "⏱️" 1 "stopwatch"
 chk "🖥️" 1 "desktop"; chk "🗑️" 1 "wastebasket"
-chk "📁" 2 "folder"; chk "👤" 2 "bust"; chk "🚫" 2 "no entry"; chk "💳" 2 "card"; chk "✅" 2 "check"; chk "❌" 2 "cross"; chk "⭐" 2 "star"
+chk "📁" 2 "folder"; chk "👤" 2 "bust"; chk "🚫" 2 "no entry"; chk "💳" 2 "card"; chk "💫" 2 "sparkle"; chk "🔴" 2 "red circle"; chk "📜" 2 "scroll"; chk "🔼" 2 "up"; chk "🔽" 2 "down"; chk "🔮" 2 "crystal ball"; chk "✅" 2 "check"; chk "❌" 2 "cross"; chk "⭐" 2 "star"
 chk "日本" 4 "CJK"; chk "é" 1 "latin"; chk "abc" 3 "ascii"
 
 # (3) every non-ASCII char in prompt-like lines

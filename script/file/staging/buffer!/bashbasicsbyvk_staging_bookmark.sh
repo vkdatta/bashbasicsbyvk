@@ -19,12 +19,12 @@ staging_bookmark_apply() {
       live+=("$p")
     else
       missing=$((missing+1))
-      echo "  ⚠️  Skipping missing item (no longer exists): $p"
+      echo "  🔴  Skipping missing item (no longer exists): $p"
     fi
   done
 
   if [ ${#live[@]} -eq 0 ]; then
-    echo "ℹ️  Bookmark buffer had no valid items to apply"
+    echo "📜  Bookmark buffer had no valid items to apply"
     return 0
   fi
 

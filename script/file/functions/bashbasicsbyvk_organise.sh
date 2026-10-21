@@ -81,7 +81,7 @@ _carry_move_batch "$folder" "${batch[@]}"   # locks move with the files
 fi
 ;;
 esac
-echo "✅ Organised by extension"
+echo "💫 Organised by extension"
 }
 
 _ORG_MONTHS=(jan feb mar apr may jun jul aug sep oct nov dec)
@@ -154,7 +154,7 @@ _year_dest "$_YMD_Y" "$group_y" "$_MIN_Y" "$_MAX_Y"
 buckets["$_YDEST"]+="$f"$'\n'
 done
 _flush_buckets buckets
-echo "✅ Organised by year(s)"
+echo "💫 Organised by year(s)"
 }
 
 organise_by_year_month() {
@@ -176,7 +176,7 @@ _month_dest "$m" "$group_m" "$_YDEST"
 buckets["$_MDEST"]+="$f"$'\n'
 done
 _flush_buckets buckets
-echo "✅ Organised by year(s) > month(s)"
+echo "💫 Organised by year(s) > month(s)"
 }
 
 organise_by_year_month_date() {
@@ -201,7 +201,7 @@ _day_dest "$d" "$group_d" "$_MDEST"
 buckets["$_DDEST"]+="$f"$'\n'
 done
 _flush_buckets buckets
-echo "✅ Organised by year(s) > month(s) > date(s)"
+echo "💫 Organised by year(s) > month(s) > date(s)"
 }
 
 unorganise() {
@@ -213,14 +213,14 @@ q|Q) _bvk_quit; return 1 ;;
 esac
 if [ "$uch" = "1" ]; then
 _carry_flatten_into "$path" "$path" 2   # locks + shortcuts follow; a locked empty folder is kept
-echo "✅ All files brought to current location. Empty folders removed."
+echo "💫 All files brought to current location. Empty folders removed."
 else
 if select_items_common "UNORGANISE (folders only)"; then
 for dir in "${selected_items[@]}"; do
 [ -d "$dir" ] || continue
 _carry_flatten_into "$path" "$dir" 1
 done
-echo "✅ Selected folders unorganised."
+echo "💫 Selected folders unorganised."
 fi
 fi
 }
@@ -260,7 +260,7 @@ az_buckets["$dest"]="$cleaned"
 }
 done
 _flush_buckets az_buckets
-echo "✅ Organised A-Z"
+echo "💫 Organised A-Z"
 }
 
 organise_menu() {

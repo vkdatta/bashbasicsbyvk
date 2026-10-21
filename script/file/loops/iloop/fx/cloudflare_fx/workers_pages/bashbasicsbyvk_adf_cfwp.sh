@@ -76,7 +76,7 @@ cfw_build() {
 cfw_row() {
   _xui_slot "$1"; local s="$_XUI_SLOT" tag="" icon="⚙️ " dir="${_CFW_NAME[$_XUI_SLOT]}-recovered"
   [ "${_CFW_TYPE[$s]}" = Pages ] && { icon="📄"; dir="${_CFW_NAME[$s]}-pages-recovered"; }
-  [ -e "$_CFW_NAV/$dir" ] && tag="  ✅ recovered here"
+  [ -e "$_CFW_NAV/$dir" ] && tag="  💫 recovered here"
   printf -v _vp_line ' %2d) %s %-6s %-30s  %s%s' "$1" "$icon" "${_CFW_TYPE[$s]}" \
     "$(_xui_trunc "${_CFW_NAME[$s]}" 30)" "$(_cfw_when "${_CFW_EPOCH[$s]}")" "$tag"
 }
@@ -106,7 +106,7 @@ _cfw_run() {
     if [ "${_CFW_TYPE[$s]}" = Pages ]; then args+=(-p "${_CFW_NAME[$s]}"); else args+=(-w "${_CFW_NAME[$s]}"); fi
   done
   for s in "${picks[@]}"; do
-    [ "${_CFW_TYPE[$s]}" = Pages ] && { echo "     ℹ️  Pages: only publicly reachable files of the latest production deployment can be recovered."; break; }
+    [ "${_CFW_TYPE[$s]}" = Pages ] && { echo "     📜  Pages: only publicly reachable files of the latest production deployment can be recovered."; break; }
   done
   _xui_yes "Start recovery?" || return 1
   echo
@@ -120,7 +120,7 @@ _cfw_export() {
   local r s fmt files tsv=""
   if [[ "$1" == *-* ]]; then _xui_parse_sel "${1#*-}" || return 1
   else _XUI_SEL=($(seq 1 "${#items[@]}")); fi
-  [ "${#_XUI_SEL[@]}" -gt 0 ] || { echo "ℹ️  Nothing to export."; return 1; }
+  [ "${#_XUI_SEL[@]}" -gt 0 ] || { echo "📜  Nothing to export."; return 1; }
   _xui_ask "Export ${#_XUI_SEL[@]} row(s) as  csv / json / both" csv || return 1
   fmt="${_XUI_IN,,}"
   case "$fmt" in csv|json|both) ;; *) echo "❌ Choose csv, json or both."; return 1 ;; esac
@@ -129,7 +129,7 @@ _cfw_export() {
     tsv+="${_CFW_TYPE[$s]}"$'\t'"${_CFW_NAME[$s]}"$'\t'"${_CFW_EPOCH[$s]}"$'\n'
   done
   files="$(printf '%s' "$tsv" | "$_CFW_PY" "$_CFW_MAIN" "$_CFW_NAV" --export "$fmt")" || { echo "❌ Export failed."; return 1; }
-  echo; echo "✅ Exported:"; while IFS= read -r r; do [ -n "$r" ] && echo "   $r"; done <<<"$files"
+  echo; echo "💫 Exported:"; while IFS= read -r r; do [ -n "$r" ] && echo "   $r"; done <<<"$files"
   echo
   return 0
 }

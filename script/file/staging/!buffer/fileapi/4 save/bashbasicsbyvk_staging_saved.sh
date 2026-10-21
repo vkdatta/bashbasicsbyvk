@@ -19,7 +19,7 @@ handle_save_upload() {
   _BB_LINK_ALIAS=""
   _sp_guard_and_resolve "$itemlist" "save-" || return 1
   if ! alias=$(_bb_svc_alias "$nm"); then
-    echo "⚠️  A name may use letters, digits, spaces and . _ @ + -  (up to ~34 characters after the date)."; return 1
+    echo "🔴  A name may use letters, digits, spaces and . _ @ + -  (up to ~34 characters after the date)."; return 1
   fi
   # hidden files inside chosen folders: same Settings → Upload hidden rule as up-
   _hidden_decide "${upload_hidden_mode:-follow}" "the save" "${sp_resolved[@]}" || return 1

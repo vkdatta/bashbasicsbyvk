@@ -38,7 +38,7 @@ gdp_build() {
 
 gdp_row() {
   _xui_slot "$1"; local s="$_XUI_SLOT" tag=""
-  [ "$_GD_ACTIVE" = 1 ] && [ "$_GD_REMOTE" = "${_GDP_NAME[$s]}" ] && tag="  ✅ open now"
+  [ "$_GD_ACTIVE" = 1 ] && [ "$_GD_REMOTE" = "${_GDP_NAME[$s]}" ] && tag="  💫 open now"
   printf -v _vp_line ' %2d) ☁️  %-24s  %s%s' "$1" "$(_xui_trunc "${_GDP_NAME[$s]}" 24)" "$(_gdp_when "${_GDP_LAST[$s]}")" "$tag"
 }
 
@@ -55,7 +55,7 @@ gdp_footer() {
 _gdp_cmd() {
   case "$1" in
     rf) _lb_run "Reading rclone profiles" _gdp_fetch || echo "❌ Reload failed."; return 0 ;;
-    n)  echo; echo "ℹ️  rclone config → n (new remote) → name → Google Drive → scope 1 → auto config y"
+    n)  echo; echo "📜  rclone config → n (new remote) → name → Google Drive → scope 1 → auto config y"
         command rclone config
         _lb_run "Reading rclone profiles" _gdp_fetch; return 0 ;;
     [0-9]*)
@@ -76,7 +76,7 @@ _fx_adf_gdrive() {
     echo "❌ Could not read the rclone profiles (see message above)."; return 1
   fi
   if [ "${#_GDP_NAME[@]}" -eq 0 ]; then
-    echo "ℹ️  rclone has no Google Drive profile yet."
+    echo "📜  rclone has no Google Drive profile yet."
     echo "   Create one:  rclone config → n (new remote) → name → Google Drive → scope 1 (full access) → auto config y"
     _xui_yes "Run 'rclone config' now?" || return 1
     command rclone config

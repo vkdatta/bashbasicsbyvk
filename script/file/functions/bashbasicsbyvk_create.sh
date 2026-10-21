@@ -24,7 +24,7 @@ create_files() {
 
     if _bvk_name_too_long "$newname"; then _bvk_name_refuse "$newname" "File"; skipped=$((skipped+1)); continue; fi
     touch "$path/$newname"
-    echo "✅ Created file: $newname"
+    echo "💫 Created file: $newname"
   done
   [ "$skipped" -gt 0 ] && echo " $skipped file(s) not created because their names exceed 255 bytes (the accepted standard)."
   return 0
@@ -37,7 +37,7 @@ create_dirs() {
   for dir in "${dirs[@]}"; do
     if _bvk_name_too_long "$dir"; then _bvk_name_refuse "$dir" "Folder"; skipped=$((skipped+1)); continue; fi
     mkdir -p "$path/$dir"
-    echo "✅ Created folder: $dir"
+    echo "💫 Created folder: $dir"
   done
   [ "$skipped" -gt 0 ] && echo " $skipped folder(s) not created because their names exceed 255 bytes (the accepted standard)."
   return 0

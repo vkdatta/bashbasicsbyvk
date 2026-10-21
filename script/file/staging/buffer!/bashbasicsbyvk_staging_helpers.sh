@@ -118,11 +118,11 @@ _sp_parse_all_except() {
 _sp_guard_and_resolve() {
   local itemlist="$1" pfx="$2"
   if [ -z "$itemlist" ]; then
-    echo "⚠️  Usage: ${pfx}1,3,5  or  ${pfx}1-7  or  ${pfx}a-1-5,7"
+    echo "🔴  Usage: ${pfx}1,3,5  or  ${pfx}1-7  or  ${pfx}a-1-5,7"
     return 1
   fi
   if $imaginary_mode; then
-    echo "⚠️  Too many items to index directly — narrow the view (group filter or forceshow) before using ${pfx} shortcuts."
+    echo "🔴  Too many items to index directly — narrow the view (group filter or forceshow) before using ${pfx} shortcuts."
     return 1
   fi
   _sp_resolve_itemlist "$itemlist"
@@ -203,12 +203,12 @@ _sp_apply_buffer() {
     if [ -e "$p" ]; then
       live+=("$p")
     else
-      echo "  ⚠️  Skipping missing item (no longer exists): $p"
+      echo "  🔴  Skipping missing item (no longer exists): $p"
     fi
   done
 
   if [ ${#live[@]} -eq 0 ]; then
-    echo "ℹ️  $label buffer had no valid items to apply"
+    echo "📜  $label buffer had no valid items to apply"
     return 0
   fi
 

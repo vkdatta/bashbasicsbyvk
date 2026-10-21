@@ -49,7 +49,7 @@ _rcv_load() {
   _RCV_TOK="${creds%%$'\n'*}"; _RCV_ACC="${creds#*$'\n'}"; creds=""
   echo "☁️  Loading workers…"
   _rcv_fetch_names || { echo "❌ Could not list workers (see message above)."; _rcv_forget; return 1; }
-  [ "${#_RCV_NAMES[@]}" -gt 0 ] || { echo "ℹ️  No workers in this account."; _rcv_forget; return 1; }
+  [ "${#_RCV_NAMES[@]}" -gt 0 ] || { echo "📜  No workers in this account."; _rcv_forget; return 1; }
 }
 
 # ── drawer screen (xui) ─────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ rcv_build() { _xui_begin_items "${_RCV_NAMES[@]}"; }
 
 rcv_row() {
   _xui_slot "$1"; local n="${_RCV_NAMES[$_XUI_SLOT]}" tag=""
-  [ -e "$_RCV_NAV/${n}-recovered" ] && tag="   ✅ already recovered here"
+  [ -e "$_RCV_NAV/${n}-recovered" ] && tag="   💫 already recovered here"
   printf -v _vp_line ' %2d) ☁️  %s%s' "$1" "$n" "$tag"
 }
 

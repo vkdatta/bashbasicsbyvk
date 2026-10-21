@@ -36,9 +36,9 @@ _HL_WHY=""
 _HL_FIX=""
 
 _hl_h()    { printf '\n━━ %s ━━\n' "$*"; }
-_hl_ok()   { printf '  ✅ %s\n' "$*"; }
+_hl_ok()   { printf '  💫 %s\n' "$*"; }
 _hl_bad()  { printf '  ❌ %s\n' "$*"; _HL_BAD=$((_HL_BAD+1)); }
-_hl_warn() { printf '  ⚠️  %s\n' "$*"; _HL_WARN=$((_HL_WARN+1)); }
+_hl_warn() { printf '  🔴  %s\n' "$*"; _HL_WARN=$((_HL_WARN+1)); }
 _hl_info() { printf '     %s\n' "$*"; }
 _hl_fix()  { printf '     🔧 %s\n' "$*"; }
 _hl_find() { _HL_FINDINGS+=("$1|$2"); }      # root-cause list for the verdict
@@ -239,7 +239,7 @@ _hl_subcommands() {
   rm -rf "$d" "$u" 2>/dev/null
   if [ "${_HL_UNI:-0}" -gt 0 ]; then
     _hl_info ""
-    _hl_info "ℹ️  exit 3 is by design (groups.c: non-ASCII names need Unicode rules). It makes the header"
+    _hl_info "📜  exit 3 is by design (groups.c: non-ASCII names need Unicode rules). It makes the header"
     _hl_info "   say [loaded by py] for those folders even though the C binary works. To remove that,"
     _hl_info "   groups.c/gfilter must learn the Unicode grouping rules."
   fi

@@ -57,7 +57,7 @@ _svc_upload() {
   local p bn cand n
   for p in "${paths[@]}"; do
     p="${p%/}"; [[ "$p" == /* ]] || p="$PWD/$p"
-    if [ ! -f "$p" ] && [ ! -d "$p" ]; then _svc_say "  ⚠️  Skipping missing item: $p" >&2; continue; fi
+    if [ ! -f "$p" ] && [ ! -d "$p" ]; then _svc_say "  🔴  Skipping missing item: $p" >&2; continue; fi
     bn="${p##*/}"; cand="$bn"; n=1
     while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
     ln -s "$p" "$stage/$cand"
@@ -97,7 +97,7 @@ _svc_upload() {
     _svc_cleanup; return 1
   fi
   if [ "$tar_rc" -eq 1 ]; then
-    _svc_say "⚠️  Some files changed or were unreadable while packing (they may be missing/partial):"
+    _svc_say "🔴  Some files changed or were unreadable while packing (they may be missing/partial):"
     [ "$_SVC_QUIET" = 1 ] || head -n 3 "$errfile" | sed 's/^/   /'
   fi
   _svc_say "   $((total_size/1024/1024)) MB after tar.gz + encryption, in $nblobs blob(s)."

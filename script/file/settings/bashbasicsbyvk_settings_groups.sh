@@ -65,13 +65,13 @@ _st_du_act() {
     custom)
       _st_ask "Time, e.g. 90m · 1 day · 2d12h · 1 week" "$(_bb_fmt_duration "${!_ST_DU_VAR}")" || return
       if ! secs=$(_bb_parse_duration "$_st_in"); then
-        _st_note "⚠️  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."; return
+        _st_note "🔴  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."; return
       fi
       if [ "$secs" -lt "$_ST_DU_MIN" ] || [ "$secs" -gt "$_ST_DU_MAX" ]; then
-        _st_note "⚠️  Must be between $(_bb_fmt_duration "$_ST_DU_MIN") and $(_bb_fmt_duration "$_ST_DU_MAX")."; return
+        _st_note "🔴  Must be between $(_bb_fmt_duration "$_ST_DU_MIN") and $(_bb_fmt_duration "$_ST_DU_MAX")."; return
       fi
       printf -v "$_ST_DU_VAR" '%s' "$secs"; save_settings
-      _st_note "✅ $(_bb_fmt_duration "$secs")${_ST_DU_NOTE:+ — $_ST_DU_NOTE}" ;;
+      _st_note "💫 $(_bb_fmt_duration "$secs")${_ST_DU_NOTE:+ — $_ST_DU_NOTE}" ;;
   esac
 }
 # _st_duration_open <title> <variable> <heading> <min> <max> <note> <seconds> <label> [<seconds> <label>]...
@@ -247,7 +247,7 @@ _st_grp_system_build() {
 _st_grp_system_act() {
   case "${_st_tag[$1]}" in
     timezone) timezone_settings ;;
-    nano)     import_nanorc_settings; _st_note "✅ nano settings added" ;;
+    nano)     import_nanorc_settings; _st_note "💫 nano settings added" ;;
   esac
 }
 system_group_settings() { _st_run "System" _st_grp_system_build _st_grp_system_act; }

@@ -391,7 +391,7 @@ const CMD = {
     await Promise.all(Array.from({ length: Math.min(CONC, tasks.length || 1) }, worker));
     clearInterval(timer);
     if (!failed) draw(true); else if (TTY) process.stderr.write('\n');
-    for (const m of errors) process.stderr.write(`  ⚠️  ${m}\n`);
+    for (const m of errors) process.stderr.write(`  🔴  ${m}\n`);
     console.log(failed ? 'FAIL' : 'OK');
   },
 

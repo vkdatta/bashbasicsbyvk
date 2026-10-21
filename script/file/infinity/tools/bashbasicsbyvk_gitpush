@@ -728,7 +728,7 @@ No force push was performed."
         remote_author="$(git log -1 --format='%an' "origin/$branch")"
 
         echo
-        echo "⚠️  GIT REMOTE DIVERGENCE DETECTED"
+        echo "🔴  GIT REMOTE DIVERGENCE DETECTED"
         echo
         echo "GitHub already has work that is not present locally."
         echo
@@ -737,7 +737,7 @@ No force push was performed."
         echo "Remote version:      $remote_version"
         echo "Local version:       $local_version"
         echo
-        echo "⚠️  DANGER: Overriding the remote branch will replace the"
+        echo "🔴  DANGER: Overriding the remote branch will replace the"
         echo "remote branch history with your local branch history."
         echo "Any remote-only commits will no longer be reachable from $branch"
         echo "unless they are preserved elsewhere."
@@ -764,7 +764,7 @@ No force push was performed."
         fi
 
         echo
-        echo "⚠️  Force-pushing local $branch to origin/$branch..."
+        echo "🔴  Force-pushing local $branch to origin/$branch..."
 
         if git push --force-with-lease origin "$branch"; then
             ok "Force push completed."

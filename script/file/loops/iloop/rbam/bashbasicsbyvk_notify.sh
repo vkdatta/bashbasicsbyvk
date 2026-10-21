@@ -14,6 +14,34 @@
 declare -ga _NF_ID=() _NF_KIND=() _NF_REF=() _NF_AT=() _NF_MAIL=() _NF_D3=() _NF_ALIAS=() _NF_BYTES=() _NF_FILES=() _NF_NUKED=() _NF_ROLE=()
 _NF_LOADED=0
 
+# ── the notification COUNT for the header row (⏰ N) ───────────────────────────────────────────────────────────
+# The header is redrawn all the time, so it never asks the server itself: it reads a tiny cache file ("<epoch> <count>")
+# written by _nf_load (every time nf opens / reloads) and refreshed in a silent background process at most once a minute.
+_nf_cnt_file() { printf '%s' "${XDG_STATE_HOME:-$HOME/.local/state}/bashbasicsbyvk/nf_count"; }
+_nf_cnt_store() {
+  local f; f=$(_nf_cnt_file); mkdir -p "${f%/*}" 2>/dev/null || return 0
+  printf '%s %s\n' "${EPOCHSECONDS:-$(date +%s)}" "$1" > "$f" 2>/dev/null; return 0
+}
+_nf_cnt_refresh() { _nf_load >/dev/null 2>&1; }     # runs in a subshell: _nf_load stores the count itself
+_NF_CNT=""
+_nf_cnt_get() {   # -> _NF_CNT  (number, or "–" while nothing is known yet)
+  local f at n now lock age
+  _NF_CNT="–"
+  [ -s "${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/auth/active" ] || { _NF_CNT=0; return 0; }   # no -auth user: nothing can be waiting
+  f=$(_nf_cnt_file); now=${EPOCHSECONDS:-$(date +%s)}
+  if [ -r "$f" ]; then read -r at n < "$f"; [[ "$n" =~ ^[0-9]+$ ]] && _NF_CNT=$n; else at=0; fi
+  [[ "$at" =~ ^[0-9]+$ ]] || at=0
+  if (( now - at >= 90 )); then
+    lock="$f.lock"; age=999
+    [ -e "$lock" ] && { read -r age < "$lock" 2>/dev/null; [[ "$age" =~ ^[0-9]+$ ]] && age=$(( now - age )) || age=999; }
+    if (( age >= 60 )) && command -v curl >/dev/null 2>&1; then
+      mkdir -p "${f%/*}" 2>/dev/null; printf '%s\n' "$now" > "$lock" 2>/dev/null
+      ( _nf_cnt_refresh >/dev/null 2>&1 </dev/null & ) 2>/dev/null
+    fi
+  fi
+  return 0
+}
+
 _nf_load() {
   _NF_ID=(); _NF_KIND=(); _NF_REF=(); _NF_AT=(); _NF_MAIL=(); _NF_D3=(); _NF_ALIAS=(); _NF_BYTES=(); _NF_FILES=(); _NF_NUKED=(); _NF_ROLE=()
   _ux_http GET /notifications || return 1
@@ -25,6 +53,7 @@ _nf_load() {
     _NF_ALIAS+=("$alias"); _NF_BYTES+=("$bytes"); _NF_FILES+=("$files"); _NF_NUKED+=("$nuked"); _NF_ROLE+=("$role")
   done < <(_ux_core tsv notifs <<<"$_UX_BODY")
   _NF_LOADED=1
+  _nf_cnt_store "${#_NF_ID[@]}"
 }
 
 # slot -> _NF_T (the sentence)  _NF_ACT (1 = needs an answer)
@@ -53,7 +82,7 @@ nf_build() {
   _xui_begin_items "${lab[@]}"
 }
 nf_row() {
-  _xui_slot "$1"; local k=$_XUI_SLOT icon="ℹ️ "
+  _xui_slot "$1"; local k=$_XUI_SLOT icon="📜 "
   _nf_text "$k"
   [ "$_NF_ACT" = 1 ] && icon="📨"
   printf -v _vp_line ' %2d) %s %s' "$1" "$icon" "$(_xui_trunc "$_NF_T" 100)"
@@ -72,9 +101,9 @@ _nf_rbam_respond() {                         # rid true|false   (also used by th
   _ux_http POST /rbam/respond "{\"rid\":$rid,\"accept\":$acc}" || return 1
   if ! _ux_ok; then _ux_fail; return 1; fi
   if [ "$acc" = true ]; then
-    echo "✅ Done — the link is active."
+    echo "💫 Done — the link is active."
     _ux_sync_dinons force "$rid"                # does something only when I am the sender
-  else echo "✅ Declined."; fi
+  else echo "💫 Declined."; fi
 }
 
 _nf_dismiss() {
@@ -97,7 +126,7 @@ _nf_open() {
       share_offer)
         _ux_http POST "/ux/${_NF_REF[$k]}/respond" "{\"accept\":$a}" || return 1
         if _ux_ok; then
-          [ "$a" = true ] && echo "✅ Accepted — find it in Cloud Surf (cs), tab “Shared with me”." || echo "✅ Declined."
+          [ "$a" = true ] && echo "💫 Accepted — find it in Cloud Surf (cs), tab “Shared with me”." || echo "💫 Declined."
         else _ux_fail; fi ;;
     esac
   else
@@ -113,7 +142,7 @@ _nf_cmd() {
       _xui_select_rows "DISMISS" "🗑️  Dismiss which notifications?" "$1" || return 1
       local r k
       for r in "${_XUI_SEL[@]}"; do _xui_slot "$r"; k=$_XUI_SLOT; _nf_dismiss "${_NF_ID[$k]}"; done
-      echo "✅ Dismissed ${#_XUI_SEL[@]}."; _NF_LOADED=0; return 0 ;;
+      echo "💫 Dismissed ${#_XUI_SEL[@]}."; _NF_LOADED=0; return 0 ;;
     [0-9]*)
       _xui_row "$1" || { _bvk_invalid; return 0; }
       _nf_open "$_XUI_SLOT"; _NF_LOADED=0; return 0 ;;

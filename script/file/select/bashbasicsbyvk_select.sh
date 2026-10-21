@@ -228,11 +228,11 @@ _sel_eval() {
   if [[ "$_ix" =~ ^(a-[0-9][0-9,-]*|[0-9][0-9,-]*)$ ]]; then
     _SEL_EVAL_KIND=index
     if ${imaginary_mode:-false}; then
-      echo "⚠️  This folder is grouped — numbers mean groups. Use fs first, or a name/.s expression"
+      echo "🔴  This folder is grouped — numbers mean groups. Use fs first, or a name/.s expression"
       return 1
     fi
     local _n=${#items[@]} _i
-    if [ "$_n" -eq 0 ]; then echo "ℹ️  Nothing displayed to select"; return 1; fi
+    if [ "$_n" -eq 0 ]; then echo "📜  Nothing displayed to select"; return 1; fi
     local -a _idx=()
     if [[ "$_ix" == a-* ]]; then
       _idx=($(_sp_parse_all_except "${_ix#a-}" "$_n"))
@@ -318,14 +318,14 @@ handle_select_cmd() {
   # .us removes.  .s.set replaces.  .s.add / .s.sub kept as aliases.
   local mode="add" expr="$raw"
   case "$raw" in
-    .us|.us.help) echo "⚠️  Usage: .us <expression>   e.g. .us 3-5   .us .s.ext png   (.us.a = unselect everything here, .s.clr = empty the whole selection)"; return ;;
+    .us|.us.help) echo "🔴  Usage: .us <expression>   e.g. .us 3-5   .us .s.ext png   (.us.a = unselect everything here, .s.clr = empty the whole selection)"; return ;;
     .us.clr) _sel_ensure_store; : > "$_SEL_FILE"; _sel_bump; echo "🧹 Selection cleared"; return ;;
     .us\ *)  mode="sub"; expr="${raw#.us }" ;;
     .us.*)   mode="sub"; expr=".s.${raw#.us.}" ;;
     .s.set\ *) mode="replace"; expr="${raw#.s.set }" ;;
     .s.add\ *) mode="add"; expr="${raw#.s.add }" ;;
     .s.sub\ *) mode="sub"; expr="${raw#.s.sub }" ;;
-    .s.add|.s.sub|.s.set) echo "⚠️  Usage: ${raw} <expression>   e.g. ${raw} .s.ext png"; return ;;
+    .s.add|.s.sub|.s.set) echo "🔴  Usage: ${raw} <expression>   e.g. ${raw} .s.ext png"; return ;;
   esac
   expr="${expr#"${expr%%[![:space:]]*}"}"
 
@@ -353,7 +353,7 @@ handle_select_cmd() {
   _sel_save out
 
   if [ ${#found[@]} -eq 0 ] && [ "$mode" = "replace" ]; then
-    echo "ℹ️  Nothing matched — selection is now empty"
+    echo "📜  Nothing matched — selection is now empty"
     return
   fi
   case "$mode" in
@@ -362,7 +362,7 @@ handle_select_cmd() {
     sub)     _sel_summary out "➖ Unselected ${#found[@]} match(es) → selection now" ;;
   esac
   _sel_preview out
-  [ ${#out[@]} -gt 0 ] && echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
+  [ ${#out[@]} -gt 0 ] && echo "▶️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }
 
 # .s.rec [N]  — take the CURRENT selection and expand it recursively (every
@@ -372,11 +372,11 @@ handle_select_cmd() {
 _sel_cmd_rec() {
   local n="${1//[[:space:]]/}" hidden=0 skipf errf
   [ -z "$n" ] && n=20
-  if [[ ! "$n" =~ ^[0-9]+$ ]]; then echo "⚠️  Usage: .s.rec [N]   e.g. .s.rec 20  (skips folders with more than N files)"; return; fi
+  if [[ ! "$n" =~ ^[0-9]+$ ]]; then echo "🔴  Usage: .s.rec [N]   e.g. .s.rec 20  (skips folders with more than N files)"; return; fi
   [ "${show_hidden_files:-false}" = "true" ] && hidden=1
   local -a roots=() found=()
   _sel_load_live roots
-  if [ ${#roots[@]} -eq 0 ]; then echo "ℹ️  Nothing selected — select items first (e.g. .s 5-8 or .s.a), then .s.rec $n"; return; fi
+  if [ ${#roots[@]} -eq 0 ]; then echo "📜  Nothing selected — select items first (e.g. .s 5-8 or .s.a), then .s.rec $n"; return; fi
   skipf=$(mktemp) || return; errf=$(mktemp) || { rm -f "$skipf"; return; }
   mapfile -d '' -t found < <(BVK_SKIPFILE="$skipf" _sel_core expand "$n" "$hidden" "${roots[@]}" 2>"$errf")
   if [ -s "$errf" ]; then echo "❌ $(sed 's/^ERR: //' "$errf")"; rm -f "$skipf" "$errf"; return; fi
@@ -390,7 +390,7 @@ _sel_cmd_rec() {
     [ "$sk" -gt 5 ] && echo "   … and $((sk-5)) more"
   fi
   rm -f "$skipf" "$errf"
-  [ ${#found[@]} -gt 0 ] && echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
+  [ ${#found[@]} -gt 0 ] && echo "▶️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }
 
 _sel_cmd_show() {
@@ -398,9 +398,9 @@ _sel_cmd_show() {
   [ "$arg" = "all" ] && all=true
   local -a sel=()
   _sel_load_live sel
-  if [ ${#sel[@]} -eq 0 ]; then echo "ℹ️  Selection is empty (use .s)"; return; fi
+  if [ ${#sel[@]} -eq 0 ]; then echo "📜  Selection is empty (use .s)"; return; fi
   _sel_summary sel "🎯 Selection"
-  [ "$_SEL_VANISHED" -gt 0 ] && echo "⚠️  $_SEL_VANISHED selected item(s) no longer exist (hidden here)"
+  [ "$_SEL_VANISHED" -gt 0 ] && echo "🔴  $_SEL_VANISHED selected item(s) no longer exist (hidden here)"
   local i lim=${#sel[@]}
   $all || [ "$lim" -le 100 ] || lim=100
   for (( i=0; i<lim; i++ )); do
@@ -411,13 +411,13 @@ _sel_cmd_show() {
 
 _sel_cmd_shown() {
   if ${imaginary_mode:-false}; then
-    echo "⚠️  Too many items to list — narrow the view (group filter or fs) first"
+    echo "🔴  Too many items to list — narrow the view (group filter or fs) first"
     return
   fi
-  if [ ${#items[@]} -eq 0 ]; then echo "ℹ️  Nothing displayed"; return; fi
+  if [ ${#items[@]} -eq 0 ]; then echo "📜  Nothing displayed"; return; fi
   local -a out=("${items[@]}")
   _sel_save out
   _sel_summary out "🎯 Selected what's displayed"
   _sel_preview out
-  echo "➡️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
+  echo "▶️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }

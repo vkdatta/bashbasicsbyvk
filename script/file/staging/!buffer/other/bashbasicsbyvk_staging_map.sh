@@ -21,7 +21,7 @@ handle_staging_map() {
 
   # ── Guard: need something after p- ──────────────────────────────────
   if [ -z "$itemlist" ]; then
-    echo "⚠️  Usage:"
+    echo "🔴  Usage:"
     echo "     p-a          → map all items"
     echo "     p-1,6        → map items 1 and 6"
     echo "     p-1-5        → map items 1 through 5"
@@ -31,7 +31,7 @@ handle_staging_map() {
 
   # ── Guard: imaginary mode has no direct indices ──────────────────────
   if $imaginary_mode; then
-    echo "⚠️  Too many items to index directly — narrow the view (group filter or forceshow) before using p- shortcuts."
+    echo "🔴  Too many items to index directly — narrow the view (group filter or forceshow) before using p- shortcuts."
     return 0
   fi
 
@@ -98,7 +98,7 @@ _map_deliver() {
   q|Q) _bvk_quit; return 1 ;;
     1)
       printf "%s" "$map_output" | bashbasicsbyvk_copy
-      if [ -n "$suggest" ]; then echo "✅ Copied to clipboard"; else echo "✅ Map copied to clipboard"; fi
+      if [ -n "$suggest" ]; then echo "💫 Copied to clipboard"; else echo "💫 Map copied to clipboard"; fi
       ;;
     2)
       local filename
@@ -116,7 +116,7 @@ _map_deliver() {
         local target="$path/$filename"
         case "$filename" in /*) target="$filename" ;; "~"/*) target="$HOME/${filename#\~/}" ;; esac
         if [ -n "$suggest" ]; then printf "%s\n" "$map_output" > "$target"; else printf "%s" "$map_output" > "$target"; fi
-        if [ -n "$suggest" ]; then echo "✅ Saved as $target"; else echo "✅ Map saved as $target"; fi
+        if [ -n "$suggest" ]; then echo "💫 Saved as $target"; else echo "💫 Map saved as $target"; fi
       fi
       ;;
     *)

@@ -218,7 +218,7 @@ _ux_load_people() {
 _ux_pick_people() {
   _UX_PICKED=()
   if ! _ux_load_people; then
-    echo "ℹ️  You have nobody to share with yet. Open  rbam → Give access  and add people first (ui)."
+    echo "📜  You have nobody to share with yet. Open  rbam → Give access  and add people first (ui)."
     return 1
   fi
   _xui_enter
@@ -259,7 +259,7 @@ _ux_init() {
     err=$(_bb_json_get "$body" error); msg=$(_bb_json_get "$body" message)
     if [ "$status" = 401 ]; then echo "❌ ${msg:-Authentication failed.}" >&2; echo "🔁 Fix the active user with  -auth  inside 'o', then try again." >&2; return 1; fi
     if [ "$status" = 409 ] && [ "$err" = oversized_confirmation_required ] && ! $confirmed; then
-      echo "⚠️  ${msg}" >&2
+      echo "🔴  ${msg}" >&2
       read -e -r -p "   Proceed at 1.2x credit cost? (y/n): " ans
       if [[ "$ans" == y || "$ans" == Y ]]; then confirmed=true; continue; fi
       echo "🚫 Cancelled." >&2; return 1
@@ -326,7 +326,7 @@ _ux_do_share() {
   local p bn cand n
   for p in "${paths[@]}"; do
     p="${p%/}"; [[ "$p" == /* ]] || p="$PWD/$p"
-    if [ ! -f "$p" ] && [ ! -d "$p" ]; then echo "  ⚠️  Skipping missing item: $p" >&2; continue; fi
+    if [ ! -f "$p" ] && [ ! -d "$p" ]; then echo "  🔴  Skipping missing item: $p" >&2; continue; fi
     bn="${p##*/}"; cand="$bn"; n=1
     while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
     ln -s "$p" "$stage/$cand"
@@ -369,7 +369,7 @@ _ux_do_share() {
     _ux_cleanup; return 1
   fi
   if [ "$tar_rc" -eq 1 ]; then
-    echo "⚠️  Some files changed or were unreadable while packing (they may be missing/partial):"
+    echo "🔴  Some files changed or were unreadable while packing (they may be missing/partial):"
     head -n 3 "$errfile" | sed 's/^/   /'
   fi
   echo "   $((total_size/1024/1024)) MB after tar.gz + encryption, in $nblobs blob(s)."
@@ -379,7 +379,7 @@ _ux_do_share() {
     _ux_cleanup; return 1
   fi
   if [ "$total_size" -gt "$_SP_SOFT_UPLOAD_BYTES" ]; then
-    echo "ℹ️  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
+    echo "📜  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
   fi
 
   # 4) price check → init (auth + credit precheck) → parallel blob uploads → commit
@@ -401,7 +401,7 @@ _ux_do_share() {
   fi
   local deducted="$_PN_DEDUCTED" balance="$_PN_BALANCE" expires="$_PN_EXPIRES"
 
-  echo "✅ Shared with ${#rids[@]} person(s). No link exists — each of them gets a notification and accepts it into their Cloud Surf."
+  echo "💫 Shared with ${#rids[@]} person(s). No link exists — each of them gets a notification and accepts it into their Cloud Surf."
   [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
   local secs; secs=$(_bb_ux_nuke_seconds)
   local label="🕐 Nuke time: $(_bb_fmt_duration "$secs")"

@@ -122,7 +122,7 @@ _pn_item_act() {
   case "$tag" in
     continue)
       echo
-      if [ "$_I_status" = running ]; then echo "⚠️  It is already running in another terminal."; else _pn_continue "$d"; fi
+      if [ "$_I_status" = running ]; then echo "🔴  It is already running in another terminal."; else _pn_continue "$d"; fi
       _pn_pause_enter; _st_back=1 ;;
     pause)
       echo; _pn_pause "$_PN_CUR_ID"; _pn_pause_enter; _st_back=1 ;;
@@ -141,7 +141,7 @@ _pn_kind_build() {
   _st_reset
   _pn_ids_of "$_PN_CUR_KIND"
   if [ ${#_PN_IDS[@]} -eq 0 ]; then _st_add h "Nothing is pending here."; return; fi
-  [ "$_PN_SRV_OK" = 1 ] || _st_add h "⚠️  Server not reachable — showing this computer only."
+  [ "$_PN_SRV_OK" = 1 ] || _st_add h "🔴  Server not reachable — showing this computer only."
   local id i
   # Settings › Display › Sort order of this list (s): A-Z · Z-A · progress. Default "as listed" = this computer's items first.
   local -a _nm=() _pc=()
@@ -180,7 +180,7 @@ _pn_top_build() {
   done
   _st_add a "Continue all interrupted (this computer)" 0 "" all
   _st_add a "Refresh" 0 "" refresh
-  [ "$_PN_SRV_OK" = 1 ] || _st_add h "⚠️  Server not reachable — showing this computer only."
+  [ "$_PN_SRV_OK" = 1 ] || _st_add h "🔴  Server not reachable — showing this computer only."
 }
 _pn_top_act() {
   local tag="${_st_tag[$1]}" id d n=0

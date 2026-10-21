@@ -125,7 +125,7 @@ _rl_migrate_legacy() {
   done
   rm -f -- "$_SEL_RULES_DIR/.last" 2>/dev/null
   [ "$n" -gt 0 ] && echo "📦 Rule book upgraded: $n rule(s) moved into select/ and display/  (originals kept in rules/.legacy)"
-  [ "$skipped" -gt 0 ] && echo "⚠️  $skipped old rule file(s) could not be moved (name clash / bad name) — left in $_SEL_RULES_DIR"
+  [ "$skipped" -gt 0 ] && echo "🔴  $skipped old rule file(s) could not be moved (name clash / bad name) — left in $_SEL_RULES_DIR"
   return 0
 }
 
@@ -344,10 +344,10 @@ _rl_p=""; _rl_n=""
 _rl_pick() {
   local num="$1"
   if [ "$_rl_tab" != rules ] || [ -z "$_rl_cur" ]; then
-    echo "⚠️  Open select/ or display/ first, then use this on a rule number"; return 1
+    echo "🔴  Open select/ or display/ first, then use this on a rule number"; return 1
   fi
   if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt "${#items[@]}" ]; then
-    echo "⚠️  Invalid rule number: $num"; return 1
+    echo "🔴  Invalid rule number: $num"; return 1
   fi
   _rl_p="${items[$((num-1))]}"; _rl_n="${_rl_p##*/}"
   return 0
@@ -356,8 +356,8 @@ _rl_pick() {
 _rl_report() {                   # re-audit and say how <kind>/<name> stands
   local kind="$1" name="$2" key="$1/$2"
   _rl_audit_all
-  if [ "${_RL_ST[$key]:-broken}" = ok ]; then echo "✅ Rule '$name' is OK   ${_RL_EX[$key]}"
-  else echo "⚠️  Rule '$name' is a [broken rule]: ${_RL_RS[$key]:-unknown problem}"; fi
+  if [ "${_RL_ST[$key]:-broken}" = ok ]; then echo "💫 Rule '$name' is OK   ${_RL_EX[$key]}"
+  else echo "🔴  Rule '$name' is a [broken rule]: ${_RL_RS[$key]:-unknown problem}"; fi
 }
 
 # ── commands ──────────────────────────────────────────────────────────────────
@@ -365,7 +365,7 @@ _rl_cmd_run() {                  # N inside select/ or display/ → apply the ru
   _rl_pick "$1" || return 1
   local key="$_rl_cur/$_rl_n"
   if [ "${_RL_ST[$key]:-broken}" != ok ]; then
-    echo "⚠️  '$_rl_n' is a [broken rule]: ${_RL_RS[$key]:-unknown problem}"
+    echo "🔴  '$_rl_n' is a [broken rule]: ${_RL_RS[$key]:-unknown problem}"
     echo "   e-$1 to fix it"
     return 1
   fi
@@ -407,23 +407,23 @@ _rl_cmd_create() {
       "$name" "$kind" "$head" "$head" "$head" > "$(_rl_dir "$kind" "$name")/$name.rule"
     _rl_editor "$(_rl_dir "$kind" "$name")/$name.rule"
   fi
-  echo "✅ Created $kind rule '$name'  ${_RL_ICON}"
+  echo "💫 Created $kind rule '$name'  ${_RL_ICON}"
   _rl_report "$kind" "$name"
 }
 
 _rl_cmd_lock() {                 # l-N / ul-N on the rules of the open folder
-  if [ "$_rl_tab" != rules ]; then echo "⚠️  Not available in the Last used tab"; return 1; fi
-  if [ -z "$_rl_cur" ]; then echo "⚠️  Open the 'select' or 'display' folder first, then use l-N / ul-N on its rules"; return 1; fi
+  if [ "$_rl_tab" != rules ]; then echo "🔴  Not available in the Last used tab"; return 1; fi
+  if [ -z "$_rl_cur" ]; then echo "🔴  Open the 'select' or 'display' folder first, then use l-N / ul-N on its rules"; return 1; fi
   _lk_cmd "$([[ "$1" == [uU][lL]-* ]] && echo unlock || echo lock)" "$1"
 }
 
 _rl_cmd_delete() {
-  if [ "$_rl_tab" != rules ]; then echo "⚠️  Not available in the Last used tab"; return 1; fi
+  if [ "$_rl_tab" != rules ]; then echo "🔴  Not available in the Last used tab"; return 1; fi
   if [ -z "$_rl_cur" ]; then
     echo "🔒 'select' and 'display' are built in and can't be deleted — open one and delete rules inside it"
     return 1
   fi
-  if [ "${#items[@]}" -eq 0 ]; then echo "ℹ️  No rules here"; return 1; fi
+  if [ "${#items[@]}" -eq 0 ]; then echo "📜  No rules here"; return 1; fi
   select_items_common "DELETE" allow_a || return 1
   local -a doomed=(); local p
   for p in "${selected_items[@]}"; do
@@ -432,19 +432,19 @@ _rl_cmd_delete() {
   [ "${#doomed[@]}" -gt 0 ] || return 1
   local refs=0 r
   for p in "${doomed[@]}"; do r=$(_rl_refs_to "$_rl_cur" "${p##*/}"); refs=$((refs + r)); done
-  [ "$refs" -gt 0 ] && echo "⚠️  $refs other rule(s) refer to what you are deleting — they will become [broken rule]"
+  [ "$refs" -gt 0 ] && echo "🔴  $refs other rule(s) refer to what you are deleting — they will become [broken rule]"
   selected_items=("${doomed[@]}")
   _lk_confirm_delete "Delete ${#doomed[@]} rule(s)? This can't be undone. (y/n): " || return 1
   for p in "${selected_items[@]}"; do rm -rf -- "$p" && _carry_forget "$p"; done
-  echo "✅ Deleted ${#selected_items[@]} rule(s)"
+  echo "💫 Deleted ${#selected_items[@]} rule(s)"
 }
 
 _rl_cmd_rename() {
-  if [ "$_rl_tab" != rules ]; then echo "⚠️  Not available in the Last used tab"; return 1; fi
+  if [ "$_rl_tab" != rules ]; then echo "🔴  Not available in the Last used tab"; return 1; fi
   if [ -z "$_rl_cur" ]; then
     echo "🔒 'select' and 'display' are built in and can't be renamed"; return 1
   fi
-  if [ "${#items[@]}" -eq 0 ]; then echo "ℹ️  No rules here"; return 1; fi
+  if [ "${#items[@]}" -eq 0 ]; then echo "📜  No rules here"; return 1; fi
   local num raw new
   read -e -r -p "✏️  Rename which rule number? " num
   case "$num" in u|U|"") return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
@@ -454,7 +454,7 @@ _rl_cmd_rename() {
   case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   new="$(_rl_clean_name "$raw")"
   _rule_valid_name "$new" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
-  [ "$new" = "$_rl_n" ] && { echo "ℹ️  Same name — nothing to do"; return 1; }
+  [ "$new" = "$_rl_n" ] && { echo "📜  Same name — nothing to do"; return 1; }
   [ -e "$(_rl_dir "$_rl_cur" "$new")" ] && { echo "❌ '$new' already exists"; return 1; }
   local refs; refs=$(_rl_refs_to "$_rl_cur" "$_rl_n")
   local old="$_rl_p" dst; dst="$(_rl_dir "$_rl_cur" "$new")"
@@ -464,8 +464,8 @@ _rl_cmd_rename() {
   for ext in rule meta; do
     [ -f "$dst/$_rl_n.$ext" ] && mv -- "$dst/$_rl_n.$ext" "$dst/$new.$ext"
   done
-  echo "✅ Renamed '$_rl_n' → '$new'"
-  [ "$refs" -gt 0 ] && echo "⚠️  $refs other rule(s) still say '$_rl_n' — edit them (e-N) or they become [broken rule]"
+  echo "💫 Renamed '$_rl_n' → '$new'"
+  [ "$refs" -gt 0 ] && echo "🔴  $refs other rule(s) still say '$_rl_n' — edit them (e-N) or they become [broken rule]"
   return 0
 }
 
@@ -476,7 +476,7 @@ _rl_cmd_edit() {                 # _rl_cmd_edit <rule|meta> <N>
     mkdir -p "$_rl_p"; : > "$f"
   fi
   _rl_editor "$f"
-  [ "$what" = rule ] && _rl_report "$_rl_cur" "$_rl_n" || echo "✅ Description updated"
+  [ "$what" = rule ] && _rl_report "$_rl_cur" "$_rl_n" || echo "💫 Description updated"
 }
 
 _rl_cmd_info() {
@@ -485,8 +485,8 @@ _rl_cmd_info() {
   echo "🧩 $_rl_n   ($_rl_cur rule)"
   echo "   expression : ${_RL_EX[$key]:-(none)}"
   echo "   description: ${_RL_DS[$key]:-(none)}"
-  if [ "${_RL_ST[$key]:-broken}" = ok ]; then echo "   status     : ✅ OK"
-  else echo "   status     : ⚠️  [broken rule] — ${_RL_RS[$key]:-unknown problem}"; fi
+  if [ "${_RL_ST[$key]:-broken}" = ok ]; then echo "   status     : 💫 OK"
+  else echo "   status     : 🔴  [broken rule] — ${_RL_RS[$key]:-unknown problem}"; fi
   echo "   files      : $_rl_p/$_rl_n.rule  ·  $_rl_n.meta"
 }
 
@@ -494,7 +494,7 @@ _rl_cmd_info() {
 _rl_cmd_save_hist() {
   local num="$1"
   if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt "${#items[@]}" ]; then
-    echo "⚠️  Invalid number: $num"; return 1
+    echo "🔴  Invalid number: $num"; return 1
   fi
   local expr="${items[$((num-1))]}" scan heads kind errf raw name desc
   errf=$(mktemp)
@@ -518,7 +518,7 @@ _rl_cmd_save_hist() {
   _rl_write_bundle "$kind" "$name" "$expr" "$desc" || { echo "❌ Could not save"; return 1; }
   local h tmp; h="$(_rl_hist_file)"; tmp="$h.tmp.$$"
   grep -vxF -- "$expr" "$h" > "$tmp" 2>/dev/null; mv -f -- "$tmp" "$h"
-  echo "✅ Saved $kind rule '$name' ${_RL_ICON}   (open the Rules tab → $kind)"
+  echo "💫 Saved $kind rule '$name' ${_RL_ICON}   (open the Rules tab → $kind)"
 }
 
 _rl_help() {
@@ -541,7 +541,7 @@ HLP
 handle_rule_cmd() {
   local raw="$1"
   if [ "$raw" != ".r" ]; then
-    echo "ℹ️  Rules are managed inside the rule book now — c create · d delete · r rename · e-N edit"
+    echo "📜  Rules are managed inside the rule book now — c create · d delete · r rename · e-N edit"
   fi
   _inner_run r
 }
@@ -596,7 +596,7 @@ rules_menu() {
 
       c)
         if [ "$_rl_tab" = rules ]; then _rl_cmd_create || _rl_fresh=false
-        else echo "⚠️  Not available in the Last used tab — type a number to save an expression"; _rl_fresh=false; fi ;;
+        else echo "🔴  Not available in the Last used tab — type a number to save an expression"; _rl_fresh=false; fi ;;
 
       d)  _rl_cmd_delete || _rl_fresh=false ;;
       l-*|ul-*) _rl_cmd_lock "$_rl_choice" || _rl_fresh=false ;;
@@ -609,16 +609,16 @@ rules_menu() {
       clr)
         if [ "$_rl_tab" = last ]; then
           local _a; read -e -r -p "Clear the last-used list? Your saved rules are not touched. (y/N): " _a
-          if [[ "$_a" == [yY] ]]; then : > "$(_rl_hist_file)"; echo "✅ Last-used list cleared"; else echo "🚫 Cancelled"; _rl_fresh=false; fi
-        else echo "⚠️  clr works in the Last used tab"; _rl_fresh=false; fi ;;
+          if [[ "$_a" == [yY] ]]; then : > "$(_rl_hist_file)"; echo "💫 Last-used list cleared"; else echo "🚫 Cancelled"; _rl_fresh=false; fi
+        else echo "🔴  clr works in the Last used tab"; _rl_fresh=false; fi ;;
 
       ux|rules.export)
-        if [ "$_rl_tab" = rules ]; then _rl_export; else echo "⚠️  Not available in the Last used tab"; fi
+        if [ "$_rl_tab" = rules ]; then _rl_export; else echo "🔴  Not available in the Last used tab"; fi
         _rl_fresh=false ;;
 
       ui|rules.import)
         if [ "$_rl_tab" = rules ]; then _rl_import || _rl_fresh=false      # list is rebuilt below (new rules appear)
-        else echo "⚠️  Not available in the Last used tab"; _rl_fresh=false; fi ;;
+        else echo "🔴  Not available in the Last used tab"; _rl_fresh=false; fi ;;
 
       p-*)  handle_staging_map "$_rl_choice" ;;
 

@@ -221,17 +221,17 @@ _api_do_alias() {
   if [ "$new" = "-" ]; then
     if _api_alias_push "$id" ""; then
       _api_alias_store "$id" ""
-      echo "✅ Alias removed"
+      echo "💫 Alias removed"
     else
       _api_fail; return 1
     fi
   else
     if [[ ! "$new" =~ $_BB_ALIAS_RE ]]; then
-      echo "⚠️  Alias may use letters, digits, spaces and . _ @ + -  (1-48 characters)."; return 1
+      echo "🔴  Alias may use letters, digits, spaces and . _ @ + -  (1-48 characters)."; return 1
     fi
     if _api_alias_push "$id" "$new"; then
       _api_alias_store "$id" ""                     # settled on the server: no pending copy needed
-      echo "✅ Alias: $new   (saved to the server)"
+      echo "💫 Alias: $new   (saved to the server)"
     elif [ "$_API_STATUS" = "000" ] || [[ "$_API_STATUS" == 5* ]]; then
       _api_alias_store "$id" "$new" || { echo "❌ Could not save"; return 1; }
       _api_fail
@@ -299,7 +299,7 @@ _api_cmd_copy() {
   local list="$1" idx k url out="" got=0 missing=0 n
   local -a ks=() shown=()
   for idx in $(parse_selection "$list" "${#items[@]}"); do ks+=("$((idx - 1))"); done
-  if [ "${#ks[@]}" -eq 0 ]; then echo "⚠️  Usage: c-2   or   c-1,3-5   (copies the link to the clipboard)"; return 1; fi
+  if [ "${#ks[@]}" -eq 0 ]; then echo "🔴  Usage: c-2   or   c-1,3-5   (copies the link to the clipboard)"; return 1; fi
   for k in "${ks[@]}"; do
     if url=$(_api_link_url "$k"); then
       out+="${url}"$'\n'; shown+=("$url"); got=$((got + 1))
@@ -311,7 +311,7 @@ _api_cmd_copy() {
   [ "$got" -gt 0 ] || return 1
   out="${out%$'\n'}"
   if ! command -v bashbasicsbyvk_copy >/dev/null 2>&1; then
-    echo "⚠️  bashbasicsbyvk_copy not found — the link(s):"; printf '%s\n' "${shown[@]}"; return 1
+    echo "🔴  bashbasicsbyvk_copy not found — the link(s):"; printf '%s\n' "${shown[@]}"; return 1
   fi
   if [ "${#out}" -gt 1000 ] && ! _api_clip_native; then
     # no native clipboard: a long text would be uploaded instead of copied — keep to what fits in 1 KB
@@ -321,12 +321,12 @@ _api_cmd_copy() {
       keep+="${u}"$'\n'; cnt=$((cnt + 1))
     done
     out="${keep%$'\n'}"
-    echo "ℹ️  No system clipboard here: only $cnt of $got link(s) fit one copy. Copy the rest separately."
+    echo "📜  No system clipboard here: only $cnt of $got link(s) fit one copy. Copy the rest separately."
     got=$cnt
   fi
   printf '%s' "$out" | bashbasicsbyvk_copy
   echo "📋 $got link(s) copied$( [ "$got" -gt 1 ] && printf ' (one per line)' )"
-  [ "$missing" -gt 0 ] && echo "⚠️  $missing link(s) skipped: no stored key."
+  [ "$missing" -gt 0 ] && echo "🔴  $missing link(s) skipped: no stored key."
   return 0
 }
 
@@ -336,7 +336,7 @@ _api_cmd_regen() {
   local list="$1" idx k ans ok=0 id
   local -a ks=() done_ks=()
   for idx in $(parse_selection "$list" "${#items[@]}"); do ks+=("$((idx - 1))"); done
-  if [ "${#ks[@]}" -eq 0 ]; then echo "⚠️  Usage: g-2   or   g-1,3-5   (new address for the link; the old one dies)"; return 1; fi
+  if [ "${#ks[@]}" -eq 0 ]; then echo "🔴  Usage: g-2   or   g-1,3-5   (new address for the link; the old one dies)"; return 1; fi
   echo "🔄 Regenerate ${#ks[@]} link(s) — each gets a NEW address; the current address stops working immediately,"
   echo "   for everyone who has it. Nothing is re-uploaded, expiry and credits are unchanged."
   for k in "${ks[@]}"; do printf '   • %s\n' "$(_api_name "$k")"; done
@@ -346,7 +346,7 @@ _api_cmd_regen() {
     id="${_API_ID[$k]}"
     _api_http POST "/links/$id/regenerate" "{}" || return 1
     if [ "$_API_STATUS" = "200" ]; then
-      echo "✅ $(_api_name "$k"): new address created"
+      echo "💫 $(_api_name "$k"): new address created"
       ok=$((ok + 1))
     else
       printf '%s  ' "$(_api_name "$k"):"; _api_fail
@@ -354,7 +354,7 @@ _api_cmd_regen() {
   done
   [ "$ok" -gt 0 ] || return 1
   _API_LOADED=0
-  echo "ℹ️  Use  c-N  to copy the new link (numbers can change after a refresh)."
+  echo "📜  Use  c-N  to copy the new link (numbers can change after a refresh)."
   return 0
 }
 
@@ -374,13 +374,13 @@ _api_cmd_key() {
   if [[ "$link" == *"#k="* ]]; then
     key="${link#*#k=}"
     local base="${link%%#*}"; base="${base%/}"
-    if [ "${base##*/}" != "$id" ]; then echo "⚠️  That link is for a different upload — not saved."; return 1; fi
+    if [ "${base##*/}" != "$id" ]; then echo "🔴  That link is for a different upload — not saved."; return 1; fi
   else
     key="$link"
   fi
-  if [[ ! "$key" =~ $_BB_KEY_RE ]]; then echo "⚠️  Not a valid key (43 characters: letters, digits, - and _)."; return 1; fi
+  if [[ ! "$key" =~ $_BB_KEY_RE ]]; then echo "🔴  Not a valid key (43 characters: letters, digits, - and _)."; return 1; fi
   _bb_key_store "$id" "$key" || { echo "❌ Could not save"; return 1; }
-  echo "✅ Key saved on this computer — c-$((k + 1)) now copies this link."
+  echo "💫 Key saved on this computer — c-$((k + 1)) now copies this link."
   if [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" != "0" ] && _bb_link_secret_put "$id" "${WORKER_URL%/}/${_API_PUB[$_api_k]:-$id}#k=$key"; then
     _API_LENC[$_api_k]="$_BB_LAST_SECRET_ENC"; echo "☁️  Also kept (encrypted) in the cloud — other devices can copy it too."
   fi
@@ -477,7 +477,7 @@ _api_menu_header() {
       printf '🔗 LINKS (api)   💳 balance: %s credits\n' "${_API_BAL:-?}"
       printf '   %s · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine\n' "$(_api_sort_note)" ;;
   esac
-  [ -n "$_API_ERR" ] && printf '   ⚠️  %s — rf to retry\n' "$_API_ERR"
+  [ -n "$_API_ERR" ] && printf '   🔴  %s — rf to retry\n' "$_API_ERR"
   if [ -z "$_API_ERR" ] && [ "${#items[@]}" -eq 0 ]; then
     case "$_API_SVC" in
       backup) printf '   No backups. They are made automatically when you delete (Settings → File API → Backup).\n' ;;
@@ -544,7 +544,7 @@ _api_redraw_fresh() {
 _api_pick() {            # _api_pick <N>  → _api_k (0-based index)
   local num="$1"
   if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt "${#items[@]}" ]; then
-    echo "⚠️  Invalid link number: $num"; return 1
+    echo "🔴  Invalid link number: $num"; return 1
   fi
   _api_k=$((num - 1))
   return 0
@@ -595,7 +595,7 @@ _api_resolve_time() {
     +*|-*) sign="${spec:0:1}"; spec="${spec:1}" ;;
   esac
   if ! secs=$(_bb_parse_duration "$spec"); then
-    echo "⚠️  Could not read '$spec' — use a number with a unit (s, m, h, d, w), e.g. 2d, 36h, +12h, -1d." >&2
+    echo "🔴  Could not read '$spec' — use a number with a unit (s, m, h, d, w), e.g. 2d, 36h, +12h, -1d." >&2
     return 1
   fi
   cur=$(( (${_API_EXPIRES[$k]} - ${_API_CREATED[$k]}) / 1000 ))
@@ -605,11 +605,11 @@ _api_resolve_time() {
     *) base=$secs ;;
   esac
   if [ "$base" -lt "$_BB_NUKE_MIN" ] || [ "$base" -gt "$_BB_NUKE_MAX" ]; then
-    echo "⚠️  Total life must be between 1 minute and 30 days (that would be $(_bb_fmt_duration "$base"))." >&2
+    echo "🔴  Total life must be between 1 minute and 30 days (that would be $(_bb_fmt_duration "$base"))." >&2
     return 1
   fi
   if [ $(( ${_API_CREATED[$k]} + base * 1000 )) -le "$_API_NOW" ]; then
-    echo "⚠️  That ends before now (the link is already $(_bb_fmt_duration $(( (_API_NOW - ${_API_CREATED[$k]}) / 1000 ))) old). Use  x-N  to nuke it instead." >&2
+    echo "🔴  That ends before now (the link is already $(_bb_fmt_duration $(( (_API_NOW - ${_API_CREATED[$k]}) / 1000 ))) old). Use  x-N  to nuke it instead." >&2
     return 1
   fi
   printf '%s' "$base"
@@ -657,7 +657,7 @@ _api_do_edit() {         # _api_do_edit <idx> [spec]
   local ch rf rd bal ex
   ch=$(_bb_json_get "$_API_BODY" charged); rf=$(_bb_json_get "$_API_BODY" refunded)
   rd=$(_bb_json_get "$_API_BODY" refundedDays); bal=$(_bb_json_get "$_API_BODY" balance); ex=$(_bb_json_get "$_API_BODY" expiresAt)
-  echo "✅ Now gone at $(_bb_fmt_when "$ex")."
+  echo "💫 Now gone at $(_bb_fmt_when "$ex")."
   if [ "${ch:-0}" -gt 0 ] 2>/dev/null; then echo "💳 Charged $ch credit(s)   |   Balance: $bal"
   elif [ "${rf:-0}" -gt 0 ] 2>/dev/null; then echo "💰 Refunded $rf credit(s) ($rd whole day(s))   |   Balance: $bal"
   else echo "💳 No credit change   |   Balance: $bal"; fi
@@ -684,7 +684,7 @@ _api_do_nuke() {         # _api_do_nuke <idx>...
     _api_http DELETE "/links/${_API_ID[$k]}" || return 1
     if [ "$_API_STATUS" = "200" ]; then
       rf=$(_bb_json_get "$_API_BODY" refunded); rd=$(_bb_json_get "$_API_BODY" refundedDays); bal=$(_bb_json_get "$_API_BODY" balance)
-      echo "✅ Nuked $(_api_name "$k")$( [ "${rf:-0}" -gt 0 ] 2>/dev/null && printf '  — refunded %s credit(s) (%s day(s))' "$rf" "$rd" )"
+      echo "💫 Nuked $(_api_name "$k")$( [ "${rf:-0}" -gt 0 ] 2>/dev/null && printf '  — refunded %s credit(s) (%s day(s))' "$rf" "$rd" )"
       ok=$((ok + 1))
     else
       printf '%s  ' "$(_api_name "$k"):"; _api_fail
@@ -712,7 +712,7 @@ _api_cmd_nuke() {        # x-LIST
   local list="$1" idx
   local -a ks=()
   for idx in $(parse_selection "$list" "${#items[@]}"); do ks+=("$((idx - 1))"); done
-  if [ "${#ks[@]}" -eq 0 ]; then echo "⚠️  Usage: x-3   or   x-1,3-5"; return 1; fi
+  if [ "${#ks[@]}" -eq 0 ]; then echo "🔴  Usage: x-3   or   x-1,3-5"; return 1; fi
   _api_do_nuke "${ks[@]}"
 }
 
@@ -795,10 +795,10 @@ api_menu() {
 
       rf) _API_LOADED=0 ;;                       # rebuilt (and re-fetched) below
 
-      r-*) if [ -n "$_API_SVC" ]; then _api_cmd_restore "${_ap_choice#[rR]-}" || true; else echo "⚠️  r-N restores a Backup / Saved item — open them with  bk  or  sv."; _ap_fresh=false; fi ;;
-      c-*) if [ "$_API_SVC" = saved ]; then echo "ℹ️  Saved items have no link — that is the point. Use r-N to restore."; _ap_fresh=false; else _api_cmd_copy "${_ap_choice#[cC]-}" || true; fi ;;
-      g-*) if [ -n "$_API_SVC" ]; then echo "ℹ️  Only plain links can get a new address."; _ap_fresh=false; else _api_cmd_regen "${_ap_choice#[gG]-}" || true; fi ;;
-      k-*) if [ -n "$_API_SVC" ]; then echo "ℹ️  Keys of Backup / Saved items are managed for you."; _ap_fresh=false; else _api_cmd_key "${_ap_choice#[kK]-}" || true; fi ;;
+      r-*) if [ -n "$_API_SVC" ]; then _api_cmd_restore "${_ap_choice#[rR]-}" || true; else echo "🔴  r-N restores a Backup / Saved item — open them with  bk  or  sv."; _ap_fresh=false; fi ;;
+      c-*) if [ "$_API_SVC" = saved ]; then echo "📜  Saved items have no link — that is the point. Use r-N to restore."; _ap_fresh=false; else _api_cmd_copy "${_ap_choice#[cC]-}" || true; fi ;;
+      g-*) if [ -n "$_API_SVC" ]; then echo "📜  Only plain links can get a new address."; _ap_fresh=false; else _api_cmd_regen "${_ap_choice#[gG]-}" || true; fi ;;
+      k-*) if [ -n "$_API_SVC" ]; then echo "📜  Keys of Backup / Saved items are managed for you."; _ap_fresh=false; else _api_cmd_key "${_ap_choice#[kK]-}" || true; fi ;;
       a-*) _api_cmd_alias "${_ap_choice#[aA]-}" || true ;;
       e-*) _api_cmd_edit "${_ap_choice#[eE]-}" || true ;;
       x-*) _api_cmd_nuke "${_ap_choice#[xX]-}" || true ;;

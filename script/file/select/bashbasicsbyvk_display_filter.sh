@@ -113,7 +113,7 @@ _disp_apply() {
   $_disp_on || return 0
   local before=${#items[@]}
   if ! _disp_run; then
-    _disp_banner="⚠️  Display filter error: ${_disp_err} — showing everything  (.d.clr to clear)"
+    _disp_banner="🔴  Display filter error: ${_disp_err} — showing everything  (.d.clr to clear)"
     return 0
   fi
   local -a kept=()
@@ -167,7 +167,7 @@ _disp_set() {
   while IFS= read -r line; do
     case "$line" in
       CSV$'\t'*) labels+=("${line#CSV$'\t'}") ;;
-      RECURSIVE=1) echo "ℹ️  -r is ignored for display (one folder at a time)" ;;
+      RECURSIVE=1) echo "📜  -r is ignored for display (one folder at a time)" ;;
     esac
   done < "$scanf"
   rm -f "$scanf"
@@ -193,7 +193,7 @@ _disp_set() {
   _disp_store "$expr" "${csvs[@]}"
   [ -z "${_DISP_NOHIST:-}" ] && _rule_hist_add "$expr"        # → .r › Last used
   echo "🔎 Display filter set — $cnt item(s) match here"
-  [ "$cnt" -eq 0 ] && echo "ℹ️  Nothing matches in this folder (filter stays on; .d.clr to clear)"
+  [ "$cnt" -eq 0 ] && echo "📜  Nothing matches in this folder (filter stays on; .d.clr to clear)"
   return 0
 }
 
@@ -207,7 +207,7 @@ handle_display_cmd() {
     .d)          if [ -z "$rest" ]; then _disp_status; _disp_help
                  elif [[ "${rest//[[:space:]]/}" =~ ^[0-9][0-9,-]*$ ]]; then
                    # bare numbers (.d 1,5,7-10): show just those displayed rows, in this folder
-                   if ${imaginary_mode:-false}; then echo "⚠️  This folder is grouped — numbers mean groups. Use fs first"; return; fi
+                   if ${imaginary_mode:-false}; then echo "🔴  This folder is grouped — numbers mean groups. Use fs first"; return; fi
                    local -a _dn=($(parse_selection "${rest//[[:space:]]/}" "${#items[@]}")) _dx=()
                    local _k
                    for _k in "${_dn[@]}"; do _dx+=("\"${items[$((_k-1))]##*/}\""); done
@@ -219,21 +219,21 @@ handle_display_cmd() {
     .d.refresh)  _disp_cache_reset; echo "🔄 Display filter will re-scan" ;;
     .d.help)     _disp_help ;;
     .d.run)
-      [ -z "$rest" ] && { echo "⚠️  Usage: .d.run NAME"; return; }
+      [ -z "$rest" ] && { echo "🔴  Usage: .d.run NAME"; return; }
       _rule_valid_name "${rest%% *}" || { echo "❌ Rule names: letters, digits, _ and - only"; return; }
       _DISP_NOHIST=1 _disp_set ".d.rule ${rest%% *}" ;;
     .d.save)
       local name="${rest%% *}" expr=""
       [[ "$rest" == *" "* ]] && expr="${rest#* }"
-      [ -z "$name" ] && { echo "⚠️  Usage: .d.save NAME [expression]   (no expression = the active filter)"; return; }
+      [ -z "$name" ] && { echo "🔴  Usage: .d.save NAME [expression]   (no expression = the active filter)"; return; }
       if [ -z "$expr" ]; then
-        _disp_load || { echo "ℹ️  No active display filter to save — give an expression"; return; }
+        _disp_load || { echo "📜  No active display filter to save — give an expression"; return; }
         expr="$_disp_expr"
       fi
       _rule_save_as display "$name" "$expr" ;;
     .d.*)        # a clause like .d.ext csv  → treat the whole thing as an expression
                  _disp_set "$raw" ;;
-    *)           echo "⚠️  Display commands: .d  .d.clr  .d.save  .d.run  .d.refresh" ;;
+    *)           echo "🔴  Display commands: .d  .d.clr  .d.save  .d.run  .d.refresh" ;;
   esac
 }
 

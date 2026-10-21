@@ -98,7 +98,7 @@ now I'm trying to exit with u
   Name this backup (Enter = just the date and time): u
 📦 Packing tar.gz → 🔐 Encrypting  0.0 MB packed  (0s)
 [██████████████████████] 100%  3/3 KB
-  ✅ 3 KB in 1s  (avg 3 KB/s)
+  💫 3 KB in 1s  (avg 3 KB/s)
 ❌ Invalid command: u — exiting
 
 

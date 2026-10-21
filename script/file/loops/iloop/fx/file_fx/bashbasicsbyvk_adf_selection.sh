@@ -18,10 +18,10 @@
 _fx_sel_need() {
   _sel_load_live sel
   if [ ${#sel[@]} -eq 0 ]; then
-    echo "ℹ️  Nothing selected — use a .s command in the file view first"
+    echo "📜  Nothing selected — use a .s command in the file view first"
     return 1
   fi
-  [ "$_SEL_VANISHED" -gt 0 ] && echo "⚠️  $_SEL_VANISHED selected item(s) no longer exist — skipped"
+  [ "$_SEL_VANISHED" -gt 0 ] && echo "🔴  $_SEL_VANISHED selected item(s) no longer exist — skipped"
   return 0
 }
 
@@ -34,7 +34,7 @@ _fx_sel_stage() {                   # _fx_sel_stage <buffer-file> <label>
   local msg="📌 Staged for $2: $_CSV_ADDED/${#sel[@]} item(s)"
   [ "${#_CSV_DUPES[@]}" -gt 0 ] && msg="$msg (${#_CSV_DUPES[@]} already staged)"
   echo "$msg"
-  [ "$_CSV_ADDED" -gt 0 ] && echo "➡️  Navigate to destination, then use d- to apply."
+  [ "$_CSV_ADDED" -gt 0 ] && echo "▶️  Navigate to destination, then use d- to apply."
 }
 
 _fx_adf_sel_view() { _sel_cmd_show ""; }

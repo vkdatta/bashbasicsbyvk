@@ -18,12 +18,12 @@ handle_compress_items() {
   local itemlist="${raw#z-}"
 
   if [ -z "$itemlist" ]; then
-    echo "⚠️  Usage: z-1,3,5  or  z-1-4  (compress selected items into a named archive)"
+    echo "🔴  Usage: z-1,3,5  or  z-1-4  (compress selected items into a named archive)"
     return
   fi
 
   if $imaginary_mode; then
-    echo "⚠️  Too many items to index directly — narrow the view before using z-."
+    echo "🔴  Too many items to index directly — narrow the view before using z-."
     return
   fi
 
@@ -43,7 +43,7 @@ _compress_paths() {
   local -a in_paths=("$@") paths=()
   local p
   for p in "${in_paths[@]}"; do
-    if [ -e "$p" ] || [ -L "$p" ]; then paths+=("$p"); else echo "  ⚠️  Skipping missing item: $p"; fi
+    if [ -e "$p" ] || [ -L "$p" ]; then paths+=("$p"); else echo "  🔴  Skipping missing item: $p"; fi
   done
   if [ ${#paths[@]} -eq 0 ]; then
     echo "❌ Nothing to compress"
@@ -105,7 +105,7 @@ _compress_paths() {
   # ── Overwrite check ──────────────────────────────────────────────────────
   if [ -e "$arc_path" ]; then
     local ext; ext="${arc_path##*/}"
-    read -e -r -p "⚠️  '${ext}' already exists. Overwrite? [y/N]: " ow
+    read -e -r -p "🔴  '${ext}' already exists. Overwrite? [y/N]: " ow
     ow="${ow%$'\r'}"
     [[ "$ow" =~ ^[Yy]$ ]] || { echo "🚫 Cancelled."; return; }
     rm -f "$arc_path"
@@ -151,7 +151,7 @@ _compress_paths() {
     fi
     rc=$?
     if [ $rc -eq 0 ]; then
-      echo "✅ Created: ${arc_name}.zip"
+      echo "💫 Created: ${arc_name}.zip"
     else
       echo "❌ zip exited with code $rc."
     fi
@@ -166,7 +166,7 @@ _compress_paths() {
     fi
     rc=$?
     if [ $rc -eq 0 ]; then
-      echo "✅ Created: ${arc_name}.tar.gz"
+      echo "💫 Created: ${arc_name}.tar.gz"
     else
       echo "❌ tar exited with code $rc."
     fi
@@ -194,12 +194,12 @@ handle_decompress_items() {
   local itemlist="${raw#uz-}"
 
   if [ -z "$itemlist" ]; then
-    echo "⚠️  Usage: uz-2  or  uz-1,4,7  (each archive gets its own folder)"
+    echo "🔴  Usage: uz-2  or  uz-1,4,7  (each archive gets its own folder)"
     return
   fi
 
   if $imaginary_mode; then
-    echo "⚠️  Too many items to index directly — narrow the view before using uz-."
+    echo "🔴  Too many items to index directly — narrow the view before using uz-."
     return
   fi
 
@@ -219,7 +219,7 @@ _decompress_paths() {
   local p succeeded=0 skipped=0
   for p in "${paths[@]}"; do
     if [ ! -f "$p" ]; then
-      echo "  ⚠️  Skipping '${p##*/}' — not an existing file"
+      echo "  🔴  Skipping '${p##*/}' — not an existing file"
       skipped=$((skipped + 1))
       continue
     fi
@@ -241,7 +241,7 @@ _decompress_paths() {
       fmt="zip"
       folder_name="${bn%.*}"        # strip .zip → name
     else
-      echo "  ⚠️  Skipping '$bn' — unrecognised extension (supported: .zip, .tar.gz, .tgz)"
+      echo "  🔴  Skipping '$bn' — unrecognised extension (supported: .zip, .tar.gz, .tgz)"
       skipped=$((skipped + 1))
       continue
     fi
@@ -263,7 +263,7 @@ _decompress_paths() {
       while [ -e "${dest_dir}_${counter}" ]; do
         counter=$((counter + 1))
       done
-      echo "  ℹ️  '${folder_name}' already exists — using '${folder_name}_${counter}' instead"
+      echo "  📜  '${folder_name}' already exists — using '${folder_name}_${counter}' instead"
       dest_dir="${dest_dir}_${counter}"
     fi
 
@@ -280,7 +280,7 @@ _decompress_paths() {
     local rc=$?
 
     if [ $rc -eq 0 ]; then
-      echo "  ✅ Done"
+      echo "  💫 Done"
       succeeded=$((succeeded + 1))
     else
       echo "  ❌ Extraction failed for '$bn' (exit code $rc)"
@@ -290,7 +290,7 @@ _decompress_paths() {
 
   echo ""
   if [ $((succeeded + skipped)) -eq 0 ]; then
-    echo "⚠️  No items processed."
+    echo "🔴  No items processed."
   else
     echo "🎉 Done — $succeeded extracted$([ $skipped -gt 0 ] && echo ", $skipped skipped")."
   fi

@@ -34,7 +34,7 @@ if [ "$METHOD" == "auto" ]; then
     fi
 
     $CMD > "$1"
-    echo "✅ Success: Overwrote '$1' using $CMD."
+    echo "💫 Success: Overwrote '$1' using $CMD."
 else
     echo "📥 Headless Environment Detected."
     echo "1. Paste your content (Ctrl+V or Long-press)."
@@ -52,5 +52,5 @@ else
 
     mv "$tmpfile" "$1"
     echo "--------------------------------------------------"
-    echo "✅ Success: Clipboard content saved to '$1'."
+    echo "💫 Success: Clipboard content saved to '$1'."
 fi

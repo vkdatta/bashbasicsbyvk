@@ -125,7 +125,7 @@ _st_bg_act() {
     custom)
       builtin printf '\033[2K'
       if _st_ask "Hex color (e.g. 1e1e2e)"; then
-        if _valid_hex "$_st_in"; then _apply_bg_color "$_st_in"; else _st_note "⚠️  Needs 6 hex digits"; fi
+        if _valid_hex "$_st_in"; then _apply_bg_color "$_st_in"; else _st_note "🔴  Needs 6 hex digits"; fi
       fi ;;
   esac
 }
@@ -147,7 +147,7 @@ _st_fg_act() {
     coder)  _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER" ;;
     custom)
       if _st_ask "Hex color (e.g. cdd6f4)"; then
-        if _valid_hex "$_st_in"; then _apply_text_color "$_st_in"; else _st_note "⚠️  Needs 6 hex digits"; fi
+        if _valid_hex "$_st_in"; then _apply_text_color "$_st_in"; else _st_note "🔴  Needs 6 hex digits"; fi
       fi ;;
   esac
 }

@@ -17,7 +17,7 @@ _BVK_SCR_RAW=$'\r\033[2K\033[?7l📂 Location: /x\033[?7h\n\r\033[2K\033[?7l  1)
 _BVK_SCR_PROMPT="Select: "; _BVK_SCR_EXTRA=$'\n'
 out="$(_bvk_scr_text)"
 [ "$out" = $'📂 Location: /x\n  1) 📄 a.txt\n  2) b.py\nSelect:' ] && ok "print: codes stripped, rows intact, ends with Select:" || { bad "print text"; printf '%s\n' "$out" | cat -A; }
-_BVK_SCR_EXTRA=$'⚠️  Invalid selection\n'
+_BVK_SCR_EXTRA=$'🔴  Invalid selection\n'
 has "$(_bvk_scr_text)" "Invalid selection" && ok "print: output printed after the frame is kept" || bad "print extra"
 
 # ---- (2) report -------------------------------------------------------------------------

@@ -74,7 +74,7 @@ JOBS = max(1, int(os.environ.get("BVK_RECOVER_JOBS", "6") or 6))     # workers r
 
 def _progress(futs, labels, status_of):
     """Live line each time an item finishes: [k/N] icon label."""
-    icon = {"ok": "✅", "skipped": "⏭️", "failed": "❌"}
+    icon = {"ok": "💫", "skipped": "⏭️", "failed": "❌"}
     idx = {f: i for i, f in enumerate(futs)}
     for k, f in enumerate(as_completed(futs), 1):
         Report(None).echo(f"── [{k}/{len(futs)}] {icon.get(status_of(f.result()), '')} {labels[idx[f]]}")
@@ -157,7 +157,7 @@ def main(argv=None):
 
     print(f"\n{'=' * 70}\nSummary")
     for name, status, detail in results:
-        icon = {"ok": "✅", "skipped": "⏭️ ", "failed": "❌"}[status]
+        icon = {"ok": "💫", "skipped": "⏭️ ", "failed": "❌"}[status]
         print(f"  {icon} {name}: {detail}")
     return 0 if all(s == "ok" for _, s, _ in results) else 1
 

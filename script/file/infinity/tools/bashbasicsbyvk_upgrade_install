@@ -11,7 +11,7 @@ SPEC="git+${REPO_URL}${REF:+@${REF}}"
 INSTALL_LOC=$(pip show bashbasicsbyvk 2>/dev/null | grep '^Location:' | cut -d' ' -f2-)
 
 if [ -z "$INSTALL_LOC" ]; then
-    echo "⚠️  Not installed yet — doing fresh user-local install (${REF:-latest main})"
+    echo "🔴  Not installed yet — doing fresh user-local install (${REF:-latest main})"
     pip install -vvv --progress-bar on "$SPEC"
     exit $?
 fi

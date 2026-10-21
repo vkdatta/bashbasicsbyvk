@@ -56,7 +56,7 @@ _tz_pkg_cmd() {
 _tz_bootstrap() {
   local ans
   if ! _tz_pkg_cmd; then
-    echo "  ⚠️  This computer has no timezone database and no supported package manager was found."
+    echo "  🔴  This computer has no timezone database and no supported package manager was found."
     return 1
   fi
   echo "  📦 This computer has no timezone database (the tz data that knows every country's offset and daylight saving)."
@@ -65,8 +65,8 @@ _tz_bootstrap() {
   echo "     Command it will run : ${_TZ_PKG_CMD[*]}"
   read -e -r -p "     Download and install it now? (y/N): " ans
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "  ↩️  Not installed — using the manual list of fixed offsets instead."; return 1 ;; esac
-  if "${_TZ_PKG_CMD[@]}" && _tz_db_present; then echo "  ✅ $_TZ_PKG_NAME installed."; return 0; fi
-  echo "  ⚠️  The install did not finish — using the manual list of fixed offsets instead."
+  if "${_TZ_PKG_CMD[@]}" && _tz_db_present; then echo "  💫 $_TZ_PKG_NAME installed."; return 0; fi
+  echo "  🔴  The install did not finish — using the manual list of fixed offsets instead."
   return 1
 }
 
@@ -243,7 +243,7 @@ _st_tz_act() {
   fi
   z="${tag#tz:}"
   if [ -n "$z" ] && ! _tz_valid "$z"; then   # stay on this screen so another zone can be picked
-    _st_wipe; _st_note "⚠️  '$z' cannot be used on this computer — pick another, or use the Manual list."
+    _st_wipe; _st_note "🔴  '$z' cannot be used on this computer — pick another, or use the Manual list."
     return
   fi
   app_timezone="$z"

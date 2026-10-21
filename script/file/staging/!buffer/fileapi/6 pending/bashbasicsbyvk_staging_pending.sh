@@ -169,7 +169,7 @@ _pn_complete() {
   id=$(_pn_get "$d" id); kind=$(_pn_get "$d" kind); nb=$(_pn_get "$d" nblobs)
   [[ "$id" =~ ^[A-Za-z0-9_-]{43}$ ]] && [[ "$nb" =~ ^[0-9]+$ ]] || { echo "❌ That pending item is damaged." >&2; return 1; }
   say() { [ "$quiet" = 1 ] || echo "$@"; }
-  _pn_lock "$d" || { say "⚠️  It is already running (another terminal)."; return 9; }
+  _pn_lock "$d" || { say "🔴  It is already running (another terminal)."; return 9; }
   _pn_set "$d" status running; rm -f "$d/pause.flag" "$d/stop.flag"
   _crypto_check >/dev/null 2>&1 || { _pn_unlock "$d"; return 1; }
   _bb_get_credentials >/dev/null 2>&1 || { _pn_unlock "$d"; return 1; }
@@ -180,7 +180,7 @@ _pn_complete() {
     case $rc in
       0) printf '%s' "$_BB_BODY" > "$d/server.json"; chmod 600 "$d/server.json" ;;
       4) if _pn_reconcile "$id" "$kind"; then found=1; _PN_URL="$WORKER_URL/$id"; _PN_DEDUCTED=""; _PN_BALANCE=""; _PN_EXPIRES=""; break
-         else say "⚠️  The server no longer has this upload (stopped, or idle for more than 3 days). It was removed here too."; rm -rf "$d"; return 1; fi ;;
+         else say "🔴  The server no longer has this upload (stopped, or idle for more than 3 days). It was removed here too."; rm -rf "$d"; return 1; fi ;;
       2) _pn_set "$d" status interrupted; _pn_unlock "$d"; say "   Nothing is lost — add credits, then continue it from Pending (pn)."; return 2 ;;
       5) _pn_set "$d" status interrupted; _pn_unlock "$d"; say "📡 Cannot reach the server. Kept — continue it from Pending (pn) when you are online."; return 23 ;;
       *) _pn_set "$d" status interrupted; _pn_unlock "$d"; return 24 ;;
@@ -231,7 +231,7 @@ _pn_report() {
     backup) echo "🗄️  Backed up as '$alias' — kept $(_bb_fmt_duration "$ttl")  ·  Home → Backup (bk) to restore." ;;
     saved)  echo "💾 Saved as '$alias' — no link exists. Open it from any device: Home → Saved Surf (sv)." ;;
     snapshot) echo "📸 Snapshot finished  ·  Home → Snapshots (sn)." ;;
-    ux)     echo "✅ Shared with ${extra:-the chosen} person(s). No link exists — each of them gets a notification and accepts it into their Cloud Surf." ;;
+    ux)     echo "💫 Shared with ${extra:-the chosen} person(s). No link exists — each of them gets a notification and accepts it into their Cloud Surf." ;;
   esac
   case "$kind" in backup|saved|snapshot|ux)
     [ -n "$_PN_DEDUCTED" ] && echo "💳 Credits deducted: $_PN_DEDUCTED   |   Balance: $_PN_BALANCE"
@@ -267,7 +267,7 @@ _pn_pause() {
     _pn_set "$d" status paused; rm -f "$d/pause.flag"
   fi
   _bb_call POST "/pending/$id/pause"
-  case "$_BB_STATUS" in 200) echo "⏸  Paused. Resume it any time." ;; 404) echo "ℹ️  The server no longer has it." ;; 000) echo "⏸  Paused here (the server could not be reached; it is only a marker there)." ;; *) echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;; esac
+  case "$_BB_STATUS" in 200) echo "⏸  Paused. Resume it any time." ;; 404) echo "📜  The server no longer has it." ;; 000) echo "⏸  Paused here (the server could not be reached; it is only a marker there)." ;; *) echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;; esac
 }
 # stop for good: incomplete blobs are deleted on the server and here.  0 stopped · 1 not stopped
 _pn_stop() {
@@ -279,8 +279,8 @@ _pn_stop() {
   _bb_call DELETE "/pending/$id"
   case "$_BB_STATUS" in
     200) echo "🗑️  Stopped. The incomplete blobs were deleted from the server." ;;
-    404) echo "ℹ️  The server had already dropped it." ;;
-    409) echo "ℹ️  It had already finished — it is a normal item now (nothing was deleted). Nuke it from its own menu if you do not want it." ;;
+    404) echo "📜  The server had already dropped it." ;;
+    409) echo "📜  It had already finished — it is a normal item now (nothing was deleted). Nuke it from its own menu if you do not want it." ;;
     000) echo "📡 Cannot reach the server, so nothing was deleted. Try again when you are online."; return 1 ;;
     *)   echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")"; return 1 ;;
   esac
@@ -304,6 +304,14 @@ _pn_local_row() {
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$(_pn_get "$d" kind)" "$(_pn_status "$d")" "$(_pn_get "$d" name)" "${done_:-0}" "${nb:-0}" "${last:--1}" "${sent:-0}" "${tot:-0}" "$(_pn_get "$d" created)"
 }
 _pn_count_local() { local n=0 i; while read -r i; do [ -n "$i" ] && n=$((n + 1)); done < <(_pn_local_ids); printf '%s' "$n"; }
+
+# the number for the header row (📣 N): same 20 s cache as the hint line below
+_PN_CNT_AT=0; _PN_CNT=0
+_pn_count_cached() {
+  local now=${EPOCHSECONDS:-$(date +%s)}
+  if [ $((now - _PN_CNT_AT)) -ge 20 ]; then _PN_CNT_AT=$now; _PN_CNT=$(_pn_count_local); fi
+  return 0
+}
 
 # one line for the main screen when something is waiting (cheap: directory listing only, cached 20 s)
 _PN_HINT_AT=0; _PN_HINT=""

@@ -215,7 +215,7 @@ _scr_rebuild() {
   done < <(find "$HOME" -name "*.shortcut" -print0 2>/dev/null)
 
   _scr_save fresh
-  echo "✅ Registry rebuilt — ${#fresh[@]} shortcut(s) indexed."
+  echo "💫 Registry rebuilt — ${#fresh[@]} shortcut(s) indexed."
 }
 
 # ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ _scr_rebuild() {
 # .shortcut file no longer exists on disk.
 # ---------------------------------------------------------------------------
 _scr_validate() {
-  [ -f "$_SCR_FILE" ] || { echo "ℹ️  Registry does not exist yet."; return 0; }
+  [ -f "$_SCR_FILE" ] || { echo "📜  Registry does not exist yet."; return 0; }
 
   local -a entries=() kept=() stale=()
   _scr_load entries
@@ -240,11 +240,11 @@ _scr_validate() {
   done
 
   if [ ${#stale[@]} -eq 0 ]; then
-    echo "✅ Registry is clean — ${#kept[@]} entry/entries, none stale."
+    echo "💫 Registry is clean — ${#kept[@]} entry/entries, none stale."
     return 0
   fi
 
-  echo "⚠️  ${#stale[@]} stale entry/entries found:"
+  echo "🔴  ${#stale[@]} stale entry/entries found:"
   local sf
   for sf in "${stale[@]}"; do
     echo "   • $sf"
@@ -276,7 +276,7 @@ handle_scr_sync() {
       local -a entries=()
       _scr_load entries
       if [ ${#entries[@]} -eq 0 ]; then
-        echo "ℹ️  Registry is empty."
+        echo "📜  Registry is empty."
       else
         echo ""
         echo "📋 ${#entries[@]} registered shortcut(s):"
@@ -285,7 +285,7 @@ handle_scr_sync() {
           sc_file="${e%%${_SCR_SEP}*}"
           target="${e#*${_SCR_SEP}}"
           local exists_tag=""
-          [ ! -f "$sc_file" ] && exists_tag="  ⚠️ missing"
+          [ ! -f "$sc_file" ] && exists_tag="  🔴 missing"
           printf "  %3d) %s%s\n       → %s\n" "$i" "$(basename "$sc_file")" "$exists_tag" "$target"
           i=$((i + 1))
         done

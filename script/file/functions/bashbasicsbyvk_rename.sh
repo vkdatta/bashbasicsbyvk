@@ -110,8 +110,8 @@ rename_item() {
   _do_rename_mv "$target" "$new_path"
   local rc=$?
   case $rc in
-    0) echo "✅ Renamed: $(basename "$target") → $newname" ;;
-    2) echo "⚠️  '$newname' already exists — skipped" ;;
+    0) echo "💫 Renamed: $(basename "$target") → $newname" ;;
+    2) echo "🔴  '$newname' already exists — skipped" ;;
     3) _bvk_name_refuse "$newname" "Name"; echo " Not renamed: names over 255 bytes are not accepted." ;;
   esac
   return $rc
@@ -158,7 +158,7 @@ _rename_single_mutation() {
   _scr_add "$new_sc_path"
   _lk_load; _lk_move "$item" "$new_sc_path"      # a locked shortcut stays locked
 fi
-echo "✅ Shortcut renamed: $cur_name → $new_name"
+echo "💫 Shortcut renamed: $cur_name → $new_name"
       continue
     fi
 
@@ -171,8 +171,8 @@ echo "✅ Shortcut renamed: $cur_name → $new_name"
     _do_rename_mv "$item" "$new_path"
     local rc=$?
     case $rc in
-      0) echo "✅ Renamed: $bn → $new_name" ;;
-      2) echo "⚠️  '$new_name' already exists — skipped" ;;
+      0) echo "💫 Renamed: $bn → $new_name" ;;
+      2) echo "🔴  '$new_name' already exists — skipped" ;;
       3) _bvk_name_refuse "$new_name" "Name"; echo " Not renamed: names over 255 bytes are not accepted." ;;
     esac
   done
@@ -261,10 +261,10 @@ _rename_multi_mutation() {
   done < "$csv_file" > "$tmp_csv"
   mv "$tmp_csv" "$csv_file"
 
-  echo "✅ Renamed: ${ok}/${total} names   (counts written to $(basename "$csv_file"))"
+  echo "💫 Renamed: ${ok}/${total} names   (counts written to $(basename "$csv_file"))"
   local i
   if [ ${#fail_names[@]} -gt 0 ]; then
-    echo "⚠️  ${#fail_names[@]} failed:"
+    echo "🔴  ${#fail_names[@]} failed:"
     for i in "${!fail_names[@]}"; do
       printf '   ❌ %s — %s\n' "${fail_names[$i]}" "${fail_reasons[$i]}"
     done

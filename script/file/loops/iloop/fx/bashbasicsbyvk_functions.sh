@@ -344,7 +344,7 @@ _fx_adf_handle_selection() {
       "$fn"
       ;;
     *)
-      echo "⚠️  Unknown item type"
+      echo "🔴  Unknown item type"
       ;;
   esac
 }
@@ -492,7 +492,7 @@ functions_menu() {
           handle_create
           path="$_saved_path_c"
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
@@ -502,7 +502,7 @@ functions_menu() {
           delete_items
           path="$_saved_path_d"
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
@@ -512,7 +512,7 @@ functions_menu() {
           if [[ "$_fx_choice" == [uU][lL]-* ]]; then handle_unlock_items "$_fx_choice"; else handle_lock_items "$_fx_choice"; fi
           path="$_saved_path_l"
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
@@ -522,7 +522,7 @@ functions_menu() {
           transfer_menu
           path="$_saved_path_t"
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
@@ -532,7 +532,7 @@ functions_menu() {
           organise_menu
           path="$_saved_path_x"
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
@@ -542,7 +542,7 @@ functions_menu() {
           handle_rename
           path="$_saved_path_r"
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
@@ -568,7 +568,7 @@ functions_menu() {
         if [ "$_fx_tab" = "udf" ]; then
           handle_staging_map "$_fx_choice"
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
@@ -592,7 +592,7 @@ functions_menu() {
           _fx_udf_export
           _fx_do_fresh=false
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 
@@ -600,7 +600,7 @@ functions_menu() {
         if [ "$_fx_tab" = "udf" ]; then
           _fx_udf_import          # list is rebuilt below (new UDFs appear)
         else
-          echo "⚠️  Not available in ADF tab"; _fx_do_fresh=false
+          echo "🔴  Not available in ADF tab"; _fx_do_fresh=false
         fi
         ;;
 

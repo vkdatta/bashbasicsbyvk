@@ -265,12 +265,34 @@ _st_draw() {
   out+="$nl"$'\n'                                         # linebreak above the footer
   out+="$nl${f1:0:cols-1}"$'\n'
   out+="$nl${f2:0:cols-1}"$'\n'
-  out+="$nl"$'\n'                                         # linebreak under the footer
+  _st_hint_text "$buf" "$cols"
+  if [ -n "$_ST_HINT" ]; then out+="$nl"$'\033[2m'"$_ST_HINT"$'\033[0m\n'      # the suggestion row, right above "Select:" (same place as the main menu)
+  else out+="$nl"$'\n'; fi
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
   if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "${_st_msg:+$_st_msg  }Select: " "$buf" "${#buf}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
   else out+="${nl}Select: $buf"$'\033[J'; fi
   builtin printf '\033[?2026h%s\033[?2026l' "$out"
   prev=$(( vis + 10 ))
+}
+
+# The suggestion row of EVERY Settings / Home style screen (what the typed text would do).  Same engine as the main menu's
+# row (_cm_hint: command map of the screen that owns this prompt), plus the two things only a list screen knows:
+# a typed row number ("Enter -> open <row>") and the = filter.  -> _ST_HINT ("" = nothing to say, the row stays blank)
+_ST_HINT=""
+_st_hint_text() {   # $1 typed text  $2 columns
+  local b="$1" cols="${2:-80}" k
+  _ST_HINT=""
+  if [[ "$b" == =* ]]; then
+    _ST_HINT="=  →  filter this list live  (= + Enter clears it)"
+  elif [[ "$b" =~ ^[0-9]+$ ]] && (( ${#b} < 9 )); then
+    k=$(( 10#$b ))
+    if (( k >= 1 && k <= ${_st_cnt:-0} )) && [ -n "${_st_nrow[$k]+x}" ]; then case "${_st_kind[${_st_nrow[$k]}]}" in t|r) _ST_HINT="Enter  →  switch  ${_st_lbl[${_st_nrow[$k]}]}" ;; *) _ST_HINT="Enter  →  open  ${_st_lbl[${_st_nrow[$k]}]}" ;; esac; else _ST_HINT="no row $k here  (1-${_st_cnt:-0})"; fi
+  elif declare -F _cm_hint >/dev/null 2>&1; then
+    declare -F _cm_ctx_find >/dev/null 2>&1 && _cm_ctx_find
+    _cm_hint "$b" menu; _ST_HINT="$_hint_want"
+  fi
+  (( ${#_ST_HINT} >= cols )) && _ST_HINT="${_ST_HINT:0:cols-2}…"
+  return 0
 }
 
 # erase the block (cursor ends where the block started)

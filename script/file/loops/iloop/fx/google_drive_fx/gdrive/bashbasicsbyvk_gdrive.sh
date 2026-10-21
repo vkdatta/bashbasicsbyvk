@@ -229,7 +229,7 @@ _gd_enter() {
 _gd_leave() {
   local quiet=0 nopath=0 a
   for a in "$@"; do case "$a" in --quiet) quiet=1 ;; --nopath) nopath=1 ;; esac; done
-  [ "$_GD_ACTIVE" = 1 ] || { [ "$quiet" = 1 ] || echo "ℹ️  No Google Drive is open."; return 0; }
+  [ "$_GD_ACTIVE" = 1 ] || { [ "$quiet" = 1 ] || echo "📜  No Google Drive is open."; return 0; }
   [ "$nopath" = 1 ] || _gd_push
   local remote="$_GD_REMOTE" orig="$_GD_ORIG_PATH"
   _gd_settings_leave
@@ -572,7 +572,7 @@ handle_gd_cmd() {
   local c="${1,,}" a
   c="${c%% *}"
   if [ "$_GD_ACTIVE" != 1 ]; then
-    echo "ℹ️  No Google Drive is open — fx → google_drive_fx → open google drive"
+    echo "📜  No Google Drive is open — fx → google_drive_fx → open google drive"
     return 0
   fi
   case "$c" in
@@ -581,12 +581,12 @@ handle_gd_cmd() {
     gd.rf|gd.refresh) _gd_refresh "$path" ;;
     gd.scan)
       _gd_push
-      _gd_py sync "$path" --force --recursive && echo "✅ Listed everything below $(_gd_view_path "$path"; echo "$_gd_vp")" ;;
+      _gd_py sync "$path" --force --recursive && echo "💫 Listed everything below $(_gd_view_path "$path"; echo "$_gd_vp")" ;;
     gd.clean)
-      echo "ℹ️  Downloaded files you did not change turn back into placeholders (they download again when needed)."
+      echo "📜  Downloaded files you did not change turn back into placeholders (they download again when needed)."
       read -e -r -p "   Free the downloaded content of this whole Drive? (y/N): " a
-      case "$a" in [yY]|[yY][eE][sS]) _gd_push; local r; r="$(_gd_py clean)"; echo "✅ ${r%%$'\t'*} file(s) freed (≈ ${r#*$'\t'} bytes of disk)." ;; *) echo "🚫 Cancelled" ;; esac ;;
-    gd.push) _gd_push && echo "✅ Nothing pending." ;;
+      case "$a" in [yY]|[yY][eE][sS]) _gd_push; local r; r="$(_gd_py clean)"; echo "💫 ${r%%$'\t'*} file(s) freed (≈ ${r#*$'\t'} bytes of disk)." ;; *) echo "🚫 Cancelled" ;; esac ;;
+    gd.push) _gd_push && echo "💫 Nothing pending." ;;
     gd.export|gd.ex) _gd_export_cmd "$1" ;;
     gd.recover) _gd_py recover "$path" ;;
     gd.sw|gd.switch) _inner_run gdp ;;

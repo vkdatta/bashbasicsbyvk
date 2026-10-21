@@ -28,10 +28,10 @@ _bk_before_delete() {
 
   # no account → no backend: one line, then carry on (the delete was already confirmed)
   if ! _bb_get_credentials >/dev/null 2>&1; then
-    echo "ℹ️  No backup was taken — there is no active user (-auth). Deleting without one."
+    echo "📜  No backup was taken — there is no active user (-auth). Deleting without one."
     return 0
   fi
-  _crypto_check >/dev/null 2>&1 || { echo "ℹ️  No backup was taken — node is missing. Deleting without one."; return 0; }
+  _crypto_check >/dev/null 2>&1 || { echo "📜  No backup was taken — node is missing. Deleting without one."; return 0; }
 
   local a nm alias
   if [ "$mode" = ask ]; then
@@ -48,7 +48,7 @@ _bk_before_delete() {
   read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm || return 1
   [ "${_CM_ABORT:-0}" = 1 ] && return 1
   while ! alias=$(_bb_svc_alias "$nm"); do
-    echo "   ⚠️  A name may use letters, digits, spaces and . _ @ + -  (up to ~34 characters after the date)."
+    echo "   🔴  A name may use letters, digits, spaces and . _ @ + -  (up to ~34 characters after the date)."
     read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm || return 1
     [ "${_CM_ABORT:-0}" = 1 ] && return 1
   done
@@ -59,9 +59,9 @@ _bk_before_delete() {
       echo "🗄️  Backed up as '$alias' — kept $(_bb_fmt_duration "$_SVC_TTL")  ·  Home → Backup (bk) to restore."
       [ -n "$_SVC_DEDUCTED" ] && echo "💳 Credits deducted: $_SVC_DEDUCTED   |   Balance: $_SVC_BALANCE"
       return 0 ;;
-    2) echo "⚠️  No backup was made (you stopped it)." ;;
+    2) echo "🔴  No backup was made (you stopped it)." ;;
     4) echo "⏸  The backup was interrupted. It is KEPT — finish it from Pending (pn). Nothing is deleted yet." ;;
-    *) echo "⚠️  The backup FAILED — nothing was saved to the cloud." ;;
+    *) echo "🔴  The backup FAILED — nothing was saved to the cloud." ;;
   esac
   read -e -r -p "   Delete anyway, without a backup? (y/N): " a || { echo "🚫 Nothing deleted."; return 1; }
   case "${a,,}" in

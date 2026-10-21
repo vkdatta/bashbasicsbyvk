@@ -171,7 +171,7 @@ _bvk_auth_create() {
   echo; echo "🆕 Create user"
   cat <<'TXT'
 
-⚠️  IMPORTANT — use your OWN, real e-mail.
+🔴  IMPORTANT — use your OWN, real e-mail.
    Admins will not block spam / other people's addresses, and welcome it —
    but at a heavy price: no paid services, no premium support, lost
    non-refundable subscriptions and other heavy penalties.
@@ -202,10 +202,10 @@ TXT
   local out="${path:-$PWD}/bashbasicsbyvk_credentials_$(date +%Y%m%d_%H%M%S).txt"
   ( umask 077; { printf 'bashbasicsbyvk credentials — KEEP SECRET\n\n'
       printf 'mail=%s\ndiseps=%s\ndinons=%s\napikey=%s\n' "$P_MAIL" "$P_DISEPS" "$P_DINONS" "$P_APIKEY"; } > "$out" )
-  echo "✅ User created: $P_MAIL"
+  echo "💫 User created: $P_MAIL"
   echo "📄 Credentials saved to: $out"
   echo "   ➜ SAVE THIS FILE NOW (move it somewhere safe). The apikey cannot be recovered."
-  echo "   ⚠️  Trying to create this mail id again will get you BLOCKED."
+  echo "   🔴  Trying to create this mail id again will get you BLOCKED."
   echo "   If you already have credentials, use 'ui' to import them — or wait 1 day to create new ones."
 }
 
@@ -234,7 +234,7 @@ _bvk_auth_export() {
         5) printf 'sealkey=%s\n' "$P_SEALKEY" ;;
       esac; done >> "$tmp/user_$n.txt" )
   done
-  if [ "$n" -eq 0 ]; then rm -rf "$tmp"; echo "ℹ️  No users to export"; return 1; fi
+  if [ "$n" -eq 0 ]; then rm -rf "$tmp"; echo "📜  No users to export"; return 1; fi
   ( umask 077
     _bz_export "$tmp" "$(_bz_dest "${path:-}" "$_BVK_AUTH_DIR")" bashbasicsbyvk_users \
       "$_AU_MANIFEST" BVK_AUTH_EXPORT "$_AU_FORMAT" users )
@@ -262,11 +262,11 @@ _bvk_auth_merge_file() {  # $1=file
     echo "🔄 Updated: $nm"
   else
     id=$(_bvk_auth_new_id); P_MAIL="$nm"; P_DISEPS="$nd"; P_APIKEY="$na"; P_DINONS="$nn"; P_SEALKEY="$ns"; P_CREATED=$(date -u +%FT%TZ)
-    echo "✅ Imported: $nm"
+    echo "💫 Imported: $nm"
   fi
   _bvk_auth_write "$_BVK_AUTH_DIR/profiles/$id"
   [ -f "$_BVK_AUTH_DIR/active" ] || printf '%s' "$id" > "$_BVK_AUTH_DIR/active"
-  [ -z "$na" ] && echo "   ℹ️  No apikey for $nm — file transfers need it (import a file that has apikey=)."
+  [ -z "$na" ] && echo "   📜  No apikey for $nm — file transfers need it (import a file that has apikey=)."
   return 0
 }
 
@@ -285,7 +285,7 @@ _bvk_auth_import() {
           [ -f "$u" ] || continue
           _bvk_auth_merge_file "$u" && cnt=$((cnt+1))
         done
-        [ "$cnt" -eq 0 ] && echo "ℹ️  Nothing usable inside."
+        [ "$cnt" -eq 0 ] && echo "📜  Nothing usable inside."
       fi
       rm -rf "$tmp" ;;
     *) _bvk_auth_merge_file "$f" ;;
@@ -309,7 +309,7 @@ _bvk_auth_link() {
   _bvk_auth_write "$_BVK_AUTH_DIR/profiles/$id"; printf '%s' "$id" > "$_BVK_AUTH_DIR/active"
   local out="${path:-$PWD}/bashbasicsbyvk_credentials_$(date +%Y%m%d_%H%M%S).txt"
   ( umask 077; printf 'bashbasicsbyvk credentials — KEEP SECRET\n\nmail=%s\ndiseps=%s\ndinons=%s\napikey=%s\n' "$P_MAIL" "$P_DISEPS" "$P_DINONS" "$P_APIKEY" > "$out" )
-  echo "✅ Account linked and set active (credits and history are unchanged)."
+  echo "💫 Account linked and set active (credits and history are unchanged)."
   echo "📄 Credentials saved to: $out  — SAVE IT NOW (it holds your new diseps and dinons)."
 }
 
@@ -353,9 +353,9 @@ _bvk_auth_regen() {  # $1=what: diseps|apikey|dinons|mail   (P_* = current profi
     dinons) P_DINONS="$nn" ;;
   esac
   _bvk_auth_write "$file"
-  echo "✅ ${what} updated and saved locally."
+  echo "💫 ${what} updated and saved locally."
   [ "$what" != mail ] && echo "   New value: $(case $what in diseps) echo "$P_DISEPS";; apikey) echo "$P_APIKEY";; dinons) echo "$P_DINONS";; esac)" && echo "   📝 Use 'ux' to export it to a file and keep it safe."
-  [ "$what" = diseps ] && echo "   ℹ️  Tell the admin your new diseps for support requests."
+  [ "$what" = diseps ] && echo "   📜  Tell the admin your new diseps for support requests."
   [ "$what" = dinons ] && { echo "   🔑 The FEK was re-encrypted with the new dinons. Everyone who holds your OLD dinons has lost access to your shares."; echo "   Send the new dinons only to people you still trust:  rbam → Give access → sd"; }
 }
 
@@ -468,7 +468,7 @@ _au_billing_action() {  # $1 = 0-based slot
   echo; read -e -r -i "$cur" -p "   $label: " new </dev/tty || return 0
   new="${new#"${new%%[![:space:]]*}"}"; new="${new%"${new##*[![:space:]]}"}"
   [ "$new" = "$cur" ] && [ -n "$(_bvk_bill_get "$key")" ] && return 0
-  if _bvk_bill_valid "$key" "$new"; then _bvk_bill_set "$key" "$new" && echo "   ✅ $label saved."; else _au_pause; fi
+  if _bvk_bill_valid "$key" "$new"; then _bvk_bill_set "$key" "$new" && echo "   💫 $label saved."; else _au_pause; fi
 }
 
 _au_recharge_build() {
@@ -526,7 +526,7 @@ _bvk_pay_open() {  # best-effort browser open
 _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary line
   local kind="$1" amount="$2" accts="${3:-}" ans body link exp total
   [ -n "$(_bvk_bill_get name)" ] && [ -n "$(_bvk_bill_get email)" ] || {
-    echo "   ⚠️  Fill Billing details first (at least NAME and EMAIL), then try again."; return 1; }
+    echo "   🔴  Fill Billing details first (at least NAME and EMAIL), then try again."; return 1; }
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
   body=$(_bvk_pay_build "$kind" "$amount" "$accts") || { echo "   ❌ Could not build the request (node is required)."; return 1; }
   echo "   $4"; read -r -p "   Create the payment link? (y/n): " ans </dev/tty
@@ -535,7 +535,7 @@ _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary l
   if ! _bvk_auth_call POST /api/orders "$body" creds "$_BVK_PAY_URL"; then _bvk_auth_err; return 1; fi
   link=$(_bb_json_get "$_AUTH_BODY" link); exp=$(_bb_json_get "$_AUTH_BODY" expires_at); total=$(_bb_json_get "$_AUTH_BODY" total)
   [ -n "$link" ] || { echo "   ❌ Unexpected server response."; return 1; }
-  echo; echo "   ✅ Payment link ready — total US\$$total · valid for 30 minutes, or until it is paid"
+  echo; echo "   💫 Payment link ready — total US\$$total · valid for 30 minutes, or until it is paid"
   echo "   🔗 $link"
   echo "   Open it, choose Razorpay or PayPal, and pay. Credits are added once the payment is confirmed."
   read -r -p "   Open in browser now? (y/n): " ans </dev/tty
@@ -673,7 +673,7 @@ _au_parse_sel() {
 # _au_select_rows "PROMPT" "title line" [typed]   typed = "ux-1,3" style shortcut (no redraw)
 _au_select_rows() {
   local prompt="$1" title="$2" typed="${3:-}"
-  [ "${#items[@]}" -gt 0 ] || { echo "ℹ️  Nothing to choose from."; return 1; }
+  [ "${#items[@]}" -gt 0 ] || { echo "📜  Nothing to choose from."; return 1; }
   if [[ "$typed" == *-* ]]; then _au_parse_sel "${typed#*-}"; return; fi
   local _multi_allow_a=true _multi_header_hook=_au_pick_header _prompt="$prompt"
   local -A _msel_set=()
@@ -709,7 +709,7 @@ _au_export_ids() {  # profile ids...
 }
 _au_remove_ids() {  # profile ids...
   local ans id
-  echo "⚠️  Removes $# user(s) from THIS machine only. Without an export you lose the apikey/dinons."
+  echo "🔴  Removes $# user(s) from THIS machine only. Without an export you lose the apikey/dinons."
   read -e -r -p "Are you really sure? (y/n): " ans
   if [[ "$ans" != y && "$ans" != Y ]]; then echo "🚫 Removal cancelled"; return 1; fi
   for id in "$@"; do

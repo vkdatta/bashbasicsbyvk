@@ -1000,13 +1000,13 @@ def cmd_push(ctx, args=None):
     if total["mk"]:
         bits.append(f"📁 {total['mk']} folder(s) created")
     if total["up"]:
-        bits.append(f"⬆️  {total['up']} uploaded")
+        bits.append(f"🔼  {total['up']} uploaded")
     if total["mv"]:
         bits.append(f"⇄ {total['mv']} moved/renamed")
     if total["rm"]:
         bits.append(f"🗑️  {total['rm']} removed" + ("" if os.environ.get("BVK_GD_PERMANENT") == "1" else " (Drive trash)"))
     if total["skipped"]:
-        bits.append(f"⚠️  {total['skipped']} placeholder copy(ies) not uploaded")
+        bits.append(f"🔴  {total['skipped']} placeholder copy(ies) not uploaded")
     if bits:
         say("☁️  Drive synced: " + " · ".join(bits))
     if total["err"]:
@@ -1068,12 +1068,12 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             continue
         if is_placeholder_copy(n.st):
             skipped += 1
-            say(f"⚠️  Not uploaded (looks like a copy of a not-downloaded file): {n.rel}")
+            say(f"🔴  Not uploaded (looks like a copy of a not-downloaded file): {n.rel}")
             continue
         uploads.append((n.rel, n.st, None))
     for r, est in modified:
         if r["gdoc"]:
-            say(f"⚠️  '{r['rel']}' is a Google file shown as a pointer; its content lives in Google and was left untouched. "
+            say(f"🔴  '{r['rel']}' is a Google file shown as a pointer; its content lives in Google and was left untouched. "
                 f"Open it in Google, or use gd.export to get a Word/Excel/PowerPoint copy.")
             with contextlib.suppress(OSError):
                 d = pointer_bytes(native_ext(r["rel"]) or GENERIC_NATIVE[0], r["did"], ctx.remote)
@@ -1082,7 +1082,7 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             continue
         if is_placeholder_copy(est):
             skipped += 1
-            say(f"⚠️  Not uploaded (looks like a not-downloaded placeholder): {r['rel']}")
+            say(f"🔴  Not uploaded (looks like a not-downloaded placeholder): {r['rel']}")
             continue
         uploads.append((r["rel"], est, r))
     total["skipped"] += skipped
@@ -1096,7 +1096,7 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
     n_native_gone = sum(1 for r in gone if r["kind"] == "f" and r["gdoc"])
     if n_native_gone and os.environ.get("BVK_GD_CONFIRM_NATIVE_DELETE", "1") == "1":
         with bar.paused():
-            ok_n = ask_yes(f"⚠️  {n_native_gone} Google Docs/Sheets/Slides/Forms will be moved to Google Drive Trash. Continue")
+            ok_n = ask_yes(f"🔴  {n_native_gone} Google Docs/Sheets/Slides/Forms will be moved to Google Drive Trash. Continue")
         if not ok_n:
             say("🚫 Nothing removed from Drive — the folder is listed again from Google Drive.")
             for r in gone:
@@ -1107,7 +1107,7 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             gone = []
     if len(gone) > max_del:
         with bar.paused():
-            ok = ask_yes(f"⚠️  {len(gone)} items are missing from the Drive mirror. Remove them from Google Drive too")
+            ok = ask_yes(f"🔴  {len(gone)} items are missing from the Drive mirror. Remove them from Google Drive too")
         if not ok:
             say("🚫 Nothing removed from Drive — the folder is listed again from Google Drive.")
             for r in gone:
@@ -1320,13 +1320,13 @@ def cmd_export(ctx, args):
         elif row["gdoc"]:
             todo.append((row, name_of(rel)))
         else:
-            say(f"ℹ️  {name_of(rel)} is not a Google file — it is an ordinary file, nothing to convert.")
+            say(f"📜  {name_of(rel)} is not a Google file — it is an ordinary file, nothing to convert.")
     done = 0
     for row, inner in todo:
         ext = native_ext(row["rel"])
         fmt = args.format or DEFAULT_EXPORT.get(ext)
         if not fmt:
-            say(f"⚠️  {name_of(row['rel'])}: Google has no file format for this kind (open it in Google).")
+            say(f"🔴  {name_of(row['rel'])}: Google has no file format for this kind (open it in Google).")
             bad += 1
             continue
         target_dir = os.path.join(args.to, parent_of(inner)) if parent_of(inner) else args.to
@@ -1352,7 +1352,7 @@ def cmd_export(ctx, args):
                 with contextlib.suppress(OSError):
                     os.unlink(ptr)
     if done:
-        say(f"✅ {done} Google file(s) converted by Google — the Drive copies are unchanged.")
+        say(f"💫 {done} Google file(s) converted by Google — the Drive copies are unchanged.")
     return 1 if bad else 0
 
 
@@ -1412,7 +1412,7 @@ def cmd_recover(ctx, args):
                 nm = e.get("Path", "")
                 trashed[os.path.splitext(nm[:-4] if nm.endswith(".url") else nm)[0]] = nm
     if not files:
-        say("✅ No Office files found there.")
+        say("💫 No Office files found there.")
         return 0
     total = sum(f[1] for f in files)
     if total > int(os.environ.get("BVK_GD_CONFIRM_MB", "200")) * 1024 * 1024 and not args.yes:
@@ -1486,7 +1486,7 @@ def cmd_sync(ctx, args):
     finally:
         bar.stop()
     if st.get("dups"):
-        say(f"⚠️  {st['dups']} item(s) share a name with another item in this Drive folder and are hidden "
+        say(f"🔴  {st['dups']} item(s) share a name with another item in this Drive folder and are hidden "
             f"(rclone dedupe {ctx.remote}:{rel} fixes that).")
     return 0
 

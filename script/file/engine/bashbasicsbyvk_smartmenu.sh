@@ -798,7 +798,7 @@ _sm_run() {
   _bvk_paste_off
   [ -n "${_orig_stty:-}" ] && stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
-  if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; builtin printf '\n\r\033[2K\033[1A\r'; fi
+  if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; _bvk_hint_leave; fi
   builtin echo
 
   if $multi; then

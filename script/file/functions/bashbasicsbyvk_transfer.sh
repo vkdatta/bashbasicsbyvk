@@ -53,7 +53,7 @@ _gcloud_init_master() {
     return 1
   fi
 
-  echo "✅ SSH tunnel established"
+  echo "💫 SSH tunnel established"
   return 0
 }
 
@@ -122,15 +122,15 @@ _view_selections_menu() {
     case "$sv_choice" in
       c|C)
         if [ ${#_sel_ref[@]} -eq 0 ]; then
-          echo "⚠️  Nothing selected — add items before confirming."
+          echo "🔴  Nothing selected — add items before confirming."
         else
-          echo "✅ Selections confirmed (${#_sel_ref[@]} item(s))"
+          echo "💫 Selections confirmed (${#_sel_ref[@]} item(s))"
           return 0
         fi
         ;;
       x|X)
         if [ ${#_sel_ref[@]} -eq 0 ]; then
-          echo "⚠️  Nothing to remove."
+          echo "🔴  Nothing to remove."
           continue
         fi
         echo "Enter item number(s) to remove (e.g. 1,3 or 2-5):"
@@ -152,7 +152,7 @@ _view_selections_menu() {
           j=$((j+1))
         done
         _sel_ref=("${new_sel[@]}")
-        echo "✅ Removed ${#rm_indices[@]} item(s). Remaining: ${#_sel_ref[@]}"
+        echo "💫 Removed ${#rm_indices[@]} item(s). Remaining: ${#_sel_ref[@]}"
         ;;
       u|U)
         echo "↩️  Back to navigation"
@@ -279,7 +279,7 @@ local_navigator() {
             _bvk_name_refuse "$new_dir_name" "Folder"
           elif [ -n "$new_dir_name" ]; then
             mkdir -p "$nav_path/$new_dir_name"
-            echo "✅ Created: $nav_path/$new_dir_name"
+            echo "💫 Created: $nav_path/$new_dir_name"
             nav_path="$nav_path/$new_dir_name"
           fi
         else
@@ -297,10 +297,10 @@ local_navigator() {
       c|C)
         if [ "$mode" == "dest" ]; then
           nav_result_path="$nav_path"
-          echo "✅ Destination confirmed: $nav_result_path"
+          echo "💫 Destination confirmed: $nav_result_path"
           return 0
         else
-          echo "⚠️  Use v) to view and confirm your selections"
+          echo "🔴  Use v) to view and confirm your selections"
         fi
         ;;
       *)
@@ -340,7 +340,7 @@ local_navigator() {
                 local indices
                 indices=($(parse_selection "$cleaned_input" "${#nav_items[@]}"))
                 if [ ${#indices[@]} -eq 0 ]; then
-                  echo "⚠️  No valid numbers"
+                  echo "🔴  No valid numbers"
                 else
                   local added=0 skipped=0
                   for idx in "${indices[@]}"; do
@@ -367,7 +367,7 @@ local_navigator() {
                     nav_force_show=false
                   else
                     if _in_selection "$sel" "${nav_selected_items[@]}"; then
-                      echo "⚠️  Already selected: $(basename "$sel") — skipped"
+                      echo "🔴  Already selected: $(basename "$sel") — skipped"
                     else
                       nav_selected_items+=("$sel")
                       echo "➕ Selected: $(basename "$sel") — total: ${#nav_selected_items[@]}  (v to review)"
@@ -378,7 +378,7 @@ local_navigator() {
                 fi
               fi
             else
-              echo "⚠️  Invalid input"
+              echo "🔴  Invalid input"
             fi
           else
             if [[ "$nav_choice" =~ ^[0-9]+$ ]] && [ "$nav_choice" -ge 1 ] && [ "$nav_choice" -le "${#nav_items[@]}" ]; then
@@ -388,7 +388,7 @@ local_navigator() {
                 nav_prefix=""
                 nav_force_show=false
               else
-                echo "⚠️  Select a folder (📁) to navigate into, or c) to confirm this location"
+                echo "🔴  Select a folder (📁) to navigate into, or c) to confirm this location"
               fi
             else
               _bvk_invalid
@@ -469,7 +469,7 @@ gcloud_navigator() {
           read -e -p "📂 New remote folder name: " new_rdir
           if [ -n "$new_rdir" ]; then
             _gcloud_cmd "mkdir -p '$remote_path/$new_rdir'"
-            echo "✅ Created remote: $remote_path/$new_rdir"
+            echo "💫 Created remote: $remote_path/$new_rdir"
             remote_path="$remote_path/$new_rdir"
           fi
         else
@@ -487,10 +487,10 @@ gcloud_navigator() {
       c|C)
         if [ "$mode" == "dest" ]; then
           gcloud_nav_result_path="$remote_path"
-          echo "✅ GCloud destination confirmed: $gcloud_nav_result_path"
+          echo "💫 GCloud destination confirmed: $gcloud_nav_result_path"
           return 0
         else
-          echo "⚠️  Use v) to view and confirm your selections"
+          echo "🔴  Use v) to view and confirm your selections"
         fi
         ;;
       *)
@@ -510,7 +510,7 @@ gcloud_navigator() {
               local indices
               indices=($(parse_selection "$cleaned_input" "${#remote_items[@]}"))
               if [ ${#indices[@]} -eq 0 ]; then
-                echo "⚠️  No valid numbers"
+                echo "🔴  No valid numbers"
               else
                 local added=0 skipped=0
                 for idx in "${indices[@]}"; do
@@ -538,7 +538,7 @@ gcloud_navigator() {
                 else
                   local full_path="$remote_path/$sel"
                   if _in_selection "$full_path" "${gcloud_nav_selected_items[@]}"; then
-                    echo "⚠️  Already selected: $sel — skipped"
+                    echo "🔴  Already selected: $sel — skipped"
                   else
                     gcloud_nav_selected_items+=("$full_path")
                     echo "➕ Selected: $sel — total: ${#gcloud_nav_selected_items[@]}  (v to review)"
@@ -549,7 +549,7 @@ gcloud_navigator() {
               fi
             fi
           else
-            echo "⚠️  Invalid input"
+            echo "🔴  Invalid input"
           fi
         else
           if [[ "$gnav_choice" =~ ^[0-9]+$ ]] && \
@@ -560,7 +560,7 @@ gcloud_navigator() {
               _nav_history+=("$remote_path")
               remote_path="$remote_path/${sel%/}"
             else
-              echo "⚠️  Select a folder (📁) to navigate into, or c) to confirm this location"
+              echo "🔴  Select a folder (📁) to navigate into, or c) to confirm this location"
             fi
           else
             _bvk_invalid
@@ -576,8 +576,8 @@ gcloud_navigator() {
 _transfer_report() {
   local verb="$1" ok="$2" total="$3" dest="$4"
   shift 4
-  local icon="✅"
-  [ $# -gt 0 ] && icon="⚠️ "
+  local icon="💫"
+  [ $# -gt 0 ] && icon="🔴 "
   echo "$icon $verb $ok out of $total item(s) → $dest"
   if [ $# -gt 0 ]; then
     echo "❌ Failed ($#):"
@@ -699,7 +699,7 @@ _shortcut_resolve() {
     return 1
   fi
   if [ ! -e "$target" ]; then
-    echo "⚠️  Shortcut target no longer exists: $target" >&2
+    echo "🔴  Shortcut target no longer exists: $target" >&2
     return 1
   fi
   printf '%s' "$target"
@@ -718,7 +718,7 @@ perform_shortcut() {
 
   for item in "${src_items[@]}"; do
     if [ ! -e "$item" ]; then
-      echo "  ⚠️  Skipped (not found): $item"
+      echo "  🔴  Skipped (not found): $item"
       continue
     fi
 
@@ -737,7 +737,7 @@ perform_shortcut() {
 
     local sc_icon
     [ -d "$item" ] && sc_icon="🔑" || sc_icon="🗝️"
-    echo "  ✅ Shortcut created: ${sc_icon} ${display_name} → $dest/$(basename "$sc_path")"
+    echo "  💫 Shortcut created: ${sc_icon} ${display_name} → $dest/$(basename "$sc_path")"
   done
 }
 
@@ -976,7 +976,7 @@ transfer_menu() {
         perform_move "$final_dest" "${selected_items[@]}"
       else
         perform_shortcut "$final_dest" "${selected_items[@]}"
-        echo "✅ Shortcuts created → $final_dest"
+        echo "💫 Shortcuts created → $final_dest"
       fi
       ;;
     3)
@@ -1069,7 +1069,7 @@ MAPPER_EOF
         if $is_dir; then
           local dir_root="$final_dest/$base"
           if rclone lsf "$dir_root" --files-only 2>/dev/null | grep -qx "$base"; then
-            echo "⚠️  Skipping $base — a file with this name already exists at destination, refusing to nest."
+            echo "🔴  Skipping $base — a file with this name already exists at destination, refusing to nest."
             continue
           fi
           local _op="$t_op"
@@ -1089,7 +1089,7 @@ MAPPER_EOF
         else
           local target_path="$final_dest/$base"
           if rclone lsf "$target_path" --dirs-only 2>/dev/null | grep -q .; then
-            echo "⚠️  Skipping $base — a folder with this exact name already exists at destination."
+            echo "🔴  Skipping $base — a folder with this exact name already exists at destination."
             continue
           fi
           local _op="$t_op"
@@ -1110,7 +1110,7 @@ MAPPER_EOF
       done
 
       rm -f "$_mapper_script"
-      echo "✅ Drive transfer complete"
+      echo "💫 Drive transfer complete"
       ;;
     4)
       echo "☁️  Transferring to GCloud Shell..."
@@ -1129,7 +1129,7 @@ MAPPER_EOF
           fi
         fi
       done
-      echo "✅ Transfer to GCloud complete"
+      echo "💫 Transfer to GCloud complete"
       ;;
     5)
       echo "☁️  Transferring from GCloud Shell to local..."
@@ -1143,7 +1143,7 @@ MAPPER_EOF
           echo "  🗑️  Removed from GCloud: $remote_item"
         fi
       done
-      echo "✅ Transfer from GCloud complete"
+      echo "💫 Transfer from GCloud complete"
       ;;
   esac
 

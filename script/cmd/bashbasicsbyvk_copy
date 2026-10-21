@@ -75,7 +75,7 @@ if [[ "$COPY_CMD" != "osc52-direct" && "$COPY_CMD" != "worker-bridge" ]]; then
 
     cat "$FILE" | eval "$COPY_CMD"
 
-    echo "✅ Success: Copied via $COPY_CMD."
+    echo "💫 Success: Copied via $COPY_CMD."
 
 elif [ "$COPY_CMD" == "osc52-direct" ]; then
 
@@ -87,7 +87,7 @@ elif [ "$COPY_CMD" == "osc52-direct" ]; then
         printf "\033]52;c;%s\a" "$PAYLOAD"
     fi
 
-    echo "✅ Success: Small file (<1KB) copied via OSC52."
+    echo "💫 Success: Small file (<1KB) copied via OSC52."
 
 else
 
@@ -187,7 +187,7 @@ else
 
     clear
 
-    echo "✅ Success: Sync link copied to clipboard (key embedded after #)."
+    echo "💫 Success: Sync link copied to clipboard (key embedded after #)."
     echo "-------------------------------------------"
     echo "Link: $FINAL_URL"
     [ -n "$CREDITS_DEDUCTED" ] && echo "💳 Credits deducted: $CREDITS_DEDUCTED   |   Balance: $CREDITS_BALANCE"
@@ -201,7 +201,7 @@ else
             || termux-open-url "$FINAL_URL"
         ) &> /dev/null &
     else
-        echo "ℹ️  Not auto-opened (the browser viewer runs server-delivered code that could read the key)."
+        echo "📜  Not auto-opened (the browser viewer runs server-delivered code that could read the key)."
         echo "   Use 'do-' to decrypt locally, or export FILEAPI_BASHBASICS_OPEN=1 to auto-open."
     fi
 fi

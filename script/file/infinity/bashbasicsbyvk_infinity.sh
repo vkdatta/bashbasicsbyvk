@@ -4,7 +4,7 @@
 # other menu (a warning printed after the options hid the menu from it).
 _infinity_warning() {
   printf "\n"
-  printf "⚠️  DEVELOPMENT / EXTREME-RISK WARNING\n"
+  printf "🔴  DEVELOPMENT / EXTREME-RISK WARNING\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
   printf "All Infinity Stones features below are currently in DEVELOPMENT STAGE and\n"
   printf "are subject to extreme stress, failure, data-loss, corruption, and incorrect\n"

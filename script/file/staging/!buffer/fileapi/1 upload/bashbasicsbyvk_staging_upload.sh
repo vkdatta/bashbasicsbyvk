@@ -60,7 +60,7 @@ _bb_authed_put() {
     fi
 
     if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
-      echo "⚠️  ${msg}" >&2
+      echo "🔴  ${msg}" >&2
       read -e -p "   Proceed at 1.2x credit cost? (y/n): " ans
       if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
         confirmed=true
@@ -147,7 +147,7 @@ _bb_link_store_and_explain() {
     if _bb_link_secret_put "$id" "$url"; then
       echo "☁️  Kept (encrypted — the server cannot read it) in Home → Links: copy it again with  c-N  from any device."
     else
-      echo "ℹ️  Not kept in the cloud (needs your dinons on this computer, or the server was unreachable). It is still saved on this computer."
+      echo "📜  Not kept in the cloud (needs your dinons on this computer, or the server was unreachable). It is still saved on this computer."
     fi
   fi
   d3=$(_bb_d3 "${FILEAPI_BASHBASICS_DISEPS:-}")
@@ -168,7 +168,7 @@ _announce_link() {
     printf "\033]52;c;%s\a" "$url_payload"
   fi
 
-  echo "✅ Link copied to clipboard (best effort). Key is embedded after # — keep the whole link intact."
+  echo "💫 Link copied to clipboard (best effort). Key is embedded after # — keep the whole link intact."
   echo "-------------------------------------------"
   echo "Link: $final_url"
   echo "-------------------------------------------"
@@ -177,7 +177,7 @@ _announce_link() {
   if [ "${FILEAPI_BASHBASICS_OPEN:-0}" = "1" ]; then
     ( open "$final_url" || xdg-open "$final_url" || termux-open-url "$final_url" ) &> /dev/null &
   else
-    echo "ℹ️  Not auto-opened: the browser viewer runs code delivered by the server, which could in theory read the key."
+    echo "📜  Not auto-opened: the browser viewer runs code delivered by the server, which could in theory read the key."
     echo "   Use 'do-' (decrypts on your machine) for the strongest protection, or export FILEAPI_BASHBASICS_OPEN=1 to auto-open."
   fi
 }
@@ -418,7 +418,7 @@ _unpack_targz_safe() {
   done
   eval "$_shopts"
   rmdir "$stage" 2>/dev/null
-  echo "✅ Imported $nfiles file(s) into: $dest"
+  echo "💫 Imported $nfiles file(s) into: $dest"
   return 0
 }
 
@@ -477,7 +477,7 @@ _bb_upload_init() {
     fi
 
     if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
-      echo "⚠️  ${msg}" >&2
+      echo "🔴  ${msg}" >&2
       read -e -p "   Proceed at 1.2x credit cost? (y/n): " ans
       if [[ "$ans" == "y" || "$ans" == "Y" ]]; then confirmed=true; continue; fi
       echo "🚫 Cancelled." >&2
@@ -551,7 +551,7 @@ _up_do_multipart_upload() {
   local p bn cand n
   for p in "${paths[@]}"; do
     p="${p%/}"; [[ "$p" == /* ]] || p="$PWD/$p"
-    if [ ! -f "$p" ] && [ ! -d "$p" ]; then echo "  ⚠️  Skipping missing item: $p" >&2; continue; fi
+    if [ ! -f "$p" ] && [ ! -d "$p" ]; then echo "  🔴  Skipping missing item: $p" >&2; continue; fi
     bn="${p##*/}"; cand="$bn"; n=1
     while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
     ln -s "$p" "$stage/$cand"
@@ -598,7 +598,7 @@ _up_do_multipart_upload() {
     _up_cleanup; return 1
   fi
   if [ "$tar_rc" -eq 1 ]; then
-    echo "⚠️  Some files changed or were unreadable while packing (they may be missing/partial):"
+    echo "🔴  Some files changed or were unreadable while packing (they may be missing/partial):"
     head -n 3 "$errfile" | sed 's/^/   /'
   fi
   echo "   $((total_size/1024/1024)) MB after tar.gz + encryption, in $nblobs blob(s)."
@@ -608,7 +608,7 @@ _up_do_multipart_upload() {
     _up_cleanup; return 1
   fi
   if [ "$total_size" -gt "$_SP_SOFT_UPLOAD_BYTES" ]; then
-    echo "ℹ️  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
+    echo "📜  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
   fi
 
   # ---- price check: cost 1 → silent; more → continue / reduce time / increase time / stop ----
@@ -678,7 +678,7 @@ _c2c_paths() {
 
   local nvalid=0
   for p in "${paths[@]}"; do
-    if [ -f "$p" ]; then nvalid=$((nvalid + 1)); else echo "  ⚠️  Skipping missing item: $p"; fi
+    if [ -f "$p" ]; then nvalid=$((nvalid + 1)); else echo "  🔴  Skipping missing item: $p"; fi
   done
   if [ "$nvalid" -eq 0 ]; then
     echo "❌ No valid files found in selection"
@@ -765,7 +765,7 @@ handle_do_import() {
   local lhost="${link#https://}"; lhost="${lhost%%/*}"
   local whost="${WORKER_URL#https://}"
   if [ "$lhost" != "$whost" ]; then
-    echo "⚠️  This link points to '$lhost', not your configured server ($whost)."
+    echo "🔴  This link points to '$lhost', not your configured server ($whost)."
     local ans; read -e -r -p "   Continue anyway? (y/n): " ans
     [[ "$ans" == "y" || "$ans" == "Y" ]] || { echo "🚫 Cancelled."; return 1; }
   fi
@@ -801,13 +801,13 @@ handle_do_import() {
         echo "❌ $path/$fname already exists — refusing to overwrite."; rm -f "$plain_tmp"; return 1
       fi
       mv -n -- "$plain_tmp" "$path/$fname"
-      echo "✅ Imported as: $path/$fname"
+      echo "💫 Imported as: $path/$fname"
     else
       # Received text is untrusted: strip control characters / escape sequences before it
       # reaches the terminal (they can retitle the window, rewrite the screen or set the clipboard).
       LC_ALL=C tr -d '\000-\010\013-\037\177' < "$plain_tmp"
       if [ "$(LC_ALL=C tr -d '\000-\010\013-\037\177' < "$plain_tmp" | wc -c)" != "$(wc -c < "$plain_tmp")" ]; then
-        echo; echo "ℹ️  Control characters were removed for display. Save to a file to keep the raw text."
+        echo; echo "📜  Control characters were removed for display. Save to a file to keep the raw text."
       fi
       rm -f "$plain_tmp"
     fi
@@ -838,6 +838,6 @@ handle_do_import() {
   _unpack_targz_safe "$arc" "$path"
   local rc=$?
   rm -f "$arc"
-  [ $rc -eq 0 ] && echo "ℹ️  The remote copy is left in place and will be nuked on its own when its nuke time runs out (or nuke it earlier from  api)."
+  [ $rc -eq 0 ] && echo "📜  The remote copy is left in place and will be nuked on its own when its nuke time runs out (or nuke it earlier from  api)."
   return $rc
 }

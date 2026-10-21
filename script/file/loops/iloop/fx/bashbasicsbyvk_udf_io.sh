@@ -23,24 +23,24 @@ _UDF_FORMAT=1
 _fx_udf_edit_item() {              # _fx_udf_edit_item <e-N>
   local arg="${1#[eE]-}"
   if [ "$_fx_tab" != "udf" ]; then
-    echo "⚠️  Not available in ADF tab"; return 1
+    echo "🔴  Not available in ADF tab"; return 1
   fi
   if ! [[ "$arg" =~ ^[0-9]+$ ]]; then
-    echo "⚠️  Usage: e-N   (e.g. e-1 opens the file actions for item 1; plain 1 runs it)"
+    echo "🔴  Usage: e-N   (e.g. e-1 opens the file actions for item 1; plain 1 runs it)"
     return 1
   fi
   if $imaginary_mode; then
-    echo "⚠️  Navigate into a group first, then use e-N"; return 1
+    echo "🔴  Navigate into a group first, then use e-N"; return 1
   fi
   if [ "$arg" -lt 1 ] || [ "$arg" -gt "${#items[@]}" ]; then
-    echo "⚠️  Invalid: $1"; return 1
+    echo "🔴  Invalid: $1"; return 1
   fi
   local t="${items[$((arg-1))]}"
   if [ -d "$t" ]; then
-    echo "⚠️  Item $arg is a folder — type $arg to open it"; return 1
+    echo "🔴  Item $arg is a folder — type $arg to open it"; return 1
   fi
   if [ ! -f "$t" ]; then
-    echo "⚠️  Item $arg no longer exists"; return 1
+    echo "🔴  Item $arg no longer exists"; return 1
   fi
   # file actions → "Run" behaves like a plain run (from the outer folder)
   pushd "${_fx_outer_path:-$PWD}" >/dev/null 2>&1 || true

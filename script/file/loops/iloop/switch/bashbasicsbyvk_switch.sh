@@ -101,11 +101,11 @@ _sw_excl_add() {
   fi
   # Duplicate check
   if grep -qE "^\s*${kind}\s+${value}\s*$" "$_SW_EXCLUDE_FILE" 2>/dev/null; then
-    echo "ℹ️  Rule already exists: $kind  $value"
+    echo "📜  Rule already exists: $kind  $value"
     return 0
   fi
   printf '%s  %s\n' "$kind" "$value" >> "$_SW_EXCLUDE_FILE"
-  echo "✅ Added: $kind  $value"
+  echo "💫 Added: $kind  $value"
   echo "   (daemon picks it up automatically — no restart needed)"
 }
 
@@ -124,7 +124,7 @@ _sw_excl_remove() {
   # numbers stay stable as we delete)
   local sorted_nums
   sorted_nums=$(echo "$nums" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -rn)
-  if [ -z "$sorted_nums" ]; then echo "⚠️  No valid numbers."; return 0; fi
+  if [ -z "$sorted_nums" ]; then echo "🔴  No valid numbers."; return 0; fi
   # Map rule numbers → actual file line numbers
   local line_nums=()
   local idx=0 lineno=0 line
@@ -136,7 +136,7 @@ _sw_excl_remove() {
       [ "$n" -eq "$idx" ] && line_nums+=( "$lineno" )
     done
   done < "$_SW_EXCLUDE_FILE"
-  if [ "${#line_nums[@]}" -eq 0 ]; then echo "⚠️  No matching rules."; return 0; fi
+  if [ "${#line_nums[@]}" -eq 0 ]; then echo "🔴  No matching rules."; return 0; fi
   # Delete lines from file (descending order keeps line numbers valid)
   local tmp
   tmp=$(mktemp)
@@ -181,7 +181,7 @@ _sw_excl_menu() {
       e)  _sw_excl_edit   ;;
       u|"") echo "↩️  Back to recents"; return 0 ;;
       q)  _bvk_quit; return 0 ;;
-      *)  echo "⚠️  Invalid: $xc" ;;
+      *)  echo "🔴  Invalid: $xc" ;;
     esac
   done
 }
@@ -225,14 +225,14 @@ _sw_add_path() {
   while IFS= read -r -d '' dup; do
     t=$(_swlink_read_target "$dup")
     if [ "$t" = "$outer_path" ]; then
-      echo "ℹ️  Already in switch: $outer_path"
+      echo "📜  Already in switch: $outer_path"
       return 0
     fi
   done < <(find "$_SW_DIR" -name '*.swlink' -print0 2>/dev/null)
   local display_name
   display_name=$(basename "$outer_path")
   _swlink_write "$sw_cur_dir" "$outer_path" "$display_name" >/dev/null
-  echo "✅ Added: $display_name  →  $outer_path"
+  echo "💫 Added: $display_name  →  $outer_path"
 }
 
 # b · b-1,3 · b-a-1-2 · x   — ONE remove, whatever the spelling (footer says b, the map says b-, x is the old key).
@@ -242,7 +242,7 @@ _sw_remove_paths() {
   case "$raw" in [bB]-*) spec="${raw:2}" ;; esac
   selected_items=()
   if [ -n "$spec" ]; then
-    $imaginary_mode && { echo "⚠️  Navigate into a group first, then use b-N"; return 0; }
+    $imaginary_mode && { echo "🔴  Navigate into a group first, then use b-N"; return 0; }
     sp_resolved=()
     _sp_resolve_itemlist "$spec" || return 0
     selected_items=("${sp_resolved[@]}")
@@ -252,14 +252,14 @@ _sw_remove_paths() {
     else select_items_common "REMOVE BOOKMARK" allow_a || return 0; fi
   fi
   n=${#selected_items[@]}
-  [ "$n" -eq 0 ] && { echo "ℹ️  Nothing selected"; return 0; }
+  [ "$n" -eq 0 ] && { echo "📜  Nothing selected"; return 0; }
   read -e -r -p "Remove $n bookmark(s)? Only the bookmark goes — what it points to is NOT touched. (y/n): " ans || return 0
   case "${ans,,}" in y|yes) ;; *) echo "Cancelled."; return 0 ;; esac
   local it removed=0
   for it in "${selected_items[@]}"; do
     rm -rf -- "$it" && { _carry_forget "$it"; removed=$((removed+1)); }
   done
-  echo "✅ Removed $removed bookmark(s)"
+  echo "💫 Removed $removed bookmark(s)"
 }
 
 # ── Recents: read daemon list ─────────────────────────────────────────────────
@@ -427,9 +427,9 @@ _sw_build_items_for_tab() {
 
 _sw_recents_blocked() {
   if [ "$_sw_tab" = "favourites" ]; then
-    printf '⚠️  Not available in Favourites — use x / r / e here, or go to the Bookmarks tab\n'
+    printf '🔴  Not available in Favourites — use x / r / e here, or go to the Bookmarks tab\n'
   else
-    printf '⚠️  Read-only in Recents — use Bookmarks tab or fx (functions) for scripts\n'
+    printf '🔴  Read-only in Recents — use Bookmarks tab or fx (functions) for scripts\n'
   fi
 }
 
@@ -444,7 +444,7 @@ _sw_bookmarks_handle_selection() {
   # e-N — bypass .swlink intercept, call handle_file directly (same as fx/udf)
   if [[ "$choice" =~ ^[eE]-([0-9]+)$ ]]; then
     local n="${BASH_REMATCH[1]}"
-    $imaginary_mode && { echo "⚠️  Navigate into a group first, then use e-N"; return 0; }
+    $imaginary_mode && { echo "🔴  Navigate into a group first, then use e-N"; return 0; }
     if [ "$n" -ge 1 ] && [ "$n" -le "${#items[@]}" ]; then
       local t="${items[$((n-1))]}"
       [ -d "$t" ] && { path="$t"; group_prefix=""; force_show=false; return 0; }
@@ -498,8 +498,8 @@ _sw_bookmarks_handle_selection() {
     if [[ "$bn" == *.swlink ]]; then
       local sw_target
       sw_target=$(_swlink_read_target "$selected")
-      [ -z "$sw_target" ]   && { echo "⚠️  Bookmark has no target"; return 0; }
-      [ ! -d "$sw_target" ] && [ ! -f "$sw_target" ] && { echo "⚠️  Target gone: $sw_target"; return 0; }
+      [ -z "$sw_target" ]   && { echo "🔴  Bookmark has no target"; return 0; }
+      [ ! -d "$sw_target" ] && [ ! -f "$sw_target" ] && { echo "🔴  Target gone: $sw_target"; return 0; }
       _sw_result_path="$sw_target"; return 1
     fi
     [ -f "$selected" ] && handle_file "$selected"
@@ -515,7 +515,7 @@ _sw_bookmarks_handle_selection() {
 _sw_favourites_handle_selection() {
   local choice="$1"
   [[ "$choice" =~ ^[0-9]+$ ]] || { _bvk_invalid; return 0; }
-  [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ] || { echo "⚠️  Out of range"; return 0; }
+  [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ] || { echo "🔴  Out of range"; return 0; }
   local t="${items[$((choice-1))]}"
   if [ ! -e "$t" ]; then
     local _mv="${_FAV_MOVED_TO[$t]:-}"
@@ -524,7 +524,7 @@ _sw_favourites_handle_selection() {
       echo "📍 ${t##*/} moved — going to: $_sw_result_path"
       return 1
     fi
-    echo "⚠️  Missing: ${t##*/} — remove it with x"; return 0
+    echo "🔴  Missing: ${t##*/} — remove it with x"; return 0
   fi
   if [ -d "$t" ]; then _sw_result_path="$t"; return 1; fi
   handle_file "$t"
@@ -536,7 +536,7 @@ _sw_favourites_handle_selection() {
 _sw_recents_handle_selection() {
   local choice="$1"
   [[ "$choice" =~ ^[0-9]+$ ]] || { _bvk_invalid; return 0; }
-  [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ] || { echo "⚠️  Out of range"; return 0; }
+  [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ] || { echo "🔴  Out of range"; return 0; }
   handle_file "${items[$((choice-1))]}"
 }
 
@@ -641,7 +641,7 @@ switch_menu() {
           IFS= read -e -r _clr_ans
           if [[ "${_clr_ans,,}" == "y" ]]; then
             : > "$_SW_RECENTS_LIST"
-            echo "✅ Recents list cleared."
+            echo "💫 Recents list cleared."
           else
             echo "Cancelled."
           fi
@@ -678,7 +678,7 @@ switch_menu() {
 
       a|A)
         if [ "$_sw_tab" = "favourites" ]; then
-          echo "ℹ️  Add favourites from the file view with  fa  (numbers, ranges, or a .s expression)"; _sw_do_fresh=false
+          echo "📜  Add favourites from the file view with  fa  (numbers, ranges, or a .s expression)"; _sw_do_fresh=false
         else
           _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || _sw_add_path "$_sw_outer_path" "$path"
         fi
@@ -696,7 +696,7 @@ switch_menu() {
 
       e|E)
         if [ "$_sw_tab" = "favourites" ]; then _fav_sw_edit "$_sw_outer_path"
-        else echo "ℹ️  e edits the favourites file — open the ⭐ Favourites tab first"; _sw_do_fresh=false; fi
+        else echo "📜  e edits the favourites file — open the ⭐ Favourites tab first"; _sw_do_fresh=false; fi
         ;;
 
       c)

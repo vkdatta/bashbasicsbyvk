@@ -114,12 +114,12 @@ _file_picker() {
                 if [ "$_fp_nav_path" != "/" ]; then
                     _fp_nav_path=$(dirname "$_fp_nav_path")
                 else
-                    echo "  ⚠️  Already at filesystem root."
+                    echo "  🔴  Already at filesystem root."
                 fi
                 ;;
 
             "")
-                echo "  ⚠️  No input — enter a number, u, z, or q."
+                echo "  🔴  No input — enter a number, u, z, or q."
                 ;;
 
             *)
@@ -131,11 +131,11 @@ _file_picker() {
                         _fp_nav_path="$_sel"
                     else
                         _fp_out="$_sel"
-                        echo "✅ Selected: $(basename "$_sel")"
+                        echo "💫 Selected: $(basename "$_sel")"
                         return 0
                     fi
                 else
-                    echo "  ⚠️  Invalid — enter a number between 1 and ${#_fp_items[@]}."
+                    echo "  🔴  Invalid — enter a number between 1 and ${#_fp_items[@]}."
                 fi
                 ;;
         esac
@@ -265,7 +265,7 @@ _csv_resolve_items() {
 _csv_print_failures() {
     local n="${#_csv_fail_names[@]}" i
     [ "$n" -eq 0 ] && return 0
-    echo "⚠️  $n failed:"
+    echo "🔴  $n failed:"
     for i in "${!_csv_fail_names[@]}"; do
         printf '   ❌ %s — %s\n' "${_csv_fail_names[$i]}" "${_csv_fail_reasons[$i]}"
     done
@@ -340,6 +340,6 @@ _csv_stage_selected() {
 
     echo "📌 Staged for $label: ${staged}/${_csv_total} names"
     _csv_print_failures
-    [ "$staged" -gt 0 ] && echo "➡️  Navigate to destination, then use d- to apply."
+    [ "$staged" -gt 0 ] && echo "▶️  Navigate to destination, then use d- to apply."
     return 0
 }

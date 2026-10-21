@@ -72,7 +72,7 @@ print(count)
 PYEOF
 )
                         _carry_apply_mv_log "$_mvlog"       # locks + shortcuts follow the renamed files
-                        echo "✅ Renamed $count item(s)."
+                        echo "💫 Renamed $count item(s)."
                     else
                         echo "Aborted."
                     fi
@@ -117,7 +117,7 @@ PYEOF
                         mapfile -t row_matches < <(find "$path" -name "*$row_find*" 2>/dev/null)
 
                         if [ ${#row_matches[@]} -eq 0 ]; then
-                            echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ⚠️  No matches"
+                            echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  🔴  No matches"
                             nr_counts+=("0")
                             continue
                         fi
@@ -147,7 +147,7 @@ print(renamed)
 PYEOF
 )
                         _carry_apply_mv_log "$_mvlog"       # locks + shortcuts follow the renamed files
-                        echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ✅ $renamed renamed"
+                        echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  💫 $renamed renamed"
                         nr_counts+=("$renamed")
                     done
 
@@ -166,7 +166,7 @@ PYEOF
                         write_idx=$((write_idx + 1))
                     done < "$csv_file" > "$tmp_csv"
                     mv "$tmp_csv" "$csv_file"
-                    echo "✅ CSV updated: $(basename "$csv_file")"
+                    echo "💫 CSV updated: $(basename "$csv_file")"
                     echo "🎉 Multi Mutation (names) complete — ${#nr_finds[@]} pattern(s) processed."
                     return
                     ;;
@@ -229,13 +229,13 @@ PYEOF
                             for f in "${results[@]}"; do
                                 sed -i "s|$pat|$rep|g" "$f" && ((count++))
                             done
-                            echo "✅ Replaced in $count file(s)."
+                            echo "💫 Replaced in $count file(s)."
                             ;;
                         [0-9]*)
                             if (( act >= 1 && act <= ${#results[@]} )); then
                                 local target="${results[$((act-1))]}"
                                 sed -i "s|$pat|$rep|g" "$target"
-                                echo "✅ Replaced in: $(basename "$target")"
+                                echo "💫 Replaced in: $(basename "$target")"
                             else
                                 echo "Invalid number."
                             fi
@@ -321,13 +321,13 @@ PYEOF
 )
 
                         if [ ${#row_files[@]} -eq 0 ]; then
-                            echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ⚠️  No matches found (0 instances)"
+                            echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  🔴  No matches found (0 instances)"
                             csv_counts+=("0")
                         else
                             for rf in "${row_files[@]}"; do
                                 sed -i "s|$row_find|$row_rep|g" "$rf"
                             done
-                            echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  ✅ $total_instances instance(s) in ${#row_files[@]} file(s)"
+                            echo "  Row $((row_idx+1)): \"$row_find\" → \"$row_rep\"  💫 $total_instances instance(s) in ${#row_files[@]} file(s)"
                             csv_counts+=("$total_instances")
                         fi
                     done
@@ -351,7 +351,7 @@ PYEOF
                     done < "$csv_file" > "$tmp_csv"
 
                     mv "$tmp_csv" "$csv_file"
-                    echo "✅ CSV updated with instance counts: $(basename "$csv_file")"
+                    echo "💫 CSV updated with instance counts: $(basename "$csv_file")"
                     echo ""
                     echo "🎉 Multi Mutation complete — ${#csv_finds[@]} pattern(s) processed."
                     return

@@ -156,7 +156,7 @@ _bb_split_alias() {
   _BB_ITEMLIST="$raw"; _BB_LINK_ALIAS=""
   lc="${raw,,}"
   if [[ "$lc" == *" as" ]]; then
-    echo "⚠️  Alias missing — use:  <items> as <alias>   e.g.  up-1-5 as user data"
+    echo "🔴  Alias missing — use:  <items> as <alias>   e.g.  up-1-5 as user data"
     return 1
   fi
   [[ "$lc" == *" as "* ]] || return 0
@@ -166,7 +166,7 @@ _bb_split_alias() {
   _BB_LINK_ALIAS="${_BB_LINK_ALIAS#"${_BB_LINK_ALIAS%%[![:space:]]*}"}"
   _BB_LINK_ALIAS="${_BB_LINK_ALIAS%"${_BB_LINK_ALIAS##*[![:space:]]}"}"
   if [[ ! "$_BB_LINK_ALIAS" =~ $_BB_ALIAS_RE ]]; then
-    echo "⚠️  Alias may use letters, digits, spaces and . _ @ + -  (1-48 characters)."
+    echo "🔴  Alias may use letters, digits, spaces and . _ @ + -  (1-48 characters)."
     _BB_LINK_ALIAS=""
     return 1
   fi
@@ -347,7 +347,7 @@ _bb_ask_time() {
     esac
     n=$(_bb_resolve_time "$cur" "$a"); rc=$?
     if [ $rc -eq 0 ]; then _BB_NEWTTL="$n"; return 0; fi
-    [ $rc -eq 2 ] && echo "   ⚠️  Between 1 minute and 30 days, please." || echo "   ⚠️  Use e.g. 12h · 2d · +1d · -6h  (units: s m h d w)."
+    [ $rc -eq 2 ] && echo "   🔴  Between 1 minute and 30 days, please." || echo "   🔴  Use e.g. 12h · 2d · +1d · -6h  (units: s m h d w)."
   done
 }
 
@@ -479,7 +479,7 @@ _bb_alias_prepare() {
     local e; e=$(_bb_label_enc "$_BB_LK" "$_BB_LINK_ALIAS")
     if [[ "$e" =~ ^[A-Za-z0-9_-]{40,180}$ ]]; then _BB_LINK_ALIAS_WIRE="e1.$e"; return 0; fi
   fi
-  echo "⚠️  The name '$_BB_LINK_ALIAS' was NOT stored: names are kept encrypted and that needs your dinons on this computer." >&2
+  echo "🔴  The name '$_BB_LINK_ALIAS' was NOT stored: names are kept encrypted and that needs your dinons on this computer." >&2
   return 0
 }
 

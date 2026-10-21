@@ -51,7 +51,7 @@ handle_staging_dispatch() {
 
   if [ ${#cp_list[@]} -eq 0 ] && [ ${#mv_list[@]} -eq 0 ] && [ ${#sc_list[@]} -eq 0 ] && [ ${#bm_list[@]} -eq 0 ] \
      && [ ${#cp_once[@]} -eq 0 ] && [ ${#mv_once[@]} -eq 0 ] && [ ${#sc_once[@]} -eq 0 ] && [ ${#bm_once[@]} -eq 0 ]; then
-    echo "ℹ️  All buffers are empty — nothing to apply. Use c-/m-/s-/b- (once) or c--/m--/s--/b-- (persistent) to stage items first."
+    echo "📜  All buffers are empty — nothing to apply. Use c-/m-/s-/b- (once) or c--/m--/s--/b-- (persistent) to stage items first."
     return 0
   fi
 
@@ -79,7 +79,7 @@ handle_staging_dispatch() {
     : > "$_SP_BM_ONCE_FILE"
   fi
 
-  echo "✅ Buffer apply complete. Persistent (--) buffers were kept. One-time (-) buffers were cleared."
+  echo "💫 Buffer apply complete. Persistent (--) buffers were kept. One-time (-) buffers were cleared."
 }
 
 # ─────────────────────────────────────────────
@@ -102,7 +102,7 @@ _sp_view_one_buffer() {
       local p
       for p in "${list[@]}"; do
         local exists_tag=""
-        [ ! -e "$p" ] && exists_tag="  ⚠️ missing"
+        [ ! -e "$p" ] && exists_tag="  🔴 missing"
         printf "  %2d) %s%s\n" "$i" "$p" "$exists_tag"
         i=$((i+1))
       done
@@ -114,7 +114,7 @@ _sp_view_one_buffer() {
     case "$bv_choice" in
       x|X)
         if [ ${#list[@]} -eq 0 ]; then
-          echo "⚠️  Nothing to remove"
+          echo "🔴  Nothing to remove"
           continue
         fi
         read -e -p "Item number(s) to remove (e.g. 1,3 or 2-4): " rm_input
@@ -137,7 +137,7 @@ _sp_view_one_buffer() {
           j=$((j+1))
         done
         _sp_save kept "$file"
-        echo "✅ Removed ${#rm_indices[@]} item(s) from $label buffer"
+        echo "💫 Removed ${#rm_indices[@]} item(s) from $label buffer"
         ;;
       clr|CLR)
         read -e -p "Clear the entire $label buffer? (y/n): " confirm

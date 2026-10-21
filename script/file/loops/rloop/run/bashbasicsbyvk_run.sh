@@ -73,7 +73,7 @@ force_open() {
         else
             mime="application/octet-stream"
         fi
-        am start -a android.intent.action.VIEW -d "file://$dest" -t "$mime" >/dev/null 2>&1 || echo "⚠️ Open via am failed"
+        am start -a android.intent.action.VIEW -d "file://$dest" -t "$mime" >/dev/null 2>&1 || echo "🔴 Open via am failed"
         return 0
     fi
     echo "❌ No suitable open method available"
@@ -106,7 +106,7 @@ force_share() {
             mime="application/octet-stream"
         fi
         am start -a android.intent.action.SEND -t "$mime" --es android.intent.extra.SUBJECT "$(basename "$dest")" --stream "file://$dest" >/dev/null 2>&1 2>/dev/null || {
-            am start -a android.intent.action.SEND -t "$mime" --es android.intent.extra.STREAM "file://$dest" >/dev/null 2>&1 || echo "⚠️ Share via am failed"
+            am start -a android.intent.action.SEND -t "$mime" --es android.intent.extra.STREAM "file://$dest" >/dev/null 2>&1 || echo "🔴 Share via am failed"
         }
         return 0
     fi
@@ -210,7 +210,7 @@ run_file() {
                 rustc "$file" -o "$tmp" && "$tmp"
                 rm -f "$tmp"
             elif command -v cargo >/dev/null 2>&1; then
-                echo "ℹ️ For cargo projects use cargo run inside the project"
+                echo "📜 For cargo projects use cargo run inside the project"
             else
                 echo "❌ rustc/cargo not found"
             fi

@@ -21,6 +21,6 @@ delete_items() {
     for item in "${selected_items[@]}"; do
       rm -rf -- "$item" && _carry_forget "$item"
     done
-    echo "✅ Selected items deleted. I can feel the space 🚀"
+    echo "💫 Selected items deleted. I can feel the space 🚀"
   fi
 }

@@ -24,7 +24,7 @@
 #        old.png #id=64768:101 #moved=/home/me/archive/old.png   (set by the daemon)
 #  Every favourite remembers the item's inode (#id) and the folder remembers its
 #  own (DIR_ID), so renaming an item OR the folder keeps the favourites attached.
-#  Items that vanish are kept and shown as ⚠️ missing — never auto-deleted.
+#  Items that vanish are kept and shown as 🔴 missing — never auto-deleted.
 #  The daemon (bashbasicsbyvk_recents_daemon) keeps this file in step in the
 #  background — renames, folder renames, and moves to other folders (#moved=).
 #  Both sides write atomically and share one lock:  favourites/.lock
@@ -218,7 +218,7 @@ _fav_begin() {
   done
   [ "$live" -eq 0 ] && { _FAV_LABEL=(); return 0; }
   _fav_has=true
-  local note=""; [ "$stale" -gt 0 ] && note="  ⚠️ $stale missing (sw → ⭐)"
+  local note=""; [ "$stale" -gt 0 ] && note="  🔴 $stale missing (sw → ⭐)"
   if $_ns_on; then
     _fav_banner="⭐ $live favourite(s) here, hidden — ns to show only them${note}"
   else
@@ -247,7 +247,7 @@ handle_normal_show() {             # ns
     if $_ns_on; then _ns_on=false; echo "⭐ Favourite mode back on"
     else _ns_on=true; echo "📁 Favourite mode paused — showing the normal view (ns again to return)"; fi
   else
-    echo "ℹ️  No favourites in this folder yet — add some with:  fa"
+    echo "📜  No favourites in this folder yet — add some with:  fa"
   fi
 }
 
@@ -313,7 +313,7 @@ _fav_add_locked() {
   echo "$msg"
   if [ "$added" -gt 0 ]; then
     _ns_on=true; _fav_last_path="$path"        # keep the normal view this visit so you can keep adding
-    echo "ℹ️  Next time you open this folder it shows only favourites  (ns toggles)"
+    echo "📜  Next time you open this folder it shows only favourites  (ns toggles)"
   fi
 }
 
@@ -333,11 +333,11 @@ handle_fav_add() {                 # fa ...
     sel)
       local -a sel=()
       _sel_load_live sel
-      [ ${#sel[@]} -eq 0 ] && { echo "ℹ️  Selection is empty (use .s first)"; return; }
+      [ ${#sel[@]} -eq 0 ] && { echo "📜  Selection is empty (use .s first)"; return; }
       picked=("${sel[@]}") ;;
     .s*|.d*|\!*|\(*)
       _sel_eval "$arg" || return
-      [ ${#_SEL_FOUND[@]} -eq 0 ] && { echo "ℹ️  Nothing matched"; return; }
+      [ ${#_SEL_FOUND[@]} -eq 0 ] && { echo "📜  Nothing matched"; return; }
       picked=("${_SEL_FOUND[@]}")
       if [ ${#picked[@]} -gt 500 ]; then
         local ans; read -e -r -p "Add ${#picked[@]} favourites? (y/n): " ans
@@ -345,7 +345,7 @@ handle_fav_add() {                 # fa ...
       fi ;;
     *)
       if $imaginary_mode; then
-        echo "⚠️  This folder is grouped — numbers mean groups. Use  fa <.s expression>  (or fs first)"
+        echo "🔴  This folder is grouped — numbers mean groups. Use  fa <.s expression>  (or fs first)"
         return
       fi
       local spec="${arg// /}" idx
@@ -371,7 +371,7 @@ _fav_sw_build() {                  # _fav_sw_build <dir>  → items + labels (st
       _FAV_MOVED_TO["$p"]="${_fav_moved[$i]}"
       _FAV_LABEL["$p"]="${_fav_alias[$i]:+${_fav_alias[$i]} — }${_fav_names[$i]} ↪ moved to ${_fav_moved[$i]}"
     elif [ "${_fav_stale[$i]}" = 1 ]; then
-      _FAV_LABEL["$p"]="${_fav_alias[$i]:+${_fav_alias[$i]} — }${_fav_names[$i]} ⚠️ (missing)"
+      _FAV_LABEL["$p"]="${_fav_alias[$i]:+${_fav_alias[$i]} — }${_fav_names[$i]} 🔴 (missing)"
     elif [ -n "${_fav_alias[$i]}" ]; then
       _FAV_LABEL["$p"]="${_fav_alias[$i]} (${_fav_names[$i]})"
     fi
@@ -381,7 +381,7 @@ _fav_sw_build() {                  # _fav_sw_build <dir>  → items + labels (st
 _fav_sw_remove() {                 # _fav_sw_remove <dir> [b | b-1,3 | x]
   local dir raw="${2:-}" spec=""; dir=$(_fav_norm "$1")
   case "$raw" in [bB]-*) spec="${raw:2}" ;; esac
-  [ ${#items[@]} -eq 0 ] && { echo "ℹ️  No favourites here"; return; }
+  [ ${#items[@]} -eq 0 ] && { echo "📜  No favourites here"; return; }
   echo "🗑️  Remove favourite(s) — the files themselves are NOT touched"
   if [ -n "$spec" ]; then
     sp_resolved=(); _sp_resolve_itemlist "$spec" || return
@@ -403,16 +403,16 @@ _fav_sw_remove() {                 # _fav_sw_remove <dir> [b | b-1,3 | x]
   _fav_names=("${n[@]}"); _fav_alias=("${a[@]}"); _fav_ids=("${d[@]}"); _fav_stale=("${s[@]}"); _fav_moved=("${m[@]}")
   _fav_save "$dir"
   _fav_unlock
-  echo "✅ Removed $removed favourite(s)"
-  [ ${#_fav_names[@]} -eq 0 ] && echo "ℹ️  No favourites left — this folder shows normally again"
+  echo "💫 Removed $removed favourite(s)"
+  [ ${#_fav_names[@]} -eq 0 ] && echo "📜  No favourites left — this folder shows normally again"
 }
 
 _fav_sw_rename() {                 # _fav_sw_rename <dir>   (alias only; the file is untouched)
   local dir; dir=$(_fav_norm "$1")
-  [ ${#items[@]} -eq 0 ] && { echo "ℹ️  No favourites here"; return; }
+  [ ${#items[@]} -eq 0 ] && { echo "📜  No favourites here"; return; }
   local num alias
   read -e -r -p "Rename which favourite (number): " num
-  [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ] || { echo "⚠️  Invalid number"; return; }
+  [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ] || { echo "🔴  Invalid number"; return; }
   local name="${items[$((num-1))]##*/}"
   read -e -r -p "New display name for '$name' (empty = clear alias): " alias
   if [[ "$alias" == *$'\t'* || "$alias" == *" #id="* || "$alias" == *" => "* ]]; then echo "❌ That name has characters not allowed"; return; fi
@@ -424,13 +424,13 @@ _fav_sw_rename() {                 # _fav_sw_rename <dir>   (alias only; the fil
   done
   _fav_save "$dir"
   _fav_unlock
-  if [ -n "$alias" ]; then echo "✅ '$name' now shows as '$alias' (file unchanged)"; else echo "✅ Alias cleared for '$name'"; fi
+  if [ -n "$alias" ]; then echo "💫 '$name' now shows as '$alias' (file unchanged)"; else echo "💫 Alias cleared for '$name'"; fi
 }
 
 _fav_sw_edit() {                   # _fav_sw_edit <dir>
   local dir; dir=$(_fav_norm "$1")
-  if ! _fav_file_for "$dir"; then echo "ℹ️  No favourites file yet — add some with fa"; return; fi
+  if ! _fav_file_for "$dir"; then echo "📜  No favourites file yet — add some with fa"; return; fi
   _rule_editor "$_FAV_FILE"
   _fav_cache_key=""
-  echo "✅ Favourites reloaded"
+  echo "💫 Favourites reloaded"
 }

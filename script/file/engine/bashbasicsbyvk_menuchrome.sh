@@ -143,7 +143,7 @@ _mc_ask() { read -e -p "${1:-Select: }" REPLY; }
 # always redrawn FRESH below it, exactly like the outer loop.  Never leave the menu
 # on screen with only a new "Select:" -- the extra line makes the viewport's block
 # height wrong, and every later in-place repaint / tick lands on the wrong rows.
-_BVK_MSG_INVALID="⚠️  Invalid selection"
+_BVK_MSG_INVALID="🔴  Invalid selection"
 _bvk_invalid() {
   echo "$_BVK_MSG_INVALID"
   [ -n "${1:-}" ] && printf -v "$1" '%s' true

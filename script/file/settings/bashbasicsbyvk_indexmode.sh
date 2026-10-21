@@ -10,7 +10,7 @@ _st_im_act() {
         if [[ "$_st_in" =~ ^[0-9]+$ ]] && [ "$_st_in" -gt 0 ]; then
           index_mode_threshold=$_st_in; save_settings
         else
-          _st_note "⚠️  Not a valid number"
+          _st_note "🔴  Not a valid number"
         fi
       fi ;;
     reset) index_mode_threshold=$DEFAULT_INDEX_MODE_THRESHOLD; save_settings ;;

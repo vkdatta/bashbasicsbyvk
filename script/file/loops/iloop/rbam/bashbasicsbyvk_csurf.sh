@@ -52,7 +52,7 @@ _cs_answer_offer() {                         # share id, alias
     1|y|Y) a=true ;; 2|n|N) a=false ;; *) echo "🕒 Left for later."; return 0 ;;
   esac
   _ux_http POST "/ux/$1/respond" "{\"accept\":$a}" || return 1
-  if _ux_ok; then [ "$a" = true ] && echo "✅ Accepted." || echo "✅ Declined."; else _ux_fail; fi
+  if _ux_ok; then [ "$a" = true ] && echo "💫 Accepted." || echo "💫 Declined."; else _ux_fail; fi
 }
 
 # ═════════════════════════ share list (the two tabs) ═════════════════════════
@@ -83,7 +83,7 @@ cs_build() {
 cs_row() {
   _xui_slot "$1"; local k=$_XUI_SLOT
   if [ "$_CS_TAB" = 0 ]; then
-    printf -v _vp_line ' %2d) 📦 %-22s %9s  %-14s ✅%s ⏳%s' "$1" "$(_xui_trunc "${_CG_ALIAS[$k]:-${_CG_ID[$k]}}" 22)" \
+    printf -v _vp_line ' %2d) 📦 %-22s %9s  %-14s 💫%s ⏳%s' "$1" "$(_xui_trunc "${_CG_ALIAS[$k]:-${_CG_ID[$k]}}" 22)" \
       "$(_xui_hsize "${_CG_BYTES[$k]}")" "$(_xui_left "${_CG_EXP[$k]}")" "${_CG_ACC[$k]}" "${_CG_OFF[$k]}"
   else
     local tag=""; [ "${_CR_OFFER[$k]}" = offered ] && tag="  ⏳ answer me"
@@ -122,7 +122,7 @@ _cs_nuke() {                                 # x-LIST
       echo "   💥 ${_CG_ALIAS[$k]:-${_CG_ID[$k]}} — refunded ${ref:-0}  (balance ${bal:-?})"
     else echo "   ❌ ${_CG_ALIAS[$k]:-${_CG_ID[$k]}}: $(_bb_json_get "$_UX_BODY" message)"; fi
   done
-  echo "✅ Nuked $ok share(s)."
+  echo "💫 Nuked $ok share(s)."
 }
 
 _cs_expiry() {                               # e-N [spec]
@@ -134,17 +134,17 @@ _cs_expiry() {                               # e-N [spec]
   echo "   “${_CG_ALIAS[$k]:-${_CG_ID[$k]}}” now lives $(_bb_fmt_duration "$cur") in total  ($(_xui_left "${_CG_EXP[$k]}"))."
   if [ -z "$spec" ]; then _xui_ask "New TOTAL life (e.g. 7d, 36h, +2d, -1d)" || return 1; spec="$_XUI_IN"; fi
   case "$spec" in +*|-*) sign="${spec:0:1}"; spec="${spec:1}" ;; esac
-  secs=$(_bb_parse_duration "$spec") || { echo "⚠️  Use a number with a unit (s, m, h, d, w), e.g. 2d, +12h, -1d." ; return 1; }
+  secs=$(_bb_parse_duration "$spec") || { echo "🔴  Use a number with a unit (s, m, h, d, w), e.g. 2d, +12h, -1d." ; return 1; }
   case "$sign" in +) base=$((cur+secs)) ;; -) base=$((cur-secs)) ;; *) base=$secs ;; esac
   if [ "$base" -lt "$_BB_NUKE_MIN" ] || [ "$base" -gt "$_BB_NUKE_MAX" ]; then
-    echo "⚠️  Total life must be between 1 minute and 30 days (that would be $(_bb_fmt_duration "$base"))."; return 1
+    echo "🔴  Total life must be between 1 minute and 30 days (that would be $(_bb_fmt_duration "$base"))."; return 1
   fi
   echo "   New total life: $(_bb_fmt_duration "$base").  Longer = charged the difference; shorter = refund of whole unused days only."
   _xui_yes "Apply?" || return 1
   _ux_http POST "/ux/${_CG_ID[$k]}/expiry" "{\"totalSeconds\":$base}" || return 1
   if _ux_ok; then
     local ch rf; ch=$(_ux_jget charged "$_UX_BODY"); rf=$(_ux_jget refunded "$_UX_BODY")
-    echo "✅ Updated.${ch:+ Charged: $ch.}${rf:+ Refunded: $rf.}  Balance: $(_ux_jget balance "$_UX_BODY")"
+    echo "💫 Updated.${ch:+ Charged: $ch.}${rf:+ Refunded: $rf.}  Balance: $(_ux_jget balance "$_UX_BODY")"
   else _ux_fail; fi
 }
 
@@ -155,7 +155,7 @@ _cs_drop() {                                 # r-LIST on the received tab
   local r k
   for r in "${_XUI_SEL[@]}"; do _xui_slot "$r"; k=$_XUI_SLOT
     _ux_http POST "/ux/${_CR_ID[$k]}/leave" "{}"
-    if _ux_ok; then echo "   ✅ ${_CR_ALIAS[$k]:-${_CR_ID[$k]}}"; else echo "   ❌ $(_bb_json_get "$_UX_BODY" message)"; fi
+    if _ux_ok; then echo "   💫 ${_CR_ALIAS[$k]:-${_CR_ID[$k]}}"; else echo "   ❌ $(_bb_json_get "$_UX_BODY" message)"; fi
   done
 }
 
@@ -165,12 +165,12 @@ _cs_cmd() {
     __sw_tab_left__)  [ "$_CS_TAB" = 0 ] && return 1; _CS_TAB=0; _CS_LOADED=0; return 3 ;;
     cs) echo "↩️  Closing Cloud Surf"; return 2 ;;
     rf) _CS_LOADED=0; return 0 ;;
-    x-*) [ "$_CS_TAB" = 0 ] || { echo "ℹ️  Only the sender can nuke. Use r-N to drop it from your list."; return 1; }
+    x-*) [ "$_CS_TAB" = 0 ] || { echo "📜  Only the sender can nuke. Use r-N to drop it from your list."; return 1; }
          _cs_nuke "$1"; _CS_LOADED=0; return 0 ;;
-    e-*) [ "$_CS_TAB" = 0 ] || { echo "ℹ️  Only the sender can change the nuke time."; return 1; }
+    e-*) [ "$_CS_TAB" = 0 ] || { echo "📜  Only the sender can change the nuke time."; return 1; }
          _cs_expiry "$1"; _CS_LOADED=0; return 0 ;;
     r-*) if [ "$_CS_TAB" = 1 ]; then _cs_drop "$1"; _CS_LOADED=0; return 0
-         else echo "ℹ️  Open a share (N) to revoke people or files; x-N nukes it for everyone."; return 1; fi ;;
+         else echo "📜  Open a share (N) to revoke people or files; x-N nukes it for everyone."; return 1; fi ;;
     [0-9]*)
       _xui_row "$1" || { _bvk_invalid; return 0; }
       local k=$_XUI_SLOT
@@ -199,9 +199,9 @@ _pp_load() {
 }
 cs_pp_build() { [ "$_PP_LOADED" = 1 ] || _pp_load; _xui_begin_items "${_PP_MAIL[@]}"; }
 cs_pp_row() {
-  _xui_slot "$1"; local k=$_XUI_SLOT tag="✅ accepted"
+  _xui_slot "$1"; local k=$_XUI_SLOT tag="💫 accepted"
   [ "${_PP_ST[$k]}" = offered ] && tag="⏳ not accepted yet"
-  [ -n "${_PP_RID[$k]}" ] || tag="⚠️ link removed"
+  [ -n "${_PP_RID[$k]}" ] || tag="🔴 link removed"
   printf -v _vp_line ' %2d) 👤 %-28s [%s…]  %s' "$1" "$(_xui_trunc "${_PP_MAIL[$k]}" 28)" "${_PP_D3[$k]:0:6}" "$tag"
 }
 cs_pp_header() {
@@ -217,9 +217,9 @@ _pp_revoke() {
   _xui_yes "Revoke ${#_XUI_SEL[@]} person/people?" || return 1
   local r k
   for r in "${_XUI_SEL[@]}"; do _xui_slot "$r"; k=$_XUI_SLOT
-    [ -n "${_PP_RID[$k]}" ] || { echo "   ℹ️  ${_PP_MAIL[$k]}: the link is already removed."; continue; }
+    [ -n "${_PP_RID[$k]}" ] || { echo "   📜  ${_PP_MAIL[$k]}: the link is already removed."; continue; }
     _ux_http POST "/ux/$_PP_ID/revoke" "{\"rid\":${_PP_RID[$k]}}"
-    if _ux_ok; then echo "   ✅ ${_PP_MAIL[$k]}"; else echo "   ❌ ${_PP_MAIL[$k]}: $(_bb_json_get "$_UX_BODY" message)"; fi
+    if _ux_ok; then echo "   💫 ${_PP_MAIL[$k]}"; else echo "   ❌ ${_PP_MAIL[$k]}: $(_bb_json_get "$_UX_BODY" message)"; fi
   done
 }
 
@@ -227,7 +227,7 @@ _pp_grant() {
   _ux_pick_people || return 1
   local csv; csv=$(IFS=,; echo "${_UX_PICKED[*]}")
   _ux_http POST "/ux/$_PP_ID/grant" "{\"rids\":[$csv]}" || return 1
-  if _ux_ok; then echo "✅ Offered to $(_ux_jget offered "$_UX_BODY") new person/people (already-shared ones are untouched)."; else _ux_fail; fi
+  if _ux_ok; then echo "💫 Offered to $(_ux_jget offered "$_UX_BODY") new person/people (already-shared ones are untouched)."; else _ux_fail; fi
 }
 
 _pp_cmd() {
@@ -239,8 +239,8 @@ _pp_cmd() {
     [0-9]*)
       _xui_row "$1" || { _bvk_invalid; return 0; }
       local k=$_XUI_SLOT
-      [ -n "${_PP_RID[$k]}" ] || { echo "ℹ️  The link to ${_PP_MAIL[$k]} was removed in RBAM."; return 1; }
-      [ "${_PP_ST[$k]}" = accepted ] || echo "ℹ️  ${_PP_MAIL[$k]} has not accepted yet — this is what they would see."
+      [ -n "${_PP_RID[$k]}" ] || { echo "📜  The link to ${_PP_MAIL[$k]} was removed in RBAM."; return 1; }
+      [ "${_PP_ST[$k]}" = accepted ] || echo "📜  ${_PP_MAIL[$k]} has not accepted yet — this is what they would see."
       _cs_tree_open "$_PP_ID" owner "${_PP_RID[$k]}"; _PP_LOADED=0; return 0 ;;
     *) return 9 ;;
   esac
@@ -353,7 +353,7 @@ _ct_download() {                             # d-LIST
           | BB_DLTOKEN="$tok" BB_K="$_UX_K" BB_CONC="${_BB_MAX_PAR:-4}" _ux_core download "$WORKER_URL" "$_CT_ID" "$dest")
     local status n bytes tops; IFS=$'\t' read -r status n bytes tops <<<"$out"
     if [ "$status" = OK ]; then
-      echo "✅ $n file(s), $(_xui_hsize "$bytes") decrypted into $dest"
+      echo "💫 $n file(s), $(_xui_hsize "$bytes") decrypted into $dest"
       echo "   ${tops//|/, }"
     else
       echo "❌ Download failed: ${n:-unknown error}"
@@ -382,12 +382,12 @@ _ct_fetch_archive() {                          # <dl token> <slot in _CT_*> <des
   _unpack_targz_safe "$arc" "$dest"
   local rc=$?
   rm -f "$arc"
-  [ $rc -eq 0 ] && echo "ℹ️  The share stays in your Cloud Surf until its nuke time runs out (or the sender nukes it)."
+  [ $rc -eq 0 ] && echo "📜  The share stays in your Cloud Surf until its nuke time runs out (or the sender nukes it)."
   return $rc
 }
 
 _ct_revoke() {                               # r-LIST
-  if [ "$_CT_ROLE" = owner ] && [ -z "$_CT_RID" ]; then echo "ℹ️  Revoking is per person: go back and open a person first."; return 1; fi
+  if [ "$_CT_ROLE" = owner ] && [ -z "$_CT_RID" ]; then echo "📜  Revoking is per person: go back and open a person first."; return 1; fi
   _xui_select_rows "REVOKE" "🚫 Take away which?" "$1" || return 1
   local -a ids=() r
   for r in "${_XUI_SEL[@]}"; do _xui_slot "$r"; ids+=("${_CT_IID[${_CT_ROWS[$_XUI_SLOT]}]}"); done
@@ -396,7 +396,7 @@ _ct_revoke() {                               # r-LIST
   _xui_yes "Continue with ${#ids[@]} item(s)?" || return 1
   if [ "$_CT_ROLE" = owner ]; then _ux_http POST "/ux/$_CT_ID/revoke" "{\"rid\":$_CT_RID,\"items\":$(_cs_idjson "${ids[@]}")}"
   else _ux_http POST "/ux/$_CT_ID/leave" "{\"items\":$(_cs_idjson "${ids[@]}")}"; fi
-  if _ux_ok; then echo "✅ Done."; else _ux_fail; fi
+  if _ux_ok; then echo "💫 Done."; else _ux_fail; fi
 }
 
 _ct_cmd() {

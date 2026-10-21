@@ -25,7 +25,7 @@ _dm_pid() {
 _dm_status() {
   local pid; pid=$(_dm_pid)
   if [ -z "$pid" ]; then
-    echo "⚠️  Daemon is not running — it starts with the app (.dm.restart to start it now)"
+    echo "🔴  Daemon is not running — it starts with the app (.dm.restart to start it now)"
     return
   fi
   if [ ! -f "$_DM_STATUS" ]; then echo "🛰️  Daemon running (pid $pid) — no status yet, give it a few seconds"; return; fi
@@ -52,7 +52,7 @@ print("   🔥 last warm: %s  (%d folder(s))" % (ago(d.get("last_warm_at")), len
 for w in lw[-4:]:
     print("      %s  %s files  %ss" % (w["root"].replace(home, "~"), format(w["files"], ","), w["seconds"]))
 if d.get("backend") == "polling":
-    print("   ⚠️  polling mode: moves are found by the periodic sync only; folder-size cache is off")
+    print("   🔴  polling mode: moves are found by the periodic sync only; folder-size cache is off")
 print("   .dm.warm · .dm.sync · .dm.roots · .dm.restart")
 PY
 }
@@ -63,13 +63,13 @@ handle_daemon_cmd() {
     .dm) _dm_status ;;
     .dm.warm|.dm.sync)
       pid=$(_dm_pid) || true
-      [ -z "$pid" ] && { echo "⚠️  Daemon is not running"; return; }
+      [ -z "$pid" ] && { echo "🔴  Daemon is not running"; return; }
       if [ "$cmd" = ".dm.warm" ]; then kill -USR1 "$pid" 2>/dev/null; echo "🔥 Warming started in the background (.dm to see progress)"
       else kill -USR2 "$pid" 2>/dev/null; echo "⭐ Favourites sync started in the background"; fi ;;
     .dm.roots)
-      [ -f "$_DM_ROOTS" ] || { echo "ℹ️  The daemon creates $_DM_ROOTS on first start — start it with .dm.restart"; return; }
+      [ -f "$_DM_ROOTS" ] || { echo "📜  The daemon creates $_DM_ROOTS on first start — start it with .dm.restart"; return; }
       _rule_editor "$_DM_ROOTS"
-      echo "✅ Saved — picked up at the next warm cycle (or .dm.warm)" ;;
+      echo "💫 Saved — picked up at the next warm cycle (or .dm.warm)" ;;
     .dm.restart)
       pid=$(_dm_pid) || true
       [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null && sleep 1
@@ -77,6 +77,6 @@ handle_daemon_cmd() {
       _bvk_wake_recents_daemon
       sleep 1
       echo "🔄 Daemon restarted"; _dm_status ;;
-    *) echo "⚠️  Daemon commands: .dm  .dm.warm  .dm.sync  .dm.roots  .dm.restart" ;;
+    *) echo "🔴  Daemon commands: .dm  .dm.warm  .dm.sync  .dm.roots  .dm.restart" ;;
   esac
 }

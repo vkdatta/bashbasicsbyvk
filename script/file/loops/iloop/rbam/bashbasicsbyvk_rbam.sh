@@ -47,12 +47,12 @@ _rb_state() {                                # slot -> _RB_S
     if [ "${_RB_MINE[$k]}" = 1 ]; then _RB_S="⏳ waiting for their answer"
     else _RB_S="📨 they asked you — open it to answer"; fi
   elif [ "$_RB_TAB" = 0 ]; then
-    if   [ "${_RB_DIN[$k]}" = 1 ]; then _RB_S="✅ active · 🔑 dinons sent"
-    elif [ "${_RB_HELD[$k]}" = 1 ]; then _RB_S="✅ active · ⏸ dinons held (sd-N sends)"
-    else _RB_S="✅ active · ⏳ dinons not sent yet"; fi
+    if   [ "${_RB_DIN[$k]}" = 1 ]; then _RB_S="💫 active · 🔑 dinons sent"
+    elif [ "${_RB_HELD[$k]}" = 1 ]; then _RB_S="💫 active · ⏸ dinons held (sd-N sends)"
+    else _RB_S="💫 active · ⏳ dinons not sent yet"; fi
   else
-    if [ "${_RB_DIN[$k]}" = 1 ]; then _RB_S="✅ active · 🔑 you can open their files"
-    else _RB_S="✅ active · ⏳ waiting for their dinons"; fi
+    if [ "${_RB_DIN[$k]}" = 1 ]; then _RB_S="💫 active · 🔑 you can open their files"
+    else _RB_S="💫 active · ⏳ waiting for their dinons"; fi
   fi
 }
 
@@ -87,14 +87,14 @@ _rb_d3_ok()   { [[ "$1" =~ ^[A-Za-z0-9]{16}-[A-Za-z0-9]{16}-[A-Za-z0-9]{16}$ ]];
 _rb_request_one() {                          # mail d3
   local mail="$1" d3="$2" role=give note
   [ "$_RB_TAB" = 1 ] && role=ask
-  _rb_mail_ok "$mail" || { echo "⚠️  '$mail' is not a valid mail." >&2; return 1; }
-  _rb_d3_ok "$d3"     || { echo "⚠️  The diseps must be three 16-character codes joined with '-' (positions 13, 24, 7 of their diseps)." >&2; return 1; }
+  _rb_mail_ok "$mail" || { echo "🔴  '$mail' is not a valid mail." >&2; return 1; }
+  _rb_d3_ok "$d3"     || { echo "🔴  The diseps must be three 16-character codes joined with '-' (positions 13, 24, 7 of their diseps)." >&2; return 1; }
   _ux_http POST /rbam/request "{\"role\":\"$role\",\"mail\":\"$mail\",\"d3\":\"$d3\"}" || return 1
   if ! _ux_ok; then echo "   ❌ $mail — $(_bb_json_get "$_UX_BODY" message)"; return 1; fi
   note=$(_bb_json_get "$_UX_BODY" note)
-  if [ -n "$note" ]; then echo "   ✅ $mail — $note"
-  elif [ "$role" = give ]; then echo "   ✅ $mail — asked to become your receiver. They will see it in their Notifications (nf)."
-  else echo "   ✅ $mail — asked to become your sender. They will see it in their Notifications (nf)."; fi
+  if [ -n "$note" ]; then echo "   💫 $mail — $note"
+  elif [ "$role" = give ]; then echo "   💫 $mail — asked to become your receiver. They will see it in their Notifications (nf)."
+  else echo "   💫 $mail — asked to become your sender. They will see it in their Notifications (nf)."; fi
   return 0
 }
 
@@ -154,11 +154,11 @@ _rb_remove() {                               # r-LIST
     _ux_http POST "/rbam/rel/$rid/remove" "{}" || continue
     if _ux_ok; then n=$((n+1)); else echo "   ❌ ${_RB_MAIL[$k]}: $(_bb_json_get "$_UX_BODY" message)"; fi
   done
-  echo "✅ Removed $n user(s)."
+  echo "💫 Removed $n user(s)."
 }
 
 _rb_senddinons() {                           # sd | sd-LIST
-  [ "$_RB_TAB" = 0 ] || { echo "ℹ️  Dinons are sent from the Give access tab."; return 1; }
+  [ "$_RB_TAB" = 0 ] || { echo "📜  Dinons are sent from the Give access tab."; return 1; }
   local -a rids=() r
   if [[ "$1" == sd-* ]]; then
     _xui_parse_sel "${1#sd-}" || return 1
@@ -167,7 +167,7 @@ _rb_senddinons() {                           # sd | sd-LIST
   else
     _ux_sync_dinons force
   fi
-  echo "✅ Done."
+  echo "💫 Done."
 }
 
 # answer a pending request from the list (the same question nf asks)
@@ -195,7 +195,7 @@ _rb_cmd() {
       _xui_row "$1" || { _bvk_invalid; return 0; }
       local k=$_XUI_SLOT
       if [ "${_RB_ST[$k]}" = pending ]; then
-        if [ "${_RB_MINE[$k]}" = 1 ]; then echo "ℹ️  Waiting for ${_RB_MAIL[$k]} to answer."; return 1; fi
+        if [ "${_RB_MINE[$k]}" = 1 ]; then echo "📜  Waiting for ${_RB_MAIL[$k]} to answer."; return 1; fi
         _rb_answer "$k"; _RB_LOADED=0; return 0
       fi
       _rb_user_open "$k"; _RB_LOADED=0; return 0 ;;
@@ -263,7 +263,7 @@ _ru_remove() {
     _xui_slot "$r"; k=$_XUI_SLOT; id="${_RU_ID[$k]}"
     if [ "$_RB_TAB" = 0 ]; then _ux_http POST "/ux/$id/revoke" "{\"rid\":$_RU_RID}"
     else _ux_http POST "/ux/$id/leave" "{}"; fi
-    if _ux_ok; then echo "   ✅ ${_RU_ALIAS[$k]:-$id}"; else echo "   ❌ ${_RU_ALIAS[$k]:-$id}: $(_bb_json_get "$_UX_BODY" message)"; fi
+    if _ux_ok; then echo "   💫 ${_RU_ALIAS[$k]:-$id}"; else echo "   ❌ ${_RU_ALIAS[$k]:-$id}: $(_bb_json_get "$_UX_BODY" message)"; fi
   done
 }
 

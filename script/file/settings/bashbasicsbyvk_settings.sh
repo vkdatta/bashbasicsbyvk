@@ -439,16 +439,16 @@ _st_nuke_act() {
     custom)
       _st_ask "Nuke time, e.g. 90m · 1 day · 2d12h · 1 week" "$(_bb_fmt_duration "$nuke_time_seconds")" || return
       if ! secs=$(_bb_parse_duration "$_st_in"); then
-        _st_note "⚠️  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."
+        _st_note "🔴  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."
         return
       fi
       if [ "$secs" -lt 60 ] || [ "$secs" -gt 2592000 ]; then
-        _st_note "⚠️  Nuke time must be between 1 minute and 30 days."
+        _st_note "🔴  Nuke time must be between 1 minute and 30 days."
         return
       fi
       nuke_time_seconds="$secs"; save_settings
-      if [ "$secs" -lt 3600 ]; then _st_note "✅ $(_bb_fmt_duration "$secs") — billed as 1 hour (the minimum)."
-      else _st_note "✅ New links will live $(_bb_fmt_duration "$secs")."; fi ;;
+      if [ "$secs" -lt 3600 ]; then _st_note "💫 $(_bb_fmt_duration "$secs") — billed as 1 hour (the minimum)."
+      else _st_note "💫 New links will live $(_bb_fmt_duration "$secs")."; fi ;;
   esac
 }
 nuke_time_settings() { _st_run "Nuke time" _st_nuke_build _st_nuke_act; }
@@ -482,16 +482,16 @@ _st_uxnuke_act() {
     custom)
       _st_ask "Nuke time, e.g. 90m · 1 day · 2d12h · 1 week" "$(_bb_fmt_duration "$ux_nuke_time_seconds")" || return
       if ! secs=$(_bb_parse_duration "$_st_in"); then
-        _st_note "⚠️  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."
+        _st_note "🔴  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."
         return
       fi
       if [ "$secs" -lt 60 ] || [ "$secs" -gt 2592000 ]; then
-        _st_note "⚠️  Nuke time must be between 1 minute and 30 days."
+        _st_note "🔴  Nuke time must be between 1 minute and 30 days."
         return
       fi
       ux_nuke_time_seconds="$secs"; save_settings
-      if [ "$secs" -lt 3600 ]; then _st_note "✅ $(_bb_fmt_duration "$secs") — billed as 1 hour (the minimum)."
-      else _st_note "✅ New ux- shares will live $(_bb_fmt_duration "$secs")."; fi ;;
+      if [ "$secs" -lt 3600 ]; then _st_note "💫 $(_bb_fmt_duration "$secs") — billed as 1 hour (the minimum)."
+      else _st_note "💫 New ux- shares will live $(_bb_fmt_duration "$secs")."; fi ;;
   esac
 }
 ux_nuke_time_settings() { _st_run "Nuke time (ux-)" _st_uxnuke_build _st_uxnuke_act; }
@@ -538,7 +538,7 @@ _st_reset_act() {
     *)     _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL" ;;
   esac
   save_settings
-  _st_note "✅ All settings reset"
+  _st_note "💫 All settings reset"
   _st_back=1
 }
 restore_all_defaults() { _st_run "Reset all settings" _st_reset_build _st_reset_act; }

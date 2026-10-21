@@ -118,7 +118,7 @@ _xui_parse_sel() {                           # "1,3-5 | a | a-2" -> _XUI_SEL (di
 # _xui_select_rows "PROMPT" "title line" [typed]     typed = "r-1,3" style shortcut (no redraw)
 _xui_select_rows() {
   local prompt="$1" title="$2" typed="${3:-}"
-  [ "${#items[@]}" -gt 0 ] || { echo "ℹ️  Nothing to choose from."; return 1; }
+  [ "${#items[@]}" -gt 0 ] || { echo "📜  Nothing to choose from."; return 1; }
   if [[ "$typed" == *-* ]]; then _xui_parse_sel "${typed#*-}"; return; fi
   local _multi_allow_a=true _multi_header_hook=_xui_pick_header _prompt="$prompt"
   local -A _msel_set=()
