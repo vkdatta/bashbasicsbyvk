@@ -110,8 +110,17 @@ _pn_xfer_bin() {
 # _pn_xfer <pipeline> <id> <dir> <nblobs> <token>  → the verdict word on stdout (progress bar on stderr).  What the server holds is read
 # from <dir>/server.json (the resume answer: done ranges + stored sizes)
 _pn_xfer() {
-  local pipe="$1" id="$2" d="$3" nb="$4" tok="$5" bin conc="$_BB_MAX_PAR" retry
+  local pipe="$1" id="$2" d="$3" nb="$4" tok="$5" bin conc retry
   bin=$(_pn_xfer_bin) || { echo "❌ bashbasicsbyvk_staging_pending_xfer not found (reinstall bashbasicsbyvk)." >&2; echo FAIL; return; }
+  # A blob is the unit of resume: a PUT cut half-way is thrown away by the server, so an outage costs (blobs in flight × blob size).
+  # Instead of a fixed stream count, keep a fixed number of BYTES in flight (default 64 MB): 4 MB blobs → 16 streams (full speed),
+  # old 16 MB blobs → 4 streams.  FILEAPI_BASHBASICS_PARALLEL (hard stream count) / _INFLIGHT_MB override.
+  local bsz budget="${FILEAPI_BASHBASICS_INFLIGHT_MB:-64}"; [[ "$budget" =~ ^[0-9]{1,4}$ ]] && [ "$budget" -ge 4 ] || budget=64
+  if [ "$pipe" = ux ]; then bsz=$((16*1024*1024));   # ux chunks are 16 MiB (staging_ux_crypto)
+   else bsz=$(wc -c < "$d/blob0" 2>/dev/null | tr -d ' '); fi
+  [[ "$bsz" =~ ^[0-9]+$ ]] && [ "$bsz" -ge 1048576 ] || bsz=$((16*1024*1024))
+  conc=$(( budget * 1048576 / bsz )); [ "$conc" -lt 2 ] && conc=2; [ "$conc" -gt 16 ] && conc=16
+  [[ "${FILEAPI_BASHBASICS_PARALLEL:-}" =~ ^[0-9]{1,2}$ ]] && [ "$FILEAPI_BASHBASICS_PARALLEL" -ge 1 ] && conc=$FILEAPI_BASHBASICS_PARALLEL
   retry="${FILEAPI_BASHBASICS_RETRY_MIN:-30}"; [[ "$retry" =~ ^[0-9]{1,4}$ ]] || retry=30
   [ "$pipe" = ux ] && [ "$conc" -gt 8 ] && conc=8
   BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_UTOKEN="$tok" BB_N="$nb" BB_CHUNK="$_BB_CHUNK_BYTES" BB_CONC="$conc" \

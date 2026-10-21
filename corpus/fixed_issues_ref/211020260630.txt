@@ -1,0 +1,44 @@
+1. ISSUE AS DEFINED BY USER
+"There are issues with resilience. While uploading a 115 mb file, at 80 mb, I stopped the operation by turning off mobile data. While it is
+still trying to reconnect, I did ctrl z to make a force close, then went to pendings and tried to continue. But it is saying only 2mb is
+already in server and it uploaded 113 mb. Why the hell."
+
+1. HOW DID YOU DEBUG
+- grep of corpus for pending/resume: nothing relevant. Read staging_pending.sh (_pn_xfer, _pn_complete), staging_pending_xfer (node), and
+  staging_upload.sh (_crypto_stream_pack, _BB_CHUNK_BYTES/_BB_MAX_PAR).
+- The archive is cut into 16 MiB encrypted blobs (115 MB => 7 x 16 MiB + one ~3 MB blob). The resume unit is a WHOLE blob: a PUT that is cut
+  half-way is thrown away by the server, and "done" = blobs the server holds. _pn_xfer passed BB_CONC=_BB_MAX_PAR=16, so all 8 blobs were
+  in flight at the same moment. 80 MB "sent" was spread over 8 blobs (each ~70 %), none complete except the 3 MB tail blob => "2 MB on server".
+- REPRODUCED (ran it): tests/resume_inflight.sh = mock worker that stores a blob only when the whole PUT arrived, shared 30 MB/s, connection
+  cut at ~80 MB on the wire. 16 in flight: 2.9 MB kept (exactly the report). 4 in flight: 66.9 MB kept.
+- Ctrl-Z itself behaved correctly (raw mode turns it into INTERRUPTED, Pending item is kept); it is not part of the cause.
+- NOT run: the real worker / a real phone (fileapi/ is not in the archive, tests/e2e_pending.sh could not run). Mock only.
+
+1. CAUSE
+Too much concurrency for an all-or-nothing resume unit: bytes in flight are lost on an outage, and with 16 parallel blobs on a 115 MB file
+"in flight" was almost the whole file. The progress bar counts bytes streamed (incl. in flight) while resume counts complete blobs, so the
+two numbers disagreed.
+
+1. FIX
+- staging_pending.sh _pn_xfer: concurrency is now FILEAPI_BASHBASICS_PARALLEL or 4 (was _BB_MAX_PAR = 16); ux still capped at 8.
+- staging_pending_xfer: new safeBytes (bytes of COMPLETE blobs); on every non-OK verdict it prints "X of Y MB are safe on the server ...
+  half-sent blobs start again", so the bar and the resume number no longer surprise.
+- tests/resume_inflight.sh added.
+Lesson: when the resume unit is a whole request, bound the number of requests in flight; the loss on a drop is concurrency x chunk size.
+Possible further step (not done, needs server work): smaller pack blobs (FILEAPI_BASHBASICS_PACK_MB) or server-side partial offsets.
+
+2. ISSUE AS DEFINED BY USER
+"Also why pending menu isn't using loading bar like all other menus which contacts internet for loading something."
+
+2. HOW DID YOU DEBUG
+- Other menus (api, upgrade, cloudflare workers, gdrive) wrap their network load in _lb_run (engine/bashbasicsbyvk_loadingbar.sh).
+  pending.sh called _pn_srv_load (GET /pending, up to 40 s) bare: on open, after Refresh, after "Continue all", after leaving an item.
+- Ran it in a pty with a stubbed 1.2 s _bb_call: bar frames drawn, cleared afterwards, _PN_SRV / _PN_SRV_OK filled (_lb_run does not
+  use a subshell). Not run inside the full menu with the real server.
+
+2. CAUSE
+The Pending menu was written without the loading bar; its server call ran silently, so the screen looked frozen.
+
+2. FIX
+- loops/iloop/pending/bashbasicsbyvk_pending.sh: new _pn_srv_load_bar (= _lb_run "Checking the server for pending uploads" _pn_srv_load,
+  plain call if _lb_run is not loaded); used at the 4 places above (an `echo` first where a screen owns the cursor row).

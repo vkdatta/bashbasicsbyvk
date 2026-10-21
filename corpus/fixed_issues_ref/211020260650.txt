@@ -1,0 +1,28 @@
+ISSUE AS DEFINED BY USER
+Follow-up to 211020260630 (resume kept only 2 MB of 115 MB). "Is there any trade off of reducing from 16 blobs to 4 blobs. Will total upload
+time increase because of it or any other side effects? If so think of the way to achieve the same speed level and resilience without
+compromising earlier speed."
+
+HOW DID YOU DEBUG
+- Reasoned that the 4-stream fix of 211020260630 trades speed for resilience: a single TCP/HTTP stream is limited by RTT / window / the
+  worker, so fewer streams can leave a fast link idle. Measured on a mock (scratchpad repro/mock2.js, sim.sh): shared 60 MB/s, 8 MB/s per
+  connection, 250 ms per-request latency, 115 MB, link cut at ~80 MB sent. Results (full upload s / MB kept after the cut):
+    16 MB blobs x 16 streams  2.7 s /  0 MB   (original: fast, loses everything)
+    16 MB blobs x  4 streams  5.0 s / 64 MB   (my first fix: ~2x slower in this model)
+     4 MB blobs x 16 streams  2.7 s / 64 MB   (same speed as original, same safety)
+     8 MB blobs x  8 streams  2.8 s / 64 MB
+     2 MB blobs x 16 streams  3.0 s / 64 MB   (more requests, slightly slower)
+  The model's numbers are assumptions, not your network or your worker; the shape (loss = in-flight bytes, speed = number of streams) is
+  what matters. Not run against the real worker.
+
+CAUSE
+Speed needs many STREAMS; resume safety needs few BYTES in flight. With big blobs those two are the same knob. Small blobs separate them.
+
+FIX
+- staging_upload.sh: default pack size 16 MiB -> 4 MiB (FILEAPI_BASHBASICS_PACK_MB still overrides). The download side raises its parallelism
+  for small chunks (about 128 MB in flight, max 24), because the old cap of 8 streams x 4 MB would have slowed downloads.
+- staging_pending.sh _pn_xfer: concurrency = in-flight byte budget (FILEAPI_BASHBASICS_INFLIGHT_MB, default 64) / blob size, 2..16, read from
+  blob0 of the item: new 4 MB blobs -> 16 streams, items packed earlier with 16 MB blobs -> 4 streams. FILEAPI_BASHBASICS_PARALLEL still forces a count.
+- Side effects to know: 4x more requests per GB (R2 write operations, worker invocations), and the server must accept the larger blobCount
+  (client limit is 199999, so 4 MB x that is far above the 32 GB ceiling; the SERVER's own limits were not visible and not checked).
+  Links made earlier (16 MB blobs) still download: chunk size is read from the manifest.

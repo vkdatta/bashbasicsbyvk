@@ -18,6 +18,8 @@
 //     • a lost connection is waited out (backoff up to 30 s, "offline — retrying") and the transfer carries on by itself;
 //       only an outage longer than BB_OFFLINE_MAX ends it with OFFLINE
 //     • blobs the server already has are never sent again (BB_DONE), so a restart continues where it stopped
+//     • a blob is the unit of resume (a PUT is all-or-nothing), so few blobs are in flight at once (BB_CONC, default 4 from bash):
+//       with 16 blobs flying at once an outage at 80 MB of 115 MB left ONLY the tiny last blob on the server (2 MB kept, 113 MB re-sent)
 //     • p = pause · Ctrl-C / Ctrl-Z / SIGTERM / SIGHUP = stop NOW but keep everything for later (they do NOT lose the upload)
 //     • BB_STATE/pause.flag or stop.flag (written by the Pending menu from another terminal) are honoured within a second
 //     • BB_STATE/progress is rewritten every 2 s: "<done> <total> <last-blob> <bytes-sent> <bytes-total>"  (the bookmark)
@@ -122,6 +124,7 @@ function writeState(name, text) { if (!STATE) return; try { fs.writeFileSync(pat
 
 // ── progress is measured in BYTES, never in blobs ──
 let sent = alreadyBytes, doneN = alreadyN, shown = 0, lastIdx = -1, note = "";
+let safeBytes = alreadyBytes;     // bytes of blobs that are COMPLETE on the server (what a restart really keeps); `sent` also counts bytes still in flight
 for (const t of tasks) if (t.done && t.idx > lastIdx) lastIdx = t.idx;
 const TTY = process.stderr.isTTY, t0 = Date.now(), samples = [];
 function fmtB(b) { return total >= 1048576 ? (b / 1048576).toFixed(1) : (b / 1024).toFixed(0); }
@@ -244,7 +247,7 @@ async function uploadOne(t) {
     for (;;) {
       if (halting()) return;
       const t = todo[next++]; if (!t) return;
-      try { await uploadOne(t); doneN++; if (t.idx > lastIdx) lastIdx = t.idx; }
+      try { await uploadOne(t); doneN++; safeBytes += t.size; if (t.idx > lastIdx) lastIdx = t.idx; }
       catch (e) { if (e && e.halt) return; failed++; if (errors.length < 3) errors.push("blob " + t.idx + ": " + (e && e.message ? e.message : e)); }
     }
   }
@@ -267,6 +270,8 @@ async function uploadOne(t) {
   else if (failed) verdict = "FAIL";
   else verdict = "OK";
   if (verdict === "OK") draw(true); else if (TTY) process.stderr.write("\n");
+  // be honest about what a restart keeps: only COMPLETE blobs are on the server, a blob that was half-sent starts again from its first byte
+  if (verdict !== "OK" && TTY && safeBytes < total) process.stderr.write("  \ud83d\udcbe " + fmtB(safeBytes) + " of " + fmtB(total) + " " + unit() + " are safe on the server (" + doneN + "/" + tasks.length + " blobs) \u2014 blobs that were half-sent start again from their first byte.\n");
   for (const m of errors) process.stderr.write("  \u26a0\ufe0f  " + m + "\n");
   if (rawOn) { try { process.stdin.setRawMode(false); } catch (e) {} process.stdin.pause(); }
   console.log(verdict);

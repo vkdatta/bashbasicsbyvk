@@ -45,6 +45,13 @@ _pn_srv_load() {
   return 0
 }
 
+# every call that asks the server shows the same back-and-forth loading bar as the other menus (api, upgrade, workers…).
+# _lb_run runs _pn_srv_load in THIS shell (no subshell), so _PN_SRV / _PN_SRV_OK are filled as usual; it draws only if the call takes > 0.15 s.
+_pn_srv_load_bar() {
+  if declare -F _lb_run >/dev/null 2>&1; then _lb_run "Checking the server for pending uploads" _pn_srv_load || true
+  else _pn_srv_load; fi
+}
+
 # the ids of one service: this computer's items first, then the ones only the server knows
 _pn_ids_of() {
   local kind="$1" id d f
@@ -146,7 +153,7 @@ _pn_kind_act() {
   [ -n "$id" ] || return 0
   _PN_CUR_ID="$id"
   _st_run "${id:0:10}…" _pn_item_build _pn_item_act
-  _pn_srv_load
+  echo; _pn_srv_load_bar
   _st_quit=0
 }
 
@@ -165,7 +172,7 @@ _pn_top_build() {
 _pn_top_act() {
   local tag="${_st_tag[$1]}" id d n=0
   case "$tag" in
-    refresh) _pn_srv_load ;;
+    refresh) echo; _pn_srv_load_bar ;;
     all)
       echo
       while read -r id; do
@@ -174,7 +181,7 @@ _pn_top_act() {
         _pn_continue "$d"
       done < <(_pn_local_ids)
       [ $n -eq 0 ] && echo "  Nothing interrupted on this computer."
-      _pn_pause_enter; _pn_srv_load ;;
+      _pn_pause_enter; echo; _pn_srv_load_bar ;;
     *)
       _PN_CUR_KIND="$tag"
       local i; for i in "${!_PN_KINDS[@]}"; do [ "${_PN_KINDS[$i]}" = "$tag" ] && break; done
@@ -187,8 +194,8 @@ pending_menu() {
   local _icon_keep="${_st_icon:-}" _st_crumb="Pending"
   _st_icon="⏸"
   _pn_gc
-  _pn_srv_load
   builtin printf '\n'
+  _pn_srv_load_bar          # opening the menu asks the server: show the bar (it used to sit there silent)
   _st_run "Pending FileAPI actions" _pn_top_build _pn_top_act
   _st_quit=0
   _st_icon="$_icon_keep"

@@ -8,8 +8,10 @@ _SP_HARD_LIMIT_BYTES=$((32*1024*1024*1024))
 # _BB_MAX_PAR is how many blobs/parts upload concurrently.
 _BB_CHUNK_BYTES=$((90*1024*1024))
 _BB_MAX_PAR="${FILEAPI_BASHBASICS_PARALLEL:-16}"
-# The tar.gz stream is cut into encrypted chunks of this size (default 16 MiB) => few requests, no file-size limit.
-_BB_PACK_BYTES=$(( ${FILEAPI_BASHBASICS_PACK_MB:-16} * 1024 * 1024 ))
+# The tar.gz stream is cut into encrypted chunks of this size (default 4 MiB) => no file-size limit.  A blob is also the unit of RESUME
+# (a cut PUT is thrown away), so what an outage can cost = blobs in flight x blob size.  Small blobs let MANY streams run in parallel
+# (full speed on fast links) while only ~FILEAPI_BASHBASICS_INFLIGHT_MB (64) is ever at risk.  Was 16 MiB x 16 streams = 256 MB at risk.
+_BB_PACK_BYTES=$(( ${FILEAPI_BASHBASICS_PACK_MB:-4} * 1024 * 1024 ))
 
 _bb_authed_put() {
   local endpoint="$1" est_size="$2"; shift 2
@@ -345,7 +347,7 @@ _crypto_fetch_archive() {
         }
       }
       bar();
-      await Promise.all(Array.from({ length: Math.min(CONC, n) }, worker));
+      await Promise.all(Array.from({ length: Math.min(Math.max(CONC, Math.min(24, Math.floor(134217728 / C))), n) }, worker));   // small blobs: keep ~128 MB in flight
       fs.closeSync(fd);
       if (TTY && failed) process.stderr.write("\n");
       console.log(failed ? "FAILED" : "OK\t" + String(m.name || "files.tar.gz"));
