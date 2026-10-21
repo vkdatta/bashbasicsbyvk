@@ -1,0 +1,53 @@
+1. ISSUE AS DEFINED BY USER
+Max paste stays 2000 chars (do not change). But a pasted text shows only ~6 rows ("6 line visibility limit"): remove that, whatever is pasted shall be visible.
+
+1. HOW DID YOU DEBUG
+Read _bvk_row_multi (viewport.sh): the window of rows was capped by _BLK_MAXVIS=6. Ran the real app (script/o in a pty + tests/paste_input/vt.py) pasting 600 chars
+at 24 rows and 2000 chars at 40 rows; then backspaced everything.
+
+1. CAUSE
+Fixed row cap _BLK_MAXVIS=6 in the multi-row input block.
+
+1. FIX
+viewport.sh _bvk_row_multi: window = all rows; only when the text is taller than the screen (rows-1) does the window follow the cursor (the cursor cannot move above row 1,
+so that case cannot be drawn in full by any means). _BLK_MAXVIS removed. _BVK_MAX_INPUT (2000) untouched. Verified: 2000 chars at 40 rows = all 2000 shown (26 rows);
+600 chars at 24 rows = 8 rows, all shown; clearing the text restores footer + Select row. tests/paste_input/ui_test.py 80: ALL OK.
+
+2. ISSUE AS DEFINED BY USER
+Caret: typing "hello" should show "hello|" but shows "hello |" (one cell too far right), although editing behaves correctly.
+
+2. HOW DID YOU DEBUG
+Typed "hello" into the real app in a pty with a terminal emulator and read the cursor column: main Select row (13 = end of "Select: hello"), "=hello" filter (14), settings Select row,
+Item numbers (multi), typed-line prompt (cm), smart menu: all exactly at the end of the text. Read _bvk_fit_input, _print_input_line, _sm_input_fn, _repaint_line_above (CSI s/u).
+
+2. CAUSE
+NOT FOUND. Not reproducible in the emulator (which ignores CSI s/u and cannot show a real terminal's glyph/width rules). No change made.
+
+2. FIX
+None. Needs: which screen/prompt, which terminal (Termux?), whether the text has emoji/non-ASCII or the screen is the live-updating Links list.
+
+3. ISSUE AS DEFINED BY USER
+20 items: typing 19 highlights item 19 (right) but typing 21 or 200 highlights item 20.
+
+3. HOW DID YOU DEBUG
+Read browse.sh _sync_highlight_from_buf: "(( n > _vp_n )) && n=$_vp_n" clamps. Ran the real app (20 files), tracking reverse-video rows from the raw output.
+
+3. CAUSE
+The typed number was clamped to the last item instead of being treated as invalid.
+
+3. FIX
+_sync_highlight_from_buf: n < 1 or n > _vp_n -> no highlight (_hl_typed_clear). Verified: 19 -> [19]; 2 then 1 (=21) -> none; 200 -> none; 20 -> [20].
+
+4. ISSUE AS DEFINED BY USER
+Press 5 -> item 5 highlighted (intended). Backspace -> nothing typed but the highlight stays on 5.
+
+4. HOW DID YOU DEBUG
+Same function: with an empty / non-number buffer it just returned, never undoing the highlight. Smart menus (_sm_sync_from_buf) had the same early return.
+
+4. CAUSE
+Nothing ever cleared a highlight that typing had set.
+
+4. FIX
+viewport.sh: _HL_TYPED (the row typing highlighted) + _hl_typed_clear (drops it only if _hl_index is still that row, so a row moved with the arrow keys is kept).
+browse.sh _sync_highlight_from_buf and smartmenu.sh _sm_sync_from_buf set/clear it. Verified in the real app: 5 then backspace -> none; 19 then 2x backspace -> none.
+Lesson: any "type to highlight" code must also handle the typed text becoming empty/invalid.

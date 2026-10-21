@@ -477,7 +477,7 @@ _sm_next_selectable() {
 # map the typed buffer onto the row whose token matches, so a
 # menu numbered 0..2 highlights correctly (single-select mode)
 _sm_sync_from_buf() {
-  [ -z "$_buf" ] && return 0
+  [ -z "$_buf" ] && { _hl_typed_clear; return 0; }     # typed text erased: drop the highlight that typing put there
   local i n=${#_sm_rows_token[@]} old="${_hl_index:-0}"
   for ((i=0; i<n; i++)); do
     if [ "${_sm_rows_token[$i]}" = "$_buf" ]; then
@@ -485,9 +485,11 @@ _sm_sync_from_buf() {
         _hl_index=$(( i + 1 ))
         _vp_goto "$old" "$_hl_index"
       fi
+      _HL_TYPED=$(( i + 1 ))
       return 0
     fi
   done
+  _hl_typed_clear                                        # no row has that token (any more)
   return 0
 }
 

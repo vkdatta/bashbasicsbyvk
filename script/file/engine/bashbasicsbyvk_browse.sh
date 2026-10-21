@@ -646,15 +646,15 @@ _sync_highlight_from_buf() {
     _vp_rerender
     _print_input_line
   fi
-  [[ "$_buf" =~ ^[0-9]+$ ]] || return
+  [[ "$_buf" =~ ^[0-9]+$ ]] || { _hl_typed_clear; return; }      # emptied (backspace) or not a number: drop the typed highlight
   local n=$((10#$_buf))
-  (( n < 1 )) && n=1
-  (( n > _vp_n )) && n=$_vp_n
+  if (( n < 1 || n > _vp_n )); then _hl_typed_clear; return; fi   # 0, 21 or 200 of 20 items: there is no such row — nothing highlighted
   if [ "$n" -ne "${_hl_index:-0}" ]; then
     local old="${_hl_index:-0}"
     _hl_index=$n
     _vp_goto "$old" "$_hl_index"
   fi
+  _HL_TYPED=$n
 }
 
 _read_choice() {

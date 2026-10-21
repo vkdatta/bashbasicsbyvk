@@ -408,6 +408,19 @@ _vp_prime_rows_run() {
 }
 
 _vp_is_hl_single() { [ "$1" -eq "${_hl_index:-0}" ]; }
+# A number typed into the Select row highlights that row (_hl_index). _HL_TYPED remembers WHICH highlight came from typing, so
+# when the typed number is gone (backspace) or invalid (more than the items there are) exactly that highlight is dropped —
+# a highlight the user moved with the arrow keys is not touched.
+_HL_TYPED=0
+_hl_typed_clear() {
+  local old="${_hl_index:-0}"
+  if (( _HL_TYPED > 0 && old == _HL_TYPED )); then
+    _HL_TYPED=0; _hl_index=0
+    _vp_repaint_row "$old"
+    [ -n "${_vp_input_fn:-}" ] && $_vp_input_fn
+  else _HL_TYPED=0; fi
+  return 0
+}
 _vp_is_hl_multi()  { [ -n "${_msel_set[$1]+x}" ]; }
 _vp_is_hl() { $_vp_hl_fn "$1"; }
 
@@ -767,11 +780,11 @@ _read_key_seq() {
 # ------------------------------------------------------------------------------------------------
 # MULTI-ROW INPUT — a text that does not fit one row (or has line breaks) is shown in full, wrapped, as a block of rows
 # ------------------------------------------------------------------------------------------------
-# The block starts on the prompt's own row and grows downward (at most _BLK_MAXVIS rows are shown; the window follows the
+# The block starts on the prompt's own row and grows downward (all rows are shown unless the text is taller than the screen; then the window follows the
 # cursor). Left/right/typing move the cursor INSIDE it, across rows. Up/down/PgUp/PgDn/Home/End still move the list:
 # the loops call _bvk_blk_park first (cursor back on the first row) so every row-relative repaint stays correct.
 _BVK_MAX_INPUT=2000          # an input longer than this is refused, whatever menu it is typed or pasted into
-_BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0; _BLK_MAXVIS=6; _BVK_FIT_COL=0
+_BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0; _BVK_FIT_COL=0
 
 _bvk_blk_reset() {           # back to a plain one-row prompt: wipe the extra rows
   if (( ${_BLK_ROWS:-1} > 1 )); then
@@ -829,7 +842,10 @@ _bvk_row_multi() {
   done
   (( found )) || crow=$(( R - 1 ))
   t="${b:rs[crow]:pos-rs[crow]}"; _bvk_dispw "$t"; ccol=$(( (crow == 0 ? pw : 0) + _BVK_W ))
-  maxv=${_BLK_MAXVIS:-6}; top=${_BLK_TOP:-0}           # the window of rows that is shown follows the cursor
+  # every row of the text is shown (no fixed row limit). Only when the text is taller than the screen itself can it not be drawn
+  # in full (the cursor cannot move above the top row): then the window of rows follows the cursor.
+  maxv=$R; (( ${_vp_rows_now:-0} > 2 && maxv > _vp_rows_now - 1 )) && maxv=$(( _vp_rows_now - 1 )); (( maxv < 1 )) && maxv=1
+  top=${_BLK_TOP:-0}
   (( top > R - maxv )) && top=$(( R - maxv )); (( top < 0 )) && top=0
   (( crow < top )) && top=$crow
   (( crow >= top + maxv )) && top=$(( crow - maxv + 1 ))
