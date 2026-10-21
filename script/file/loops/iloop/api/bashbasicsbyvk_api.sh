@@ -789,7 +789,7 @@ api_menu() {
       .r) _inner_next=r;   break ;;
       -u) _inner_next=upg; break ;;
 
-      q) _fx_in_mode=0; _sw_in_mode=0; _bvk_quit ;;
+      q) _bvk_quit; break ;;                      # q = close to the main loop (u = back one screen)
 
       -h) _api_help; _ap_fresh=false ;;
 
@@ -818,6 +818,7 @@ api_menu() {
     esac
 
     shopt -u nocasematch
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && break          # q inside a command / prompt of this loop: close to the main loop
     # after an edit / nuke the list is re-fetched (_API_LOADED=0), so numbers and times are current
     $_ap_fresh && _api_redraw_fresh
   done

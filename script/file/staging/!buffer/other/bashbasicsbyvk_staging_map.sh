@@ -95,7 +95,7 @@ _map_deliver() {
 
   case "$choice" in
   u|U) return ;;
-  q|Q) _bvk_quit ;;
+  q|Q) _bvk_quit; return 1 ;;
     1)
       printf "%s" "$map_output" | bashbasicsbyvk_copy
       if [ -n "$suggest" ]; then echo "✅ Copied to clipboard"; else echo "✅ Map copied to clipboard"; fi

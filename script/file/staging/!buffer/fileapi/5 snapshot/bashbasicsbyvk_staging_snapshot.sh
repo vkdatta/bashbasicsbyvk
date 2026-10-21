@@ -386,11 +386,12 @@ _snap_menu_device_view() {   # one device: its watched paths, and its snapshots
         "$( [ "${T_LAST[$i]:-0}" -gt 0 ] 2>/dev/null && _snap_name "${T_LAST[$i]}" || echo none yet )"
     done
     echo "   N: snapshots of that path · all: every snapshot of this device · x-N: stop snapshotting it (removes it from the list$( [ "$is_self" = 1 ] || echo ' — that device stops on its next sync' )) · u: back"
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
     read -e -r -p "   > " a || return 0
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
       u|"") return 0 ;;
-      q) _bvk_quit ;;
+      q) _bvk_quit; return 0 ;;
       all) _snap_menu_snaps "$lk" "$dev" "" "all paths" ;;
       x-*)
         n="${a#*-}"
@@ -435,11 +436,12 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
         "$(_bb_fmt_duration $(( (${S_EXP[$i]} - nowms) / 1000 )))"
     done
     echo "   N: restore here (into a new folder named after it) · e-N: extend / shorten · x-N: nuke · u: back      (snapshots cannot be renamed)"
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
     read -e -r -p "   > " a || return 0
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
       u|"") return 0 ;;
-      q) _bvk_quit ;;
+      q) _bvk_quit; return 0 ;;
       x-*|e-*)
         local verb="${a:0:1}" spec=""; n="${a#*-}"
         if [ "$verb" = e ]; then local nn="${n%%[[:space:]]*}"; [ "$nn" != "$n" ] && spec="${n#*[[:space:]]}"; n="$nn"; fi
@@ -516,11 +518,12 @@ snapshot_menu() {
         "$( [ "${SNAP_D_ID[$i]}" = "$SNAP_D_SELF" ] && echo '★' || echo ' ' )" "${SNAP_D_LABEL[$i]:-device}" "${SNAP_D_ID[$i]:0:8}" "${SNAP_D_TARGETS[$i]}" "${SNAP_D_SNAPS[$i]}" "$(_bb_fmt_when "${SNAP_D_SEEN[$i]}")"
     done
     echo "   N: open that device · rf: refresh · u: back       (★ = this computer)"
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
     read -e -r -p "   > " a || return 0
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
       u|sn|"") return 0 ;;
-      q) _bvk_quit ;;
+      q) _bvk_quit; return 0 ;;
       rf) ;;
       *)
         if [[ "$a" =~ ^[0-9]+$ ]] && [ "$a" -ge 1 ] && [ "$a" -le ${#SNAP_D_ID[@]} ]; then

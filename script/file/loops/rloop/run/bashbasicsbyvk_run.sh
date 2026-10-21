@@ -33,7 +33,7 @@ handle_file() {
             10) _lk_file_cmd unlock "$file"; return 1 ;;
             u|U) return 1 ;;
             h|H) home_menu; return 1 ;;
-            q|Q) exit 0 ;;
+            q|Q) _bvk_quit; return 1 ;;
             *)
                 _bvk_invalid
                 ;;

@@ -47,7 +47,7 @@ for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
 case "$ech" in
 u|U) return ;;
-q|Q) _bvk_quit ;;
+q|Q) _bvk_quit; return 1 ;;
 1)
 declare -A ext_buckets=()
 for f in "${files[@]}"; do
@@ -209,7 +209,7 @@ _mc_menu "🔄 Unorganise and bring to current location:" -- "Unorganise all" "U
 read -e -p "Select: " uch
 case "$uch" in
 u|U) return ;;
-q|Q) _bvk_quit ;;
+q|Q) _bvk_quit; return 1 ;;
 esac
 if [ "$uch" = "1" ]; then
 _carry_flatten_into "$path" "$path" 2   # locks + shortcuts follow; a locked empty folder is kept
@@ -270,7 +270,7 @@ _mc_menu "🗂️ Organise files in current location ($path):" -- "Organise by e
 read -e -p "Select: " och
 case "$och" in
 u|U) return ;;
-q|Q) _bvk_quit ;;
+q|Q) _bvk_quit; return 1 ;;
 1) organise_by_ext ;;
 2) organise_by_year ;;
 3) organise_by_year_month ;;

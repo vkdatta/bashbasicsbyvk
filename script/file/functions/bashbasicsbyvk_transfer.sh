@@ -159,7 +159,7 @@ _view_selections_menu() {
         return 1
         ;;
       q|Q)
-        exit 0
+        _bvk_quit; return 1
         ;;
       *)
         _bvk_invalid
@@ -260,7 +260,7 @@ local_navigator() {
     read -e -p "Nav: " nav_choice
 
     case "$nav_choice" in
-      q|Q) exit 0 ;;
+      q|Q) _bvk_quit; return 1 ;;
       z|Z)
         echo "🚫 Navigation cancelled"
         return 1
@@ -454,8 +454,8 @@ gcloud_navigator() {
     case "$gnav_choice" in
       q|Q)
         gcloud_nav_selected_items=()
-        echo "🗑️  All selections cleared. Exiting."
-        exit 0
+        echo "🗑️  All selections cleared. Closing."
+        _bvk_quit; return 1
         ;;
       z|Z)
         echo "🚫 GCloud navigation cancelled"
@@ -836,7 +836,7 @@ transfer_menu() {
 
   case "$t_mode" in
   u|U) return ;;
-  q|Q) _bvk_quit ;;
+  q|Q) _bvk_quit; return 1 ;;
     1|2|3|4|5) ;;
     *)
       echo "❌ Invalid mode"
@@ -885,7 +885,7 @@ transfer_menu() {
 
   case "$t_mode" in
   u|U) return ;;
-  q|Q) _bvk_quit ;;
+  q|Q) _bvk_quit; return 1 ;;
     1)
       local_navigator "dest" "$HOME"
       if [ $? -eq 0 ]; then
@@ -946,7 +946,7 @@ transfer_menu() {
   local t_op
   case "$t_action" in
   u|U) return ;;
-  q|Q) _bvk_quit ;;
+  q|Q) _bvk_quit; return 1 ;;
     c|C) t_op="copy" ;;
     m|M) t_op="move" ;;
     s|S)
@@ -968,7 +968,7 @@ transfer_menu() {
 
   case "$t_mode" in
   u|U) return ;;
-  q|Q) _bvk_quit ;;
+  q|Q) _bvk_quit; return 1 ;;
     1|2)
       if [ "$t_op" == "copy" ]; then
         perform_copy "$final_dest" "${selected_items[@]}"

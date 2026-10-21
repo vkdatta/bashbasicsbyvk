@@ -453,9 +453,8 @@ functions_menu() {
         ;;
 
       q)
-        _fx_in_mode=0
-        _sw_in_mode=0
-        exit 0
+        _bvk_quit                    # q = close to the main loop (u = back one screen); never leaves the app
+        break
         ;;
 
       -h) open_help ;;
@@ -616,6 +615,7 @@ functions_menu() {
     esac
 
     shopt -u nocasematch
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && break          # q inside a command / prompt of this loop: close to the main loop
 
     # a Google Drive was just opened: leave fx so the main screen shows it
     if [ "${_GD_FX_LEAVE:-0}" = 1 ]; then _GD_FX_LEAVE=0; break; fi

@@ -152,7 +152,7 @@ _sp_view_one_buffer() {
         return 0
         ;;
       q|Q)
-        _bvk_quit
+        _bvk_quit; return 0
         ;;
       *)
         _bvk_invalid
@@ -217,7 +217,7 @@ handle_staging_view() {
         return 0
         ;;
       q|Q)
-        _bvk_quit
+        _bvk_quit; return 0
         ;;
       *)
         _bvk_invalid

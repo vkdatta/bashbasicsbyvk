@@ -352,13 +352,13 @@ _st_run() {
         if [[ "$buf" == =* ]]; then fq="${buf:1}"; cur=-1; top=0
         else _st_follow; need=0; fi ;;
       char)
-        if (( ${#buf} >= ${_BVK_MAX_INPUT:-2000} )); then _st_msg="[too large: max ${_BVK_MAX_INPUT:-2000}]"
+        if (( ${#buf} >= ${_BVK_MAX_INPUT:-512} )); then _st_msg="[too large: max ${_BVK_MAX_INPUT:-512}]"
         elif [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
         elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
         else buf+="$_st_d"; _st_follow; need=0; fi ;;
       paste|pasteenter)
         # a pasted text goes into the row in ONE step; it is accepted only by the user's own Enter
-        if (( ${#buf} + ${#_st_d} > ${_BVK_MAX_INPUT:-2000} )); then _st_msg="[too large: $(( ${#buf} + ${#_st_d} )) chars, max ${_BVK_MAX_INPUT:-2000}, not accepted]"; _st_d=""; fi
+        if (( ${#buf} + ${#_st_d} > ${_BVK_MAX_INPUT:-512} )); then _st_msg="[too large: $(( ${#buf} + ${#_st_d} )) chars, max ${_BVK_MAX_INPUT:-512}, not accepted]"; _st_d=""; fi
         _st_d="${_st_d//$'\n'/ }"                                   # this row is one line: line breaks become spaces
         if [ -z "$_st_d" ]; then :
         elif [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; fq="${buf:1}"; cur=-1; top=0

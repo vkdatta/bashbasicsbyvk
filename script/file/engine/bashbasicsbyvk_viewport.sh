@@ -783,7 +783,7 @@ _read_key_seq() {
 # The block starts on the prompt's own row and grows downward (all rows are shown unless the text is taller than the screen; then the window follows the
 # cursor). Left/right/typing move the cursor INSIDE it, across rows. Up/down/PgUp/PgDn/Home/End still move the list:
 # the loops call _bvk_blk_park first (cursor back on the first row) so every row-relative repaint stays correct.
-_BVK_MAX_INPUT=2000          # an input longer than this is refused, whatever menu it is typed or pasted into
+_BVK_MAX_INPUT=512           # an input longer than this is refused, whatever menu it is typed or pasted into
 _BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0; _BVK_FIT_COL=0
 
 _bvk_blk_reset() {           # back to a plain one-row prompt: wipe the extra rows
@@ -1031,11 +1031,22 @@ _key_name() {
   return 0
 }
 
-# _bvk_quit — the universal  q  : leave the whole app (same as q in the main
-# menu).  u (back / up one level) is handled by each menu itself.
-_bvk_quit() {
+# q  — two different things, never mixed up:
+#   _bvk_exit  the q of the MAIN LOOP (the file list): leave the whole app.
+#   _bvk_quit  the q of EVERY OTHER screen (fx, sw, .r, api, bk, sv, sn, rbam, nf, cs, -u, Home ...): close to the main loop.
+#              It only raises _BVK_TO_MAIN; the caller returns / breaks, every menu loop on the way sees the flag and leaves
+#              (_inner_run, Home, the loops themselves), and the main loop clears it at the top of its next round.
+#              It must NEVER exit the app: after  _bvk_quit  the caller has to  break / return.
+# u (back / up one level) is handled by each menu itself and only ever goes back ONE screen.
+_BVK_TO_MAIN=0
+_bvk_exit() {
   _bvk_paste_off
   if ${_sw_did_switch:-false}; then declare -F _gd_before_exec >/dev/null && _gd_before_exec; cd "$path" && exec "$SHELL"; else exit 0; fi
+}
+_bvk_quit() {
+  _fx_in_mode=0; _sw_in_mode=0
+  _BVK_TO_MAIN=1
+  return 0
 }
 
 _is_ctrl_char() {

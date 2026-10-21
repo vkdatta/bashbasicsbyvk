@@ -270,7 +270,7 @@ handle_scr_sync() {
 
   case "$_scr_choice" in
   u|U) return ;;
-  q|Q) _bvk_quit ;;
+  q|Q) _bvk_quit; return 1 ;;
     1)
       _scr_ensure
       local -a entries=()

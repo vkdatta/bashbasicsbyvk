@@ -368,7 +368,7 @@ upgrade_menu() {
       sw) _inner_next=sw; break ;;
       .r) _inner_next=r;  break ;;
 
-      q) _fx_in_mode=0; _sw_in_mode=0; _bvk_quit ;;
+      q) _bvk_quit; break ;;                      # q = close to the main loop (u = back one screen)
 
       -h) _upg_help; _up_fresh=false ;;
 
@@ -399,6 +399,7 @@ upgrade_menu() {
     esac
 
     shopt -u nocasematch
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && break          # q inside a command / prompt of this loop: close to the main loop
     $_up_fresh && _upg_redraw_fresh
   done
 

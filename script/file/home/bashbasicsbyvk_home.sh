@@ -40,24 +40,28 @@ _home_build() {
   _st_add a "Pending"       0 "" pending
 }
 
+# u inside a screen opened from Home comes BACK HERE (Home stays open and is redrawn).
+# q inside it (_BVK_TO_MAIN, see _bvk_quit) closes Home too: straight to the main loop.
 _home_act() {
   case "${_st_tag[$1]}" in
     local)     _st_back=1 ;;                                   # plain file surf = the main loop
-    cloud)     _inner_run cs;       _st_back=1 ;;
-    shared)    _inner_run cs-recv;  _st_back=1 ;;
-    notify)    _inner_run nf;       _st_back=1 ;;
-    switch)    _inner_run sw;  _st_back=1 ;;
-    functions) _inner_run fx;  _st_back=1 ;;
-    rules)     _inner_run r;   _st_back=1 ;;
-    help)      open_help;      _st_back=1 ;;
-    auth)      auth_menu;      _st_back=1 ;;
-    links)     _inner_run api; _st_back=1 ;;
-    rbam)      _inner_run rbam; _st_back=1 ;;
-    backup)    _inner_run bk;   _st_back=1 ;;
-    saved)     _inner_run sv;   _st_back=1 ;;
-    snapshots) _inner_run sn;   _st_back=1 ;;
-    pending)   _inner_run pn;   _st_back=1 ;;
+    cloud)     _inner_run cs ;;
+    shared)    _inner_run cs-recv ;;
+    notify)    _inner_run nf ;;
+    switch)    _inner_run sw ;;
+    functions) _inner_run fx ;;
+    rules)     _inner_run r ;;
+    help)      open_help ;;
+    auth)      auth_menu ;;
+    links)     _inner_run api ;;
+    rbam)      _inner_run rbam ;;
+    backup)    _inner_run bk ;;
+    saved)     _inner_run sv ;;
+    snapshots) _inner_run sn ;;
+    pending)   _inner_run pn ;;
   esac
+  [ "${_BVK_TO_MAIN:-0}" = 1 ] && _st_back=1
+  return 0
 }
 
 home_menu() {

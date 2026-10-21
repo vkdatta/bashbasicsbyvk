@@ -49,7 +49,7 @@ handle_create() {
 
   case "$cr" in
   u|U) return ;;
-  q|Q) _bvk_quit ;;
+  q|Q) _bvk_quit; return 1 ;;
     1) create_dirs ;;
     2) create_files ;;
     *) _bvk_invalid ;;

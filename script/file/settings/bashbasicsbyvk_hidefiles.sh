@@ -77,7 +77,7 @@ _hidden_decide() {
       case "${a,,}" in
         y|yes) _hid_inc=true ;;
         u)     echo "🚫 Cancelled."; return 1 ;;
-        q)     _bvk_quit ;;
+        q)     _bvk_quit; return 1 ;;
       esac
       return 0 ;;
     *) [ "${show_hidden_files:-false}" = true ] && _hid_inc=true || _hid_inc=false ;;

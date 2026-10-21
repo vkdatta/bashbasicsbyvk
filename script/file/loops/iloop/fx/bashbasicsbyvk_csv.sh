@@ -102,7 +102,7 @@ _file_picker() {
         _fp_choice="${_fp_choice%"${_fp_choice##*[![:space:]]}"}"
 
         case "$_fp_choice" in
-            q|Q) exit 0 ;;
+            q|Q) _bvk_quit; _fp_out=""; return 1 ;;
 
             z|Z)
                 echo "🚫 ${_fp_lbl} selection cancelled."

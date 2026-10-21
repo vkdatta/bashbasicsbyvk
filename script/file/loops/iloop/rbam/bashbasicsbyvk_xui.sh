@@ -178,7 +178,7 @@ _xui_loop() {
       rc=1
       case "$c" in
         u) rc=2 ;;
-        q) _fx_in_mode=0; _sw_in_mode=0; _bvk_quit ;;
+        q) _bvk_quit; return 1 ;;                  # q = close to the main loop (u = back one screen)
         fx|sw|api|.r|-u)
           if [ "$_XUI_DEPTH" -le 1 ]; then
             case "$c" in .r) _inner_next=r ;; -u) _inner_next=upg ;; *) _inner_next="$c" ;; esac
@@ -188,6 +188,7 @@ _xui_loop() {
         *) _bvk_invalid; rc=0 ;;     # rc 0 -> _xui_fresh redraws THIS menu
       esac
     fi
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q here or in a deeper screen / prompt: close to the main loop
     case "$rc" in
       0) _xui_fresh ;;
       2) return 0 ;;

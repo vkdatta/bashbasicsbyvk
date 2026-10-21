@@ -55,6 +55,7 @@ _inner_run() {
       cs-recv) csurf_menu 1 ;;
       gdp) gdrive_profiles_menu ;;
     esac
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && break      # q somewhere inside: close to the main loop (u only ever goes back one screen)
     _next="$_inner_next"
   done
 }
@@ -98,6 +99,8 @@ fi
 
 shopt -s nullglob
 while true; do
+  _BVK_TO_MAIN=0                                 # we ARE the main loop: a q from a menu / flow has arrived
+  declare -F _cm_abort_clear >/dev/null 2>&1 && _cm_abort_clear
   _lt_b "gdrive: sync cycle"; _gd_cycle; _lt_e     # Google Drive open: push what the last command changed, list this folder
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   _lt_b "count items in this folder"; total=$(count_items_in_path "$path"); _lt_e
@@ -183,7 +186,7 @@ while true; do
 
   shopt -s nocasematch
   case "$choice" in
-    q)           if $_sw_did_switch; then _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi ;;
+    q)           if $_sw_did_switch; then _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi ;;   # q on the main loop = leave the app
     -h)          open_help ;;
     h)           home_menu ;;
     u)           if _gd_at_root; then echo "☁️  This is the top of your Google Drive — gdx leaves it"

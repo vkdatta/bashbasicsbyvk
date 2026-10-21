@@ -479,6 +479,7 @@ _sm_next_selectable() {
 _sm_sync_from_buf() {
   [ -z "$_buf" ] && { _hl_typed_clear; return 0; }     # typed text erased: drop the highlight that typing put there
   local i n=${#_sm_rows_token[@]} old="${_hl_index:-0}"
+  (( ${#_buf} > ${_CM_LIVE_MAX:-56} )) && { _hl_typed_clear; return 0; }   # longer than any token/command: no live lookup (Enter is the fallback)
   for ((i=0; i<n; i++)); do
     if [ "${_sm_rows_token[$i]}" = "$_buf" ]; then
       if [ "$(( i + 1 ))" -ne "$old" ]; then

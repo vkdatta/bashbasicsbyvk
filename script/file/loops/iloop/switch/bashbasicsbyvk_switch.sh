@@ -83,7 +83,7 @@ _sw_excl_add() {
   local kind
   case "$t_choice" in
     u|U) echo "↩️  Back"; return 0 ;;
-    q|Q) _bvk_quit ;;
+    q|Q) _bvk_quit; return 1 ;;
     1) kind="filename"   ;;
     2) kind="foldername" ;;
     3) kind="filepath"   ;;
@@ -180,7 +180,7 @@ _sw_excl_menu() {
       x)  _sw_excl_remove ;;
       e)  _sw_excl_edit   ;;
       u|"") echo "↩️  Back to recents"; return 0 ;;
-      q)  _bvk_quit ;;
+      q)  _bvk_quit; return 0 ;;
       *)  echo "⚠️  Invalid: $xc" ;;
     esac
   done
@@ -652,9 +652,8 @@ switch_menu() {
         ;;
         
       q)
-        path="$_sw_saved_path"
-        _sw_in_mode=0
-        exit 0
+        _bvk_quit                    # q = close to the main loop (u = back one screen); never leaves the app
+        break
         ;;
 
       -h) open_help ;;
@@ -807,6 +806,7 @@ switch_menu() {
     esac
 
     shopt -u nocasematch
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && break          # q inside a command / prompt of this loop: close to the main loop
 
     # ── Re-render after action ───────────────────────────────────────────────
     if $_sw_do_fresh; then

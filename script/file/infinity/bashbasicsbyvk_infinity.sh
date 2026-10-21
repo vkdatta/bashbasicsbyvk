@@ -35,7 +35,7 @@ infinity_stones_menu() {
 
     case "$is_choice" in
     u|U|"") return ;;
-    q|Q) _bvk_quit ;;
+    q|Q) _bvk_quit; return 1 ;;
       1) python "$SCRIPT_DIR/bashbasicsbyvk_xtract" "$path" ;;
       2) python "$SCRIPT_DIR/bashbasicsbyvk_js_audit" "$path" ;;
       3) bash "$SCRIPT_DIR/bashbasicsbyvk_py_audit" "$path" ;;

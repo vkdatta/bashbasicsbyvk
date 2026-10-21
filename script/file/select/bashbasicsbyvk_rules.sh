@@ -385,7 +385,7 @@ _rl_cmd_create() {
     read -e -r -p "Select: " ans
     case "$ans" in
       u|U) return 1 ;;
-      q|Q) _bvk_quit ;;
+      q|Q) _bvk_quit; return 1 ;;
       1) kind=select ;;
       2) kind=display ;;
       *) _bvk_invalid; return 1 ;;
@@ -393,13 +393,13 @@ _rl_cmd_create() {
   fi
   local head=.s; [ "$kind" = display ] && head=.d
   read -e -r -p "📄 Rule name (e.g. mango or mango.txt): " raw
-  case "$raw" in u|U) return 1 ;; q|Q) _bvk_quit ;; esac
+  case "$raw" in u|U) return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   name="$(_rl_clean_name "$raw")"
   if [ -z "$name" ]; then echo "🚫 Cancelled"; return 1; fi
   if ! _rule_valid_name "$name"; then echo "❌ Rule names: letters, digits, _ and - only"; return 1; fi
   if [ -e "$(_rl_dir "$kind" "$name")" ]; then echo "❌ A $kind rule called '$name' already exists"; return 1; fi
   read -e -r -p "✏️  Expression (e.g. $head.ext png ; blank = open editor): " expr
-  case "$expr" in u|U) return 1 ;; q|Q) _bvk_quit ;; esac
+  case "$expr" in u|U) return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   read -e -r -p "📝 Description (optional): " desc
   _rl_write_bundle "$kind" "$name" "$expr" "$desc" || { echo "❌ Could not create the rule"; return 1; }
   if [ -z "$expr" ]; then
@@ -447,11 +447,11 @@ _rl_cmd_rename() {
   if [ "${#items[@]}" -eq 0 ]; then echo "ℹ️  No rules here"; return 1; fi
   local num raw new
   read -e -r -p "✏️  Rename which rule number? " num
-  case "$num" in u|U|"") return 1 ;; q|Q) _bvk_quit ;; esac
+  case "$num" in u|U|"") return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   _rl_pick "$num" || return 1
   _rl_is_bundle "$_rl_p" || { echo "🔒 Protected item"; return 1; }
   read -e -r -p "📝 New name for '$_rl_n': " raw
-  case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit ;; esac
+  case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   new="$(_rl_clean_name "$raw")"
   _rule_valid_name "$new" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
   [ "$new" = "$_rl_n" ] && { echo "ℹ️  Same name — nothing to do"; return 1; }
@@ -510,7 +510,7 @@ _rl_cmd_save_hist() {
   esac
   echo "💾 $expr   → will be a $kind rule"
   read -e -r -p "📄 Rule name (u = cancel): " raw
-  case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit ;; esac
+  case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   name="$(_rl_clean_name "$raw")"
   _rule_valid_name "$name" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
   [ -e "$(_rl_dir "$kind" "$name")" ] && { echo "❌ A $kind rule called '$name' already exists"; return 1; }
@@ -586,7 +586,7 @@ rules_menu() {
       fx|FX) _inner_next=fx; break ;;
       sw|SW) _inner_next=sw; break ;;
 
-      q) _fx_in_mode=0; _sw_in_mode=0; _bvk_quit ;;
+      q) _bvk_quit; break ;;                      # q = close to the main loop (u = back one screen)
 
       -h) _rl_help; _rl_fresh=false ;;
 
@@ -645,6 +645,7 @@ rules_menu() {
     esac
 
     shopt -u nocasematch
+    [ "${_BVK_TO_MAIN:-0}" = 1 ] && break          # q inside a command / prompt of this loop: close to the main loop
     $_rl_fresh && _rl_redraw_fresh
   done
 

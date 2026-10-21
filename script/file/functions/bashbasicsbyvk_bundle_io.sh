@@ -139,7 +139,7 @@ _bz_import() {
     ans="${ans%$'\r'}"
     case "$ans" in
     u|U) return ;;
-    q|Q) _bvk_quit ;;
+    q|Q) _bvk_quit; return 1 ;;
       1) mode="-n" ;;
       2) mode="-o" ;;
       *) echo "🚫 Import cancelled"; return 1 ;;

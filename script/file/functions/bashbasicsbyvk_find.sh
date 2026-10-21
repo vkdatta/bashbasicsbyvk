@@ -7,7 +7,7 @@ find_menu() {
     local -a results=()
     case "$ftype" in
     u|U) return ;;
-    q|Q) _bvk_quit ;;
+    q|Q) _bvk_quit; return 1 ;;
         1)
             read -e -p "Name pattern (e.g. report): " pat
             mapfile -t results < <(find "$path" -name "*$pat*" 2>/dev/null | head -100)
@@ -22,7 +22,7 @@ find_menu() {
 
             case "$fr_name_mode" in
             u|U) return ;;
-            q|Q) _bvk_quit ;;
+            q|Q) _bvk_quit; return 1 ;;
                 1)
                     # ── Single Mutation ──────────────────────────────────────────
                     read -e -p "Name pattern to find: " pat
@@ -184,7 +184,7 @@ PYEOF
 
             case "$fr_mode" in
             u|U) return ;;
-            q|Q) _bvk_quit ;;
+            q|Q) _bvk_quit; return 1 ;;
                 1)
                     # ── Single Mutation ─────────────────────────────────────────
                     read -e -p "Text to find inside files: " pat
@@ -223,7 +223,7 @@ PYEOF
 
                     case "$act" in
                         u|U) return ;;
-                        q|Q) _bvk_quit ;;
+                        q|Q) _bvk_quit; return 1 ;;
                         a|A)
                             local count=0
                             for f in "${results[@]}"; do
@@ -391,7 +391,7 @@ PYEOF
         read -e -p "Action: " act || return
         case "$act" in
             u|U) continue 2 ;;   # back to the Find mode menu (step 2)
-            q|Q) _bvk_quit ;;
+            q|Q) _bvk_quit; return 1 ;;
             [0-9]*)
                 if [[ $act =~ ^[0-9]+$ ]] && (( act >= 1 && act <= ${#results[@]} )); then
                     local target="${results[$((act-1))]}"

@@ -63,6 +63,9 @@ _CM_FLASH=""                    # one-shot message shown in the hint row
 _CM_ABORT=0; _CM_ABORT_MSG=""; _CM_ABORT_DEPTH=0; _CM_ABORT_N=0
 _CM_MAP=""; _CM_MDEPTH=0; _CM_FLOW=0     # set by _cm_ctx_find; defined here so nothing reads them unset
 _CM_MUTE=0
+# No command is longer than this many characters. Past it, nothing is looked up WHILE TYPING (live hint, highlight):
+# only below it. Enter is the fallback: the gates (_cm_gate_*) still resolve the whole text (up to the 255 guard in _cm_resolve).
+_CM_LIVE_MAX=56
 
 # ------------------------------------------------------------ locating the files
 # Built ONCE per session, with no subshells: the directories to look in, and every
@@ -368,7 +371,7 @@ _cm_hint() {
     _CM_FLASH=""
   fi
   [ -z "$b" ] && return 0
-  [ "${#b}" -gt 255 ] && return 0          # a big paste: no hint (and no per-command matching)
+  [ "${#b}" -gt "$_CM_LIVE_MAX" ] && return 0   # longer than any command: no live lookup (Enter is the fallback)
   _cm_on || return 0
   [ "$_CM_BOOTED" = 1 ] || _cm_boot
   _cm_table_build "${_CM_MAP:-main}"
@@ -451,7 +454,8 @@ _cm_abort_swallow() {
 bvk_main_exec() {
   local c="${1,,}"
   case "$c" in
-    q)      _bvk_quit ;;
+    q)      # q on the main loop's own prompt leaves the app; q anywhere else (a menu, a prompt inside a flow) closes to the main loop
+            if [ "${_CM_MAP:-main}" = main ] && [ "${_CM_FLOW:-0}" = 0 ]; then _bvk_exit; else _bvk_quit; fi ;;
     h)      home_menu ;;
     s)      settings_menu ;;
     i)      infinity_stones_menu ;;
@@ -491,7 +495,14 @@ _cm_gate_choice() {
   _cm_resolve menu "$choice"
   case "$_CM_ACT" in
     none|local) return 0 ;;
-    run)   _cm_run_main "$choice" menu; return 1 ;;
+    run)   local _g_main=0            # (the command may open screens that re-read the context: remember where WE are first)
+           [ "${_CM_MAP:-main}" = main ] && [ "${_CM_FLOW:-0}" = 0 ] && _g_main=1
+           _cm_run_main "$choice" menu
+           if [ "${_BVK_TO_MAIN:-0}" = 1 ]; then
+             if [ "$_g_main" = 1 ]; then _BVK_TO_MAIN=0                 # this IS the main loop: the q from the screen we opened has arrived
+             else choice=q; return 0; fi                                # a menu: its own  q)  case closes it, up to the main loop
+           fi
+           return 1 ;;
     back)  choice="${_CM_MAP_BACK[$_CM_MAP]:-u}"; return 0 ;;
     block) echo "❌ Invalid command: $choice — not available in ${_CM_MAP}"; return 1 ;;
   esac
@@ -557,7 +568,9 @@ _cm_gate_multi() {
   _cm_resolve text "$t"
   case "$_CM_ACT" in
     none|local) return 0 ;;
-    run)   _cm_run_main "$t" text; return 1 ;;
+    run)   _cm_run_main "$t" text
+           [ "${_BVK_TO_MAIN:-0}" = 1 ] && { _cm_abort ""; _buf=""; return 0; }   # q: cancel this flow silently, the menus close up to the main loop
+           return 1 ;;
     back)  _cm_abort "↩️  Back"; _buf=""; return 0 ;;
     block) _cm_abort "❌ Invalid command: $t — exiting"; _buf=""; return 0 ;;
   esac
@@ -585,7 +598,9 @@ _cm_gate_sm() {
   _cm_resolve text "$t"
   case "$_CM_ACT" in
     none|local) return 0 ;;
-    run)   _cm_run_main "$t" text; _CM_REDRAW_FRESH=1; return 1 ;;
+    run)   _cm_run_main "$t" text
+           [ "${_BVK_TO_MAIN:-0}" = 1 ] && { _cm_abort ""; _sm_result=""; return 2; }   # q: cancel this flow silently, the menus close up to the main loop
+           _CM_REDRAW_FRESH=1; return 1 ;;
     back)  _cm_abort "↩️  Back"; _sm_result=""; return 2 ;;
     block) _cm_abort "❌ Invalid command: $t — exiting"; _sm_result=""; return 2 ;;
   esac
@@ -645,7 +660,9 @@ _cm_gate_text() {   # $1 typed  $2 initial text ; sets _CM_OUT ; 0 accept · 3 r
   _cm_resolve text "$t"
   case "$_CM_ACT" in
     none|local) return 0 ;;
-    run)   _cm_run_main "$t" text; return 3 ;;
+    run)   _cm_run_main "$t" text
+           [ "${_BVK_TO_MAIN:-0}" = 1 ] && { _cm_abort ""; _CM_OUT=""; return 4; }   # q: cancel this flow silently, the menus close up to the main loop
+           return 3 ;;
     back)  _cm_abort "↩️  Back"; _CM_OUT=""; return 4 ;;
     block) _cm_abort "❌ Invalid command: $t — exiting"; _CM_OUT=""; return 4 ;;
   esac
@@ -735,8 +752,8 @@ _cm_edit_leave() {
 _cm_edit_paste() {   # insert a pasted text at the cursor (the caller's _ce_buf/_ce_pos)
   local t="$1"
   [ -z "$t" ] && return 0
-  if (( ${#_ce_buf} + ${#t} > ${_BVK_MAX_INPUT:-2000} )); then
-    _ce_deny="Too large: $(( ${#_ce_buf} + ${#t} )) characters (limit ${_BVK_MAX_INPUT:-2000}). Not accepted; nothing was changed."
+  if (( ${#_ce_buf} + ${#t} > ${_BVK_MAX_INPUT:-512} )); then
+    _ce_deny="Too large: $(( ${#_ce_buf} + ${#t} )) characters (limit ${_BVK_MAX_INPUT:-512}). Not accepted; nothing was changed."
     _bvk_paste_drain
     return 0
   fi
@@ -802,7 +819,7 @@ _cm_line_edit() {
         $'\x04') [ -z "$_ce_buf" ] && { _CM_OUT=""; rc=1; break; } ;;
         $'\t') [ "$can_complete" = 1 ] && _cm_complete ;;
         [[:cntrl:]]) : ;;
-        *) if (( ${#_ce_buf} >= ${_BVK_MAX_INPUT:-2000} )); then _ce_deny="Too large: over ${_BVK_MAX_INPUT:-2000} characters. Not accepted."
+        *) if (( ${#_ce_buf} >= ${_BVK_MAX_INPUT:-512} )); then _ce_deny="Too large: over ${_BVK_MAX_INPUT:-512} characters. Not accepted."
            else _ce_buf="${_ce_buf:0:_ce_pos}${key}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos + 1 )); fi ;;
       esac
     fi

@@ -1,5 +1,5 @@
 """Real-app UI test (pty + a tiny terminal emulator, vt.py): a pasted multi-line text is shown as multi-line, the left arrow
-moves INSIDE the text (never onto the 'Select:' label), >2000 characters are refused with a notice.
+moves INSIDE the text (never onto the 'Select:' label), >512 characters are refused with a notice.
 tests/stresstest/input.txt is bare paste data. usage: python3 ui_test.py [cols]"""
 import os, pty, sys, time, select, fcntl, termios, struct, tempfile, shutil, subprocess
 here = os.path.dirname(os.path.abspath(__file__)); root = os.path.abspath(os.path.join(here, '..', '..'))
@@ -62,11 +62,11 @@ send(b'\x15' if False else b'\x1b[F', 0.2)
 # limit
 for _ in range(60): send(b'\x7f', 0.01)
 pump(0.5)
-paste('y' * 2001)
-L = rows(); check('2001 characters are refused with a notice', any('Too large' in l for l in L), '')
+paste("y" * 513)
+L = rows(); check('513 characters are refused with a notice', any('Too large' in l for l in L), '')
 check('...and nothing was inserted', not any('yyyyyyyyyy' in l for l in L))
-paste('z' * 1990); paste('w' * 20)
-L = rows(); check('a paste that would pass 2000 in total is refused', any('Too large' in l for l in L))
+paste("z" * 500); paste("w" * 20)
+L = rows(); check('a paste that would pass 512 in total is refused', any('Too large' in l for l in L))
 send(b'\r', 1.5)
 check('Enter accepts the text as ONE input (one "Invalid selection", no cascade)', ''.join(rows()).count('Invalid selection') <= 1)
 shutil.rmtree(tmp, ignore_errors=True)

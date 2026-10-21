@@ -34,7 +34,7 @@ _fx_adf_delete_by_ext() {
   local reply
   read -e -p "Choice: " reply
   [ -z "$reply" ] && { echo "🚫 Cancelled"; return; }
-  case "${reply,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit ;; esac
+  case "${reply,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit; return 1 ;; esac
 
   local -A chosen=()
   local tok idx

@@ -59,7 +59,7 @@ _compress_paths() {
     fmt_choice="${fmt_choice%$'\r'}"
     case "$fmt_choice" in
     u|U) return ;;
-    q|Q) _bvk_quit ;;
+    q|Q) _bvk_quit; return 1 ;;
       1) fmt="zip" ;;
       2) fmt="targz" ;;
       *) echo "🚫 Cancelled — invalid choice." ; return ;;

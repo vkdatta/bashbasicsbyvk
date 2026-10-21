@@ -607,7 +607,7 @@ _sync_highlight_from_buf() {
   # prefix = letters/digits then 1-2 dashes (ux- up- z- m- c2c- ...); a trailing " as <alias>" is ignored
   local _hl_buf="$_buf"
   [[ "$_hl_buf" == *" as "* || "$_hl_buf" == *" AS "* ]] && _hl_buf="${_hl_buf%% [aA][sS] *}"
-  if [[ "$_hl_buf" =~ ^([A-Za-z][A-Za-z0-9]*-{1,2}|\.s[[:space:]]*|\.us[[:space:]]*|\.d[[:space:]]+)(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)[[:space:]]*$ ]]; then
+  if (( ${#_hl_buf} <= ${_CM_LIVE_MAX:-56} )) && [[ "$_hl_buf" =~ ^([A-Za-z][A-Za-z0-9]*-{1,2}|\.s[[:space:]]*|\.us[[:space:]]*|\.d[[:space:]]+)(a(-[0-9][0-9,-]*)?|[0-9][0-9,-]*)[[:space:]]*$ ]]; then
     local body="${BASH_REMATCH[2]}"
     local -A _old=()
     local k
@@ -679,7 +679,7 @@ _rc_type_key() {
 _rc_paste_text() {
   local t="$1"
   [ -z "$t" ] && return 0
-  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _print_input_line drain; return 0; }   # over 2000 characters: refused, redrawn
+  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _print_input_line drain; return 0; }   # over 512 characters: refused, redrawn
   if [ -z "$_buf" ] && [ "${t:0:1}" = "=" ]; then
     if _filter_on_char "="; then t="${t:1}"; fi   # the filter starts (snapshot, hint) ... (if it did not: "=" stays part of the text)
     [ -z "$t" ] && return 0

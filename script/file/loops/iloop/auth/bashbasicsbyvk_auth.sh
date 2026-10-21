@@ -776,7 +776,8 @@ auth_menu() {
   while :; do
     _read_choice_filtered
     case "${choice,,}" in
-      u|q) break ;;
+      u)   break ;;
+      q)   _bvk_quit; break ;;                 # q closes to the main loop (u only goes back one screen)
       "")  ;;
       c)   _bvk_auth_create ;;
       l)   _bvk_auth_link ;;
@@ -799,7 +800,8 @@ auth_menu() {
     _au_fresh
   done
 
-  # leave tidy
+  # leave tidy.  q on a user screen closed -auth entirely: that is a q, so it closes to the main loop (u = one screen back)
+  [ "$_AU_QUIT" = 1 ] && _bvk_quit
   _AU_QUIT=0
   _filter_reset_state
   items=("${_au_keep_items[@]}"); _hl_index="$_au_keep_hl"
