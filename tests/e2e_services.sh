@@ -4,7 +4,7 @@
 #   bash tests/e2e_services.sh
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FILEAPI="$ROOT/../fileapi"
+FILEAPI="${FILEAPI:-$ROOT/../fileapi}"
 T=${E2E_DIR:-/tmp/e2e}; PORT=${E2E_PORT:-8791}
 rm -rf "$T/home" "$T/info.json"; mkdir -p "$T/home"
 [ -f "$T/cert.pem" ] || openssl req -x509 -newkey rsa:2048 -nodes -keyout "$T/key.pem" -out "$T/cert.pem" -days 2 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
@@ -33,7 +33,7 @@ printf '%s\n' "$UUID" > "$_BVK_TELEMETRY_DIR/uuid"; printf '%s\n' "$SIG" > "$_BV
 
 # ---- client under test ----
 source "bashbasicsbyvk_auth.sh"
-source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_backup.sh"; source "bashbasicsbyvk_staging_saved.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
+source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_pending.sh"; source "bashbasicsbyvk_staging_upload.sh"; source "bashbasicsbyvk_staging_ux.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_backup.sh"; source "bashbasicsbyvk_staging_saved.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
 WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")
 # the user's key chain, made the way -auth makes it: dinons (never sent) wrap a random FEK; only the wrapped FEK is on the server
 DINONS=$(_bvk_auth_gen_codes 29); FEK_HEX=$(_bvk_auth_gen_fek)
@@ -222,7 +222,7 @@ echo "── 5. background process ──"
 rm -f "$_SNAP_LASTRUN" "$_SNAP_NOTICE"; echo v4 >> "$T/work/watch/f.txt"; sleep 1.1; touch "$T/work/watch/f.txt"
 n2=$(q1 "select count(*) from snapshots")
 cat > "$T/o_sim.sh" <<EOS
-source "bashbasicsbyvk_auth.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
+source "bashbasicsbyvk_auth.sh"; source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_pending.sh"; source "bashbasicsbyvk_staging_upload.sh"; source "bashbasicsbyvk_staging_ux.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
 WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")
 _bb_get_credentials() { export FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" FILEAPI_BASHBASICS_KEY="$APIKEY"; P_DINONS="$DINONS"; return 0; }
 _snap_daemon_start

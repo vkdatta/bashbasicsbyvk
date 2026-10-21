@@ -15,6 +15,7 @@
 #     12) Backup           opens  bk   (copies taken just before a delete: restore, rename, extend, nuke)
 #     13) Saved Surf       opens  sv   (things stored with save-: no link, opens from any device)
 #     14) Snapshots        opens  sn   (watched files/folders of every device, and their snapshots)
+#     15) Pending          opens  pn   (unfinished uploads of the 5 services: continue, pause, resume, stop)
 #
 #  Built on the same menu engine as Settings (type a number · ↑↓ · u back · q close).
 #  Needs: _st_run/_st_add (settings_ui), _inner_run (o), open_help, auth_menu.
@@ -36,6 +37,7 @@ _home_build() {
   _st_add a "Backup"        0 "" backup
   _st_add a "Saved Surf"    0 "" saved
   _st_add a "Snapshots"     0 "" snapshots
+  _st_add a "Pending"       0 "" pending
 }
 
 _home_act() {
@@ -54,6 +56,7 @@ _home_act() {
     backup)    _inner_run bk;   _st_back=1 ;;
     saved)     _inner_run sv;   _st_back=1 ;;
     snapshots) _inner_run sn;   _st_back=1 ;;
+    pending)   _inner_run pn;   _st_back=1 ;;
   esac
 }
 

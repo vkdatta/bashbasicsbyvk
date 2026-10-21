@@ -8,6 +8,7 @@ fx       | functions_menu         | menu   | u
 rules    | rules_menu             | menu   | u
 api      | api_menu               | menu   | u
 snapshot | snapshot_menu          | menu   | u
+pending  | pending_menu           | menu   | u
 xui      | _xui_loop              | menu   | u
 find     | find_menu              | menu   | u
 transfer | transfer_menu          | menu   | u

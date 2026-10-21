@@ -60,6 +60,7 @@ _bk_before_delete() {
       [ -n "$_SVC_DEDUCTED" ] && echo "💳 Credits deducted: $_SVC_DEDUCTED   |   Balance: $_SVC_BALANCE"
       return 0 ;;
     2) echo "⚠️  No backup was made (you stopped it)." ;;
+    4) echo "⏸  The backup was interrupted. It is KEPT — finish it from Pending (pn). Nothing is deleted yet." ;;
     *) echo "⚠️  The backup FAILED — nothing was saved to the cloud." ;;
   esac
   read -e -r -p "   Delete anyway, without a backup? (y/N): " a || { echo "🚫 Nothing deleted."; return 1; }

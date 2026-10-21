@@ -93,6 +93,7 @@ The local tool is free. The hosted services are metered with simple credits. Rec
 | **RBAM direct sharing** | `ux-` | Share user-to-user with client-side encryption and no public link. Sender controls and can revoke access at any level. |
 | **Backup before delete** | internal delete | Paid users get an encrypted backup taken before each delete, recoverable for a limited window. |
 | **Snapshots** | startup / schedule | Selected files upload automatically as part of your routine. |
+| **Pending (`pn`)** | any time | Interrupted uploads (Wi-Fi off, Ctrl-C, kill) resume from the last blob that arrived — continue, pause, resume or stop-for-good, for all five upload services. |
 | **Save to Cloud Surf** | Save | Same pipeline as upload, delivered to your own cloud arena instead of a shared link. |
 | **AI Command Help** | `.ai` | Ask how to do something and get command-specific guidance. |
 

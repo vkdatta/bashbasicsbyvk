@@ -74,3 +74,4 @@ print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
 loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
 cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
 kl         .mapto()  block()
+pn         .mapto()  block()

@@ -190,14 +190,15 @@ _snap_take() {
     read -r sig bytes count <<<"$(_snap_sig "$src")"       # it moved under us: look again, then retry the copy
   done
   # what was archived is what we remember (a path that kept changing is simply picked up again next time)
-  _SVC_SNAP_TGT="$tgt"; _SVC_SNAP_SIG="$csig"; _SVC_QUIET=1
+  _SVC_SNAP_TGT="$tgt"; _SVC_SNAP_SIG="$csig"; _SVC_SNAP_KIND="$kind"; _SVC_SNAP_SRC="$src"; _SVC_QUIET=1
   _svc_upload snapshot "" "$work/$(basename "$src")"
   local rc=$?
-  _SVC_QUIET=0; _SVC_SNAP_TGT=""; _SVC_SNAP_SIG=""
+  _SVC_QUIET=0; _SVC_SNAP_TGT=""; _SVC_SNAP_SIG=""; _SVC_SNAP_KIND=""; _SVC_SNAP_SRC=""
   rm -rf "$work"; _SNAP_WORK=""
   case $rc in
     0) now=$(date +%s); _snap_target_set "$tgt" "$kind" "$src" 1 "$csig" "$now"; _snap_log "snapshot taken: $src ($((bytes/1024/1024)) MB, ${_SVC_DEDUCTED:-?} credit(s))"; return 0 ;;
     3) return 3 ;;
+    4) _snap_log "snapshot interrupted: $src — kept, it is finished automatically (or from Pending)"; return 1 ;;
     *) _snap_log "snapshot failed: $src"; return 1 ;;
   esac
 }
@@ -207,6 +208,7 @@ _snap_cycle() {
   _bb_get_credentials >/dev/null 2>&1 || return 0
   _crypto_check >/dev/null 2>&1 || return 0
   _snap_dev_hdrs || { _snap_log "device id not ready yet"; return 0; }
+  _pn_auto_snapshots 2>/dev/null      # first finish snapshots an earlier run left half-sent (auto-continue)
   local lk; lk=$(_snap_labelkey 2>/dev/null) || { _snap_log "cannot open the key chain (server unreachable, or no dinons on this computer)"; return 0; }
   _snap_reconcile "$lk" || { _snap_log "could not sync the list with the server"; return 0; }
   [ -s "$_SNAP_TARGETS" ] || return 0

@@ -19,6 +19,7 @@ _lt_b "load refresh"; source "bashbasicsbyvk_refresh.sh"; _lt_e
 _lt_b "load switch"; source "bashbasicsbyvk_switch.sh"; _lt_e
 _lt_b "load upgrade"; source "bashbasicsbyvk_upgrade.sh"; _lt_e
 _lt_b "load api"; source "bashbasicsbyvk_api.sh"; _lt_e
+_lt_b "load pending"; source "bashbasicsbyvk_pending.sh"; _lt_e   # pn: Pending FileAPI actions (continue / pause / resume / stop unfinished uploads)
 _lt_b "load functions"; source "bashbasicsbyvk_functions.sh"; _lt_e
 _lt_b "load import_fx"; source "_3bvk_import_fx.sh"; _lt_e
 _lt_b "load infinity"; source "bashbasicsbyvk_infinity.sh"; _lt_e
@@ -31,7 +32,7 @@ _lt_b "load csurf"; source "bashbasicsbyvk_csurf.sh"; _lt_e
 _lt_b "load ai"; source "bashbasicsbyvk_ai.sh"; _lt_e
 _lt_b "load gdrive"; source "bashbasicsbyvk_gdrive.sh"; _lt_e   # Google Drive (fx → google_drive_fx): session layer, wraps the native read/copy functions
 
-# Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), bk (Backup), sv (Saved Surf), sn (Snapshots), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
+# Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), pn (Pending uploads), bk (Backup), sv (Saved Surf), sn (Snapshots), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
 _inner_next=""
 _inner_run() {
@@ -44,6 +45,7 @@ _inner_run() {
       r)  rules_menu ;;
       upg) upgrade_menu ;;
       api) api_menu ;;
+      pn)  pending_menu ;;
       bk)  backup_menu ;;
       sv)  saved_menu ;;
       sn)  snapshot_menu ;;
@@ -237,6 +239,7 @@ while true; do
     sw)          _inner_run sw ;;
     fx)          _inner_run fx ;;
     api)         _inner_run api ;;
+    pn)          _inner_run pn ;;
     bk)          _inner_run bk ;;
     sv)          _inner_run sv ;;
     sn)          _inner_run sn ;;

@@ -1,5 +1,6 @@
 # Order matters,
 _lt_b "load staging_fileapi_lib"; source "bashbasicsbyvk_fileapi_lib.sh"; _lt_e
+_lt_b "load staging_pending"; source "bashbasicsbyvk_staging_pending.sh"; _lt_e
 _lt_b "load staging_svc"; source "bashbasicsbyvk_staging_svc.sh"; _lt_e
 _lt_b "load staging_upload"; source "bashbasicsbyvk_staging_upload.sh"; _lt_e
 _lt_b "load staging_ux"; source "bashbasicsbyvk_staging_ux.sh"; _lt_e

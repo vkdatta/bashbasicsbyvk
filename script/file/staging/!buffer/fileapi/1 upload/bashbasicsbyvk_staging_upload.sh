@@ -421,8 +421,10 @@ _unpack_targz_safe() {
 }
 
 # Phase 1: authorize + credit precheck, get an upload id back. Echoes the id.
+# _bb_upload_init <estimated-bytes> [blob-count]   — X-Pending: 1 makes the server NOTE this upload (pending.js): it can then be paused,
+# continued after a lost connection / Ctrl-C / kill, or stopped, and the server keeps its blobs for 3 days instead of ~2.5 hours.
 _bb_upload_init() {
-  local est_size="$1"
+  local est_size="$1" nblobs_hint="${2:-}"
   _bb_get_credentials || return 1
 
   _bb_alias_prepare
@@ -434,9 +436,10 @@ _bb_upload_init() {
     cfg=$({ _bb_auth_cfg
             _bb_link_cfg
             _bb_cfg_header X-Estimated-Size "$est_size"
+            _bb_cfg_header X-Pending 1
+            [[ "$nblobs_hint" =~ ^[0-9]+$ ]] && _bb_cfg_header X-Blob-Count "$nblobs_hint"
             $confirmed && _bb_cfg_header X-Confirm-Oversized yes
             true; })
-    local response http_status body
     local response http_status body
     response=$(curl -s "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X PUT "$WORKER_URL/upload/init" <<<"$cfg")
     http_status=$(echo "$response" | tail -n 1)
@@ -456,6 +459,12 @@ _bb_upload_init() {
     local err_type msg
     err_type=$(_bb_json_get "$body" error)
     msg=$(_bb_json_get "$body" message)
+
+    # a glitch right at the start (offline, 5xx): nothing was sent yet, so just try again a few times
+    if { [ "$http_status" == "000" ] || [[ "$http_status" == 5* ]]; } && [ "$attempt" -lt 4 ]; then
+      [ "${_SVC_QUIET:-0}" = 1 ] || echo "⏳ Server not reachable — trying again in $((attempt * 3))s…" >&2
+      sleep $((attempt * 3)); continue
+    fi
 
     # 401 = the saved profile's credentials are wrong. Retrying would just reload
     # the same profile and fail identically, so report once and stop.
@@ -478,239 +487,15 @@ _bb_upload_init() {
   done
 }
 
-# Phase 2: upload ALL encrypted blobs from a single Node process.
-#
-# This used to fork one `curl` per blob from bash. That was the reason upload
-# lagged download so badly:
-#   * one process spawn per blob (forking is expensive on Termux/Android)
-#   * a fresh TCP + TLS handshake per blob — no connection reuse at all
-#   * a `wait` barrier every _BB_MAX_PAR blobs, so each batch ran at the speed
-#     of its slowest member (convoy effect) instead of refilling continuously
-#   * `split` writing a second full copy of every large blob to disk
-# Node keeps one process, reuses keep-alive connections across all workers,
-# refills the pool the instant any slot frees, and streams byte ranges straight
-# off the original file. Same pool design the download path uses.
-_bb_upload_blobs() {
-  local id="$1" tmpdir="$2" nblobs="$3" token="$4"
-  BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_UTOKEN="$token" node -e '
-    // one way to draw a \r status line: clipped (auto-wrap OFF), never wider than the screen
-    const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, "")) { const c = ch.codePointAt(0);
-      if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
-      w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0x1F300 && c <= 0x1FAFF)) ? 2 : 1; } return w; };
-    const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
-    const live = (s) => process.stderr.write("\u001b[?7l\r\u001b[K" + s + "\u001b[?7h");
-    const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
-    const fs = require("fs");
-    const path = require("path");
-    const { Readable, Transform } = require("stream");
-
-    const base   = process.argv[1];
-    const id     = process.argv[2];
-    const dir    = process.argv[3];
-    const N      = parseInt(process.argv[4], 10);
-    const CONC   = Math.max(1, parseInt(process.argv[5], 10) || 16);
-    const email  = process.env.BB_EMAIL;
-    const utoken = process.env.BB_UTOKEN;
-    const CHUNK  = parseInt(process.argv[6], 10);
-    const INLINE = 4 * 1024 * 1024;   // read small blobs into memory; stream bigger ones
-
-    // Only the per-upload token travels with blobs; the API key is never re-sent.
-    const auth = { "X-User-Email": email, "X-Upload-Token": utoken };
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-    // ---- progress is measured in BYTES, never in blobs ----------------------
-    // sent  = request-body bytes handed to the network so far (counted as the
-    //         file streams out, so it moves smoothly while a blob is in flight).
-    // total = sum of every blob file size, known up front.
-    // A failed attempt gives its bytes back (see send), so a retry never
-    // double-counts. Small blobs are sent from memory: they are credited when
-    // the server accepts them.
-    let sent = 0, total = 0, done = 0, shown = 0;
-    for (let i = 0; i < N; i++) {
-      try { total += fs.statSync(path.join(dir, "blob" + i)).size; } catch (e) {}
-    }
-
-    function counted(rs, ctr) {
-      const t = new Transform({
-        transform(chunk, _enc, cb) { sent += chunk.length; ctr.n += chunk.length; cb(null, chunk); }
-      });
-      rs.on("error", (e) => t.destroy(e));
-      return rs.pipe(t);
-    }
-
-    // Fresh body each attempt: a stream can only be consumed once, so retries
-    // need a factory rather than a reusable body value.
-    function bodyFor(fp, size, start, end, ctr) {
-      if (start === undefined && size <= INLINE) return fs.readFileSync(fp);
-      const opts = { highWaterMark: 64 * 1024 };
-      if (start !== undefined) { opts.start = start; opts.end = end; }
-      return Readable.toWeb(counted(fs.createReadStream(fp, opts), ctr));
-    }
-
-    // credit = body bytes this request carries (0 for control requests).
-    async function send(url, method, makeBody, extraHeaders, credit) {
-      let lastErr;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const ctr = { n: 0 };
-        try {
-          const body = makeBody(ctr);
-          const init = {
-            method,
-            headers: Object.assign({}, auth, extraHeaders || {}),
-            body,
-            redirect: "error",
-            duplex: "half"
-          };
-          const res = await fetch(url, init);
-          if (res.ok) { sent += (credit || 0) - ctr.n; return res; }
-          sent -= ctr.n;
-          // 4xx other than 429 will not fix themselves: fail fast.
-          if (res.status < 500 && res.status !== 429) {
-            throw new Error("HTTP " + res.status);
-          }
-          lastErr = new Error("HTTP " + res.status);
-        } catch (e) {
-          if (e && /^HTTP 4/.test(e.message || "") ) throw e;
-          sent -= ctr.n;
-          lastErr = e;
-        }
-        await sleep(250 * Math.pow(2, attempt));
-      }
-      throw lastErr;
-    }
-
-    // ---- the bar --------------------------------------------------------------
-    const TTY = process.stderr.isTTY;
-    const t0 = Date.now();
-    const samples = [];                         // [time, sent] over the last ~8 s
-    function fmtB(b) {
-      if (total >= 1048576) return (b / 1048576).toFixed(1);
-      return (b / 1024).toFixed(0);
-    }
-    const unit = () => (total >= 1048576 ? "MB" : "KB");
-    function fmtT(s) {
-      s = Math.max(0, Math.round(s));
-      if (s >= 3600) return Math.floor(s / 3600) + "h" + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m";
-      if (s >= 60) return Math.floor(s / 60) + "m" + String(s % 60).padStart(2, "0") + "s";
-      return s + "s";
-    }
-    function speed() {
-      const now = Date.now();
-      samples.push([now, sent]);
-      while (samples.length > 2 && now - samples[0][0] > 8000) samples.shift();
-      const a = samples[0], b = samples[samples.length - 1];
-      const dt = (b[0] - a[0]) / 1000;
-      return dt > 0.4 ? Math.max(0, (b[1] - a[1]) / dt) : 0;
-    }
-    function draw(final) {
-      if (!TTY) return;
-      shown = Math.max(shown, Math.min(sent, total));            // never goes backwards
-      const finished = final && done >= N;
-      let pct = total > 0 ? Math.floor(shown * 100 / total) : 100;
-      if (!finished && pct > 99) pct = 99;                       // 100% only once the server has everything
-      const sp = speed();
-      const cols = process.stderr.columns || 60;
-      const left = fmtB(finished ? total : shown) + "/" + fmtB(total) + " " + unit();
-      const parts = [String(pct).padStart(3) + "%", left];
-      const extra = [];
-      if (!finished) {
-        extra.push(sp > 0 ? (fmtB(sp) + " " + unit() + "/s") : "...");
-        if (sp > 0) extra.push("ETA " + fmtT((total - shown) / sp));
-        extra.push(done + "/" + N);
-      }
-      // drop the least important pieces until the line fits the screen
-      let barW = 22, info;
-      for (;;) {
-        info = parts.concat(extra).join("  ");
-        if (cols - info.length - 4 >= 8 || extra.length === 0) break;
-        extra.pop();
-      }
-      barW = Math.max(6, Math.min(22, cols - info.length - 4));
-      const filled = Math.floor(pct * barW / 100);
-      const b = "\u2588".repeat(filled) + "\u2591".repeat(barW - filled);
-      const color = finished ? "\u001b[32m" : "\u001b[36m";
-      live( color + "[" + b + "] " + info + "\u001b[0m");
-      if (finished) {
-        const secs = (Date.now() - t0) / 1000;
-        process.stderr.write("\n  \u2705 " + fmtB(total) + " " + unit() + " in " + fmtT(secs) +
-          (secs > 0 ? "  (avg " + fmtB(total / secs) + " " + unit() + "/s)" : "") + "\n");
-      }
-    }
-
-    async function uploadOne(idx) {
-      const fp = path.join(dir, "blob" + idx);
-      const size = fs.statSync(fp).size;
-
-      if (size <= CHUNK) {
-        await send(base + "/upload/" + id + "/blob/" + idx, "PUT",
-                   (ctr) => bodyFor(fp, size, undefined, undefined, ctr), undefined, size);
-        return;
-      }
-
-      // Large blob -> R2 multipart. Ranges are streamed straight off the
-      // original file, so nothing extra is written to disk.
-      const cRes = await send(base + "/upload/" + id + "/blob/" + idx + "/mpu", "POST", () => undefined);
-      const uploadId = (await cRes.json()).uploadId;
-      if (!uploadId) throw new Error("no uploadId");
-
-      const ranges = [];
-      for (let off = 0, pn = 1; off < size; off += CHUNK, pn++) {
-        ranges.push({ pn, start: off, end: Math.min(off + CHUNK, size) - 1 });
-      }
-
-      const parts = new Array(ranges.length);
-      let nextPart = 0;
-      async function partWorker() {
-        while (true) {
-          const i = nextPart++;
-          if (i >= ranges.length) return;
-          const r = ranges[i];
-          const res = await send(
-            base + "/upload/" + id + "/blob/" + idx + "/mpu/" + uploadId + "/" + r.pn,
-            "PUT", (ctr) => bodyFor(fp, size, r.start, r.end, ctr), undefined, r.end - r.start + 1);
-          const j = await res.json();
-          parts[i] = { partNumber: j.partNumber, etag: j.etag };
-        }
-      }
-      await Promise.all(Array.from({ length: Math.min(CONC, ranges.length) }, partWorker));
-
-      await send(base + "/upload/" + id + "/blob/" + idx + "/mpu/" + uploadId + "/complete",
-                 "POST", () => JSON.stringify(parts), { "Content-Type": "application/json" });
-    }
-
-    (async () => {
-      let next = 0, failed = 0;
-      const errors = [];
-      async function worker() {
-        while (true) {
-          const i = next++;
-          if (i >= N) return;
-          try {
-            await uploadOne(i);
-          } catch (e) {
-            failed++;
-            if (errors.length < 3) errors.push("blob " + i + ": " + (e && e.message ? e.message : e));
-          }
-          done++;
-        }
-      }
-      const timer = setInterval(() => draw(false), 200);
-      draw(false);
-      await Promise.all(Array.from({ length: Math.min(CONC, N || 1) }, worker));
-      clearInterval(timer);
-      if (failed === 0) draw(true);
-      else if (TTY) process.stderr.write("\n");
-      for (const m of errors) process.stderr.write("  \u26a0\uFE0F  " + m + "\n");
-      console.log(failed === 0 ? "OK" : "FAIL");
-    })();
-  
-  ' "$WORKER_URL" "$id" "$tmpdir" "$nblobs" "$_BB_MAX_PAR" "$_BB_CHUNK_BYTES"
-}
+# Phase 2 (sending the blobs) now lives in bashbasicsbyvk_staging_pending.sh (_pn_complete → bashbasicsbyvk_staging_pending_xfer):
+# one Node process, keep-alive pool, byte-based progress bar — and it waits out a lost connection, skips the blobs the server
+# already holds, and honours pause / stop.
 
 # Phase 3: upload the manifest, settle credits, return the link + credit headers.
 _BB_COMMIT_HDRS=()        # extra commit headers (X-Vault-Kdk, X-Snap-*) set by the Backup / Saved / Snapshot services
 _bb_upload_commit() {
   local id="$1" fcount="$2" mpath="$3" token="$4"
+  _BB_COMMIT_STATUS=""; _BB_COMMIT_ERR=""
   local cfg
   local h
   cfg=$({ _bb_cfg_header X-User-Email "$FILEAPI_BASHBASICS_EMAIL"
@@ -735,6 +520,7 @@ _bb_upload_commit() {
     return 0
   fi
   rm -f "$hdrfile"
+  _BB_COMMIT_STATUS="$http_status"; _BB_COMMIT_ERR=$(_bb_json_get "$body" error)
   echo "❌ $(_bb_fail_reason "$body" "$http_status")" >&2
   return 1
 }
@@ -755,9 +541,9 @@ _up_do_multipart_upload() {
   # Stage the selection by name as symlinks so the archive holds "<name>/..." entries relative
   # to nothing absolute (same layout the old per-file upload produced).
   local stage tmpdir rcfile errfile
-  stage=$(mktemp -d) && tmpdir=$(mktemp -d) && rcfile=$(mktemp) && errfile=$(mktemp) \
+  stage=$(mktemp -d) && tmpdir=$(_pn_mkpack) && rcfile=$(mktemp) && errfile=$(mktemp) \
     || { echo "❌ Could not create temp files."; return 1; }
-  _up_cleanup() { rm -rf "$stage" "$tmpdir" "$rcfile" "$errfile"; }
+  _up_cleanup() { rm -rf "$stage" ${tmpdir:+"$tmpdir"} "$rcfile" "$errfile"; }
 
   local -a rel_items=()
   local p bn cand n
@@ -826,34 +612,24 @@ _up_do_multipart_upload() {
   # ---- price check: cost 1 → silent; more → continue / reduce time / increase time / stop ----
   _bb_get_credentials >/dev/null 2>&1 && { _bb_credit_gate "$total_size" "This upload" || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }; }
 
-  # ---- Phase 1: init (auth + credit precheck) ----
-  local init_out id token
-  init_out=$(_bb_upload_init "$total_size") || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }
+  # ---- Phase 1: init (auth + credit precheck) → the unique service id; the encrypted blobs move to the pending folder ----
+  local init_out id token pdir
+  init_out=$(_bb_upload_init "$total_size" "$nblobs") || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }
   id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
   if [ -z "$id" ] || [ -z "$token" ]; then
     echo "❌ Upload init failed (no id returned)"; _up_cleanup; return 1
   fi
+  pdir=$(_pn_adopt "$tmpdir" "$id" upload "$nblobs" "$total_size" "$arcname" "key=$key") || { echo "❌ Could not keep the upload folder."; _up_cleanup; return 1; }
+  tmpdir=""; _up_cleanup
 
-  # ---- Phase 2: parallel streaming blob uploads (single Node process) ----
+  # ---- Phase 2 + 3: send what the server lacks (waits out a lost connection) → commit.  Ctrl-C / kill / offline keep it in Pending. ----
   [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
-  local upres
-  upres=$(_bb_upload_blobs "$id" "$tmpdir" "$nblobs" "$token")
-  if [ "$upres" != "OK" ]; then
-    _up_cleanup
-    echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects are removed automatically within a few hours."
-    return 1
+  _pn_complete "$pdir" 0; local prc=$?
+  if [ $prc -ne 0 ]; then
+    [ $prc -ge 20 ] && echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"
+    _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1
   fi
-
-  # ---- Phase 3: commit (manifest + credit settlement) ----
-  local result final_url deducted balance expires
-  result=$(_bb_upload_commit "$id" "$nblobs" "$tmpdir/manifest.enc" "$token") \
-    || { _up_cleanup; return 1; }
-  _up_cleanup
-
-  final_url=$(echo "$result" | sed -n '1p')
-  deducted=$(echo "$result" | sed -n '2p')
-  balance=$(echo "$result" | sed -n '3p')
-  expires=$(echo "$result" | sed -n '4p')
+  local final_url="$_PN_URL" deducted="$_PN_DEDUCTED" balance="$_PN_BALANCE" expires="$_PN_EXPIRES"
 
   _announce_link "${final_url}#k=${key}"
   [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"

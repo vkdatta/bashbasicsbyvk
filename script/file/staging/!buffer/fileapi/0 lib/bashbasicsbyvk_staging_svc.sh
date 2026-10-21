@@ -21,12 +21,13 @@
 _SVC_QUIET=0            # 1 = background work: no price prompt, no progress chatter
 _SVC_SNAP_TGT=""        # snapshot only: id of the watched path
 _SVC_SNAP_SIG=""        # snapshot only: change signature of what was packed
+_SVC_SNAP_KIND=""; _SVC_SNAP_SRC=""   # snapshot only: kind (f/d) and path of the watched target (so an interrupted snapshot can be finished later)
 _SVC_INC_HIDDEN=true    # false = leave out hidden files inside the chosen folders (save- follows Settings → Upload hidden)
 _SVC_ID=""; _SVC_KEY=""; _SVC_EXPIRES=""; _SVC_BYTES=""; _SVC_DEDUCTED=""; _SVC_BALANCE=""
 
 _svc_say() { [ "$_SVC_QUIET" = 1 ] || echo "$@"; }
 
-# _svc_upload <service> <alias|""> <path>...      returns 0 ok · 1 failed · 2 stopped at the price prompt · 3 not enough credits (quiet mode)
+# _svc_upload <service> <alias|""> <path>...      returns 0 ok · 1 failed · 2 stopped at the price prompt · 3 not enough credits (quiet mode) · 4 interrupted, KEPT in Pending to continue
 # Everything under the given paths is included, hidden files too (a backup or snapshot must be complete).
 _svc_upload() {
   local svc="$1" alias="$2"; shift 2
@@ -48,9 +49,9 @@ _svc_upload() {
   [[ "$lvl" =~ ^[1-9]$ ]] || lvl=6
 
   local stage tmpdir rcfile errfile
-  stage=$(mktemp -d) && tmpdir=$(mktemp -d) && rcfile=$(mktemp) && errfile=$(mktemp) \
+  stage=$(mktemp -d) && tmpdir=$(_pn_mkpack) && rcfile=$(mktemp) && errfile=$(mktemp) \
     || { echo "❌ Could not create temp files."; return 1; }
-  _svc_cleanup() { rm -rf "$stage" "$tmpdir" "$rcfile" "$errfile"; }
+  _svc_cleanup() { rm -rf "$stage" ${tmpdir:+"$tmpdir"} "$rcfile" "$errfile"; }
 
   local -a rel_items=()
   local p bn cand n
@@ -116,44 +117,39 @@ _svc_upload() {
     if ! _bb_credit_gate "$total_size" "$what" "$svc"; then _svc_cleanup; _BB_TTL_OVERRIDE=""; return 2; fi
   fi
 
-  _BB_SVC="$svc"; _BB_LINK_ALIAS="$alias"
-  local rc=1 init_out id token
-  init_out=$(_bb_upload_init "$total_size") && rc=0
-  if [ $rc -ne 0 ]; then _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; fi
-  id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
-  if [ -z "$id" ] || [ -z "$token" ]; then echo "❌ Upload init failed (no id returned)"; _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; return 1; fi
-
-  local upres
-  upres=$(_bb_upload_blobs "$id" "$tmpdir" "$nblobs" "$token")
-  if [ "$upres" != "OK" ]; then
-    _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
-    echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects are removed automatically within a few hours."
-    return 1
-  fi
-
-  # K → kdk (wrapped with the FEK, here). The server is only ever given kdk.
+  # K → kdk (wrapped with the FEK, here, BEFORE the upload): the raw key is never written to disk, only kdk — which the server keeps anyway
   local kdk=""
   if [ "$svc" = backup ] || [ "$svc" = saved ] || [ "$svc" = snapshot ]; then
     kdk=$(BB_FEK="$_UX_FEK" BB_K="$key" _ux_core dk-wrap 2>/dev/null)
     if [[ ! "$kdk" =~ ^[A-Za-z0-9_-]{60,200}$ ]]; then
-      echo "❌ Could not wrap the item key — nothing was finalized."; _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1
+      echo "❌ Could not wrap the item key — nothing was uploaded."; _svc_cleanup; return 1
     fi
   fi
-  _BB_COMMIT_HDRS=()
-  case "$svc" in
-    backup|saved) _BB_COMMIT_HDRS=("X-Vault-Kdk: $kdk") ;;
-    snapshot) _BB_COMMIT_HDRS=("X-Vault-Kdk: $kdk" "X-Snap-Target: $_SVC_SNAP_TGT" "X-Snap-Sig: ${_SVC_SNAP_SIG:-0}") ;;
-  esac
-  local result
-  result=$(_bb_upload_commit "$id" "$nblobs" "$tmpdir/manifest.enc" "$token"); rc=$?
-  _BB_COMMIT_HDRS=()
-  local _ttl_used; _ttl_used=$(_bb_svc_ttl "$svc")
-  _svc_cleanup
-  local was_svc="$_BB_SVC"; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
-  [ $rc -eq 0 ] || return 1
 
+  _BB_SVC="$svc"; _BB_LINK_ALIAS="$alias"
+  local rc=1 init_out id token pdir
+  init_out=$(_bb_upload_init "$total_size" "$nblobs") && rc=0
+  if [ $rc -ne 0 ]; then _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; fi
+  id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
+  if [ -z "$id" ] || [ -z "$token" ]; then echo "❌ Upload init failed (no id returned)"; _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; return 1; fi
+
+  local -a extra=("kdk=$kdk")
+  [ "$svc" = snapshot ] && extra+=("snap_tgt=$_SVC_SNAP_TGT" "snap_sig=${_SVC_SNAP_SIG:-0}" "snap_kind=${_SVC_SNAP_KIND:-d}" "snap_src=${_SVC_SNAP_SRC:-}")
+  pdir=$(_pn_adopt "$tmpdir" "$id" "$svc" "$nblobs" "$total_size" "$arcname" "${extra[@]}") \
+    || { echo "❌ Could not keep the upload folder."; _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; return 1; }
+  tmpdir=""; _svc_cleanup
+  local _ttl_used; _ttl_used=$(_bb_svc_ttl "$svc")
+
+  # send what the server lacks (a lost connection is waited out) → commit.  Interrupted / offline: kept in Pending (return 4).
+  _pn_complete "$pdir" "$_SVC_QUIET"; rc=$?
+  _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
+  if [ $rc -ne 0 ]; then
+    [ $rc -ge 20 ] && [ "$_SVC_QUIET" != 1 ] && echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"
+    [ $rc -ge 20 ] || [ $rc -eq 2 ] && return 4
+    return 1
+  fi
   _SVC_ID="$id"; _SVC_KEY="$key"; _SVC_BYTES="$total_size"
-  _SVC_DEDUCTED=$(printf '%s' "$result" | sed -n '2p'); _SVC_BALANCE=$(printf '%s' "$result" | sed -n '3p'); _SVC_EXPIRES=$(printf '%s' "$result" | sed -n '4p')
+  _SVC_DEDUCTED="$_PN_DEDUCTED"; _SVC_BALANCE="$_PN_BALANCE"; _SVC_EXPIRES="$_PN_EXPIRES"
   _SVC_TTL="$_ttl_used"
   return 0
 }

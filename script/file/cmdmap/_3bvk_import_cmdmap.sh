@@ -7,6 +7,7 @@ _lt_b "load infinitymenucommands"; source "bashbasicsbyvk_infinitymenucommands.s
 _lt_b "load organisemenucommands"; source "bashbasicsbyvk_organisemenucommands.sh"; _lt_e
 _lt_b "load promptmenucommands"; source "bashbasicsbyvk_promptmenucommands.sh"; _lt_e
 _lt_b "load renamemenucommands"; source "bashbasicsbyvk_renamemenucommands.sh"; _lt_e
+_lt_b "load pendingmenucommands"; source "bashbasicsbyvk_pendingmenucommands.sh"; _lt_e
 _lt_b "load rulesmenucommands"; source "bashbasicsbyvk_rulesmenucommands.sh"; _lt_e
 _lt_b "load settingsmenucommands"; source "bashbasicsbyvk_settingsmenucommands.sh"; _lt_e
 _lt_b "load snapshotmenucommands"; source "bashbasicsbyvk_snapshotmenucommands.sh"; _lt_e

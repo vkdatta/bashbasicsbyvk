@@ -237,12 +237,14 @@ _ux_pick_people() {
 # ── the init step (auth + credit precheck), like _bb_upload_init ─────────────
 # prints "<id>\n<token>" ; messages on stderr
 _ux_init() {
-  local est="$1" confirmed=false cfg response status body err msg ans
+  local est="$1" nblobs_hint="${2:-}" confirmed=false cfg response status body err msg ans
   _bb_get_credentials || return 1
   [ -n "${_BB_OVERSIZE_OK:-}" ] && confirmed=true     # the price prompt already covered the 1.2x rate
   while :; do
     cfg=$({ _bb_auth_cfg
             _bb_cfg_header X-Estimated-Size "$est"
+            _bb_cfg_header X-Pending 1                                  # noted by the server: pause / continue / stop (see pending.js)
+            [[ "$nblobs_hint" =~ ^[0-9]+$ ]] && _bb_cfg_header X-Blob-Count "$nblobs_hint"
             _bb_cfg_header X-Nuke-Seconds "$(_bb_ux_nuke_seconds)"
             [ -n "$_BB_LINK_ALIAS" ] && _bb_cfg_header X-Link-Alias "$_BB_LINK_ALIAS"
             $confirmed && _bb_cfg_header X-Confirm-Oversized yes
@@ -265,6 +267,26 @@ _ux_init() {
     echo "❌ $(_bb_fail_reason "$body" "$status")" >&2
     return 1
   done
+}
+
+# the last request of a share: the item list + wrapped key.  prints "<body>\n<deducted>\n<balance>\n<expires>"; sets _BB_COMMIT_STATUS / _BB_COMMIT_ERR
+_ux_commit() {
+  local id="$1" token="$2" dir="$3" rid_csv="$4" cfg hdrfile response status body deducted balance expires
+  _BB_COMMIT_STATUS=""; _BB_COMMIT_ERR=""
+  cfg=$({ _bb_cfg_header X-Upload-Token "$token"; _bb_cfg_header X-Ux-Recipients "$rid_csv"; })
+  hdrfile=$(mktemp)
+  response=$(curl -s --max-time 120 "${_BB_CURL_OPTS[@]}" -K - -D "$hdrfile" -w "\n%{http_code}" -H "Expect:" -H "Content-Type: application/json" -X PUT \
+    --data-binary "@$dir/commit.json" "$WORKER_URL/ux/$id/commit" <<<"$cfg")
+  status="${response##*$'\n'}"; body="${response%$'\n'*}"
+  deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+  balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+  expires=$(grep -i '^X-Link-Expires:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+  rm -f "$hdrfile"
+  if [ "$status" = 201 ]; then printf '%s\n%s\n%s\n%s\n' "$body" "$deducted" "$balance" "$expires"; return 0; fi
+  [[ "$status" =~ ^[0-9]{3}$ ]] || status=000
+  _BB_COMMIT_STATUS="$status"; _BB_COMMIT_ERR=$(_bb_json_get "$body" error)
+  echo "❌ $(_bb_fail_reason "$body" "$status")" >&2
+  return 1
 }
 
 # ── the share ────────────────────────────────────────────────────────────────
@@ -295,10 +317,10 @@ _ux_do_share() {
 
   echo "🔎 Scanning selection..."
   local stage tmpdir rcfile errfile
-  stage=$(mktemp -d) && tmpdir=$(mktemp -d) && rcfile=$(mktemp) && errfile=$(mktemp) \
+  stage=$(mktemp -d) && tmpdir=$(_pn_mkpack) && rcfile=$(mktemp) && errfile=$(mktemp) \
     || { echo "❌ Could not create temp files."; return 1; }
   chmod 700 "$stage" "$tmpdir"
-  _ux_cleanup() { rm -rf "$stage" "$tmpdir" "$rcfile" "$errfile"; K=""; }
+  _ux_cleanup() { rm -rf "$stage" ${tmpdir:+"$tmpdir"} "$rcfile" "$errfile"; K=""; }
 
   local -a rel_items=()
   local p bn cand n
@@ -362,34 +384,22 @@ _ux_do_share() {
 
   # 4) price check → init (auth + credit precheck) → parallel blob uploads → commit
   _bb_get_credentials >/dev/null 2>&1 && { _bb_credit_gate "$total_size" "This share" ux || { _ux_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }; }
-  local init_out id token
-  init_out=$(_ux_init "$total_size") || { _ux_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }
+  local init_out id token pdir
+  init_out=$(_ux_init "$total_size" "$nblobs") || { _ux_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }
   id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
   if [ -z "$id" ] || [ -z "$token" ]; then
     echo "❌ Upload init failed (no id returned)"; _ux_cleanup; return 1
   fi
+  pdir=$(_pn_adopt "$tmpdir" "$id" ux "$nblobs" "$total_size" "$arcname" "rids=$rid_csv") || { echo "❌ Could not keep the upload folder."; _ux_cleanup; return 1; }
+  tmpdir=""; _ux_cleanup
 
   [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
-  local upres
-  upres=$(BB_UTOKEN="$token" BB_CONC="$_BB_MAX_PAR" _ux_core upload "$WORKER_URL" "$id" "$tmpdir")
-  if [ "$upres" != OK ]; then
-    _ux_cleanup
-    echo "❌ One or more parts failed to upload. Nothing was finalized; partial objects are removed automatically within a few hours."
-    return 1
+  _pn_complete "$pdir" 0; local prc=$?
+  if [ $prc -ne 0 ]; then
+    [ $prc -ge 20 ] && echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"
+    _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1
   fi
-
-  local cfg hdrfile response status body
-  cfg=$({ _bb_cfg_header X-Upload-Token "$token"; _bb_cfg_header X-Ux-Recipients "$rid_csv"; })
-  hdrfile=$(mktemp)
-  response=$(curl -s --max-time 120 "${_BB_CURL_OPTS[@]}" -K - -D "$hdrfile" -w "\n%{http_code}" -H "Expect:" -H "Content-Type: application/json" -X PUT \
-    --data-binary "@$tmpdir/commit.json" "$WORKER_URL/ux/$id/commit" <<<"$cfg")
-  status="${response##*$'\n'}"; body="${response%$'\n'*}"
-  local deducted balance expires
-  deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-  balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-  expires=$(grep -i '^X-Link-Expires:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-  rm -f "$hdrfile"; _ux_cleanup
-  if [ "$status" != 201 ]; then echo "❌ $(_bb_fail_reason "$body" "$status")"; return 1; fi
+  local deducted="$_PN_DEDUCTED" balance="$_PN_BALANCE" expires="$_PN_EXPIRES"
 
   echo "✅ Shared with ${#rids[@]} person(s). No link exists — each of them gets a notification and accepts it into their Cloud Surf."
   [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"

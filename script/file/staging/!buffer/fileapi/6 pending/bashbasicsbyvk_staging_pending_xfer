@@ -1,0 +1,274 @@
+#!/usr/bin/env node
+// bashbasicsbyvk_staging_pending_xfer — the RESILIENT blob transfer behind all five upload services
+//   (up- · ux- · backup · save- · snapshot).  Called by bash as:
+//
+//     node bashbasicsbyvk_staging_pending_xfer <upload|ux> <worker-url> <id> <dir>
+//
+//   upload  sends  <dir>/blob0 … blob<N-1>                     to  <url>/upload/<id>/blob/<n>      (R2 multipart above BB_CHUNK)
+//   ux      sends  <dir>/<item>.<n>  listed in commit.json     to  <url>/ux/<id>/item/<item>/blob/<n>
+//
+//   env  BB_UTOKEN   the per-upload token (the API key never travels with blobs)       BB_EMAIL  (upload) sent as X-User-Email
+//        BB_N        number of blobs (upload)          BB_CHUNK  largest single PUT (server CHUNK_BYTES)     BB_CONC  parallel requests
+//        BB_DONEFILE the server's resume answer (JSON): done "0-203,205" (ux: doneItems {"<item>":"0-3"}) + sizes of the stored blobs.
+//                    Blobs it already holds are skipped — unless the stored size differs from the local file (then they are sent again)
+//        BB_STATE    a folder for the noter: progress, heartbeat and the pause / stop flags (optional)
+//        BB_OFFLINE_MAX  seconds of CONTINUOUS outage to wait out before giving up (default 1800)
+//
+//   What makes it resilient
+//     • a lost connection is waited out (backoff up to 30 s, "offline — retrying") and the transfer carries on by itself;
+//       only an outage longer than BB_OFFLINE_MAX ends it with OFFLINE
+//     • blobs the server already has are never sent again (BB_DONE), so a restart continues where it stopped
+//     • p = pause · Ctrl-C / Ctrl-Z / SIGTERM / SIGHUP = stop NOW but keep everything for later (they do NOT lose the upload)
+//     • BB_STATE/pause.flag or stop.flag (written by the Pending menu from another terminal) are honoured within a second
+//     • BB_STATE/progress is rewritten every 2 s: "<done> <total> <last-blob> <bytes-sent> <bytes-total>"  (the bookmark)
+//
+//   The last line on stdout is the verdict:  OK | PAUSED | INTERRUPTED | STOPPED | TOKEN (token expired: mint a new one, run again)
+//   | OFFLINE | FAIL
+
+const fs = require("fs");
+const path = require("path");
+const { Readable, Transform } = require("stream");
+
+const [pipeline, base, id, dir] = process.argv.slice(2);
+if (!/^(upload|ux)$/.test(pipeline || "") || !base || !id || !dir) { console.log("FAIL"); process.exit(2); }
+const utoken = process.env.BB_UTOKEN || "";
+const email = process.env.BB_EMAIL || "";
+const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || (pipeline === "ux" ? 8 : 16), 32));
+const CHUNK = parseInt(process.env.BB_CHUNK, 10) || 90 * 1024 * 1024;
+const OFFLINE_MAX = Math.max(10, parseInt(process.env.BB_OFFLINE_MAX, 10) || 1800) * 1000;
+const STATE = process.env.BB_STATE || "";
+const INLINE = 4 * 1024 * 1024;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ── one way to draw a \r status line: clipped (auto-wrap OFF), never wider than the screen ──
+const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, "")) { const c = ch.codePointAt(0);
+  if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
+  w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || (c >= 0x1F300 && c <= 0x1FAFF)) ? 2 : 1; } return w; };
+const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
+const live = (s) => process.stderr.write("\u001b[?7l\r\u001b[K" + s + "\u001b[?7h");
+const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
+
+// ── what the server already holds ──
+function parseRanges(s) {
+  const set = new Set();
+  for (const part of String(s || "").split(",")) {
+    const m = /^(\d+)(?:-(\d+))?$/.exec(part.trim());
+    if (!m) continue;
+    const a = +m[1], b = m[2] === undefined ? a : +m[2];
+    if (b >= a && b - a < 1e6) for (let i = a; i <= b; i++) set.add(i);
+  }
+  return set;
+}
+let doneUpload = new Set(), doneUx = {}, storedSizes = {};
+try {
+  const j = JSON.parse(fs.readFileSync(process.env.BB_DONEFILE || "", "utf8"));
+  storedSizes = j.sizes || {};
+  if (pipeline === "ux") { const o = j.doneItems || {}; for (const k of Object.keys(o)) doneUx[k] = parseRanges(o[k]); }
+  else doneUpload = parseRanges(j.done);
+} catch (e) {}
+
+// ── the work list ──
+const tasks = [];
+if (pipeline === "upload") {
+  const N = parseInt(process.env.BB_N, 10) || 0;
+  for (let i = 0; i < N; i++) {
+    const fp = path.join(dir, "blob" + i);
+    let size = 0; try { size = fs.statSync(fp).size; } catch (e) { console.error("  \u26a0\ufe0f  blob " + i + " is missing on this computer"); console.log("FAIL"); process.exit(2); }
+    tasks.push({ key: String(i), idx: i, fp, size, url: base + "/upload/" + id + "/blob/" + i, done: doneUpload.has(i) && storedSizes[i] === size });
+  }
+} else {
+  let plan; try { plan = JSON.parse(fs.readFileSync(path.join(dir, "commit.json"), "utf8")); } catch (e) { console.log("FAIL"); process.exit(2); }
+  let n = 0;
+  for (const it of plan.items || []) {
+    if (it.k !== "f") continue;
+    for (let i = 0; i < it.c; i++) {
+      const fp = path.join(dir, it.i + "." + i);
+      let size = 0; try { size = fs.statSync(fp).size; } catch (e) { console.error("  \u26a0\ufe0f  chunk " + it.i + "." + i + " is missing on this computer"); console.log("FAIL"); process.exit(2); }
+      tasks.push({ key: it.i + "." + i, idx: n++, fp, size, url: base + "/ux/" + id + "/item/" + it.i + "/blob/" + i, done: !!(doneUx[it.i] && doneUx[it.i].has(i)) && storedSizes[it.i + "." + i] === size });
+    }
+  }
+}
+const total = tasks.reduce((a, t) => a + t.size, 0);
+const alreadyBytes = tasks.reduce((a, t) => a + (t.done ? t.size : 0), 0);
+const todo = tasks.filter((t) => !t.done);
+const alreadyN = tasks.length - todo.length;
+
+// ── halting: pause key / flags / signals ──
+let halt = null;                 // null | "PAUSED" | "INTERRUPTED" | "STOPPED"
+let tokenDead = false, offlineDead = false;
+const ctrl = new AbortController();
+let abortTimer = null;
+function requestHalt(why, graceMs) {
+  if (halt) return;
+  halt = why;
+  if (graceMs <= 0) ctrl.abort(); else abortTimer = setTimeout(() => ctrl.abort(), graceMs);   // let in-flight blobs finish for a moment
+}
+const halting = () => !!halt || tokenDead || offlineDead;
+const flag = (n) => { try { return !!STATE && fs.existsSync(path.join(STATE, n)); } catch (e) { return false; } };
+for (const sg of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sg, () => requestHalt("INTERRUPTED", 2500));
+
+let rawOn = false;
+if (process.stdin.isTTY && process.stderr.isTTY) {
+  try {
+    process.stdin.setRawMode(true); rawOn = true; process.stdin.resume();
+    process.stdin.on("data", (b) => {
+      const s = b.toString("latin1");
+      if (s === "p" || s === "P") requestHalt("PAUSED", 8000);
+      else if (s === "\u0003" || s === "\u001a") requestHalt("INTERRUPTED", 2500);   // Ctrl-C / Ctrl-Z: raw mode delivers them as keys
+    });
+  } catch (e) { rawOn = false; }
+}
+function writeState(name, text) { if (!STATE) return; try { fs.writeFileSync(path.join(STATE, name), text); } catch (e) {} }
+
+// ── progress is measured in BYTES, never in blobs ──
+let sent = alreadyBytes, doneN = alreadyN, shown = 0, lastIdx = -1, note = "";
+for (const t of tasks) if (t.done && t.idx > lastIdx) lastIdx = t.idx;
+const TTY = process.stderr.isTTY, t0 = Date.now(), samples = [];
+function fmtB(b) { return total >= 1048576 ? (b / 1048576).toFixed(1) : (b / 1024).toFixed(0); }
+const unit = () => (total >= 1048576 ? "MB" : "KB");
+function fmtT(s) { s = Math.max(0, Math.round(s)); if (s >= 3600) return Math.floor(s / 3600) + "h" + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m"; if (s >= 60) return Math.floor(s / 60) + "m" + String(s % 60).padStart(2, "0") + "s"; return s + "s"; }
+function speed() {
+  const now = Date.now(); samples.push([now, sent]);
+  while (samples.length > 2 && now - samples[0][0] > 8000) samples.shift();
+  const a = samples[0], b = samples[samples.length - 1], dt = (b[0] - a[0]) / 1000;
+  return dt > 0.4 ? Math.max(0, (b[1] - a[1]) / dt) : 0;
+}
+function draw(final) {
+  if (!TTY) return;
+  shown = Math.max(shown, Math.min(sent, total));
+  const finished = final && doneN >= tasks.length;
+  let pct = total > 0 ? Math.floor(shown * 100 / total) : 100;
+  if (!finished && pct > 99) pct = 99;
+  const sp = speed(), cols = process.stderr.columns || 60;
+  const parts = [String(pct).padStart(3) + "%", fmtB(finished ? total : shown) + "/" + fmtB(total) + " " + unit()];
+  const extra = [];
+  if (!finished) {
+    if (note) extra.push(note);
+    else { extra.push(sp > 0 ? (fmtB(sp) + " " + unit() + "/s") : "..."); if (sp > 0) extra.push("ETA " + fmtT((total - shown) / sp)); }
+    extra.push(doneN + "/" + tasks.length);
+  }
+  let info;
+  for (;;) { info = parts.concat(extra).join("  "); if (cols - info.length - 4 >= 8 || extra.length === 0) break; extra.shift(); }
+  const barW = Math.max(6, Math.min(22, cols - info.length - 4)), filled = Math.floor(pct * barW / 100);
+  const color = finished ? "\u001b[32m" : (note ? "\u001b[33m" : "\u001b[36m");
+  live(color + "[" + "\u2588".repeat(filled) + "\u2591".repeat(barW - filled) + "] " + info + "\u001b[0m");
+  if (finished) {
+    const secs = (Date.now() - t0) / 1000, mine = total - alreadyBytes;
+    process.stderr.write("\n  \u2705 " + fmtB(total) + " " + unit() + (alreadyN ? " (" + fmtB(mine) + " " + unit() + " sent now, the rest was already there)" : " in " + fmtT(secs) + (secs > 0 ? "  (avg " + fmtB(total / secs) + " " + unit() + "/s)" : "")) + "\n");
+  }
+}
+function noter() {
+  writeState("progress", [doneN, tasks.length, lastIdx, Math.min(sent, total), total].join(" ") + "\n");
+  writeState("run.hb", process.pid + " " + Math.floor(Date.now() / 1000) + "\n");
+}
+
+// ── sending ──
+function counted(rs, ctr) {
+  const t = new Transform({ transform(chunk, _e, cb) { sent += chunk.length; ctr.n += chunk.length; cb(null, chunk); } });
+  rs.on("error", (e) => t.destroy(e));
+  return rs.pipe(t);
+}
+function bodyFor(fp, size, start, end, ctr) {
+  if (start === undefined && size <= INLINE) return fs.readFileSync(fp);
+  const opts = { highWaterMark: 64 * 1024 };
+  if (start !== undefined) { opts.start = start; opts.end = end; }
+  return Readable.toWeb(counted(fs.createReadStream(fp, opts), ctr));
+}
+const authHeaders = () => (pipeline === "upload" ? { "X-User-Email": email, "X-Upload-Token": utoken } : { "X-Upload-Token": utoken });
+let outageSince = 0;
+
+// ONE request that survives a bad network: transient failures (offline, timeouts, 5xx, 429) are retried with backoff until
+// BB_OFFLINE_MAX of continuous outage; a 4xx will not fix itself (a 401 token = TOKEN so the caller can mint a new one).
+async function send(url, method, makeBody, extra, credit, label) {
+  for (let attempt = 0; ; attempt++) {
+    if (halting()) throw Object.assign(new Error("halt"), { halt: true });
+    const ctr = { n: 0 };
+    let transient = null;
+    try {
+      const res = await fetch(url, { method, headers: Object.assign(authHeaders(), extra || {}), body: makeBody(ctr), redirect: "error", duplex: "half", signal: ctrl.signal });
+      if (res.ok) { sent += (credit || 0) - ctr.n; outageSince = 0; note = ""; return res; }
+      sent -= ctr.n;
+      let err = ""; try { err = (await res.clone().json()).error || ""; } catch (e) {}
+      if (res.status === 401 && err === "invalid_upload_token") { tokenDead = true; throw Object.assign(new Error("token"), { halt: true }); }
+      if (res.status < 500 && res.status !== 429) throw Object.assign(new Error("HTTP " + res.status), { fatal: true });
+      transient = "HTTP " + res.status;
+    } catch (e) {
+      if (e && (e.fatal || e.halt)) throw e;
+      sent -= ctr.n;
+      if (halting()) throw Object.assign(new Error("halt"), { halt: true });
+      transient = (e && e.cause && e.cause.code) || (e && e.message) || "network";
+    }
+    // transient: wait the outage out, still listening for pause / stop
+    if (!outageSince) outageSince = Date.now();
+    if (Date.now() - outageSince > OFFLINE_MAX) { offlineDead = true; throw Object.assign(new Error("offline"), { halt: true }); }
+    const wait = Math.min(30000, 400 * Math.pow(2, Math.min(attempt, 7))) * (0.75 + Math.random() * 0.5);
+    for (let w = 0; w < wait; w += 250) {
+      note = "\u23f3 offline? retry in " + Math.max(1, Math.round((wait - w) / 1000)) + "s (" + label + ")";
+      if (halting()) throw Object.assign(new Error("halt"), { halt: true });
+      await sleep(250);
+    }
+  }
+}
+
+async function uploadOne(t) {
+  if (t.size <= CHUNK || pipeline === "ux") {
+    const extra = pipeline === "ux" ? { "Content-Length": String(t.size), "Content-Type": "application/octet-stream" } : undefined;
+    await send(t.url, "PUT", (ctr) => bodyFor(t.fp, t.size, undefined, undefined, ctr), extra, t.size, "blob " + t.idx);
+    return;
+  }
+  // a blob above the single-PUT limit goes up as R2 multipart; an interrupted one is restarted from its first byte
+  const cRes = await send(t.url + "/mpu", "POST", () => undefined, undefined, 0, "blob " + t.idx);
+  const uploadId = (await cRes.json()).uploadId;
+  if (!uploadId) throw Object.assign(new Error("no uploadId"), { fatal: true });
+  const ranges = [];
+  for (let off = 0, pn = 1; off < t.size; off += CHUNK, pn++) ranges.push({ pn, start: off, end: Math.min(off + CHUNK, t.size) - 1 });
+  const parts = new Array(ranges.length);
+  let nextPart = 0;
+  async function partWorker() {
+    for (;;) {
+      const i = nextPart++; if (i >= ranges.length) return;
+      const r = ranges[i];
+      const res = await send(t.url + "/mpu/" + uploadId + "/" + r.pn, "PUT", (ctr) => bodyFor(t.fp, t.size, r.start, r.end, ctr), undefined, r.end - r.start + 1, "blob " + t.idx + " part " + r.pn);
+      const j = await res.json(); parts[i] = { partNumber: j.partNumber, etag: j.etag };
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONC, ranges.length) }, partWorker));
+  await send(t.url + "/mpu/" + uploadId + "/complete", "POST", () => JSON.stringify(parts), { "Content-Type": "application/json" }, 0, "blob " + t.idx);
+}
+
+(async () => {
+  if (alreadyN > 0) process.stderr.write("\u21a9\ufe0f  Continuing: " + alreadyN + "/" + tasks.length + " blob(s) (" + Math.floor(alreadyBytes * 100 / Math.max(1, total)) + "%) are already on the server \u2014 sending the remaining " + todo.length + ".\n");
+  if (rawOn && TTY) process.stderr.write("   p = pause \u00b7 Ctrl-C / Ctrl-Z = stop now and keep it for later (Pending \u2192 continue)\n");
+  let next = 0, failed = 0; const errors = [];
+  async function worker() {
+    for (;;) {
+      if (halting()) return;
+      const t = todo[next++]; if (!t) return;
+      try { await uploadOne(t); doneN++; if (t.idx > lastIdx) lastIdx = t.idx; }
+      catch (e) { if (e && e.halt) return; failed++; if (errors.length < 3) errors.push("blob " + t.idx + ": " + (e && e.message ? e.message : e)); }
+    }
+  }
+  const checkFlags = () => {
+    if (flag("stop.flag")) requestHalt("STOPPED", 1500);
+    else if (flag("pause.flag")) requestHalt("PAUSED", 8000);
+  };
+  checkFlags();                                   // a flag written just before we started counts too
+  const flagTimer = setInterval(checkFlags, 500);
+  const tick = setInterval(() => { draw(false); }, 200);
+  const nt = setInterval(noter, 2000);
+  noter(); draw(false);
+  await Promise.all(Array.from({ length: Math.min(CONC, todo.length || 1) }, worker));
+  clearInterval(tick); clearInterval(nt); clearInterval(flagTimer); if (abortTimer) clearTimeout(abortTimer);
+  noter();
+  let verdict;
+  if (halt) verdict = halt;
+  else if (tokenDead) verdict = "TOKEN";
+  else if (offlineDead) verdict = "OFFLINE";
+  else if (failed) verdict = "FAIL";
+  else verdict = "OK";
+  if (verdict === "OK") draw(true); else if (TTY) process.stderr.write("\n");
+  for (const m of errors) process.stderr.write("  \u26a0\ufe0f  " + m + "\n");
+  if (rawOn) { try { process.stdin.setRawMode(false); } catch (e) {} process.stdin.pause(); }
+  console.log(verdict);
+  setTimeout(() => process.exit(0), 300).unref();
+})();
