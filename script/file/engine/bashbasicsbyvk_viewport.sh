@@ -50,6 +50,42 @@ _term_cols() {
 # the row (a "<" marks hidden text on the left) and the hint row is clipped, so nothing ever wraps.
 _bvk_is_ascii() { local LC_ALL=C; [[ "$1" != *[!\ -~]* ]]; }
 
+# ── THE one cell-width rule for a non-ASCII character ───────────────────────────────────────────────────────
+# _vp_cpw <codepoint> -> _VP_CPW = 0 | 1 | 2.  EVERY width measurement in the app (_bvk_dispw, _vp_cells, so every
+# prompt caret, row fit and erase count) goes through THIS function.  Never write another range table.
+# It follows wcwidth / Unicode: a character is 2 cells only when it is a wide (East Asian W/F) character or has
+# Emoji_Presentation=Yes (📁 👤 ✅ ❌ ⭐ ...).  Emoji that are text-by-default (🗄 🗑 👁 🖥 ⚠ ℹ ✏ ⚙ ⏱ ...) are 1 cell even
+# when followed by U+FE0F: Termux and most terminals draw them 1 cell wide, and U+FE0F itself adds nothing.
+# (Counting 🗄️ as 2 put the caret one cell too far right, "hello |", on every prompt that began with such an emoji.)
+_VP_TEXT_EMOJI=" 1F321 1F324-1F32C 1F336 1F37D 1F396-1F397 1F399-1F39B 1F39E-1F39F 1F3CB-1F3CE 1F3D4-1F3DF 1F3F3 1F3F5 1F3F7 1F43F 1F441 1F4FD 1F549-1F54A 1F56F-1F570 1F573-1F579 1F587 1F58A-1F58D 1F590 1F5A5 1F5A8 1F5B1-1F5B2 1F5BC 1F5C2-1F5C4 1F5D1-1F5D3 1F5DC-1F5DE 1F5E1 1F5E3 1F5E8 1F5EF 1F5F3 1F5FA 1F6CB 1F6CD-1F6CF 1F6E0-1F6E5 1F6E9 1F6F0 1F6F3 "
+_VP_WIDE_BMP=" 231A-231B 23E9-23EC 23F0 23F3 25FD-25FE 2614-2615 2648-2653 267F 2693 26A1 26AA-26AB 26BD-26BE 26C4-26C5 26CE 26D4 26EA 26F2-26F3 26F5 26FA 26FD 2705 270A-270B 2728 274C 274E 2753-2755 2757 2795-2797 27B0 27BF 2B1B-2B1C 2B50 2B55 "
+_vp_in_set() {   # $1 codepoint (decimal)  $2 space list of HEX or HEX-HEX  -> 0 when inside
+  local cp=$1 r lo hi
+  for r in $2; do
+    lo=$(( 16#${r%-*} )); hi=$(( 16#${r#*-} ))
+    (( cp >= lo && cp <= hi )) && return 0
+  done
+  return 1
+}
+_vp_cpw() {
+  local cp=$1
+  _VP_CPW=1
+  if   (( cp < 0x300 )); then return 0
+  elif (( (cp >= 0x300 && cp <= 0x36F) || (cp >= 0x200B && cp <= 0x200F) || (cp >= 0xFE00 && cp <= 0xFE0F) )); then _VP_CPW=0
+  elif (( (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) \
+       || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF00 && cp <= 0xFF60) \
+       || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x20000 && cp <= 0x3FFFD) )); then _VP_CPW=2
+  elif (( cp >= 0x2300 && cp <= 0x2BFF )); then
+    _vp_in_set "$cp" "$_VP_WIDE_BMP" && _VP_CPW=2
+  elif (( cp >= 0x1F000 && cp <= 0x1FAFF )); then
+    if   _vp_in_set "$cp" "$_VP_TEXT_EMOJI"; then _VP_CPW=1
+    elif (( (cp >= 0x1F300 && cp <= 0x1F64F) || (cp >= 0x1F680 && cp <= 0x1F6FF) || (cp >= 0x1F900 && cp <= 0x1F9FF) \
+         || (cp >= 0x1FA70 && cp <= 0x1FAFF) || cp == 0x1F004 || cp == 0x1F0CF || cp == 0x1F18E \
+         || (cp >= 0x1F191 && cp <= 0x1F19A) || (cp >= 0x1F201 && cp <= 0x1F251) )); then _VP_CPW=2
+    fi
+  fi
+}
+
 _bvk_dispw() {   # $1 text -> _BVK_W = display cells (ANSI colour codes ignored, wide chars/emoji = 2, combining = 0)
   local s="$1" i c cp w=0 n
   while [[ "$s" == *$'\033'* ]] && [[ "$s" =~ $'\033'\[[0-9\;?]*[A-Za-z] ]]; do s="${s/"${BASH_REMATCH[0]}"/}"; done
@@ -67,12 +103,8 @@ _bvk_dispw() {   # $1 text -> _BVK_W = display cells (ANSI colour codes ignored,
     case "$c" in
       [a-zA-Z0-9\ ._/:#=,\;-]) w=$(( w + 1 )) ;;
       *) printf -v cp '%d' "'$c" 2>/dev/null || cp=0
-         if   (( cp < 32 )); then :
-         elif (( (cp >= 0x300 && cp <= 0x36F) || (cp >= 0x200B && cp <= 0x200F) || (cp >= 0xFE00 && cp <= 0xFE0F) )); then :
-         elif (( (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) \
-              || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF00 && cp <= 0xFF60) \
-              || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1FAFF) || (cp >= 0x20000 && cp <= 0x3FFFD) )); then w=$(( w + 2 ))
-         else w=$(( w + 1 )); fi ;;
+         if (( cp < 32 )); then :
+         else _vp_cpw "$cp"; w=$(( w + _VP_CPW )); fi ;;
     esac
   done
   _BVK_W=$w
@@ -213,12 +245,7 @@ _vp_cells() {
     c="${s:i:1}"
     if [[ "$c" == [[:ascii:]] ]]; then w=$(( w + 1 )); continue; fi
     builtin printf -v cp '%d' "'$c" 2>/dev/null || cp=0
-    if   (( cp == 0xFE0F || cp == 0xFE0E || cp == 0x200D || (cp >= 0x300 && cp <= 0x36F) )); then :
-    elif (( (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) \
-         || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF00 && cp <= 0xFF60) \
-         || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1F64F) || (cp >= 0x1F680 && cp <= 0x1F6FF) \
-         || (cp >= 0x1F900 && cp <= 0x1F9FF) || (cp >= 0x1FA70 && cp <= 0x1FAFF) )); then w=$(( w + 2 ))
-    else w=$(( w + 1 )); fi
+    _vp_cpw "$cp"; w=$(( w + _VP_CPW ))
   done
   _vp_w=$w
 }

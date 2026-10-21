@@ -1,0 +1,13 @@
+1. ISSUE AS DEFINED BY USER
+Caret visibility glitch in some read prompts only. Typing "hello" should show the caret as "hello|" but it shows "hello |" (one cell too far right), although input still works. Seen in:
+  "🗄️  Back up 1 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y"
+but not in "Are you really sure you want to delete ... (y/n): y" or "Item numbers: 1". Screenshots (Termux) show it, pasted text cannot. Must be fixed site-wide and never repeat.
+
+1. HOW DID YOU DEBUG
+Grepped the prompt: staging_backup.sh read -e -r -p "🗄️  Back up ..." (read is shimmed by smartmenu.sh -> _cm_text_read -> _cm_edit_draw in cmdmap.sh). _cm_edit_draw places the caret with \r + \033[<col>C where col = _bvk_dispw(prompt)+_bvk_dispw(text before caret). In the screenshot "Back" starts at pixel 30 = cell 3, so the terminal drew 🗄️ as ONE cell (1+2 spaces). Read both width functions: _bvk_dispw counted every code point 1F300-1FAFF as 2, _vp_cells every 1F300-1F64F as 2; U+1F5C4 is in both, so prompt width was 1 too big. Listed every prompt with U+FE0F: only 🗄️ (3 prompts) and 👁️ (hidefiles) hit the wide range; ⚠️ ℹ️ ✏️ ⚙️ ⏱️ are outside it (counted 1, correct), which is why only "specific menus" were off. Ran after the fix: tests/width/width_consistency.sh (OK), tests/cmd_drift.sh (0 FAIL), tests/paste_input/ui_test.py (ALL OK). Not run on a real Termux screen.
+
+1. CAUSE
+Two hand-written, different width tables (viewport.sh _bvk_dispw and _vp_cells, plus 3 JS copies in staging files) that treated whole Unicode blocks as 2 cells wide. Wide only holds for Emoji_Presentation=Yes characters (📁 👤 ✅); text-default emoji (🗄 🗑 👁 🖥) with U+FE0F are 1 cell in Termux / wcwidth. Wrong prompt width -> wrong caret column.
+
+1. FIX
+viewport.sh: one rule _vp_cpw (wcwidth/Unicode: wide = CJK + Emoji_Presentation=Yes, incl. BMP ✅ ❌ ⭐ ⌚; text-default emoji list = 1; FE0F/ZWJ/combining = 0). _bvk_dispw (caret, fit) and _vp_cells (menus, erase counts) both call it. The 3 JS dw() copies (staging_upload, ux_crypto, pending_xfer) use /\p{Emoji_Presentation}/u. New tests/width/width_consistency.sh: known characters (🗄️=1, 📁=2 ...), both functions agree on every character in every prompt in script/, and a grep that fails if anyone writes another 0x1F300 width table. Lesson: never add a width table; call _vp_cpw / _bvk_dispw. Run the test after adding any emoji to a prompt.
