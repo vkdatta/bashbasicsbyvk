@@ -525,6 +525,14 @@ _api_build_items() {
   _all_items=("${items[@]}")
 }
 
+# a main command typed here (s → Display → Sort order) returns to the redraw WITHOUT passing through api_menu's loop, so
+# the new order has to be applied by this hook (called from _cm_read_choice); it also keeps the row numbers in step
+_api_after_cmd() {
+  _api_sort
+  items=("${_API_ID[@]}")
+  _all_items=("${items[@]}")
+}
+
 _api_redraw_fresh() {
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   _api_build_items
@@ -756,6 +764,7 @@ api_menu() {
   _API_LOADED=0
   local _ap_saved_fast="$_vp_poll_fast" _ap_saved_tick="${_vp_tick_fn:-}"
   _vp_poll_fast=1; _vp_poll_cur=1; _vp_tick_fn=_api_tick
+  local _vp_after_cmd_fn=_api_after_cmd     # local: leaving this menu drops the hook with it
 
   local _ap_choice _ap_fresh
   shopt -s nullglob

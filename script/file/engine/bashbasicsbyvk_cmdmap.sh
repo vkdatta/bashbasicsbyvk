@@ -512,6 +512,9 @@ _cm_read_choice() {
     _cm_gate_choice && return 0
     # a message is on screen; draw the menu again below it (same convention as _bvk_invalid).
     # A command that opened a smart menu (print → "1) Copy …") leaves ITS rows in the row cache: rebuild them.
+    # A menu whose list order depends on a setting (Settings › Display › Sort order typed as  s ) names a hook in
+    # _vp_after_cmd_fn: it re-applies that setting to the menu's own arrays before the redraw.
+    [ -n "${_vp_after_cmd_fn:-}" ] && "$_vp_after_cmd_fn"
     _vp_cache_reset; _vp_prime_rows
     _vp_render_fresh
   done
