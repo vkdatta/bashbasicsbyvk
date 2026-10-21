@@ -50,7 +50,7 @@ declare -g  _GD_ENV_HOME_WAS="" _GD_ENV_RULES_WAS=""
 _GD_TTL="${BVK_GD_TTL:-120}"
 
 # settings that live in the config file (see save_settings in bashbasicsbyvk_settings.sh)
-_GD_SET_VARS=(show_hidden_files index_mode_threshold terminal_bg_color terminal_text_color sort_mode display_suffix_set
+_GD_SET_VARS=(show_hidden_files index_mode_threshold terminal_bg_color terminal_text_color sort_mode menu_sort_str display_suffix_set
   display_time_format group_view_levels_str compress_format upload_hidden_mode zip_hidden_mode ux_hidden_mode filter_mode
   filter_hidden_mode filter_recursive display_filter_persist anim_outer anim_inner nuke_time_seconds
   ux_nuke_time_seconds app_timezone credit_prompts backup_mode backup_nuke_time_seconds saved_nuke_time_seconds

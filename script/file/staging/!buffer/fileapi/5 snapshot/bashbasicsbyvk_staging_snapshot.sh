@@ -355,10 +355,14 @@ _snap_menu_devices() {
     [ "$b" = "-" ] && b=""
     SNAP_D_ID+=("$a"); SNAP_D_LABEL+=("$(_bb_label_dec "$lk" "$b")"); SNAP_D_TARGETS+=("$c"); SNAP_D_SNAPS+=("$d"); SNAP_D_SEEN+=("$e")
   done <<<"$out"
+  # Settings (s) › Display › Sort order of this list: A-Z · Z-A · last seen · number of snapshots (default: last seen first, as the server sends it)
+  _ms_perm snap_devices "${#SNAP_D_ID[@]}" name=SNAP_D_LABEL seen=SNAP_D_SEEN snaps=SNAP_D_SNAPS
+  _ms_reorder SNAP_D_ID SNAP_D_LABEL SNAP_D_TARGETS SNAP_D_SNAPS SNAP_D_SEEN
   return 0
 }
 
 _snap_menu_device_view() {   # one device: its watched paths, and its snapshots
+  local _MS_CTX=snap_targets
   local lk="$1" dev="$2" dlabel="$3" is_self="$4" a n i
   local out
   while :; do
@@ -372,6 +376,8 @@ _snap_menu_device_view() {   # one device: its watched paths, and its snapshots
       [ -n "$tgt" ] || continue
       T_ID+=("$tgt"); T_PATH+=("$(_bb_label_dec "$lk" "$lab")"); T_KIND+=("$kind"); T_LAST+=("$ltaken")
     done <<<"$out"
+    _ms_perm snap_targets "${#T_ID[@]}" name=T_PATH last=T_LAST       # Settings › Display › Sort order of this list
+    _ms_reorder T_ID T_PATH T_KIND T_LAST
     echo
     echo "📸 $dlabel$( [ "$is_self" = 1 ] && echo '  (this computer)' )   —   files/folders on its snapshot list: ${#T_ID[@]}"
     if [ ${#T_ID[@]} -eq 0 ]; then echo "   (none)  — add some with  snap-1-3"; fi
@@ -405,6 +411,7 @@ _snap_menu_device_view() {   # one device: its watched paths, and its snapshots
 }
 
 _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
+  local _MS_CTX=snapshots
   local lk="$1" dev="$2" tgt="$3" label="$4" a n i out
   while :; do
     _BB_CALL_HDRS=()
@@ -417,8 +424,10 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
       [ -n "$id" ] || continue
       S_ID+=("$id"); S_TGT+=("$t"); S_AT+=("$at"); S_BYTES+=("$by"); S_EXP+=("$ex")
     done <<<"$out"
+    _ms_perm snapshots "${#S_ID[@]}" created=S_AT size=S_BYTES expiry=S_EXP      # Settings › Display › Sort order of this list
+    _ms_reorder S_ID S_TGT S_AT S_BYTES S_EXP
     echo
-    echo "🕘 SNAPSHOTS — $label   (${#S_ID[@]}, newest first)   🕐 times in $(_tz_label 2>/dev/null || date +%Z)"
+    _ms_label snapshots; echo "🕘 SNAPSHOTS — $label   (${#S_ID[@]}, sorted: $_ms_l)   🕐 times in $(_tz_label 2>/dev/null || date +%Z)"
     [ ${#S_ID[@]} -eq 0 ] && echo "   (none yet — they appear after the first sync while  o  is running)"
     local nowms; nowms=$(( $(date +%s) * 1000 ))
     for i in "${!S_ID[@]}"; do
@@ -486,6 +495,7 @@ _snap_extend() {             # _snap_extend <id> <taken-ms> <expires-ms> [spec] 
 }
 
 snapshot_menu() {
+  local _MS_CTX=snap_devices            # s → Display → Sort order is this list's own
   _crypto_check || return 1
   _bb_get_credentials || return 1
   local lk a n i

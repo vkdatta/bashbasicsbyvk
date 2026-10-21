@@ -6,8 +6,9 @@
 #      3) Colors
 #      4) Files & archives
 #      5) File API          
-#      6) System
-#      7) Reset all settings
+#      6) Menu specific       (sort order of Links, Backup, Saved Surf, Cloud Surf, Snapshots, Pending)
+#      7) System
+#      8) Reset all settings
 #
 #  Every group is one more screen of the same kind (_st_run); the leaf screens (sort order, nuke time, …) are the
 #  ones that always existed. File API holds everything that talks to the cloud, in sub-groups:
@@ -199,7 +200,12 @@ _st_grp_display_act() {
     group)  group_view_settings ;;    index) index_mode_threshold_settings ;;   anim) animation_settings ;;
   esac
 }
-display_group_settings() { _st_run "Display" _st_grp_display_build _st_grp_display_act; }
+# Typed from INSIDE a menu-specific screen (that screen sets  local _MS_CTX=<menu>), Display holds that screen's own
+# settings only; everywhere else it is the general (file browser) Display.
+display_group_settings() {
+  if [ -n "${_MS_CTX:-}" ] && [ -n "${_MS_NAME[$_MS_CTX]:-}" ]; then menu_context_display_settings
+  else _st_run "Display" _st_grp_display_build _st_grp_display_act; fi
+}
 
 # ── Filters ──────────────────────────────────────────────────────────────────────────────────────────────
 _st_grp_filters_build() {
@@ -254,6 +260,7 @@ _st_top_build() {
   _st_add a "Colors"              0 "" colors
   _st_add a "Files & archives"    0 "" files
   _st_add a "File API"            0 "" fileapi
+  _st_add a "Menu specific"       0 "" menuspec
   _st_add a "System"              0 "" system
   _st_add a "Reset all settings"  0 "" reset
 }
@@ -265,6 +272,7 @@ _st_top_act() {
     colors)  colors_group_settings ;;
     files)   files_group_settings ;;
     fileapi) fileapi_group_settings ;;
+    menuspec) menu_specific_settings ;;
     system)  system_group_settings ;;
     reset)   restore_all_defaults ;;
   esac

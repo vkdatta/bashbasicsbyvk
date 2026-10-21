@@ -142,11 +142,24 @@ _pn_kind_build() {
   _pn_ids_of "$_PN_CUR_KIND"
   if [ ${#_PN_IDS[@]} -eq 0 ]; then _st_add h "Nothing is pending here."; return; fi
   [ "$_PN_SRV_OK" = 1 ] || _st_add h "⚠️  Server not reachable — showing this computer only."
-  local id
+  local id i
+  # Settings › Display › Sort order of this list (s): A-Z · Z-A · progress. Default "as listed" = this computer's items first.
+  local -a _nm=() _pc=()
+  for id in "${_PN_IDS[@]}"; do _pn_info "$id"; _nm+=("$_I_name"); _pc+=("$_I_pct"); done
+  _ms_perm pending "${#_PN_IDS[@]}" name=_nm pct=_pc
+  _ms_reorder _PN_IDS
+  _ms_label pending; _st_add h "sorted: $_ms_l   (s = change)"
   for id in "${_PN_IDS[@]}"; do
     _pn_info "$id"
     _st_add a "${id:0:10}…  ${_I_name}  ${_I_pct}%" 0 "$(_pn_state_word "$_I_status")" "$id"
   done
+}
+# typed on the list of one service: s → Settings, where Display › Sort order is this list's own
+_pn_kind_cmd() {
+  case "$1" in
+    s) local _MS_CTX=pending; settings_menu; return 0 ;;
+  esac
+  return 1
 }
 _pn_kind_act() {
   local id="${_st_tag[$1]}"
@@ -185,7 +198,7 @@ _pn_top_act() {
     *)
       _PN_CUR_KIND="$tag"
       local i; for i in "${!_PN_KINDS[@]}"; do [ "${_PN_KINDS[$i]}" = "$tag" ] && break; done
-      _st_run "${_PN_NAMES[$i]}" _pn_kind_build _pn_kind_act
+      _st_run "${_PN_NAMES[$i]}" _pn_kind_build _pn_kind_act "" _pn_kind_cmd
       _st_quit=0 ;;
   esac
 }

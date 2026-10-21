@@ -9,6 +9,7 @@ DEFAULT_TERMINAL_TEXT_COLOR_NORMAL="FFFFFF"
 DEFAULT_TERMINAL_TEXT_COLOR_CODER="00D000"
 
 DEFAULT_SORT_MODE="az"
+DEFAULT_MENU_SORT_STR=""          # menu-specific sort orders ("links=az backup=exp_long"); see bashbasicsbyvk_menu_sort.sh
 DEFAULT_DISPLAY_SUFFIX_SET=""
 DEFAULT_DISPLAY_TIME_FORMAT="full"
 DEFAULT_GROUP_VIEW_LEVELS=""
@@ -39,6 +40,7 @@ unset index_mode_threshold
 unset terminal_bg_color
 unset terminal_text_color
 unset sort_mode
+unset menu_sort_str
 unset display_suffix_set
 unset display_time_format
 unset group_view_levels_str
@@ -84,6 +86,8 @@ _bvk_settings_read() {
 : "${terminal_bg_color:=$DEFAULT_TERMINAL_BG_COLOR}"
 : "${terminal_text_color:=$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL}"
 : "${sort_mode:=$DEFAULT_SORT_MODE}"
+: "${menu_sort_str=$DEFAULT_MENU_SORT_STR}"
+[[ "$menu_sort_str" =~ ^[a-z0-9_=\ ]*$ ]] || menu_sort_str=$DEFAULT_MENU_SORT_STR
 : "${display_suffix_set:=$DEFAULT_DISPLAY_SUFFIX_SET}"
 : "${display_time_format:=$DEFAULT_DISPLAY_TIME_FORMAT}"
 : "${group_view_levels_str:=$DEFAULT_GROUP_VIEW_LEVELS}"
@@ -213,6 +217,7 @@ save_settings() {
     echo "terminal_bg_color=$terminal_bg_color"
     echo "terminal_text_color=$terminal_text_color"
     echo "sort_mode=$sort_mode"
+    echo "menu_sort_str=\"$menu_sort_str\""
     echo "display_suffix_set=\"$display_suffix_set\""
     echo "display_time_format=$display_time_format"
     echo "group_view_levels_str=\"${group_view_levels[*]}\""
@@ -502,6 +507,7 @@ _st_reset_act() {
   show_hidden_files=$DEFAULT_SHOW_HIDDEN_FILES
   index_mode_threshold=$DEFAULT_INDEX_MODE_THRESHOLD
   sort_mode=$DEFAULT_SORT_MODE
+  menu_sort_str=$DEFAULT_MENU_SORT_STR
   display_suffix_set=$DEFAULT_DISPLAY_SUFFIX_SET
   display_time_format=$DEFAULT_DISPLAY_TIME_FORMAT
   group_view_levels=(); group_view_levels_str=""

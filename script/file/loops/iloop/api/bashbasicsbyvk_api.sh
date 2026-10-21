@@ -2,7 +2,7 @@
 # bashbasicsbyvk_api.sh — the  api  loop: manage the links you have created (an inner loop, like fx / sw / .r / -u)
 # ════════════════════════════════════════════════════════════════════════════
 #  api   opens the link manager (also: Home → Links).   Every ACTIVE link you made with up- / c2c- is
-#  listed, soonest expiry first. A link is shown by its ALIAS (up-1-3 as user data); without one you see
+#  listed, soonest expiry first by default (Settings › Display › Sort order changes it for this screen only). A link is shown by its ALIAS (up-1-3 as user data); without one you see
 #  the start of its id. The full link is shown only on request (c-N). The link (with its key) is kept in the cloud
 #  ONLY as ciphertext made with your label key (dinons → FEK → label key), so c-N works on every device you log in on and the
 #  server cannot read it; names are encrypted the same way. The key also stays on this computer as a cache.
@@ -16,6 +16,7 @@
 #    e-N        edit the expiry of link N          e-N 2d   (value given inline)
 #    x-N        nuke link N now                    x-1,3-5  (several)
 #    rf         refresh the list          u  exit          api  close          q  quit the app
+#    s          Settings — Display › Sort order here is this screen's own list (A-Z · created · modified · size · time to expiry)
 #    fx / sw / .r / -u   hand over to those loops
 #
 #  Editing the expiry
@@ -32,7 +33,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 
 declare -ga _API_ID=() _API_KIND=() _API_ALIAS=() _API_BYTES=() _API_CREATED=() _API_EXPIRES=()
-declare -ga _API_PAID=() _API_RFND=() _API_RFND_D=() _API_PUB=() _API_LENC=()
+declare -ga _API_PAID=() _API_RFND=() _API_RFND_D=() _API_PUB=() _API_LENC=() _API_MOD=()
 _API_BAL=""
 _API_NOW=0           # server clock (ms) at the last refresh
 _API_LOCAL=0         # this computer's clock (s) at the same moment → server "now" stays live between refreshes
@@ -72,7 +73,7 @@ _api_fail() {            # prints the server's reason for the last call
 _API_SVC="${_API_SVC:-}"
 _api_load() {
   _API_ID=(); _API_KIND=(); _API_ALIAS=(); _API_BYTES=(); _API_CREATED=(); _API_EXPIRES=()
-  _API_PAID=(); _API_RFND=(); _API_RFND_D=(); _API_PUB=(); _API_LENC=()
+  _API_PAID=(); _API_RFND=(); _API_RFND_D=(); _API_PUB=(); _API_LENC=(); _API_MOD=()
   _API_ERR=""; _API_LOADED=1; _API_BAL=""
   if ! _crypto_check >/dev/null 2>&1; then _API_ERR="node is required (used to read the server's answer)"; return 1; fi
   _api_http GET "/links${_API_SVC:+?svc=$_API_SVC}" || { _API_ERR="no active user — run  -auth  inside 'o'"; return 1; }
@@ -96,15 +97,15 @@ _api_load() {
       };
       console.log(["META", o.balance, o.now].join(US));
       for (const l of o.links) {
-        console.log(["L", l.id, l.kind, clean(dec(String(l.alias ?? ""))), l.bytes, l.createdAt, l.expiresAt, l.paidHours, l.nukeRefund, l.nukeRefundDays, l.publicId || l.id, l.linkEnc || ""].join(US));
+        console.log(["L", l.id, l.kind, clean(dec(String(l.alias ?? ""))), l.bytes, l.createdAt, l.expiresAt, l.paidHours, l.nukeRefund, l.nukeRefundDays, l.publicId || l.id, l.linkEnc || "", l.modifiedAt || l.createdAt].join(US));
       }
     });' <<<"$_API_BODY") || { _API_ERR="the server answered, but not with a link list"; return 1; }
-  local tag a b c d e f g h i j k
-  while IFS="$_API_US" read -r tag a b c d e f g h i j k; do
+  local tag a b c d e f g h i j k l
+  while IFS="$_API_US" read -r tag a b c d e f g h i j k l; do
     case "$tag" in
       META) _API_BAL="$a"; _API_NOW="$b"; _API_LOCAL="${EPOCHSECONDS:-$(date +%s)}"; _API_PRE=(); _API_POST=() ;;
       L)    _API_ID+=("$a"); _API_KIND+=("$b"); _API_ALIAS+=("$c"); _API_BYTES+=("$d")
-            _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i"); _API_PUB+=("${j:-$a}"); _API_LENC+=("$k") ;;
+            _API_CREATED+=("$e"); _API_EXPIRES+=("$f"); _API_PAID+=("$g"); _API_RFND+=("$h"); _API_RFND_D+=("$i"); _API_PUB+=("${j:-$a}"); _API_LENC+=("$k"); _API_MOD+=("${l:-$e}") ;;
     esac
   done <<<"$out"
   _api_sync_local_aliases
@@ -112,6 +113,18 @@ _api_load() {
   _api_apply_aliases
   _api_backfill_secrets
   return 0
+}
+
+# ── sort ──────────────────────────────────────────────────────────────────────
+# The order comes from Settings › Display › Sort order of THIS screen (links / backup / saved each keep their own; see
+# bashbasicsbyvk_menu_sort.sh). It is applied to the loaded arrays on every redraw, so changing it needs no new fetch.
+_api_sort() {
+  local n=${#_API_ID[@]} i
+  declare -ga _API_SORTKEY=()
+  for (( i=0; i<n; i++ )); do _API_SORTKEY[$i]="${_API_ALIAS[$i]:-${_API_ID[$i]}}"; done      # the name you see (alias, else id)
+  _ms_perm "${_MS_CTX:-links}" "$n" name=_API_SORTKEY created=_API_CREATED modified=_API_MOD size=_API_BYTES expiry=_API_EXPIRES
+  _ms_reorder _API_ID _API_KIND _API_ALIAS _API_BYTES _API_CREATED _API_EXPIRES _API_PAID _API_RFND _API_RFND_D _API_PUB _API_LENC _API_MOD
+  _API_PRE=(); _API_POST=()           # the per-row text cache is indexed by row: rebuild it
 }
 
 # Links made before links were kept in the cloud (or while no dinons were on hand): their key is on this computer, so store
@@ -448,18 +461,21 @@ _api_tick() {
   done
 }
 
+# "sorted: Time to expiry · smallest to largest  (s › Display › Sort order)"
+_api_sort_note() { _ms_label "${_MS_CTX:-links}"; printf 'sorted: %s  (s → Display → Sort order)' "$_ms_l"; }
+
 _api_menu_header() {
   echo
   case "$_API_SVC" in
     backup)
       printf '🗄️  BACKUP (bk)   💳 balance: %s credits\n' "${_API_BAL:-?}"
-      printf '   copies taken just before you deleted something · soonest expiry first · r-N restores here · c-N copies its link\n' ;;
+      printf '   copies taken just before you deleted something · %s · r-N restores here · c-N copies its link\n' "$(_api_sort_note)" ;;
     saved)
       printf '💾 SAVED SURF (sv)   💳 balance: %s credits\n' "${_API_BAL:-?}"
-      printf '   things you stored with  save-  · no link exists · opens from any device with your e-mail, diseps and API key · r-N restores here\n' ;;
+      printf '   things you stored with  save-  · no link exists · opens from any device with your e-mail, diseps and API key · r-N restores here · %s\n' "$(_api_sort_note)" ;;
     *)
       printf '🔗 LINKS (api)   💳 balance: %s credits\n' "${_API_BAL:-?}"
-      printf '   soonest expiry first · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine\n' ;;
+      printf '   %s · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine\n' "$(_api_sort_note)" ;;
   esac
   [ -n "$_API_ERR" ] && printf '   ⚠️  %s — rf to retry\n' "$_API_ERR"
   if [ -z "$_API_ERR" ] && [ "${#items[@]}" -eq 0 ]; then
@@ -504,6 +520,7 @@ _api_build_items() {
     if declare -F _lb_run >/dev/null 2>&1; then _lb_run "Fetching your links" _api_load || true
     else echo "⏳ Fetching your links…"; _api_load; fi
   fi
+  _api_sort
   items=("${_API_ID[@]}")
   _all_items=("${items[@]}")
 }
@@ -712,7 +729,8 @@ HLP
   esac
   cat <<'HLP'
 🔗 LINKS  (api)
- Every active link you made with up- / c2c-, soonest expiry first. Shown by ALIAS:
+ Every active link you made with up- / c2c-, soonest expiry first unless you chose another order (s → Display → Sort order:
+   A-Z · Z-A · date created · date modified · size · time to expiry; Backup and Saved Surf keep their own). Shown by ALIAS:
    up-1-3 as user data      c2c-2 as snippet      (no alias → the start of the id)
  N open · c-N copy link (c-1,3-5 several; rebuilt from the key kept on this computer) · g-N new address (old one dies, no re-upload) · k-N attach key of an older link · a-N [name] set/rename alias, saved on the server (a-N - removes it) · e-N [time] edit expiry · x-N nuke (x-1,3-5 several) · rf refresh · u exit · api close
  time = the NEW TOTAL life from creation:  2d · 36h · 1 week     or  +12h extend / -1d shorten
@@ -728,6 +746,7 @@ HLP
 
 # ── the loop ──────────────────────────────────────────────────────────────────
 api_menu() {
+  local _MS_CTX="${_API_SVC:-links}"      # Settings (s) typed in here opens THIS screen's own Display › Sort order
   local _ap_saved_prefix="$group_prefix" _ap_saved_force="$force_show"
   local _ap_saved_all=("${_all_items[@]}")
   group_prefix=""

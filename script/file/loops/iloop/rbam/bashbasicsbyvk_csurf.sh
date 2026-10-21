@@ -56,8 +56,25 @@ _cs_answer_offer() {                         # share id, alias
 }
 
 # ═════════════════════════ share list (the two tabs) ═════════════════════════
+# Settings › Display › Sort order of this screen (one list per tab: Given / Received). Sorting the arrays in place is cheap and
+# idempotent, so it runs on every redraw (a change made in Settings applies when you come back, with no new fetch).
+_cs_sort() {
+  local n i
+  if [ "$_CS_TAB" = 0 ]; then
+    n=${#_CG_ID[@]}; local -a _k=(); for (( i=0; i<n; i++ )); do _k[$i]="${_CG_ALIAS[$i]:-${_CG_ID[$i]}}"; done
+    _ms_perm shares_given "$n" name=_k created=_CG_CREATED size=_CG_BYTES expiry=_CG_EXP
+    _ms_reorder _CG_ID _CG_ALIAS _CG_BYTES _CG_CREATED _CG_EXP _CG_ACC _CG_OFF _CG_REF _CG_REFD _CG_PAID
+  else
+    n=${#_CR_ID[@]}; local -a _k=(); for (( i=0; i<n; i++ )); do _k[$i]="${_CR_ALIAS[$i]:-${_CR_ID[$i]}}"; done
+    _ms_perm shares_recv "$n" name=_k from=_CR_FROM size=_CR_BYTES expiry=_CR_EXP
+    _ms_reorder _CR_ID _CR_ALIAS _CR_BYTES _CR_EXP _CR_OFFER _CR_FROM _CR_FROMD3 _CR_RID
+  fi
+}
+
 cs_build() {
   [ "$_CS_LOADED" = 1 ] || _cs_load
+  if [ "$_CS_TAB" = 0 ]; then _MS_CTX=shares_given; else _MS_CTX=shares_recv; fi    # s → Display → Sort order is the tab's own
+  _cs_sort
   local -a lab=() i
   if [ "$_CS_TAB" = 0 ]; then for i in "${!_CG_ID[@]}"; do lab+=("${_CG_ALIAS[$i]:-${_CG_ID[$i]}}"); done
   else                        for i in "${!_CR_ID[@]}"; do lab+=("${_CR_ALIAS[$i]:-${_CR_ID[$i]}} ${_CR_FROM[$i]}"); done; fi
@@ -415,6 +432,7 @@ _cs_tree_open() {
 
 # ── the loop ─────────────────────────────────────────────────────────────────
 csurf_menu() {
+  local _MS_CTX=shares_given            # cs_build keeps it in step with the tab
   _ux_need || return 1
   _CS_TAB="${1:-0}"; _CS_LOADED=0
   _xui_enter
