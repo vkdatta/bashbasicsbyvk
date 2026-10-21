@@ -475,7 +475,7 @@ _bvk_hdr_status() {
 
 #   c | ⏰ 0 | 📣 0
 #
-#   📂 cd path: /data/data/com.termux/files/home          <- the real folder (what  cd / u  act on)
+#   📂 cd path: /data/data/com.termux/files/home          <- where the CURRENT SHELL is cd'ed ($PWD: it does not move while you browse)
 #   ☁️ nav path: /data/data/com.termux/files/home         <- where you are browsing (Drive / group / filter marks go here; the loaded-by tag is now the first field of the status row)
 _menu_header() {
   echo
@@ -500,7 +500,7 @@ _menu_header() {
       fi
     fi
   fi
-  echo "📂 cd path: $path"
+  echo "📂 cd path: $PWD"
   echo "$_hdr_loc"
 }
 

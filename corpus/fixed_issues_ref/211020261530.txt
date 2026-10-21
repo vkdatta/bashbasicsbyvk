@@ -45,3 +45,15 @@ Misread "lang".
 
 4. FIX
 browse.sh _bvk_hdr_lang now derives c / py from _bvk_src_tag_v (– when hidden by BVK_SHOW_SRC=0 or nothing loaded). The tag is removed from the nav path line (it lives in the status row). Header: "c | ⏰ n | 📣 n". Note 2 above still describes the locale version: this item supersedes it.
+
+5. ISSUE AS DEFINED BY USER
+"cd path means where the current shell is cd'ed." (I had shown the browsed folder on both lines.)
+
+5. HOW DID YOU DEBUG
+Browsing only changes the variable $path (path="$selected"); the process never cd's while you browse, only on q / cd / switch (cd "$path" && exec "$SHELL" in o / viewport.sh). So the shell's own folder is $PWD.
+
+5. CAUSE
+Misread: cd path was printed from $path (the browsed folder), same as nav path.
+
+5. FIX
+browse.sh _menu_header: "📂 cd path: $PWD"; "☁️ nav path:" stays the browsed location ($path / Drive view). They differ as soon as you open a sub-folder. tests/hints/hint_test.py now opens a folder and checks cd path stays and nav path moves.

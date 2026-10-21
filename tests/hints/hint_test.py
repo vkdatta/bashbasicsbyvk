@@ -25,6 +25,13 @@ try:
     top = [l for l in t if l.strip()][:3]
     check('main header row 1 = lang | ⏰ n | 📣 n', len(top) >= 3 and '| ⏰' in top[0] and '| 📣' in top[0], a)
     check('main header has cd path then nav path', 'cd path:' in top[1] and 'nav path:' in top[2], a)
+    cdp = top[1].split('cd path:')[1].strip()
+    a.line('u', 1.5)
+    L2 = [l for l in a.text().split('\n') if l.strip()]
+    k = max(i for i, l in enumerate(L2) if 'cd path:' in l); top2 = L2[k:k + 2]
+    navp = top2[1].split('nav path:')[-1].strip()
+    check('cd path stays where the shell is; nav path moves when you go up (u)', top2[0].split('cd path:')[-1].strip() == cdp and navp == os.path.dirname(cdp), a)
+    a.line('work', 1.5)
     a.send('s', 0.8); r = row_above_select(a, 's')
     check('main: typing s puts the suggestion right above Select:', bool(r) and 'Settings' in r, a)
     a.send('\x7f', 0.6); r = row_above_select(a, '')
