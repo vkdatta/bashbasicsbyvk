@@ -277,6 +277,13 @@ _crypto_stream_pack() {
 # stdout: "OK<TAB>name" | "EXPIRED" | "BADKEY" | "FAILED"
 _crypto_fetch_archive() {
   local link="$1" key="$2" outfile="$3"
+  if _bvk_xfer_bin; then           # the Go engine (no node start-up, one HTTP/2 connection); node below is the fallback
+    local gv; gv=$(BB_KEY="$key" "$_BVK_XFER_BIN" fetch "$link" "$outfile" "$_BB_MAX_PAR" | tail -n 1)
+    case "${gv%%$'\t'*}" in
+      OK|EXPIRED|BADKEY|FAILED) printf '%s\n' "$gv"; return 0 ;;
+    esac
+    _bb_xfer_note go-fallback "fetch gave no verdict (crashed?) — continued with node"
+  fi
   BB_KEY="$key" node -e '
     // one way to draw a \r status line: clipped (auto-wrap OFF), never wider than the screen
     const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, "")) { const c = ch.codePointAt(0);
@@ -372,6 +379,19 @@ _crypto_fetch_archive() {
 # prints the number of files on stdout is NOT used; messages go to the terminal. Returns 0 on success.
 _unpack_targz_safe() {
   local arc="$1" dest="$2"
+  local stage nfiles expanded go_ok=0
+  if _bvk_xfer_bin; then      # Go: ONE pass that checks and extracts (the tar way below reads the archive three times)
+    local ures ukind umsg
+    stage=$(mktemp -d "$dest/.bbvk_x.XXXXXX") || { echo "❌ Could not write to $dest"; return 1; }
+    ures=$("$_BVK_XFER_BIN" untar "$arc" "$stage" 2>/dev/null | tail -n 1)
+    IFS=$'\t' read -r ukind nfiles expanded <<<"$ures"
+    case "$ukind" in
+      OK) go_ok=1; echo "📂 Unpacked $nfiles file(s), $((expanded/1024/1024)) MB" ;;
+      ERR) umsg="$nfiles"; echo "❌ ${umsg:-Unpacking failed.}"; rm -rf "$stage"; return 1 ;;
+      *)  rm -rf "$stage"; _bb_xfer_note go-fallback "untar gave no verdict (crashed?) — continued with tar" ;;
+    esac
+  fi
+  if [ $go_ok = 0 ]; then
   command -v tar &>/dev/null || { echo "❌ 'tar' not found — install it first."; return 1; }
 
   local ls_tmp; ls_tmp=$(mktemp "$dest/.bbvk_ls.XXXXXX") || { echo "❌ Could not write to $dest"; return 1; }
@@ -380,7 +400,7 @@ _unpack_targz_safe() {
     rm -f "$ls_tmp"; return 1
   fi
 
-  local nbad nnames stats nfiles expanded free
+  local nbad nnames stats free
   nbad=$(LC_ALL=C awk '{ c = substr($0,1,1); if (c != "-" && c != "d") n++ } END { print n+0 }' "$ls_tmp")
   if [ "$nbad" -gt 0 ]; then
     echo "❌ Archive contains $nbad link/special entr(y/ies) — refusing to unpack (possible path-escape attack)."
@@ -402,13 +422,14 @@ _unpack_targz_safe() {
   fi
 
   echo "📂 Unpacking $nfiles file(s), $((expanded/1024/1024)) MB..."
-  local stage; stage=$(mktemp -d "$dest/.bbvk_x.XXXXXX") || return 1
+  stage=$(mktemp -d "$dest/.bbvk_x.XXXXXX") || return 1
   local errf; errf=$(mktemp)
   if ! tar -xzf "$arc" -C "$stage" --no-same-owner --no-same-permissions --no-overwrite-dir 2> "$errf"; then
     echo "❌ Unpacking failed:"; head -n 3 "$errf" | sed 's/^/   /'
     rm -rf "$stage" "$errf"; return 1
   fi
   rm -f "$errf"
+  fi
 
   # Move top-level items into place without ever overwriting anything.
   local _shopts; _shopts=$(shopt -p nullglob dotglob)
@@ -534,6 +555,65 @@ _bb_upload_commit() {
   return 1
 }
 
+# ════════════════════════════════════════════════════════════════════════════
+#  _bb_fast_send <dir> <total-bytes> <blobs> [pack-ms]      the Go engine's FAST PATH, shared by up- · backup · save- · snapshot
+#  ONE request for a small upload (blob + manifest + commit); for a big one the init rides on blob 0 and the commit on the last blob.  Auth, size and
+#  credits are checked by the server on the very first request.  Above FILEAPI_BASHBASICS_FAST_MAX_MB (default 64) the upload is HANDED OVER to the
+#  resumable path after blob 0, so a long transfer keeps pause · Ctrl-C · offline waiting · continue-later.
+#  Reads _BB_COMMIT_HDRS (vault key, snapshot target) and the usual _BB_SVC / alias / ttl state.
+#    return 0 done (_FS_URL _FS_DEDUCTED _FS_BALANCE _FS_EXPIRES) · 1 refused (message printed) · 2 continue in the resumable path (_FS_ID: the
+#    server's id, or empty = it has nothing yet) · 3 interrupted by Ctrl-C (_FS_ID: keep in Pending when set) · 4 not used (no Go engine / credentials)
+# ════════════════════════════════════════════════════════════════════════════
+_FS_URL=""; _FS_DEDUCTED=""; _FS_BALANCE=""; _FS_EXPIRES=""; _FS_ID=""
+_bb_fast_send() {
+  local dir="$1" est="$2" nb="$3" pack_ms="${4:-0}"
+  _FS_URL=""; _FS_DEDUCTED=""; _FS_BALANCE=""; _FS_EXPIRES=""; _FS_ID=""
+  _bvk_xfer_bin || return 4
+  _bb_get_credentials >/dev/null 2>&1 || return 4
+  _bb_alias_prepare
+  local fcfg fh fconc fbudget="${FILEAPI_BASHBASICS_INFLIGHT_MB:-64}" fbsz=$_BB_PACK_BYTES fmax="${FILEAPI_BASHBASICS_FAST_MAX_MB:-64}"
+  [[ "$fbudget" =~ ^[0-9]{1,4}$ ]] && [ "$fbudget" -ge 4 ] || fbudget=64
+  [[ "$fmax" =~ ^[0-9]{1,6}$ ]] || fmax=64
+  fconc=$(( fbudget * 1048576 / fbsz )); [ "$fconc" -lt 2 ] && fconc=2; [ "$fconc" -gt 16 ] && fconc=16
+  [[ "${FILEAPI_BASHBASICS_PARALLEL:-}" =~ ^[0-9]{1,2}$ ]] && [ "$FILEAPI_BASHBASICS_PARALLEL" -ge 1 ] && fconc=$FILEAPI_BASHBASICS_PARALLEL
+  fcfg=$({ _bb_auth_cfg
+           _bb_link_cfg
+           [ -n "${_BB_OVERSIZE_OK:-}" ] && _bb_cfg_header X-Confirm-Oversized yes
+           for fh in "${_BB_COMMIT_HDRS[@]}"; do _bb_cfg_header "${fh%%:*}" "${fh#*: }"; done
+           true; })
+  [ -t 2 ] || [ "${_SVC_QUIET:-0}" = 1 ] || echo "☁️  Uploading $nb encrypted blob(s)..."
+  local fout fverdict tline
+  fout=$("$_BVK_XFER_BIN" send --dir "$dir" --url "$WORKER_URL" --est "$est" --n "$nb" --conc "$fconc" --handover-over "$((fmax * 1048576))" <<<"$fcfg")
+  fverdict=$(printf '%s\n' "$fout" | sed -n '1p')
+  tline=$(printf '%s\n' "$fout" | grep -m1 $'^TIME\t')
+  _bb_xfer_note go-timing "pack=${pack_ms}ms ${tline#TIME$'\t'}"
+  case "${fverdict%%$'\t'*}" in
+    OK)
+      _FS_URL=$(printf '%s\n' "$fout" | sed -n '2p'); _FS_DEDUCTED=$(printf '%s\n' "$fout" | sed -n '3p')
+      _FS_BALANCE=$(printf '%s\n' "$fout" | sed -n '4p'); _FS_EXPIRES=$(printf '%s\n' "$fout" | sed -n '5p')
+      return 0 ;;
+    HANDOVER)
+      IFS=$'\t' read -r _ _FS_ID <<<"$fverdict"; return 2 ;;
+    INTERRUPTED)
+      IFS=$'\t' read -r _ _FS_ID <<<"$fverdict"; [ "$_FS_ID" = "-" ] && _FS_ID=""; return 3 ;;
+    REFUSED)
+      local fst fer fmsg
+      IFS=$'\t' read -r _ fst fer fmsg <<<"$fverdict"
+      [ "$fer" = oversized_confirmation_required ] && return 2     # a question, not a refusal: the old path asks it
+      echo "❌ ${fmsg:-The server refused the upload (HTTP $fst).}" >&2
+      [ "$fst" = 401 ] && echo "🔁 Fix the active user with  -auth  inside 'o', then try again." >&2
+      return 1 ;;
+    FALLBACK)
+      local fwhy; IFS=$'\t' read -r _ _FS_ID fwhy <<<"$fverdict"
+      [ "$_FS_ID" = "-" ] && _FS_ID=""
+      _bb_xfer_note go-fallback "${fwhy:-interrupted}${_FS_ID:+ (upload $_FS_ID continued on the resumable path)}"
+      [ "${_SVC_QUIET:-0}" = 1 ] || echo "↪️  Switching to the resumable path (${fwhy:-interrupted})…" >&2
+      return 2 ;;
+    *)
+      _bb_xfer_note go-fallback "send gave no verdict (crashed?)"; return 2 ;;
+  esac
+}
+
 _up_do_multipart_upload() {
   local -a paths=("$@")
   local use_go=0; _bvk_xfer_bin && use_go=1             # the Go engine packs, encrypts and sends; node / tar / gzip are only the fallback
@@ -583,7 +663,7 @@ _up_do_multipart_upload() {
   echo "📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)"
   # find lists regular files + folders only (symlinks inside the tree are skipped, as before);
   # tar -h resolves the staging symlinks at the top level.  tar's exit status goes to $rcfile.
-  local packout
+  local packout _tp0=${EPOCHREALTIME/./} _tp1; _tp0=${_tp0:-0}
   if [ $use_go = 1 ]; then
     packout=$(
       cd "$stage" || exit 1
@@ -600,6 +680,7 @@ _up_do_multipart_upload() {
     )
   fi
 
+  _tp1=${EPOCHREALTIME/./}; _tp1=${_tp1:-0}
   local key total_size nblobs tar_rc
   key=$(printf '%s' "$packout" | sed -n '1p')
   total_size=$(printf '%s' "$packout" | sed -n '2p')
@@ -633,48 +714,21 @@ _up_do_multipart_upload() {
   # ---- price check: cost 1 → silent; more → continue / reduce time / increase time / stop ----
   _bb_get_credentials >/dev/null 2>&1 && { _bb_credit_gate "$total_size" "This upload" || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }; }
 
-  # ---- FAST PATH (Go engine): ONE request for a small upload (blob + manifest + commit), otherwise init rides on blob 0 and the commit on the last
-  # blob, with the blobs in between in parallel on one connection — about 2 round trips in all, whatever the size.  Auth, size and credits are
-  # checked by the server on the very first request.  Anything that goes wrong half-way is handed to the resumable path below (nothing is lost).
-  local fast_id="" fout fverdict fkey
-  if [ $use_go = 1 ] && _bb_get_credentials >/dev/null 2>&1; then
-    _bb_alias_prepare
-    local fcfg fh fconc fbudget="${FILEAPI_BASHBASICS_INFLIGHT_MB:-64}" fbsz=$_BB_PACK_BYTES
-    [[ "$fbudget" =~ ^[0-9]{1,4}$ ]] && [ "$fbudget" -ge 4 ] || fbudget=64
-    fconc=$(( fbudget * 1048576 / fbsz )); [ "$fconc" -lt 2 ] && fconc=2; [ "$fconc" -gt 16 ] && fconc=16
-    [[ "${FILEAPI_BASHBASICS_PARALLEL:-}" =~ ^[0-9]{1,2}$ ]] && [ "$FILEAPI_BASHBASICS_PARALLEL" -ge 1 ] && fconc=$FILEAPI_BASHBASICS_PARALLEL
-    fcfg=$({ _bb_auth_cfg
-             _bb_link_cfg
-             [ -n "${_BB_OVERSIZE_OK:-}" ] && _bb_cfg_header X-Confirm-Oversized yes
-             for fh in "${_BB_COMMIT_HDRS[@]}"; do _bb_cfg_header "${fh%%:*}" "${fh#*: }"; done
-             true; })
-    [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s)..."
-    fout=$("$_BVK_XFER_BIN" send --dir "$tmpdir" --url "$WORKER_URL" --est "$total_size" --n "$nblobs" --conc "$fconc" <<<"$fcfg")
-    fverdict=$(printf '%s\n' "$fout" | sed -n '1p')
-    case "${fverdict%%$'\t'*}" in
-      OK)
-        local final_url deducted balance expires
-        final_url=$(printf '%s\n' "$fout" | sed -n '2p'); deducted=$(printf '%s\n' "$fout" | sed -n '3p')
-        balance=$(printf '%s\n' "$fout" | sed -n '4p');   expires=$(printf '%s\n' "$fout" | sed -n '5p')
-        _up_cleanup
-        _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
-        _announce_link "${final_url}#k=${key}"
-        [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
-        _bb_print_expiry "$expires"
-        return 0 ;;
-      REFUSED)
-        local fst fer fmsg
-        IFS=$'\t' read -r _ fst fer fmsg <<<"$fverdict"
-        if [ "$fer" != oversized_confirmation_required ]; then      # that one is a question, not a refusal: the old path asks it
-          echo "❌ ${fmsg:-The server refused the upload (HTTP $fst).}" >&2
-          [ "$fst" = 401 ] && echo "🔁 Fix the active user with  -auth  inside 'o', then try again." >&2
-          _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1
-        fi ;;
-      FALLBACK)
-        local fwhy; IFS=$'\t' read -r _ fast_id fwhy <<<"$fverdict"
-        [ "$fast_id" = "-" ] && fast_id=""
-        _bb_xfer_note go-fallback "${fwhy:-interrupted}${fast_id:+ (upload $fast_id continued on the resumable path)}"
-        [ "${_SVC_QUIET:-0}" = 1 ] || echo "↪️  Switching to the resumable path (${fwhy:-interrupted})…" >&2 ;;
+  # ---- FAST PATH (Go engine) — see _bb_fast_send.  Anything that goes wrong half-way continues in the resumable path below (nothing is lost). ----
+  local fast_id="" fast_intr=0 pack_ms=$(( (_tp1 - _tp0) / 1000 ))
+  if [ $use_go = 1 ]; then
+    _bb_fast_send "$tmpdir" "$total_size" "$nblobs" "$pack_ms"; local frc=$?
+    case $frc in
+      0) _up_cleanup
+         _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
+         _announce_link "${_FS_URL}#k=${key}"
+         [ -n "$_FS_DEDUCTED" ] && echo "💳 Credits deducted: $_FS_DEDUCTED   |   Balance: $_FS_BALANCE"
+         _bb_print_expiry "$_FS_EXPIRES"
+         return 0 ;;
+      1) _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1 ;;
+      2) fast_id="$_FS_ID" ;;
+      3) fast_id="$_FS_ID"; fast_intr=1
+         if [ -z "$fast_id" ]; then _up_cleanup; echo "⏹  Cancelled — nothing was kept."; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; fi ;;
     esac
   fi
 
@@ -693,6 +747,12 @@ _up_do_multipart_upload() {
   tmpdir=""; _up_cleanup
 
   # ---- Phase 2 + 3: send what the server lacks (waits out a lost connection) → commit.  Ctrl-C / kill / offline keep it in Pending. ----
+  if [ "$fast_intr" = 1 ]; then
+    _pn_set "$pdir" status interrupted
+    echo "⏸  Stopped for now — nothing is lost. Continue it from Pending (pn)."
+    echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"
+    _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1
+  fi
   [ -t 2 ] || [ $use_go = 1 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
   _pn_complete "$pdir" 0; local prc=$?
   if [ $prc -ne 0 ]; then

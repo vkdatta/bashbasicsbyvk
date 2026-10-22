@@ -5,18 +5,22 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -30,9 +34,11 @@ import (
 // The request headers (auth, nuke time, alias, service, vault key …) arrive on stdin in curl-config form (header = "Name: value"), exactly as the
 // shell already builds them, so no secret is ever on a command line.
 //
-// stdout, first line is the verdict:
+// stdout, first line is the verdict (a last line "TIME\t…" says where the first request's time went):
 //
 //	OK \n url \n credits-deducted \n balance \n expires-ms        done (the folder may be deleted)
+//	HANDOVER \t id                                               init + blob 0 done; the shell continues in the resumable path (big uploads)
+//	INTERRUPTED \t id-or-"-"                                     Ctrl-C / kill: keep the folder (Pending) when there is an id
 //	REFUSED \t status \t error \t message                         the server said no for good (credits, auth, size …): do not retry
 //	FALLBACK \t id-or-"-" \t reason                               something went wrong half-way: hand the folder to the resumable path
 type hdrs [][2]string
@@ -83,7 +89,38 @@ type resp struct {
 	err    error
 }
 
+// where the time of the FIRST request goes (DNS · TCP · TLS · server wait): printed as a TIME line, logged by the shell, shown by `health`
+type traceData struct{ t0, dnsS, dnsD, conS, conD, tlsS, tlsD, wrote, first time.Time }
+
+func (t *traceData) clientTrace() *httptrace.ClientTrace {
+	return &httptrace.ClientTrace{
+		GetConn:              func(string) { t.t0 = time.Now() },
+		DNSStart:             func(httptrace.DNSStartInfo) { t.dnsS = time.Now() },
+		DNSDone:              func(httptrace.DNSDoneInfo) { t.dnsD = time.Now() },
+		ConnectStart:         func(string, string) { if t.conS.IsZero() { t.conS = time.Now() } },
+		ConnectDone:          func(string, string, error) { t.conD = time.Now() },
+		TLSHandshakeStart:    func() { t.tlsS = time.Now() },
+		TLSHandshakeDone:     func(tls.ConnectionState, error) { t.tlsD = time.Now() },
+		WroteRequest:         func(httptrace.WroteRequestInfo) { t.wrote = time.Now() },
+		GotFirstResponseByte: func() { t.first = time.Now() },
+	}
+}
+
+func (t *traceData) String() string {
+	ms := func(a, b time.Time) int64 {
+		if a.IsZero() || b.IsZero() {
+			return 0
+		}
+		return b.Sub(a).Milliseconds()
+	}
+	return fmt.Sprintf("dns=%dms tcp=%dms tls=%dms wait=%dms first-request=%dms", ms(t.dnsS, t.dnsD), ms(t.conS, t.conD), ms(t.tlsS, t.tlsD), ms(t.wrote, t.first), ms(t.t0, t.first))
+}
+
 type sender struct {
+	ctx  context.Context
+	intr atomic.Bool
+	tr   *traceData // set only while the FIRST request runs (later requests run in parallel and must not touch it)
+	trLine string
 	cl   *http.Client
 	base string
 	sent int64 // plain progress: bytes of blobs acknowledged
@@ -93,8 +130,11 @@ type sender struct {
 }
 
 func (s *sender) put(path string, hs hdrs, body []byte) resp {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	ctx, cancel := context.WithTimeout(s.ctx, 4*time.Minute)
 	defer cancel()
+	if s.tr != nil {
+		ctx = httptrace.WithClientTrace(ctx, s.tr.clientTrace())
+	}
 	req, err := http.NewRequestWithContext(ctx, "PUT", s.base+path, bytes.NewReader(body))
 	if err != nil {
 		return resp{err: err}
@@ -113,7 +153,7 @@ func (s *sender) put(path string, hs hdrs, body []byte) resp {
 }
 
 func (s *sender) get(path string) resp {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", s.base+path, nil)
 	if err != nil {
@@ -175,6 +215,11 @@ func refused(r resp) int {
 	return 0
 }
 
+func interrupted(id string) int {
+	fmt.Printf("INTERRUPTED\t%s\n", id)
+	return 0
+}
+
 func fallback(id, why string) int {
 	if id == "" {
 		id = "-"
@@ -211,6 +256,7 @@ func cmdSend(args []string) int {
 	n := fs.Int("n", 0, "number of blobs")
 	conc := fs.Int("conc", 8, "blobs in flight at once")
 	pending := fs.Bool("pending", true, "let the server note a multi-blob upload (so it can be continued)")
+	handover := fs.Int64("handover-over", 0, "estimates above this many bytes: do init + blob 0, then hand over to the resumable path (pause / resume / offline wait)")
 	if err := fs.Parse(args); err != nil || *dir == "" || *n < 1 || *est < 1 || !strings.HasPrefix(*base, "https://") {
 		fmt.Fprintln(os.Stderr, "usage: bvk-xfer send --dir D --url https://host --est BYTES --n BLOBS [--conc N]   (headers on stdin)")
 		return 2
@@ -247,7 +293,20 @@ func cmdSend(args []string) int {
 	id := base64.RawURLEncoding.EncodeToString(sum[:])
 
 	st, _ := os.Stderr.Stat()
-	s := &sender{cl: newClient(*conc), base: strings.TrimRight(*base, "/"), tot: *est, t0: time.Now(), tty: st != nil && st.Mode()&os.ModeCharDevice != 0}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := &sender{ctx: ctx, cl: newClient(*conc), base: strings.TrimRight(*base, "/"), tot: *est, t0: time.Now(), tty: st != nil && st.Mode()&os.ModeCharDevice != 0}
+	sigc := make(chan os.Signal, 2)
+	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	go func() { <-sigc; s.intr.Store(true); cancel() }() // Ctrl-C / kill: stop NOW, tell the shell, which keeps the upload in Pending
+	s.tr = &traceData{}
+	defer func() {
+		line := s.trLine
+		if line == "" && s.tr != nil {
+			line = s.tr.String()
+		}
+		fmt.Printf("TIME\t%s send=%dms\n", line, time.Since(s.t0).Milliseconds())
+	}()
 	readBlob := func(i int) ([]byte, error) { return os.ReadFile(filepath.Join(*dir, "blob"+strconv.Itoa(i))) }
 	b64man := base64.RawURLEncoding.EncodeToString(man)
 	commitH := append(hdrs{{"X-File-Count", strconv.Itoa(*n)}, {"X-Manifest", b64man}, {"X-Final", "1"}}, cfg.commit...)
@@ -269,7 +328,7 @@ func cmdSend(args []string) int {
 	var r1 resp
 	for attempt := 0; attempt < 3; attempt++ {
 		r1 = s.put("/upload/fast", first, b0)
-		if k := classify(r1); k != "retry" {
+		if k := classify(r1); k != "retry" || s.intr.Load() {
 			break
 		}
 		// the answer may have been lost AFTER the server committed: look before sending anything again (a retry must never charge twice)
@@ -277,6 +336,14 @@ func cmdSend(args []string) int {
 			return okOut(resp{}, s.base+"/"+id)
 		}
 		time.Sleep(time.Duration(attempt+1) * 700 * time.Millisecond)
+	}
+	s.trLine = s.tr.String()
+	s.tr = nil
+	if s.intr.Load() {
+		if single {
+			return interrupted("-")
+		}
+		return interrupted(id)
 	}
 	switch classify(r1) {
 	case "refused":
@@ -306,6 +373,10 @@ func cmdSend(args []string) int {
 	}
 	id = init.ID
 	tokH := hdrs{{"X-Upload-Token", init.Token}}
+	if *handover > 0 && *est > *handover {
+		fmt.Printf("HANDOVER\t%s\n", id) // a big upload goes on in the resumable path: pause, Ctrl-C, offline wait, continue later
+		return 0
+	}
 
 	// ── requests 2..n-1: the other blobs, in parallel on the same connection ──
 	var wg sync.WaitGroup
@@ -340,7 +411,7 @@ func cmdSend(args []string) int {
 			var r resp
 			for attempt := 0; attempt < 4; attempt++ {
 				r = s.put("/upload/"+id+"/blob/"+strconv.Itoa(i), tokH, b)
-				if classify(r) != "retry" {
+				if classify(r) != "retry" || s.intr.Load() {
 					break
 				}
 				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
@@ -359,6 +430,10 @@ func cmdSend(args []string) int {
 	}
 	wg.Wait()
 	close(stopDraw)
+	if s.intr.Load() {
+		s.draw(true)
+		return interrupted(id)
+	}
 	if atomic.LoadInt32(&failed) != 0 {
 		s.draw(true)
 		why, _ := firstErr.Load().(string)
@@ -374,13 +449,16 @@ func cmdSend(args []string) int {
 	var rl resp
 	for attempt := 0; attempt < 4; attempt++ {
 		rl = s.put("/upload/"+id+"/blob/"+strconv.Itoa(*n-1), lastH, bl)
-		if classify(rl) != "retry" {
+		if classify(rl) != "retry" || s.intr.Load() {
 			break
 		}
 		time.Sleep(time.Duration(attempt+1) * 700 * time.Millisecond)
 	}
 	atomic.AddInt64(&s.sent, int64(len(bl)))
 	s.draw(true)
+	if s.intr.Load() {
+		return interrupted(id)
+	}
 	switch classify(rl) {
 	case "ok":
 		return okOut(rl, strings.TrimSpace(string(rl.body)))

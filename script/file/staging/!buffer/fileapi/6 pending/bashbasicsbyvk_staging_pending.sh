@@ -112,7 +112,12 @@ _pn_xfer_bin() {
 # from <dir>/server.json (the resume answer: done ranges + stored sizes)
 _pn_xfer() {
   local pipe="$1" id="$2" d="$3" nb="$4" tok="$5" bin conc retry
-  bin=$(_pn_xfer_bin) || { echo "❌ bashbasicsbyvk_staging_pending_xfer not found (reinstall bashbasicsbyvk)." >&2; echo FAIL; return; }
+  # the Go engine does this job (same arguments, same BB_* environment, same verdict words); node is the fallback — when Go is missing, or when it
+  # dies without giving a verdict (a crash): blobs already on the server are skipped, so running it again costs nothing
+  local go=0 verdict=""; _bvk_xfer_bin && go=1
+  if [ $go = 0 ]; then
+    bin=$(_pn_xfer_bin) || { echo "❌ bashbasicsbyvk_staging_pending_xfer not found (reinstall bashbasicsbyvk)." >&2; echo FAIL; return; }
+  fi
   # A blob is the unit of resume: a PUT cut half-way is thrown away by the server, so an outage costs (blobs in flight × blob size).
   # Instead of a fixed stream count, keep a fixed number of BYTES in flight (default 64 MB): 4 MB blobs → 16 streams (full speed),
   # old 16 MB blobs → 4 streams.  FILEAPI_BASHBASICS_PARALLEL (hard stream count) / _INFLIGHT_MB override.
@@ -124,9 +129,18 @@ _pn_xfer() {
   [[ "${FILEAPI_BASHBASICS_PARALLEL:-}" =~ ^[0-9]{1,2}$ ]] && [ "$FILEAPI_BASHBASICS_PARALLEL" -ge 1 ] && conc=$FILEAPI_BASHBASICS_PARALLEL
   retry="${FILEAPI_BASHBASICS_RETRY_MIN:-30}"; [[ "$retry" =~ ^[0-9]{1,4}$ ]] || retry=30
   [ "$pipe" = ux ] && [ "$conc" -gt 8 ] && conc=8
-  BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_UTOKEN="$tok" BB_N="$nb" BB_CHUNK="$_BB_CHUNK_BYTES" BB_CONC="$conc" \
-  BB_DONEFILE="$d/server.json" BB_STATE="$d" BB_OFFLINE_MAX=$((retry * 60)) \
-    node "$bin" "$pipe" "$WORKER_URL" "$id" "$d" | tail -n 1
+  export BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_UTOKEN="$tok" BB_N="$nb" BB_CHUNK="$_BB_CHUNK_BYTES" BB_CONC="$conc" \
+         BB_DONEFILE="$d/server.json" BB_STATE="$d" BB_OFFLINE_MAX=$((retry * 60))
+  if [ $go = 1 ]; then
+    verdict=$("$_BVK_XFER_BIN" xfer "$pipe" "$WORKER_URL" "$id" "$d" | tail -n 1)
+    case "$verdict" in
+      OK|PAUSED|INTERRUPTED|STOPPED|TOKEN|OFFLINE|FAIL) printf '%s\n' "$verdict"; return ;;
+    esac
+    _bb_xfer_note go-fallback "xfer gave no verdict (crashed?) — continued with node"
+    bin=$(_pn_xfer_bin) || { unset BB_EMAIL BB_UTOKEN BB_N BB_CHUNK BB_CONC BB_DONEFILE BB_STATE BB_OFFLINE_MAX; echo FAIL; return; }
+  fi
+  node "$bin" "$pipe" "$WORKER_URL" "$id" "$d" | tail -n 1
+  unset BB_EMAIL BB_UTOKEN BB_N BB_CHUNK BB_CONC BB_DONEFILE BB_STATE BB_OFFLINE_MAX
 }
 
 # ── commit (the last request) — one function per pipeline; both set _BB_COMMIT_STATUS / _BB_COMMIT_ERR ──
@@ -172,7 +186,7 @@ _pn_complete() {
   say() { [ "$quiet" = 1 ] || echo "$@"; }
   _pn_lock "$d" || { say "🔴  It is already running (another terminal)."; return 9; }
   _pn_set "$d" status running; rm -f "$d/pause.flag" "$d/stop.flag"
-  _crypto_check >/dev/null 2>&1 || { _pn_unlock "$d"; return 1; }
+  _bvk_xfer_bin || _crypto_check >/dev/null 2>&1 || { _pn_unlock "$d"; return 1; }       # Go does the sending; node is only needed without it
   _bb_get_credentials >/dev/null 2>&1 || { _pn_unlock "$d"; return 1; }
   pipe=upload; [ "$kind" = ux ] && pipe=ux
   _PN_KIND="$kind"; _PN_KEY=$(_pn_get "$d" key); _PN_NBLOBS="$nb"

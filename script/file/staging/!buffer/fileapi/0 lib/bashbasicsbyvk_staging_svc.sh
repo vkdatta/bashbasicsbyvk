@@ -33,8 +33,9 @@ _svc_upload() {
   local svc="$1" alias="$2"; shift 2
   local -a paths=("$@")
   _SVC_ID=""; _SVC_KEY=""; _SVC_EXPIRES=""; _SVC_BYTES=""; _SVC_DEDUCTED=""; _SVC_BALANCE=""
-  _crypto_check || return 1
-  if ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; then
+  _crypto_check || return 1             # the vault keys (FEK, kdk) are still made by node
+  local use_go=0; _bvk_xfer_bin && use_go=1
+  if [ $use_go = 0 ] && { ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; }; then
     echo "❌ 'tar' and 'gzip' are required (pkg install tar gzip)."; return 1
   fi
   _bb_get_credentials || return 1
@@ -48,7 +49,8 @@ _svc_upload() {
   local lvl="${FILEAPI_BASHBASICS_GZIP_LEVEL:-6}"
   [[ "$lvl" =~ ^[1-9]$ ]] || lvl=6
 
-  local stage tmpdir rcfile errfile
+  local stage tmpdir rcfile errfile _tp0=${EPOCHREALTIME/./} _tp1
+  _tp0=${_tp0:-0}
   stage=$(mktemp -d) && tmpdir=$(_pn_mkpack) && rcfile=$(mktemp) && errfile=$(mktemp) \
     || { echo "❌ Could not create temp files."; return 1; }
   _svc_cleanup() { rm -rf "$stage" ${tmpdir:+"$tmpdir"} "$rcfile" "$errfile"; }
@@ -81,10 +83,15 @@ _svc_upload() {
         find -H "$r" -mindepth 1 \( -name '.*' -prune \) -o \( -type f -o -type d \) -print0
       fi
     done 2>> "$errfile" \
-      | { tar --null --no-recursion -h -T - -cf - 2>> "$errfile"; echo $? > "$rcfile"; } \
-      | "${gz[@]}" "-$lvl" -c \
-      | _crypto_stream_pack "$tmpdir" "$arcname"
+      | if [ $use_go = 1 ]; then
+          "$_BVK_XFER_BIN" pack --out "$tmpdir" --name "$arcname" --level "$lvl" --chunk "$_BB_PACK_BYTES" --rc "$rcfile" --warn "$errfile"
+        else
+          { tar --null --no-recursion -h -T - -cf - 2>> "$errfile"; echo $? > "$rcfile"; } \
+            | "${gz[@]}" "-$lvl" -c \
+            | _crypto_stream_pack "$tmpdir" "$arcname"
+        fi
   )
+  _tp1=${EPOCHREALTIME/./}; _tp1=${_tp1:-0}
   local key total_size nblobs tar_rc
   key=$(printf '%s' "$packout" | sed -n '1p'); total_size=$(printf '%s' "$packout" | sed -n '2p'); nblobs=$(printf '%s' "$packout" | sed -n '3p')
   tar_rc=$(cat "$rcfile" 2>/dev/null)
@@ -127,10 +134,34 @@ _svc_upload() {
   fi
 
   _BB_SVC="$svc"; _BB_LINK_ALIAS="$alias"
-  local rc=1 init_out id token pdir
-  init_out=$(_bb_upload_init "$total_size" "$nblobs") && rc=0
-  if [ $rc -ne 0 ]; then _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; fi
-  id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
+  local rc=1 init_out id token pdir fast_id="" fast_intr=0
+  # ---- FAST PATH (Go engine) — see _bb_fast_send (the vault key and the snapshot target travel with the commit, exactly as _pn_commit sends them) ----
+  if [ $use_go = 1 ]; then
+    _BB_COMMIT_HDRS=()
+    case "$svc" in
+      backup|saved) _BB_COMMIT_HDRS=("X-Vault-Kdk: $kdk") ;;
+      snapshot)     _BB_COMMIT_HDRS=("X-Vault-Kdk: $kdk" "X-Snap-Target: $_SVC_SNAP_TGT" "X-Snap-Sig: ${_SVC_SNAP_SIG:-0}") ;;
+    esac
+    _bb_fast_send "$tmpdir" "$total_size" "$nblobs" "$(( (_tp1 - _tp0) / 1000 ))"; local frc=$?
+    _BB_COMMIT_HDRS=()
+    case $frc in
+      0) _SVC_ID="${_FS_URL##*/}"; _SVC_KEY="$key"; _SVC_BYTES="$total_size"
+         _SVC_DEDUCTED="$_FS_DEDUCTED"; _SVC_BALANCE="$_FS_BALANCE"; _SVC_EXPIRES="$_FS_EXPIRES"; _SVC_TTL=$(_bb_svc_ttl "$svc")
+         _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
+         return 0 ;;
+      1) _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1 ;;
+      2) fast_id="$_FS_ID" ;;
+      3) fast_id="$_FS_ID"; fast_intr=1
+         if [ -z "$fast_id" ]; then _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; fi ;;
+    esac
+  fi
+  if [ -n "$fast_id" ]; then
+    id="$fast_id"; token="resume"                        # the server already knows this upload (init rode on blob 0)
+  else
+    init_out=$(_bb_upload_init "$total_size" "$nblobs") && rc=0
+    if [ $rc -ne 0 ]; then _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; fi
+    id=$(printf '%s' "$init_out" | sed -n '1p'); token=$(printf '%s' "$init_out" | sed -n '2p')
+  fi
   if [ -z "$id" ] || [ -z "$token" ]; then echo "❌ Upload init failed (no id returned)"; _svc_cleanup; _BB_SVC=""; _BB_LINK_ALIAS=""; return 1; fi
 
   local -a extra=("kdk=$kdk")
@@ -141,6 +172,12 @@ _svc_upload() {
   local _ttl_used; _ttl_used=$(_bb_svc_ttl "$svc")
 
   # send what the server lacks (a lost connection is waited out) → commit.  Interrupted / offline: kept in Pending (return 4).
+  if [ "$fast_intr" = 1 ]; then
+    _pn_set "$pdir" status interrupted
+    [ "$_SVC_QUIET" = 1 ] || { echo "⏸  Stopped for now — nothing is lost. Continue it from Pending (pn)."; echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"; }
+    _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
+    return 4
+  fi
   _pn_complete "$pdir" "$_SVC_QUIET"; rc=$?
   _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
   if [ $rc -ne 0 ]; then

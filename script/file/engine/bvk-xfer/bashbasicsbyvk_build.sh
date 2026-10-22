@@ -41,6 +41,7 @@ if NDK="$(find_ndk)"; then
   done
   unset GOARM
 else
+  if [ "${REQUIRE_ANDROID:-0}" = 1 ]; then echo "Android NDK not found (set ANDROID_NDK_HOME)" >&2; exit 1; fi
   for a in amd64 arm64; do cp "bvk-xfer-linux-$a" "bvk-xfer-android-$a"; echo "bvk-xfer-android-$a = static linux build (no NDK found; works on Android)"; done
   cp bvk-xfer-linux-arm bvk-xfer-android-arm; echo "bvk-xfer-android-arm = static linux build"
 fi

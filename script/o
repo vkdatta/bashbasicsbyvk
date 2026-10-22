@@ -228,6 +228,7 @@ while true; do
     clear)       hash -r ;;
     =*)          ;;
     health)      bvk_health ;;
+    lang)        bvk_lang ;;
     disk)        df -h ;;
     ram)         free -h ;;
     rf)          if [ "${_GD_ACTIVE:-0}" = 1 ]; then _gd_refresh "$path"; else handle_refresh; fi ;;
