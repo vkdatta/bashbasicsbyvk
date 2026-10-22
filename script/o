@@ -68,7 +68,7 @@ _lt_b "start: telemetry (background)"; _bvk_telemetry_start; _lt_e
 _lt_b "start: snapshot daemon";       _snap_daemon_start; _lt_e         # Snapshots: background sync while  o  runs (does nothing until a path is on the list)
 _lt_b "start: terminal colours + screen setup"; _disp_startup; _lt_e
 
-trap '_gd_on_exit 2>/dev/null; _lt_cleanup; _bvk_paste_off 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
+trap '_gd_on_exit 2>/dev/null; _lt_cleanup; _bvk_paste_off 2>/dev/null; _bvk_mouse_off 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
       [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
       [ -n "${_BVK_DSIZE_TMP:-}" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
       true' EXIT

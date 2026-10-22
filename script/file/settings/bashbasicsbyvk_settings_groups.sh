@@ -193,11 +193,13 @@ _st_grp_display_build() {
   _st_add a "Group by"         0 "$gv"                    group
   _st_add a "Big-folder limit" 0 "$index_mode_threshold"  index
   _st_add a "Animation"        0 "$anim_outer / $anim_inner" anim
+  _st_add a "Mouse / touch"    0 "$mouse_mode"            mouse
 }
 _st_grp_display_act() {
   case "${_st_tag[$1]}" in
     hidden) hidden_file_settings ;;   sort)  sort_order_settings ;;   details) display_suffix_settings ;;
     group)  group_view_settings ;;    index) index_mode_threshold_settings ;;   anim) animation_settings ;;
+    mouse)  mouse_mode_settings ;;
   esac
 }
 # Typed from INSIDE a menu-specific screen (that screen sets  local _MS_CTX=<menu>), Display holds that screen's own
@@ -205,6 +207,13 @@ _st_grp_display_act() {
 display_group_settings() {
   if [ -n "${_MS_CTX:-}" ] && [ -n "${_MS_NAME[$_MS_CTX]:-}" ]; then menu_context_display_settings
   else _st_run "Display" _st_grp_display_build _st_grp_display_act; fi
+}
+
+# ── Mouse / touch ────────────────────────────────────────────────────────────────────────────────────────
+mouse_mode_settings() {
+  _st_choice_open "Mouse / touch" mouse_mode "Click or tap an item number in a list" "" \
+    on  "On  (default) — click / tap selects, double click / double tap opens, wheel / swipe scrolls  (text selection needs Shift)" \
+    off "Off — keyboard only; the terminal keeps its own mouse and text selection"
 }
 
 # ── Filters ──────────────────────────────────────────────────────────────────────────────────────────────

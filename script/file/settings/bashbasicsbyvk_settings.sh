@@ -22,6 +22,7 @@ DEFAULT_FILTER_HIDDEN_MODE="respect"
 DEFAULT_FILTER_RECURSIVE=false      # = filter looks only in the folder you are viewing
 DEFAULT_DISPLAY_FILTER_PERSIST=false
 DEFAULT_ANIM_OUTER="pop"       # outer loop: whole screen appears at once
+DEFAULT_MOUSE_MODE="on"         # click / tap an item number, double click / double tap = open it:  on | off  (see bashbasicsbyvk_mouse.sh)
 DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw)  (draws instantly, same as pop)
 DEFAULT_NUKE_TIME_SECONDS=3600   # up- / c2c-: how long a new link lives (1 hour). 60 s .. 30 days
 DEFAULT_UX_NUKE_TIME_SECONDS=2592000   # ux-: how long a new share lives (30 days). 60 s .. 30 days
@@ -54,6 +55,7 @@ unset filter_recursive
 unset display_filter_persist
 unset anim_outer
 unset anim_inner
+unset mouse_mode
 unset nuke_time_seconds
 unset ux_nuke_time_seconds
 unset app_timezone
@@ -105,6 +107,7 @@ _bvk_settings_read() {
 : "${display_filter_persist:=$DEFAULT_DISPLAY_FILTER_PERSIST}"
 : "${anim_outer:=$DEFAULT_ANIM_OUTER}"
 : "${anim_inner:=$DEFAULT_ANIM_INNER}"
+: "${mouse_mode:=$DEFAULT_MOUSE_MODE}"
 : "${nuke_time_seconds:=$DEFAULT_NUKE_TIME_SECONDS}"
 : "${ux_nuke_time_seconds:=$DEFAULT_UX_NUKE_TIME_SECONDS}"
 : "${app_timezone=$DEFAULT_APP_TIMEZONE}"
@@ -139,6 +142,7 @@ if ! [[ "$ux_nuke_time_seconds" =~ ^[0-9]{1,9}$ ]] || [ "$ux_nuke_time_seconds" 
 fi
 [[ "$anim_outer" == pop || "$anim_outer" == carpet ]] || anim_outer=$DEFAULT_ANIM_OUTER
 [[ "$anim_inner" == pop || "$anim_inner" == carpet ]] || anim_inner=$DEFAULT_ANIM_INNER
+[[ "$mouse_mode" == on || "$mouse_mode" == off ]] || mouse_mode=$DEFAULT_MOUSE_MODE
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Timezone  (Settings → Timezone)
@@ -231,6 +235,7 @@ save_settings() {
     echo "display_filter_persist=$display_filter_persist"
     echo "anim_outer=$anim_outer"
     echo "anim_inner=$anim_inner"
+    echo "mouse_mode=$mouse_mode"
     echo "nuke_time_seconds=$nuke_time_seconds"
     echo "ux_nuke_time_seconds=$ux_nuke_time_seconds"
     echo "app_timezone=\"$app_timezone\""
@@ -521,6 +526,7 @@ _st_reset_act() {
   display_filter_persist=$DEFAULT_DISPLAY_FILTER_PERSIST
   anim_outer=$DEFAULT_ANIM_OUTER
   anim_inner=$DEFAULT_ANIM_INNER
+  mouse_mode=$DEFAULT_MOUSE_MODE
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
   ux_nuke_time_seconds=$DEFAULT_UX_NUKE_TIME_SECONDS
   app_timezone=$DEFAULT_APP_TIMEZONE; _apply_timezone

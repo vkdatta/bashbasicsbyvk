@@ -726,6 +726,38 @@ _rc_type_text() {
   _sync_highlight_from_buf
 }
 
+# ── mouse / touch (see bashbasicsbyvk_mouse.sh) ──────────────────────────────────────────────────────────────────────
+# wheel / swipe: scroll the highlight (clamped, no wrap-around: a wheel that jumps from the top to the bottom is useless)
+_rc_wheel() {
+  $_can_nav || return 0
+  _bvk_blk_park
+  if [ "$1" = up ]; then _nav_jump_to $(( ${_hl_index:-1} - _BVK_WHEEL_STEP ))
+  else                   _nav_jump_to $(( ${_hl_index:-0} + _BVK_WHEEL_STEP )); fi
+  (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line
+  return 0
+}
+# a left click / tap at (_MS_X, _MS_Y).   returns 2 = double click: accept the line now (Enter), 0 = handled
+_rc_click() {
+  $_can_nav || return 0
+  _bvk_blk_park                                              # cursor onto the first prompt row, so its screen row IS the prompt row
+  if ! _bvk_cursor_row; then                                 # the terminal does not answer ESC[6n: no way to place a click, stop asking for them
+    _BVK_MOUSE_BROKEN=1; _bvk_mouse_off; (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line; return 0
+  fi
+  _bvk_mouse_hit "$_MS_Y" "$_BVK_CROW"
+  local rc=0 dbl=0
+  case "$_MS_KIND" in
+    item)
+      _bvk_now_ms
+      if [ "$_MS_ITEM" = "$_BVK_LAST_ITEM" ] && (( _BVK_MS - _BVK_LAST_MS <= _BVK_DBL_MS )); then dbl=1; fi
+      if (( dbl )); then _BVK_LAST_ITEM=""; rc=2; else _BVK_LAST_ITEM="$_MS_ITEM"; _BVK_LAST_MS=$_BVK_MS; fi
+      _nav_jump_to "$_MS_ITEM" ;;                            # highlight + type its number in the prompt (exactly what the arrow keys do)
+    pgup) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-1} - _vp_page_step )) ;;
+    pgdn) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-0} + _vp_page_step )) ;;
+  esac
+  (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line
+  return $rc
+}
+
 _read_choice_raw() {
   choice=""
   _can_nav=false
@@ -740,6 +772,7 @@ _read_choice_raw() {
   stty -icanon -echo min 1 time 0 2>/dev/null
   trap '_vp_on_resize' WINCH
   _bvk_paste_on
+  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
 
   _buf=""
   _pos=0
@@ -777,6 +810,14 @@ _read_choice_raw() {
     if [[ "$key" == $'\x1b' ]]; then
       _read_key_seq || continue
       if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _rc_paste_text "$_BVK_PASTE"; continue; fi
+      if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
+        case "$_MS_ACT" in
+          press)     _rc_click; (( $? == 2 )) && break ;;    # double click / double tap: the same as Enter
+          wheelup)   _rc_wheel up ;;
+          wheeldown) _rc_wheel down ;;
+        esac
+        continue
+      fi
       _key_name "$_esc"
       case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
       case "$_kname" in
@@ -853,6 +894,7 @@ _read_choice_raw() {
 
   trap - WINCH
   _bvk_paste_off
+  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
   stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
   # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)

@@ -60,6 +60,7 @@ It has two parts:
 - **Cheat codes (`cc`):** forget a command name? `cc` lists every command the *current* prompt accepts (a menu, the item picker, a Settings screen each get their own list), in the same style as Settings. Filter with `=lo`, pick a number, and the command is typed into the prompt you came from. It never runs by itself: `c-` stays in the prompt so you can finish it (`c-1-5`) and press Enter.
 - **Functions (`fx`):** built-in CSV-driven operations plus your own scripts, exportable and importable.
 - **Transfer (`t`):** local copy/move, and Google Drive or Cloud Shell through your own `rclone` / `gcloud` login.
+- **Mouse and touch:** click or tap an item and its number is typed into the prompt (press Enter to open it); double click or double tap opens it at once; click ▲ / ▼ to page; wheel or swipe scrolls. Works in any terminal that reports the mouse (and in touch terminals such as Termux, which turn a tap into a click). Settings → Display → Mouse / touch turns it off; `BVK_MOUSE=0` does it for one run, `BVK_DBLCLICK_MS` sets the double-click time (default 500). While it is on, text selection needs Shift held.
 - **Interface:** sort, group (Settings → Group by: year → month → date → ext, drawn as a tree of headers; grouped natively by the C helper), file details, colours, timezone, instant pop / carpet draws (no animation delay), settings that reset cleanly.
 - **Native speed:** a C helper (`bvk-ls`) lists large folders quickly; `health` tells you exactly what is active on your machine.
 

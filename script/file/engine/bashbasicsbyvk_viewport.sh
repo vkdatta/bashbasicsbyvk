@@ -798,10 +798,15 @@ _read_key_seq() {
       while IFS= read -rsn1 -t 0.08 c; do
         _esc+="$c"
         case "$c" in
-          [0-9]|';') continue ;;
+          [0-9]|';'|'<') continue ;;          # '<' opens an SGR mouse report: ESC[<button;column;row M|m  (see bashbasicsbyvk_mouse.sh)
           *) break ;;
         esac
       done
+      if [ "$_esc" = "[M" ]; then             # X10 mouse report: three raw bytes follow; never let them reach the prompt
+        IFS= read -rsn1 -t 0.08 c && _esc+="$c"
+        IFS= read -rsn1 -t 0.08 c && _esc+="$c"
+        IFS= read -rsn1 -t 0.08 c && _esc+="$c"
+      fi
       ;;
     'O')
       IFS= read -rsn1 -t 0.08 c && _esc+="$c"
@@ -1097,6 +1102,7 @@ _key_name() {
 _BVK_TO_MAIN=0
 _bvk_exit() {
   _bvk_paste_off
+  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
   if ${_sw_did_switch:-false}; then declare -F _gd_before_exec >/dev/null && _gd_before_exec; cd "$path" && exec "$SHELL"; else exit 0; fi
 }
 _bvk_quit() {

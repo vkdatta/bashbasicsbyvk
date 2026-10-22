@@ -5,7 +5,7 @@ class Screen:
     def __init__(self, cols=80, rows=30):
         self.cols, self.rows = cols, rows
         self.buf = [[' '] * cols for _ in range(rows)]
-        self.r = self.c = 0; self.pend = b''; self.wrap = False
+        self.r = self.c = 0; self.pend = b''; self.wrap = False; self.saved = (0, 0)
     @property
     def cursor(self): return (self.r, self.c)
     def _lf(self):
@@ -56,6 +56,8 @@ class Screen:
                 self.buf[self.r][self.c:] = [' '] * (self.cols - self.c)
                 for k in range(self.r + 1, self.rows): self.buf[k] = [' '] * self.cols
             elif n == 2: self.buf = [[' '] * self.cols for _ in range(self.rows)]
+        elif f == 's': self.saved = (self.r, self.c)          # save / restore cursor (the app repaints list rows that way)
+        elif f == 'u': self.r, self.c = self.saved
         elif f == 'H':
             p = a.split(';'); self.r = min(self.rows - 1, int(p[0] or 1) - 1) if p[0] else 0
             self.c = min(self.cols - 1, int(p[1] or 1) - 1) if len(p) > 1 and p[1] else 0
