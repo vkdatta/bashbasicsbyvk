@@ -144,6 +144,7 @@ _upg_rowtext() {
   _vp_line="$line"
 }
 
+_bvk_tabs_register "📦 Stable" "🧪 Tags (beta)"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
 _upg_tab_label() {
   local a="📦 Stable" b="🧪 Tags (beta)"
   if [ "$_upg_tab" = stable ]; then printf '[%s]   %s' "$a" "$b"; else printf ' %s  [%s]' "$a" "$b"; fi

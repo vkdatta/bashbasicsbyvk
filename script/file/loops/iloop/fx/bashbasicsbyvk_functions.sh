@@ -159,6 +159,7 @@ _fx_tab_next() {
 # only two tabs, so "previous" is the same flip as "next"
 _fx_tab_prev() { _fx_tab_next; }
 
+_bvk_tabs_register "🛠️  ADF" "👤 UDF"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
 _fx_tab_label() {
   local ad="🛠️  ADF" ud="👤 UDF"
   case "$_fx_tab" in

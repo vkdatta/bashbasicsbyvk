@@ -91,6 +91,7 @@ cs_row() {
       "$(_xui_hsize "${_CR_BYTES[$k]}")" "$(_xui_left "${_CR_EXP[$k]}")" "$(_xui_trunc "${_CR_FROM[$k]}" 26)" "$tag"
   fi
 }
+_bvk_tabs_register "📤 Given" "📥 Received"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
 cs_header() {
   local a=" 📤 Given " b=" 📥 Received "
   [ "$_CS_TAB" = 0 ] && a="[📤 Given]" || b="[📥 Received]"

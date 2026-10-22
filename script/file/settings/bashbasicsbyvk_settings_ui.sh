@@ -150,10 +150,12 @@ _st_tty_raw() {
   [ -n "$_st_stty" ] || _st_stty=$(stty -g 2>/dev/null)
   stty -icanon -echo min 1 time 0 2>/dev/null
   _bvk_paste_on
+  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
 }
 # cooked again (echo on) for anything that asks a question with  read
 _st_tty_cooked() {
   _bvk_paste_off
+  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
   [ -t 0 ] && [ -n "$_st_stty" ] && stty "$_st_stty" 2>/dev/null
   return 0
 }
@@ -172,6 +174,14 @@ _st_readkey() {
     $'\033')
       if _read_key_seq; then
         if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _st_k=paste; _st_d="$_BVK_PASTE"; return; fi
+        if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
+          case "$_MS_ACT" in
+            press) _st_k=click; return ;;
+            wheelup) _st_k=wheelup; return ;;
+            wheeldown) _st_k=wheeldown; return ;;
+            *) _st_readkey; return ;;          # a button release / drag: nothing to do, wait for the next key (no redraw)
+          esac
+        fi
         _key_name "$_esc"
         case "$_kname" in
           up|down|left|right|home|end|pgup|pgdn) _st_k="$_kname" ;;
@@ -302,6 +312,29 @@ _st_wipe() {
   prev=0
 }
 
+# a click / tap (called from _st_run; shares its locals).  The block is  prev = vis + 10  rows, the cursor is on its last row (Select:):
+#   rows from the top: blank · title · blank · ▲/rule · vis list rows · ▼/rule · blank · footer 1 · footer 2 · hint · Select
+# click a row = highlight it and type its number · double click = and open / switch it · ▲ / ▼ = page.  _ST_CLICK_ACT=1: a row was opened.
+_ST_CLICK_ACT=0
+_st_click() {
+  _ST_CLICK_ACT=0
+  (( prev > 10 )) || return 0
+  _bvk_mouse_prow || return 0
+  local vis=$(( prev - 10 )) rel i
+  rel=$(( _MS_Y - ( _BVK_CROW - vis - 5 ) ))          # 0 = the first list row on screen
+  if (( rel >= 0 && rel < vis )); then
+    i=$(( top + rel ))
+    _st_selectable "$i" || return 0
+    cur=$i; buf="${_st_num[$i]}"
+    if _bvk_mouse_dbl "st:$i"; then
+      _lt_enter "click" "${_st_lbl[$i]}"; buf=""; _ST_CLICK_ACT=1; _st_activate
+    fi
+  elif (( rel == -1 && top > 0 )); then _BVK_LAST_ITEM=""; _st_move -1 "$page"; (( cur >= 0 )) && buf="${_st_num[$cur]}"
+  elif (( rel == vis && top + vis < ${#_st_lbl[@]} )); then _BVK_LAST_ITEM=""; _st_move 1 "$page"; (( cur >= 0 )) && buf="${_st_num[$cur]}"
+  fi
+  return 0
+}
+
 # do what the highlighted row says (called from _st_run; shares its locals)
 _st_activate() {
   case "${_st_kind[$cur]}" in
@@ -367,6 +400,9 @@ _st_run() {
       down)  need=0; _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       pgup)  need=0; _st_move -1 "$page"; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;   # ±10 like the main menu
       pgdn)  need=0; _st_move 1 "$page";  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      click)     need=0; _st_click; (( _ST_CLICK_ACT )) && need=1 ;;
+      wheelup)   need=0; _st_move -1 "${_BVK_WHEEL_STEP:-3}"; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      wheeldown) need=0; _st_move 1 "${_BVK_WHEEL_STEP:-3}";  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       home)  need=0; cur=-1; _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       end)   need=0; cur=-1; _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       bksp)

@@ -65,6 +65,7 @@ rb_row() {
   _rb_state "$k"
   printf -v _vp_line ' %2d) 👤 %-28s [%s…]  %s' "$1" "$(_xui_trunc "${_RB_MAIL[$k]}" 28)" "${_RB_D3[$k]:0:6}" "$_RB_S"
 }
+_bvk_tabs_register "📤 Give access" "📥 Receive access"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
 _rb_tabbar() {
   local a=" 📤 Give access " b=" 📥 Receive access "
   [ "$_RB_TAB" = 0 ] && a="[📤 Give access]" || b="[📥 Receive access]"

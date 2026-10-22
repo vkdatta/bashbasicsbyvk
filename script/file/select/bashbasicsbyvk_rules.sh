@@ -266,6 +266,7 @@ _rl_rowtext() {
 
 # ── tabs ──────────────────────────────────────────────────────────────────────
 _rl_tab_next() { if [ "$_rl_tab" = rules ]; then _rl_tab=last; else _rl_tab=rules; fi; }
+_bvk_tabs_register "🧩 Rules" "🕘 Last used"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
 _rl_tab_label() {
   local a="🧩 Rules" b="🕘 Last used"
   if [ "$_rl_tab" = rules ]; then printf '[%s]   %s' "$a" "$b"; else printf ' %s  [%s]' "$a" "$b"; fi

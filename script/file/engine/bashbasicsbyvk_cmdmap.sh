@@ -184,7 +184,7 @@ _cm_ctx_find() {
   for (( i=1; i<n; i++ )); do
     fn="${FUNCNAME[i]}"
     case "$fn" in
-      _cm_*|_lt_*|_multi_*|select_items_common|select_imaginary_items_common|_read_choice|_read_choice_raw|_read_choice_filtered|read|_sm_*|_vp_*|_input_*|_print_input_line|_mc_ask|source|main) continue ;;
+      _cm_*|_lt_*|_multi_*|_rc_click|_rc_wheel|_bvk_mouse_*|_st_click|_sm_click|_sm_wheel|select_items_common|select_imaginary_items_common|_read_choice|_read_choice_raw|_read_choice_filtered|read|_sm_*|_vp_*|_input_*|_print_input_line|_mc_ask|source|main) continue ;;
     esac
     m="${_CM_MAP_FUNC[$fn]-}"
     if [ -n "$m" ]; then

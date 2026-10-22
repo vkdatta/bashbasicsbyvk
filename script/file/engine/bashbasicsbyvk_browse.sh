@@ -736,25 +736,32 @@ _rc_wheel() {
   (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line
   return 0
 }
-# a left click / tap at (_MS_X, _MS_Y).   returns 2 = double click: accept the line now (Enter), 0 = handled
+# a left click / tap at (_MS_X, _MS_Y).   returns 2 = double click: accept the line now (Enter)
+#                                         3 = a header tap: the line (_buf) is already set, accept it
+#                                         0 = handled
 _rc_click() {
-  $_can_nav || return 0
   _bvk_blk_park                                              # cursor onto the first prompt row, so its screen row IS the prompt row
-  if ! _bvk_cursor_row; then                                 # the terminal does not answer ESC[6n: no way to place a click, stop asking for them
-    _BVK_MOUSE_BROKEN=1; _bvk_mouse_off; (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line; return 0
-  fi
+  if ! _bvk_mouse_prow; then (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line; return 0; fi
   _bvk_mouse_hit "$_MS_Y" "$_BVK_CROW"
-  local rc=0 dbl=0
+  local rc=0
   case "$_MS_KIND" in
     item)
-      _bvk_now_ms
-      if [ "$_MS_ITEM" = "$_BVK_LAST_ITEM" ] && (( _BVK_MS - _BVK_LAST_MS <= _BVK_DBL_MS )); then dbl=1; fi
-      if (( dbl )); then _BVK_LAST_ITEM=""; rc=2; else _BVK_LAST_ITEM="$_MS_ITEM"; _BVK_LAST_MS=$_BVK_MS; fi
+      _bvk_mouse_dbl "i:$_MS_ITEM" && rc=2
       _nav_jump_to "$_MS_ITEM" ;;                            # highlight + type its number in the prompt (exactly what the arrow keys do)
     pgup) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-1} - _vp_page_step )) ;;
     pgdn) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-0} + _vp_page_step )) ;;
+    *)
+      _BVK_LAST_ITEM=""
+      if _bvk_mouse_hdr_hit "$_MS_Y" "$_BVK_CROW"; then
+        case "$_MS_HKIND" in
+          cmd) _bvk_mouse_hdr_ok && { _buf="$_MS_CMD"; _pos=${#_buf}; rc=3; } ;;        # py | ⏰ 0 | 📣 0  →  lang | nf | pn, as if typed
+          tab) [ "${_sw_in_mode:-0}" = 1 ] && { _BVK_TAB_STEPS=$_MS_TABDELTA; _BVK_TAB_SCREEN="${_vp_header_fn:-}"; } ;;   # consumed at the top of the key loop
+          nav) _bvk_mouse_nav_ok && [ -d "$_MS_NAV" ] && { _BVK_NAV_TARGET="$_MS_NAV"; _buf="__navpath__"; _pos=${#_buf}; rc=3; } ;;
+        esac
+      fi ;;
   esac
   (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line
+  (( rc == 3 )) && [ "$_buf" != "__navpath__" ] && _print_input_line     # show the command that was "typed"
   return $rc
 }
 
@@ -783,6 +790,16 @@ _read_choice_raw() {
   [ -n "${_CC_PREFILL:-}" ] && _cc_replay _rc_type_key _rc_type_text
 
   while true; do
+    # a tab was tapped (bashbasicsbyvk_mouse.sh): feed the ←/→ sentinel once per turn, exactly as if the arrow key had been pressed
+    if (( ${_BVK_TAB_STEPS:-0} != 0 )); then
+      if [ "${_sw_in_mode:-0}" = 1 ] && [ "${_BVK_TAB_SCREEN:-}" = "${_vp_header_fn:-}" ]; then
+        if (( _BVK_TAB_STEPS > 0 )); then choice="__sw_tab_right__"; _BVK_TAB_STEPS=$(( _BVK_TAB_STEPS - 1 ))
+        else choice="__sw_tab_left__"; _BVK_TAB_STEPS=$(( _BVK_TAB_STEPS + 1 )); fi
+        _buf=""; _pos=0; _hl_index=0
+        break
+      fi
+      _BVK_TAB_STEPS=0                                      # not this screen any more: forget it
+    fi
     IFS= read -rsn1 -t "$_vp_poll_cur" key
     _rc=$?
     if [ "$_rc" -gt 128 ]; then
@@ -812,7 +829,7 @@ _read_choice_raw() {
       if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _rc_paste_text "$_BVK_PASTE"; continue; fi
       if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
         case "$_MS_ACT" in
-          press)     _rc_click; (( $? == 2 )) && break ;;    # double click / double tap: the same as Enter
+          press)     _rc_click; case $? in 2|3) break ;; esac ;;    # double click / double tap = Enter · a header tap = the command is typed
           wheelup)   _rc_wheel up ;;
           wheeldown) _rc_wheel down ;;
         esac

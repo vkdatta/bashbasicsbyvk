@@ -296,6 +296,7 @@ _sw_tab_prev() {
 # recents and favourites are "managed" tabs: the normal file commands are blocked
 _sw_is_ro() { [ "$_sw_tab" = "recents" ] || [ "$_sw_tab" = "favourites" ]; }
 
+_bvk_tabs_register "📌 Bookmarks" "🕐 Recents" "⭐ Favourites"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
 _sw_tab_label() {
   local bm="📌 Bookmarks" rc="🕐 Recents" fv="⭐ Favourites"
   case "$_sw_tab" in

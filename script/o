@@ -189,6 +189,7 @@ while true; do
     q)           if $_sw_did_switch; then _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi ;;   # q on the main loop = leave the app
     -h)          open_help ;;
     h)           home_menu ;;
+    __navpath__) [ -d "${_BVK_NAV_TARGET:-}" ] && { path="$_BVK_NAV_TARGET"; group_prefix=""; force_show=false; }; _BVK_NAV_TARGET="" ;;   # a folder name of the nav path was touched (bashbasicsbyvk_mouse.sh)
     u)           if _gd_at_root; then echo "☁️  This is the top of your Google Drive — gdx leaves it"
                  elif [ -n "$group_prefix" ]; then
                    group_prefix="${group_prefix%?}"; force_show=false

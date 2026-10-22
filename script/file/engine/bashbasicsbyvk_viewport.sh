@@ -1306,6 +1306,32 @@ _multi_adjust_number_at_cursor() {
   _multi_sync
 }
 
+# mouse / touch in the picker (see bashbasicsbyvk_mouse.sh): a click toggles the item in the typed list (1-3,7), a double click
+# puts it in and accepts, ▲ / ▼ and the wheel scroll the window.  returns 2 = accept now.
+_multi_click() {
+  _bvk_blk_park
+  if ! _bvk_mouse_prow; then _multi_print_input_line; return 0; fi
+  _bvk_mouse_hit "$_MS_Y" "$_BVK_CROW"
+  local rc=0 it
+  case "$_MS_KIND" in
+    item)
+      it="$_MS_ITEM"
+      local _numre='^[0-9, -]*$'
+      if [[ "$_buf" =~ $_numre ]]; then      # a, a-1-5 or a typed command: not a list of numbers, leave it alone
+        _multi_compute_set
+        if _bvk_mouse_dbl "m:$it"; then rc=2; _msel_set[$it]=1       # double: the item is in, and Enter
+        elif [ -n "${_msel_set[$it]+x}" ]; then unset '_msel_set[$it]'
+        else _msel_set[$it]=1; fi
+        _buf="$(_sm_render_set)"; _pos=${#_buf}
+        _multi_sync; return $rc
+      fi ;;
+    pgup) _BVK_LAST_ITEM=""; _bvk_mouse_scroll $(( - _vp_page )) ;;
+    pgdn) _BVK_LAST_ITEM=""; _bvk_mouse_scroll "$_vp_page" ;;
+  esac
+  _multi_print_input_line
+  return $rc
+}
+
 # The picker ("Item numbers:" / "Group numbers:") is a prompt inside a flow: a command typed here
 # (s, h ...) runs and the picker is asked again; a blocked one cancels the flow (see cmdmap).
 _multi_prompt_loop() {
@@ -1344,6 +1370,7 @@ _multi_prompt_loop_raw() {
   stty -icanon -echo min 1 time 0 2>/dev/null
   trap '_vp_on_resize' WINCH
   _bvk_paste_on
+  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
   _multi_render
   _lt_ready text
   [ -n "${_CC_PREFILL:-}" ] && _cc_replay _multi_type_key _multi_type_text
@@ -1361,6 +1388,14 @@ _multi_prompt_loop_raw() {
     if [[ "$key" == $'\x1b' ]]; then
       _read_key_seq || continue
       if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _multi_paste_text "$_BVK_PASTE"; continue; fi
+      if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
+        case "$_MS_ACT" in
+          press)     _multi_click; (( $? == 2 )) && break ;;
+          wheelup)   _bvk_blk_park; _bvk_mouse_scroll $(( - _BVK_WHEEL_STEP )); _multi_print_input_line ;;
+          wheeldown) _bvk_blk_park; _bvk_mouse_scroll "$_BVK_WHEEL_STEP"; _multi_print_input_line ;;
+        esac
+        continue
+      fi
       _key_name "$_esc"
       case "$_kname" in
         up)   _multi_adjust_number_at_cursor up ;;
@@ -1418,6 +1453,7 @@ _multi_prompt_loop_raw() {
 
   trap - WINCH
   _bvk_paste_off
+  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
   stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; _bvk_hint_leave; fi

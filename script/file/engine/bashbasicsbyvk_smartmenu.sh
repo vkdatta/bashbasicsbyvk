@@ -623,6 +623,47 @@ PYEOF
 _sm_range() { if [ "$1" = "$2" ]; then builtin echo "$1"; else builtin echo "$1-$2"; fi; }
 
 # ------------------------------------------------------------
+# mouse / touch (see bashbasicsbyvk_mouse.sh)
+# ------------------------------------------------------------
+# click a row: single menu = select it (its token is typed), double click = and Enter.  multi / command menu = move the cursor row
+# there and toggle it like Space; double click = make sure it is in, and Enter.  ▲ / ▼ / wheel scroll.   returns 2 = accept now.
+_sm_click() {
+  _bvk_blk_park
+  if ! _bvk_mouse_prow; then _sm_input_fn; return 0; fi
+  _bvk_mouse_hit "$_MS_Y" "$_BVK_CROW"
+  local rc=0 it
+  case "$_MS_KIND" in
+    item)
+      it="$_MS_ITEM"
+      _sm_row_selectable "$it" || { _sm_input_fn; return 0; }
+      _bvk_mouse_dbl "s:$it" && rc=2
+      if [ "$_sm_mode" = single ]; then
+        _sm_set_index "$it"
+      else
+        _sm_move_cursor "$it"
+        if (( rc == 2 )); then
+          [ -n "${_msel_set[$it]+x}" ] || _sm_toggle_cursor          # a double click never switches an item OFF
+        else _sm_toggle_cursor; fi
+      fi
+      return $rc ;;
+    pgup) _BVK_LAST_ITEM=""; _bvk_mouse_scroll $(( - _vp_page )) ;;
+    pgdn) _BVK_LAST_ITEM=""; _bvk_mouse_scroll "$_vp_page" ;;
+  esac
+  _sm_input_fn
+  return $rc
+}
+_sm_wheel() {   # $1 = -1 up · 1 down
+  _bvk_blk_park
+  local n=${#_sm_rows_text[@]} h=${_hl_index:-0}
+  if [ "$_sm_mode" = single ]; then
+    h=$(( h + $1 * _BVK_WHEEL_STEP )); (( h < 1 )) && h=1; (( h > n )) && h=$n
+    h=$(_sm_next_selectable "$h" "$1"); _sm_set_index "$h"
+  else
+    _bvk_mouse_scroll $(( $1 * _BVK_WHEEL_STEP )); _sm_input_fn
+  fi
+}
+
+# ------------------------------------------------------------
 # the interactive loop
 # ------------------------------------------------------------
 # cc types a command into this menu's prompt
@@ -690,6 +731,7 @@ _sm_run() {
 
   stty -icanon -echo min 1 time 0 2>/dev/null
   _bvk_paste_on
+  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
   _lt_ready smart
   [ -n "${_CC_PREFILL:-}" ] && _cc_replay _sm_type_key _sm_type_text
   while true; do
@@ -710,6 +752,14 @@ _sm_run() {
     if [[ "$key" == $'\x1b' ]]; then
       _read_key_seq || continue
       if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _sm_paste_text "$_BVK_PASTE"; continue; fi
+      if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
+        case "$_MS_ACT" in
+          press)     _sm_click; (( $? == 2 )) && break ;;       # double click / double tap = Enter
+          wheelup)   _sm_wheel -1 ;;
+          wheeldown) _sm_wheel 1 ;;
+        esac
+        continue
+      fi
       _key_name "$_esc"
       case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
       if $multi; then
@@ -796,6 +846,7 @@ _sm_run() {
   done
 
   _bvk_paste_off
+  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
   [ -n "${_orig_stty:-}" ] && stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; _bvk_hint_leave; fi
