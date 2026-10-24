@@ -46,7 +46,6 @@ Grammar (see README / .s help)
   ops     := &  (AND)   |  (OR)   !  (NOT)   plain space = AND   ( ) grouping
   flag    := -r  (recursive, anywhere in the expression)
 """
-import hashlib
 import os
 import re
 import stat as statmod
@@ -688,75 +687,24 @@ def build_universe(root, recursive, show_hidden, limit=None):
 # ══════════════════════════════════════════════════════════════════════════════
 #  Duplicate finder  (size → head hash → full hash)
 # ══════════════════════════════════════════════════════════════════════════════
-def _hash(path, limit=None):
-    h = hashlib.sha1()
-    try:
-        with open(path, 'rb') as fh:
-            if limit:
-                h.update(fh.read(limit))
-            else:
-                for chunk in iter(lambda: fh.read(1 << 20), b''):
-                    h.update(chunk)
-    except OSError:
-        return None
-    return h.digest()
-
-
 def find_dups(entries, keep_all):
-    """Duplicate files in `entries`.  Uses the cached hashes when available."""
-    if IDXLIB is not None:
-        USED_HEAVY['dup'] = True
-        recs, byp = [], {}
-        for e in entries:
-            st = e.st
-            if e.isdir or st is None or not statmod.S_ISREG(st.st_mode) or st.st_size == 0:
-                continue
-            recs.append((e.path, st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev))
-            byp[e.path] = e
-        result = set()
-        for group in IDXLIB.dup_groups(recs, IDX, prefix=ROOT):
-            same = sorted((byp[p] for p in group), key=lambda x: (x.mtime, x.path))
-            for e in (same if keep_all else same[1:]):
-                result.add(e.path)
-        return result
-    return find_dups_plain(entries, keep_all)
-
-
-def find_dups_plain(entries, keep_all):
-    by_size = {}
-    seen_inodes = set()
+    """Duplicate files in `entries`.  The size → head hash → full hash walk lives ONLY in bashbasicsbyvk_index_lib.dup_groups
+    (which also uses the cached hashes when the index is open); this just maps its groups to "which ones to select"."""
+    if IDXLIB is None:
+        raise SelError('duplicate search needs bashbasicsbyvk_index_lib.py (reinstall bashbasicsbyvk)')
+    USED_HEAVY['dup'] = True
+    recs, byp = [], {}
     for e in entries:
         st = e.st
         if e.isdir or st is None or not statmod.S_ISREG(st.st_mode) or st.st_size == 0:
             continue
-        key = (st.st_dev, st.st_ino)
-        if key in seen_inodes:                      # hard link to a file already seen
-            continue
-        seen_inodes.add(key)
-        by_size.setdefault(st.st_size, []).append(e)
+        recs.append((e.path, st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev))
+        byp[e.path] = e
     result = set()
-    for group in by_size.values():
-        if len(group) < 2:
-            continue
-        by_head = {}
-        for e in group:
-            h = _hash(e.path, 65536)
-            if h is not None:
-                by_head.setdefault(h, []).append(e)
-        for sub in by_head.values():
-            if len(sub) < 2:
-                continue
-            by_full = {}
-            for e in sub:
-                h = _hash(e.path)
-                if h is not None:
-                    by_full.setdefault(h, []).append(e)
-            for same in by_full.values():
-                if len(same) < 2:
-                    continue
-                same.sort(key=lambda x: (x.mtime, x.path))
-                for e in (same if keep_all else same[1:]):
-                    result.add(e.path)
+    for group in IDXLIB.dup_groups(recs, IDX, prefix=ROOT):
+        same = sorted((byp[p] for p in group), key=lambda x: (x.mtime, x.path))
+        for e in (same if keep_all else same[1:]):
+            result.add(e.path)
     return result
 
 

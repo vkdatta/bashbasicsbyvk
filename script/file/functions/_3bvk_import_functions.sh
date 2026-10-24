@@ -1,4 +1,5 @@
 _lt_b "load create"; source "bashbasicsbyvk_create.sh"; _lt_e
+_lt_b "load findrun"; source "bashbasicsbyvk_findrun.sh"; _lt_e
 _lt_b "load find"; source "bashbasicsbyvk_find.sh"; _lt_e
 _lt_b "load organise"; source "bashbasicsbyvk_organise.sh"; _lt_e
 _lt_b "load rename"; source "bashbasicsbyvk_rename.sh"; _lt_e

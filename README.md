@@ -52,7 +52,7 @@ It has two parts:
 - **Stage:** `c-` copy, `m-` move, `s-` shortcut, `b-` bookmark, applied with `d-` at the destination. Persistent buffers (`c--`, `m--`) for repeated use.
 - **Select with expressions:** by extension, size, date, name, duplicates, empty items, CSV lists. Combine with `&`, `|`, `!` and grouping.
 - **Display rules:** show only what you care about in a given folder (`.d.ext py`), saved as presets.
-- **Batch:** create or delete many files and folders, find and replace in names and contents, CSV-driven rename, delete by date or extension.
+- **Batch:** create or delete many files and folders, find and replace in names, in contents or in both (plain text or regex, flat or recursive), CSV-driven rename, delete by date or extension.
 - **Organise:** by year, month, date, extension or alphabet, and undo it.
 - **Compress:** `z-` and `uz-` for zip and unzip of multiple items.
 - **Project maps:** `p-` generates a text map of any path.
@@ -62,6 +62,7 @@ It has two parts:
 - **Transfer (`t`):** local copy/move, and Google Drive or Cloud Shell through your own `rclone` / `gcloud` login.
 - **Mouse and touch:** works on every numbered list: the file list, Settings, Home, cc, the file menu and every other `Select:` menu, and the `Item numbers:` picker. Click or tap an item and its number is typed into the prompt (press Enter to open it); double click or double tap opens it at once (in a multi-select it toggles the item, and a double click adds it and accepts); click ▲ / ▼ to page; wheel or swipe scrolls. On screens with tabs (`sw`, `fx`, `-u`, `.r`, `cs`, `rbam`) tap a tab name to switch to it (a tap two tabs away switches in one go). In the file list, tap the status row `py | ⏰ 0 | 📣 0` to run `lang`, `nf` or `pn`, and tap a folder name in `nav path:` to browse there (the shell's `cd path` is not touched). On screens with tabs (sw, fx, -u, .r, cs, rbam) tap a tab name to switch to it (two tabs away in one tap works too). Works in any terminal that reports the mouse, and in touch terminals such as Termux, which turn a tap into a click. Settings → Display → Mouse / touch turns it off; `BVK_MOUSE=0` does it for one run, `BVK_DBLCLICK_MS` sets the double-click time (default 500). While it is on, text selection needs Shift held.
 - **Interface:** sort, group (Settings → Group by: year → month → date → ext, drawn as a tree of headers; grouped natively by the C helper), file details, colours, timezone, instant pop / carpet draws (no animation delay), settings that reset cleanly.
+- **Find & replace (`f`):** six modes: find, or find & replace, in names, in contents, or in both. Everything runs in a small native engine (`bvk-fr`, C; a Python twin takes over when no binary runs), so recursive searches over tens of thousands of files take a fraction of a second. Patterns are plain text by default (`hello [c]` means exactly that), regex is optional, renames never overwrite an existing file, edits are atomic, binary files, hidden files and `.git` are skipped unless you say otherwise. Settings → Find & replace holds every choice: match case (exact / any / ask), regex (off / on / ask), flat / recursive / ask, whole words, hidden files, files or folders, binary files, big files, preview-first, single or CSV, result limit and threads.
 - **Native speed:** a C helper (`bvk-ls`) lists large folders quickly; `health` tells you exactly what is active on your machine.
 
 <details>
@@ -430,7 +431,7 @@ sudo pip uninstall bashbasicsbyvk
 
 ## Use with care
 
-File-management tools can permanently delete data and there is no recycle bin for local operations. Review bulk operations before confirming, and keep independent backups. `kl` force-ends every process owned by your user. The **Infinity Stones** menu (`i`: web table extraction, JavaScript and Python audit, Git Push, SQL generation, LocalHost) is in development and should be used only on data you can afford to lose.
+File-management tools can permanently delete data and there is no recycle bin for local operations. Review bulk operations before confirming, and keep independent backups. `kl` force-ends every process owned by your user. The **Infinity Stones** menu (`i`: web table extraction, JavaScript and Python audit, Git Push, SQL generation, LocalHost, Polyglot duplicate-function finder) is in development and should be used only on data you can afford to lose.
 
 ---
 

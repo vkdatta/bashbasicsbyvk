@@ -44,10 +44,7 @@ _svc_upload() {
     if [ "$_SVC_QUIET" = 1 ]; then _ux_self_fek 2>/dev/null; else _ux_self_fek; fi \
       || { [ "$_SVC_QUIET" = 1 ] || echo "❌ Nothing was uploaded: backups, save- and snap- encrypt with your FEK, which needs the dinons on this computer." >&2; return 1; }
   fi
-  local -a gz=(gzip)
-  command -v pigz &>/dev/null && gz=(pigz)
-  local lvl="${FILEAPI_BASHBASICS_GZIP_LEVEL:-6}"
-  [[ "$lvl" =~ ^[1-9]$ ]] || lvl=6
+  local -a gz; local lvl; _bb_gzip_setup
 
   local stage tmpdir rcfile errfile _tp0=${EPOCHREALTIME/./} _tp1
   _tp0=${_tp0:-0}
@@ -56,15 +53,7 @@ _svc_upload() {
   _svc_cleanup() { rm -rf "$stage" ${tmpdir:+"$tmpdir"} "$rcfile" "$errfile"; }
 
   local -a rel_items=()
-  local p bn cand n
-  for p in "${paths[@]}"; do
-    p="${p%/}"; [[ "$p" == /* ]] || p="$PWD/$p"
-    if [ ! -f "$p" ] && [ ! -d "$p" ]; then _svc_say "  🔴  Skipping missing item: $p" >&2; continue; fi
-    bn="${p##*/}"; cand="$bn"; n=1
-    while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
-    ln -s "$p" "$stage/$cand"
-    rel_items+=("./$cand")
-  done
+  _bb_stage_links "$stage" _svc_say "${paths[@]}"
   if [ ${#rel_items[@]} -eq 0 ]; then echo "❌ Nothing to pack."; _svc_cleanup; return 1; fi
 
   local arcname="files.tar.gz"

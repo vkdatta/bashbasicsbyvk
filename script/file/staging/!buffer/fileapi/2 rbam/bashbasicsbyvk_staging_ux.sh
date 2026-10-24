@@ -37,7 +37,8 @@ _ux_core() {
     fi
     [ -n "$_UX_CORE" ] || { echo "❌ bashbasicsbyvk_staging_ux_crypto not found (reinstall bashbasicsbyvk)." >&2; return 127; }
   fi
-  node "$_UX_CORE" "$@"
+  local jl; jl=$(_bb_jslib) || return 127
+  BB_JSLIB="$jl" node "$_UX_CORE" "$@"
 }
 
 # the ux- nuke time (Settings), falling back to the config file, then 30 days
@@ -55,29 +56,14 @@ _bb_ux_nuke_seconds() {
   else printf '%s' 2592000; fi
 }
 
-# _ux_http METHOD PATH [json-body] -> _UX_STATUS / _UX_BODY. Credentials go to curl on stdin, never argv.
+# _ux_http METHOD PATH [json-body] -> _UX_STATUS / _UX_BODY. Credentials go to curl on stdin, never argv. (The call itself is _bb_call.)
 _ux_http() {
-  local method="$1" path="$2" body="${3:-}" cfg out
-  _bb_get_credentials || return 1
-  cfg=$({ _bb_auth_cfg; [ -n "$body" ] && _bb_cfg_header Content-Type application/json; true; })
-  if [ -n "$body" ]; then
-    out=$(curl -s --max-time 60 "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X "$method" --data-binary "$body" "$WORKER_URL$path" <<<"$cfg")
-  else
-    out=$(curl -s --max-time 60 "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X "$method" "$WORKER_URL$path" <<<"$cfg")
-  fi
-  _UX_STATUS="${out##*$'\n'}"
-  _UX_BODY="${out%$'\n'*}"
-  [[ "$_UX_STATUS" =~ ^[0-9]{3}$ ]] || _UX_STATUS=000
-  return 0
+  _bb_call "$1" "$2" "${3:-}" 60; local rc=$?
+  _UX_STATUS="$_BB_STATUS"; _UX_BODY="$_BB_BODY"
+  return $rc
 }
 _ux_ok() { [ "$_UX_STATUS" = 200 ] || [ "$_UX_STATUS" = 201 ]; }
-_ux_fail() {
-  case "$_UX_STATUS" in
-    000) echo "❌ Could not reach the server (offline?)." ;;
-    401) echo "❌ $(_bb_json_get "$_UX_BODY" message)"; echo "🔁 Fix the active user with  -auth  inside 'o', then try again." ;;
-    *)   echo "❌ $(_bb_fail_reason "$_UX_BODY" "$_UX_STATUS")" ;;
-  esac
-}
+_ux_fail() { _bb_http_fail "$_UX_STATUS" "$_UX_BODY"; }
 # JSON path -> value ("share.kdk")
 _ux_jget() { _ux_core jget "$1" <<<"$2"; }
 
@@ -310,10 +296,7 @@ _ux_do_share() {
     echo "❌ 'tar' and 'gzip' are required for ux- (pkg install tar gzip)."
     return 1
   fi
-  local -a gz=(gzip)
-  command -v pigz &>/dev/null && gz=(pigz)          # parallel gzip when available
-  local lvl="${FILEAPI_BASHBASICS_GZIP_LEVEL:-6}"
-  [[ "$lvl" =~ ^[1-9]$ ]] || lvl=6
+  local -a gz; local lvl; _bb_gzip_setup
 
   echo "🔎 Scanning selection..."
   local stage tmpdir rcfile errfile
@@ -323,15 +306,7 @@ _ux_do_share() {
   _ux_cleanup() { rm -rf "$stage" ${tmpdir:+"$tmpdir"} "$rcfile" "$errfile"; K=""; }
 
   local -a rel_items=()
-  local p bn cand n
-  for p in "${paths[@]}"; do
-    p="${p%/}"; [[ "$p" == /* ]] || p="$PWD/$p"
-    if [ ! -f "$p" ] && [ ! -d "$p" ]; then echo "  🔴  Skipping missing item: $p" >&2; continue; fi
-    bn="${p##*/}"; cand="$bn"; n=1
-    while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
-    ln -s "$p" "$stage/$cand"
-    rel_items+=("./$cand")                            # "./" so a name starting with "-" is never an option
-  done
+  _bb_stage_links "$stage" echo "${paths[@]}"
   [ ${#rel_items[@]} -gt 0 ] || { echo "❌ No valid files found in selection"; _ux_cleanup; return 1; }
 
   # hidden files inside the chosen folders: Settings → Hidden files (ux-)

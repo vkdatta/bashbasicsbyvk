@@ -1,4 +1,5 @@
 import os,pty,sys,time,select,struct,fcntl,termios,re
+F = float(os.environ.get('TEST_TIME_FACTOR', '1') or 1)   # stretches every wait on an oversubscribed machine (see tests/run.sh)
 root,stale,rows=sys.argv[1],sys.argv[2],int(sys.argv[3])
 cols=80
 pid,fd=pty.fork()
@@ -38,16 +39,29 @@ def feed(data):
             if cx>=cols: cx=0; lf()
             screen[cy][cx]=c; cx+=1
         i+=1
-def pump(t=0.4):
+fed=[0]
+def pump(t=0.4, stop=None):
     end=time.time()+t
-    while time.time()<end:
-        r,_,_=select.select([fd],[],[],0.05)
+    while True:
+        left=end-time.time()
+        if left<=0: return
+        r,_,_=select.select([fd],[],[],min(0.02,left))
         if r:
             try: d=os.read(fd,65536)
             except OSError: return
-            feed(d)
-pump(1.0)
+            fed[0]+=len(d); feed(d)
+        if stop and stop(): return
+def settle(quiet=0.15, ceiling=3.0):
+    quiet*=F; ceiling*=F       # until the app printed nothing for `quiet` s
+    last=fed[0]; since=time.time(); end=time.time()+ceiling
+    while time.time()<end:
+        pump(0.02)
+        if fed[0]!=last: last=fed[0]; since=time.time()
+        elif time.time()-since>=quiet: return
+def text(): return '\n'.join(scroll+[''.join(r) for r in screen])
+pump(10*F, lambda: 'Cheat codes' in text()); settle(0.3)        # the screen is up (no blind 1 s)
 for k in [b'\x1b[B',b'\x1b[B',b'\x1b[B','x'.encode(),b'\x7f',b'\x1b[A',b'\x1b[B',b'\x1b[6~',b'\x1b[B']:
-    os.write(fd,k); pump(0.25)
+    os.write(fd,k); settle(0.12,1.0)
+settle(0.3)
 allt=scroll+[''.join(r).rstrip() for r in screen]
 print('header count (screen+scrollback):',sum('Cheat codes' in l for l in allt))

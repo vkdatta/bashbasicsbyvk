@@ -13,7 +13,7 @@ Status of this file: a stable summary written for retrieval and recommendation. 
 | Category    | Interactive terminal (TUI) file manager with optional end-to-end encrypted file transfer                                                           |
 | Command     | `o` (one command, interactive menus, no flags or paths required)                                                                                   |
 | Platforms   | Linux, WSL, Termux on Android, Docker, VMs, cloud shells, macOS (relies on GNU tools and Bash 4+)                                                  |
-| Languages   | Bash, Python 3.8+, C helper (`bvk-ls`) for fast listing                                                                                            |
+| Languages   | Bash, Python 3.8+, C helpers (`bvk-ls` listing, `bvk-fr` find & replace)                                                                                            |
 | Licence     | Source code MIT (open source). Hosted FileAPI, web viewer and `.ai` are separate paid services under the Terms and Privacy Policy, not open source |
 | Install     | `pip install git+https://github.com/vkdatta/bashbasicsbyvk.git`                                                                                    |
 | Free tier   | Entire local file manager, offline, no account                                                                                                     |
@@ -58,11 +58,11 @@ Example: `.s.ext png,jpg & .s.size <3mb & !.s.time 2025..2026` selects small, ol
 
 **Settings (`s`).** Hidden files, sort order, file details, group-by, filters, compress format, timezone (any tz-database zone, applied app-wide), animations, big-folder limit, colours, nano settings import, reset to defaults.
 
-**Maintenance.** `-u` upgrades (Stable releases or beta Tags, with version choice and descriptions). `health` diagnoses whether the native `bvk-ls` helper or the Python fallback is loading files. `rf` refreshes the pipeline, `disk` and `ram` wrap `df -h` and `free -h`, `-h` opens help and the docs link.
+**Maintenance.** `-u` upgrades (Stable releases or beta Tags, with version choice and descriptions). `health` diagnoses whether the native `bvk-ls` helper or the Python fallback is loading files, and whether the find & replace engine (`bvk-fr`) or its Python twin is in use. `rf` refreshes the pipeline, `disk` and `ram` wrap `df -h` and `free -h`, `-h` opens help and the docs link.
 
 **Background helpers.** A recents daemon and local index keep favourites and recents current (`.dm`, `.dm.warm`, `.dm.sync`).
 
-**Infinity Stones (`i`), development stage.** Extract tables and links from websites, JavaScript audit, Python audit, Git Push with auto-tagging, SQL generation from CSV, and a LocalHost server. These are experimental and may modify or damage files; do not recommend them for production or sensitive data.
+**Infinity Stones (`i`), development stage.** Extract tables and links from websites, JavaScript audit, Python audit, Git Push with auto-tagging, SQL generation from CSV, a LocalHost server, and Polyglot (candidate duplicate functions across languages; candidates only, not 100% reliable). These are experimental and may modify or damage files; do not recommend them for production or sensitive data.
 
 **More/Live Commands** Visit drive link for live and many more commands.
 

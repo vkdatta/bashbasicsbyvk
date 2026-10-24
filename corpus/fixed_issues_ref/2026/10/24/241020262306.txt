@@ -1,0 +1,57 @@
+1. ISSUE IN BRIEF
+Running the test suite after a small fix took about half an hour, far longer than the fix itself, and agents added their own long sleeps (sleep 600) while waiting for it.
+
+1. HOW DID YOU DEBUG
+Read every test under tests/ and timed each one alone before changing anything (baseline: mouse 334 s, nav_back 159 s, paste_input 140 s, wrap_input 65 s, hints 22 s, cmd_drift 12-20 s). The time was waiting, not work:
+every pty test started the real app and slept a blind 4 s (ptyapp.py pump(4)) and then fixed 0.3-3 s after each key; the select() inside pump() blocked 50 ms per call, so a pump(0.004) per typed character cost 50 ms
+(130 characters x 8 cases = the whole 65 s of wrap_input; the 100 KB paste cost 50 ms per 4 KB chunk); paste_input started the app 18 times with a 150 s timeout each; cheatcode, loadtime_print, e2e_services and
+e2e_pending used fixed sleeps (sleep 14 for a fake "o", sleep 1.1 for the file clock tick, sleep 5 and 4 for the daemon to exit). AGENTS.md also told agents to run the whole suite before and after, and to run the
+polyglot scan (whole repo, pip install) on every job. The app's telemetry has no off switch (VK_TELEMETRY=0 is ignored), so the tests also paid for a daily network ping.
+Rewrote the waiting, not the checks, then re-timed: mouse 67 s, wrap_input 11 s, hints 7.5 s, stale_size 2 s, cheatcode 11.6 s (original 37 s on the same stand-in tmux), resume_inflight 7 s, paste_input 43-58 s, nav_back 44-53 s;
+the whole suite through tests/run.sh took 140 s of wall time on one CPU with 2 jobs (16 passed, 2 skipped; it was ~30 minutes), and the six pty-heavy tests still all passed with two CPU hogs running (waits stretched x3, 230 s). Proved the faster tests still fail when the app is broken (mutations in a copy: input limit 512 -> 5000000 fails paste_input,
+double-click window 500 -> 1 ms fails mouse, a second emoji table fails width, renamed report rows fail loadtime_print, a hint row without its description fails hints, a renamed cc header fails cheatcode on the stand-in tmux). No mutation was tried on nav_back.
+NOT verified by running: tests/e2e_pending.sh and tests/e2e_services.sh (they need the ../fileapi repo, absent here; edited and syntax-checked only; the replaced "sleep 1.1; touch" now sets a future mtime with touch -d,
+which is an assumption about the snapshot code). The tmux parts of cheatcode.sh and loadtime_print.sh were run only against a small stand-in tmux written for this check, not real tmux. AGENTS.md check 5 (polyglot) was not run; checks 1-4 print the same 16 lines as the original archive (pre-existing go files and grep false positives), check 6 prints [] [] [] []. Found and fixed while testing: tests left the app's recents daemon running (328 of them used all memory and made later tests time out), so PtyApp.close, run.sh (per-test TMPDIR) and bvk_reap now stop everything started from a test's temp dir.
+AGENTS.md check 5 (polyglot) was not run: this change adds no production code.
+
+1. CAUSE
+Tests waited for guessed times instead of for the state they needed, started the app once per assertion, and had a select() timeout that made every tiny pump slow; nothing told an agent which tests cover which files, so the
+whole suite and the polyglot scan ran for every change; and the lack of any "it is done" signal made agents sleep for long, fixed periods.
+
+1. FIX
+New tests/wait_lib.sh (wait_until, wait_file, wait_gone, wait_port, wait_grep, wait_count, settle, tmx_* helpers, UTF-8 locale, bvk_file/bvk_need to find scripts by name, TEST_TIME_FACTOR). tests/paste_input/ptyapp.py:
+wait / wait_text / settle / react, send(until=, hold=), boot waits for the prompt and fails loudly with the screen, seeds the telemetry "reported today" flag, find_script, TEST_TIME_FACTOR. nav_test, hint_test, mouse_test,
+ui_test (now on PtyApp instead of its own copy of the pty code), driver.py, wrap_input/emu.py, stale_size/emu.py, cheatcode.sh, loadtime_print.sh, resume_inflight.sh, e2e_common.sh, e2e_pending.sh, e2e_services.sh converted
+to condition waits; every assertion kept. New tests/run.sh + tests.list + covers.map + known_failing.txt (tiers, parallel, hard timeouts, failures printed at once, SKIP is never a pass, waits stretched by jobs/cpus),
+tests/bg.sh (background job + wait that returns the moment it ends), tests/lint_waits.sh (rejects fixed sleeps and blind pumps; found a pty driver embedded in e2e_pending.sh). AGENTS.md: new "Tests" section with the
+rules, polyglot only when the prompt asks to dedupe, run only the covering tests, never sleep over 30 s. Lesson: speed a test up by changing how it waits, never what it checks, and prove it can still fail.
+
+2. ISSUE IN BRIEF
+Several tests failed from the start although the app worked, and the agent had to acknowledge the red result and move on.
+
+2. HOW DID YOU DEBUG
+Ran every test at baseline. width_consistency failed with display width 7 for one emoji: the sandbox locale was C, not UTF-8 (passes with LC_ALL=C.UTF-8). loadtime_print failed on its first lines: it sourced
+script/file/engine/bashbasicsbyvk_print.sh and ran script/file/engine/bashbasicsbyvk_loadtime_report, which had moved to script/file/engine/debug/...; the same hard-coded path pattern was in mouse_test.py. Two mouse cases
+failed at baseline: "Home: double click" waited a fixed 2.5 s for Help, which runs a slow find over /usr (BB-231020260814-4 style stale expectation), and "hand-back ends at the next typed key" expected prompt 7 while the
+first wheel-up had already put 1 in the prompt (that earlier note says "fix the test expectation"). The paste test counted a missing answer (RESULT_LEN=-1) as "refused": probed it and found the app was not hung, an Enter
+sent inside its end-of-paste window is swallowed on purpose, so the old check had never verified the 100 KB unbracketed case. e2e tests need ../fileapi, which was not present (reported as SKIP now).
+
+2. CAUSE
+Tests assumed the host locale, hard-coded script paths that later moved, held two wrong expectations, and one check passed when the app never answered.
+
+2. FIX
+wait_lib.sh and PtyApp force a UTF-8 locale; scripts are found by name (bvk_need, find_script); the Help case waits for the Help text; the typed-key case expects 17; the paste check requires an empty result (len 0), and the
+driver repeats Enter until the editor answers; the mouse tests use BVK_DBLCLICK_MS=1500 except the case that proves a slow second click is not a double click (real 0.9 s gap, window 500); SKIP is reported separately.
+Follow-up of BB-231020260814-4 (the 17-vs-7 failure): that test is now fixed.
+
+3. ISSUE IN BRIEF
+AGENTS.md made agents run the polyglot duplicate scan, which reads the whole repo and installs packages, on every job, which is slow and rarely useful for ordinary fixes.
+
+3. HOW DID YOU DEBUG
+Read AGENTS.md check 5 and its description; the scan is a candidate finder that is explicitly not reliable and the existing clusters are "not yours to fix". Not run in this change.
+
+3. CAUSE
+Check 5 was written as part of the routine "before you finish" run.
+
+3. FIX
+AGENTS.md: check 5 is run only when the prompt asks to dedupe or find duplicates; ordinary jobs use grep before writing (principle step 1). Checks 1-4 and 6 stay routine because they are cheap.

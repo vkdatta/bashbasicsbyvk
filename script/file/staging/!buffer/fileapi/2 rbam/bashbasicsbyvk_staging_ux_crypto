@@ -71,20 +71,23 @@ function cleanName(n) {          // anything that reaches the terminal or the di
   while (Buffer.byteLength(s) > MAX_NAME_BYTES) s = s.slice(0, -1);
   return s;
 }
-const fmtMB = (b) => (b / 1048576).toFixed(1);
+// one encrypted chunk by URL, with the download token; 4 tries with a growing pause. null = gone / refused (404, 401) or the tries ran out.
+async function getChunk(url, token) {
+  for (let a = 0; a < 4; a++) {
+    try {
+      const res = await fetch(url, { redirect: 'error', headers: { 'X-Download-Token': token } });
+      if (res.ok) return Buffer.from(await res.arrayBuffer());
+      if (res.status === 404 || res.status === 401) return null;
+    } catch (e) {}
+    await sleep(300 * (a + 1));
+  }
+  return null;
+}
 
-// ---- ONE way to draw a \r-redrawn status line ------------------------------------------
-// dw(): display width in terminal cells (emoji / CJK = 2).  live(): erases the row and
-// writes with auto-wrap OFF (DECAWM), so a line that is wider than the screen -- or a
-// terminal that reports the wrong width (Cloud Shell Android app) -- is clipped instead
-// of wrapping, and every \r redraw lands on the SAME row.  fitv(): first variant that fits.
-const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, '')) { const c = ch.codePointAt(0);
-  if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
-  w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || /\p{Emoji_Presentation}/u.test(ch)) ? 2 : 1; } return w; };
-const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
-const live = (s) => process.stderr.write('\u001b[?7l\r\u001b[K' + s + '\u001b[?7h');
-const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
-
+// ---- shared with the other node transfer tools: the status-line helpers, the pack status, the chunk writer (bashbasicsbyvk_staging_jslib.js).
+// bash (_ux_core) hands its path over in BB_JSLIB.
+if (!process.env.BB_JSLIB) die(127, 'bashbasicsbyvk_staging_jslib.js not found (reinstall bashbasicsbyvk)');
+const { fmtMB, live, fitv, packStatus, writeChunks } = require(process.env.BB_JSLIB);
 
 // ---------------------------------------------------------------- sealing (RBAM dinons)
 function rawPub(keyObj) { const d = keyObj.export({ format: 'der', type: 'spki' }); return d.subarray(d.length - 32); }
@@ -242,41 +245,17 @@ const CMD = {
     if (!/^[A-Za-z0-9_-]{60,200}$/.test(kdk)) die(2, 'bad wrapped key');
     const name = String(arcname || 'files.tar.gz');
     const id = b64u(crypto.randomBytes(16));
-    const TTY = process.stderr.isTTY, t0 = Date.now();
-    let lastDraw = 0, seen = 0;
-    const status = (final) => {
-      if (!TTY) return;
-      const now = Date.now(); if (!final && now - lastDraw < 150) return; lastDraw = now;
-      const mb = fmtMB(seen), sec = Math.floor((now - t0) / 1000);
-      live('\u001b[36m' + fitv([`📦 Packing tar.gz → 🔐 Encrypting  ${mb} MB packed  (${sec}s)`, `📦 Packing → 🔐 Encrypting  ${mb} MB (${sec}s)`, `📦→🔐 ${mb} MB (${sec}s)`, `📦→🔐 ${mb} MB`]) + '\u001b[0m');
-      if (final) process.stderr.write('\n');
-    };
-    const buf = Buffer.allocUnsafe(CHUNK);
-    let fill = 0, idx = 0, plainTotal = 0, cipherTotal = 0;
-    const flush = () => {
-      if (fill === 0) return;
-      const rec = enc(K, buf.subarray(0, fill), `bbvk6|${id}|${idx}`);
-      fs.writeFileSync(path.join(outdir, `${id}.${idx}`), rec, { mode: 0o600 });
-      cipherTotal += rec.length; plainTotal += fill; idx++; fill = 0;
-    };
+    const TTY = process.stderr.isTTY, status = packStatus();
+    let res;
     try {
-      for await (const piece of process.stdin) {
-        let off = 0;
-        while (off < piece.length) {
-          const n = Math.min(CHUNK - fill, piece.length - off);
-          piece.copy(buf, fill, off, off + n);
-          fill += n; off += n;
-          if (fill === CHUNK) flush();
-        }
-        seen += piece.length;
-        status(false);
-      }
-      flush();
+      res = await writeChunks(process.stdin, { chunk: CHUNK, onBytes: status.add,
+        seal: (piece, i) => enc(K, piece, `bbvk6|${id}|${i}`), fileFor: (i) => path.join(outdir, `${id}.${i}`) });
     } catch (e) {
       if (TTY) process.stderr.write('\n');
       die(3, '  ❌ ' + (e && e.code === 'ENOSPC' ? 'Disk full while writing encrypted blobs.' : 'Packing failed: ' + (e && e.message)));
     }
-    status(true);
+    const { idx, plainTotal, cipherTotal } = res;
+    status.done();
     if (idx === 0) die(2, '  ❌ Nothing to pack.');
     const item = { i: id, p: null, k: 'f', n: b64u(enc(K, Buffer.from(name.slice(0, 120)), 'bbvk6|arc|' + id)), b: plainTotal, c: idx };
     fs.writeFileSync(path.join(outdir, 'commit.json'), JSON.stringify({ kdk, items: [item] }), { mode: 0o600 });
@@ -289,17 +268,7 @@ const CMD = {
     const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || 8, 8));        // 8 x 16 MiB in flight
     const n = parseInt(chunks, 10), size = parseInt(bytes, 10);
     if (!Number.isInteger(n) || n < 1 || n > 199999 || !Number.isSafeInteger(size) || size <= (n - 1) * CHUNK || size > n * CHUNK) { console.log('FAILED\tbad archive description'); return; }
-    async function get(url) {
-      for (let a = 0; a < 4; a++) {
-        try {
-          const res = await fetch(url, { redirect: 'error', headers: { 'X-Download-Token': token } });
-          if (res.ok) return Buffer.from(await res.arrayBuffer());
-          if (res.status === 404 || res.status === 401) return null;
-        } catch (e) {}
-        await sleep(300 * (a + 1));
-      }
-      return null;
-    }
+    const get = (url) => getChunk(url, token);
     const fd = fs.openSync(outfile, 'r+');
     const TTY = process.stderr.isTTY;
     let done = 0, lastPct = -1, failed = null, next = 0;
@@ -500,17 +469,7 @@ const CMD = {
     try { for (const r of roots) walk(all.get(r), dest, true); }
     catch (e) { rollback(); console.log('FAILED\t' + (e && e.message)); return; }
 
-    async function get(url) {
-      for (let a = 0; a < 4; a++) {
-        try {
-          const res = await fetch(url, { redirect: 'error', headers: { 'X-Download-Token': token } });
-          if (res.ok) return Buffer.from(await res.arrayBuffer());
-          if (res.status === 404 || res.status === 401) return null;
-        } catch (e) {}
-        await sleep(300 * (a + 1));
-      }
-      return null;
-    }
+    const get = (url) => getChunk(url, token);
     const TTY = process.stderr.isTTY, nChunks = jobs.reduce((s, j) => s + j.x.chunks, 0);
     let done = 0, failed = null, lastPct = -1;
     function bar() {

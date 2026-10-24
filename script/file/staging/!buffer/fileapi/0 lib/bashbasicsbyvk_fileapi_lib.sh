@@ -329,24 +329,84 @@ _bb_device_cfg() {
 }
 _bb_device_ready() { _bb_device_cfg >/dev/null 2>&1; }
 
-# _bb_call <METHOD> <path> [json-body]     → _BB_STATUS (000 = unreachable) and _BB_BODY.
+# _bb_call <METHOD> <path> [json-body] [max-seconds=40]     → _BB_STATUS (000 = unreachable) and _BB_BODY.
+# THE one authenticated JSON call to the worker: api.sh (_api_http) and staging_ux.sh (_ux_http) are thin wrappers around it.
 # Extra request headers: set  _BB_CALL_HDRS=("Name: value" ...)  before calling (they go through the curl config, never argv).
 _BB_CALL_HDRS=()
 _bb_call() {
-  local method="$1" path="$2" body="${3:-}" cfg out h
+  local method="$1" path="$2" body="${3:-}" tmo="${4:-40}" cfg out h
   _bb_get_credentials || { _BB_STATUS=000; _BB_BODY=""; return 1; }
   cfg=$({ _bb_auth_cfg
           for h in "${_BB_CALL_HDRS[@]}"; do _bb_cfg_header "${h%%:*}" "${h#*: }"; done
           [ -n "$body" ] && _bb_cfg_header Content-Type application/json; true; })
   if [ -n "$body" ]; then
-    out=$(curl -s --max-time 40 "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X "$method" --data-binary "$body" "$WORKER_URL$path" <<<"$cfg")
+    out=$(curl -s --max-time "$tmo" "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X "$method" --data-binary "$body" "$WORKER_URL$path" <<<"$cfg")
   else
-    out=$(curl -s --max-time 40 "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X "$method" "$WORKER_URL$path" <<<"$cfg")
+    out=$(curl -s --max-time "$tmo" "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X "$method" "$WORKER_URL$path" <<<"$cfg")
   fi
   _BB_STATUS="${out##*$'\n'}"
   _BB_BODY="${out%$'\n'*}"
   [[ "$_BB_STATUS" =~ ^[0-9]{3}$ ]] || _BB_STATUS=000
   return 0
+}
+
+# _bb_http_fail <status> <body>   prints the server's reason for a failed _bb_call-style answer (one place for the wording)
+_bb_http_fail() {
+  case "$1" in
+    000) echo "❌ Could not reach the server (offline?)." ;;
+    401) echo "❌ $(_bb_json_get "$2" message)"; echo "🔁 Fix the active user with  -auth  inside 'o', then try again." ;;
+    *)   echo "❌ $(_bb_fail_reason "$2" "$1")" ;;
+  esac
+}
+
+# _bb_created_emit <header-file> <body>   the answer of a successful (HTTP 201) link-creating call, as the callers read it:
+# prints  body \n credits-deducted \n credits-balance \n link-expires  (the three come from the response headers) and removes <header-file>.
+_bb_created_emit() {
+  local hdrfile="$1" body="$2" deducted balance expires
+  deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+  balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+  expires=$(grep -i '^X-Link-Expires:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
+  rm -f "$hdrfile"
+  printf '%s\n%s\n%s\n%s\n' "$body" "$deducted" "$balance" "$expires"
+}
+
+# _bb_jslib  → prints the path of bashbasicsbyvk_staging_jslib.js (the status-line / chunk-writer code the node transfer tools share).
+# Callers hand it to node as  BB_JSLIB=...  (ux_crypto, pending_xfer and the node fallbacks in staging_upload.sh require() it).
+# Searched on PATH by readability, not +x: it is a library, and a source checkout has no exec bits.
+_BB_JSLIB=""
+_bb_jslib() {
+  if [ -z "$_BB_JSLIB" ]; then
+    local d IFS=:
+    for d in $PATH; do [ -n "$d" ] && [ -r "$d/bashbasicsbyvk_staging_jslib.js" ] && { _BB_JSLIB="$d/bashbasicsbyvk_staging_jslib.js"; break; }; done
+  fi
+  [ -n "$_BB_JSLIB" ] || { echo "❌ bashbasicsbyvk_staging_jslib.js not found (reinstall bashbasicsbyvk)." >&2; return 127; }
+  printf '%s' "$_BB_JSLIB"
+}
+
+# ── packing helpers shared by svc (backup/saved/snapshot), up- and ux- ────────────────────────────────────────────
+# _bb_stage_links <stage-dir> <say-fn> <path>...   → appends "./<name>" to the CALLER's  rel_items  array.
+# Symlinks each existing item into <stage-dir> under a unique name, so the archive holds "<name>/..." entries relative to nothing
+# absolute. The "./" keeps a name that starts with "-" from ever being read as an option. A missing item is skipped with a notice
+# through <say-fn> (echo when empty; svc passes its quiet-aware _svc_say).
+_bb_stage_links() {
+  local stage="$1" say="${2:-echo}" p bn cand n
+  shift 2
+  for p in "$@"; do
+    p="${p%/}"; [[ "$p" == /* ]] || p="$PWD/$p"
+    if [ ! -f "$p" ] && [ ! -d "$p" ]; then "$say" "  🔴  Skipping missing item: $p" >&2; continue; fi
+    bn="${p##*/}"; cand="$bn"; n=1
+    while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
+    ln -s "$p" "$stage/$cand"
+    rel_items+=("./$cand")
+  done
+}
+
+# _bb_gzip_setup  → sets the CALLER's  gz  array (pigz when installed, else gzip) and  lvl  (FILEAPI_BASHBASICS_GZIP_LEVEL, 1-9, default 6)
+_bb_gzip_setup() {
+  gz=(gzip)
+  command -v pigz &>/dev/null && gz=(pigz)          # parallel gzip when available
+  lvl="${FILEAPI_BASHBASICS_GZIP_LEVEL:-6}"
+  [[ "$lvl" =~ ^[1-9]$ ]] || lvl=6
 }
 
 # "90m" / "2d" absolute, or "+1d" / "-12h" relative to <current-seconds>   → new total seconds, within 1 minute..30 days.

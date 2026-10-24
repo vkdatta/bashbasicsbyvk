@@ -2,45 +2,8 @@
 # End-to-end test of the price check, Backup, Saved Surf and Snapshots: the REAL bash client against the REAL worker code
 # (in-memory D1/R2, local HTTPS). Needs node >= 22 (node:sqlite), openssl, curl, tar, gzip.
 #   bash tests/e2e_services.sh
-set -u
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FILEAPI="${FILEAPI:-$ROOT/../fileapi}"
-T=${E2E_DIR:-/tmp/e2e}; PORT=${E2E_PORT:-8791}
-rm -rf "$T/home" "$T/info.json"; mkdir -p "$T/home"
-[ -f "$T/cert.pem" ] || openssl req -x509 -newkey rsa:2048 -nodes -keyout "$T/key.pem" -out "$T/cert.pem" -days 2 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
-
-export HOME="$T/home" XDG_CONFIG_HOME="$T/home/.config" XDG_CACHE_HOME="$T/home/.cache" NODE_EXTRA_CA_CERTS="$T/cert.pem" NODE_NO_WARNINGS=1
-mkdir -p "$XDG_CONFIG_HOME/bashbasicsbyvk" "$HOME/.bashbasicsbyvk"
-export PATH="$(find "$ROOT/script" -type d | paste -sd: -):$PATH"
-
-( cd "$FILEAPI/test" && node --experimental-sqlite e2e_server.mjs "$PORT" "$T/cert.pem" "$T/key.pem" "$T/info.json" 1000 ) > "$T/server.log" 2>&1 &
-SRV=$!
-trap 'kill $SRV 2>/dev/null; pkill -f "e2e_server.mjs $PORT" 2>/dev/null; true' EXIT
-for _ in $(seq 1 50); do grep -q ready "$T/server.log" 2>/dev/null && break; sleep 0.2; done
-grep -q ready "$T/server.log" || { echo "server did not start"; cat "$T/server.log"; exit 1; }
-
-jget() { node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write(String(o[process.argv[2]]))' "$T/info.json" "$1"; }
-EMAIL=$(jget mail); DISEPS=$(jget diseps); APIKEY=$(jget apikey); UUID=$(jget uuid); SIG=$(jget sig); UUID2=$(jget uuid2); SIG2=$(jget sig2)
-BASE="https://localhost:$PORT"
-sql() { curl -s --cacert "$T/cert.pem" -G "$BASE/__test/sql" --data-urlencode "q=$1"; }
-setbal() { curl -s --cacert "$T/cert.pem" -X POST "$BASE/__test/balance?set=$1" >/dev/null; }
-bal() { curl -s --cacert "$T/cert.pem" "$BASE/__test/balance"; }
-q1() { sql "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const r=JSON.parse(d);const o=r[0]||{};process.stdout.write(String(Object.values(o)[0] ?? ""))})'; }
-
-# device id files (what the telemetry ping would have written)
-export _BVK_TELEMETRY_DIR="$XDG_CONFIG_HOME/bashbasicsbyvk/telemetry"; mkdir -p "$_BVK_TELEMETRY_DIR"
-printf '%s\n' "$UUID" > "$_BVK_TELEMETRY_DIR/uuid"; printf '%s\n' "$SIG" > "$_BVK_TELEMETRY_DIR/sig"
-
-# ---- client under test ----
-source "bashbasicsbyvk_auth.sh"
-source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_pending.sh"; source "bashbasicsbyvk_staging_upload.sh"; source "bashbasicsbyvk_staging_ux.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_backup.sh"; source "bashbasicsbyvk_staging_saved.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
-WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")
-# the user's key chain, made the way -auth makes it: dinons (never sent) wrap a random FEK; only the wrapped FEK is on the server
-DINONS=$(_bvk_auth_gen_codes 29); FEK_HEX=$(_bvk_auth_gen_fek)
-sql "update users set fek_wrapped='$(_bvk_auth_fek_wrap "$FEK_HEX" "$DINONS")'" >/dev/null
-HAVE_DINONS=1
-_bb_get_credentials() { export FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" FILEAPI_BASHBASICS_KEY="$APIKEY"; P_DINONS=""; [ "$HAVE_DINONS" = 1 ] && P_DINONS="$DINONS"; return 0; }
-_SNAP_DIR="$XDG_CONFIG_HOME/bashbasicsbyvk/snapshots"   # (same value; explicit for the reader)
+E2E_DEFAULT_DIR=/tmp/e2e; E2E_DEFAULT_PORT=8791
+source "$(dirname "${BASH_SOURCE[0]}")/e2e_common.sh"
 
 # a name as the owner sees it (decrypted with the label key: dinons → FEK → label key); the server only ever holds "e1.…"
 shown() { ( _bb_labelkey_load >/dev/null 2>&1; _bb_alias_show "$1" ); }
@@ -166,7 +129,11 @@ setbal 1000; rm -rf "$_SNAP_DIR"
 p1=$(readlink -f "$T/work/watch"); p2=$(readlink -f "$T/work/one.txt")
 t1=$(_snap_sha256 "$p1"); t2=$(_snap_sha256 "$p2")
 _snap_target_set "$t1" d "$p1" 0 "" 0; _snap_target_set "$t2" f "$p2" 0 "" 0
-_snap_cycle; sleep 0.3
+snapcount() { q1 "select count(*) from snapshots"; }
+_BUMP=0
+bump() {   # change the watched file AND give it a clearly newer mtime without sleeping (it replaces a fixed one-second wait for the clock tick)
+  echo "$1" >> "$T/work/watch/f.txt"; _BUMP=$((_BUMP+10)); touch -d "@$(( $(date +%s) + _BUMP ))" "$T/work/watch/f.txt"; }
+_snap_cycle; wait_count 10 "snapshots on the server" snapcount 2
 chk "targets registered on the server" "$(q1 'select count(*) from snap_targets')" "2"
 chk "both paths snapshotted" "$(q1 "select count(*) from snapshots")" "2"
 chk "snapshot links are filed as snapshot" "$(q1 "select count(*) from links where svc='snapshot'")" "2"
@@ -176,7 +143,7 @@ chk "every snapshot key is client-wrapped (cse1)" "$(q1 "select count(*) from va
 chk "the label key is client-wrapped (cse1)" "$(q1 "select scheme from user_vault")" "cse1"
 hasnt "FEK is not in the label-key row either" "$(sql 'select * from user_vault')" "$FEK_HEX"
 _snap_cycle; chk "nothing changed → nothing uploaded (no credits spent)" "$(q1 "select count(*) from snapshots")" "2"
-b0=$(bal); echo v2 >> "$T/work/watch/f.txt"; sleep 1.1; touch "$T/work/watch/f.txt"
+b0=$(bal); bump v2
 _snap_cycle; chk "a changed folder → exactly one new snapshot" "$(q1 "select count(*) from snapshots")" "3"
 chk "…and only that folder (the untouched file was skipped)" "$(q1 "select count(*) from snapshots where tgt='$t2'")" "1"
 chk "credits were spent only for the one" "$(( b0 - $(bal) ))" "1"
@@ -207,7 +174,7 @@ _snap_dev_hdrs; _snap_cycle
 [ -z "$(_snap_target_line "$t2")" ] && ok "device 1 dropped the removed path on its next sync" || bad "target still on device 1"
 [ -n "$(_snap_target_line "$t1")" ] && ok "…and kept the other" || bad "other target lost"
 # credits not enough → pause with a notice, then resume
-setbal 0; echo v3 >> "$T/work/watch/f.txt"; sleep 1.1; touch "$T/work/watch/f.txt"
+setbal 0; bump v3
 n1=$(q1 "select count(*) from snapshots"); _snap_cycle
 chk "no credits → nothing taken" "$(q1 "select count(*) from snapshots")" "$n1"; has "…notice written" "$(cat "$_SNAP_NOTICE" 2>/dev/null)" "paused"
 setbal 1000; _snap_cycle
@@ -219,35 +186,35 @@ rm -f "$_SNAP_TARGETS"; _snap_cycle
 [ -n "$(_snap_target_line "$t1")" ] && ok "after losing the local list, it is rebuilt from the server" || bad "not rebuilt"
 
 echo "── 5. background process ──"
-rm -f "$_SNAP_LASTRUN" "$_SNAP_NOTICE"; echo v4 >> "$T/work/watch/f.txt"; sleep 1.1; touch "$T/work/watch/f.txt"
+rm -f "$_SNAP_LASTRUN" "$_SNAP_NOTICE"; bump v4
 n2=$(q1 "select count(*) from snapshots")
 cat > "$T/o_sim.sh" <<EOS
 source "bashbasicsbyvk_auth.sh"; source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_pending.sh"; source "bashbasicsbyvk_staging_upload.sh"; source "bashbasicsbyvk_staging_ux.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
 WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")
 _bb_get_credentials() { export FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" FILEAPI_BASHBASICS_KEY="$APIKEY"; P_DINONS="$DINONS"; return 0; }
 _snap_daemon_start
-sleep 14        # "o" is running for 14 seconds
+while [ ! -e "$T/o_stop" ]; do sleep 0.05; done        # "o" keeps running until the test says it ends (no guessed 14 s)
 EOS
-bash "$T/o_sim.sh" &
+rm -f "$T/o_stop"; bash "$T/o_sim.sh" &
 OSIM=$!
-for _ in $(seq 1 30); do [ "$(q1 "select count(*) from snapshots")" -gt "$n2" ] && break; sleep 0.5; done
+_gt_n2() { [ "$(snapcount)" -gt "$n2" ]; }; wait_until 40 "the background snapshot" _gt_n2
 chk "while 'o' runs, the background process takes the snapshot" "$(q1 "select count(*) from snapshots")" "$((n2+1))"
 chk "…one daemon, one lock" "$(ls -d "$_SNAP_LOCK" 2>/dev/null | wc -l | tr -d ' ')" "1"
 dpid=$(cat "$_SNAP_LOCK/pid" 2>/dev/null)
-chk "…second start does not spawn another" "$( ( _snap_daemon_start; sleep 0.5; cat "$_SNAP_LOCK/pid" ) )" "$dpid"
-wait $OSIM 2>/dev/null; sleep 5
-kill -0 "$dpid" 2>/dev/null && bad "daemon still alive after 'o' ended" || ok "when 'o' ends, snapshots stop (daemon gone)"
+chk "…second start does not spawn another" "$( ( _snap_daemon_start; settle 2 0.3 cat "$_SNAP_LOCK/pid"; cat "$_SNAP_LOCK/pid" ) )" "$dpid"
+touch "$T/o_stop"; wait $OSIM 2>/dev/null
+wait_gone 30 "$dpid" && ok "when 'o' ends, snapshots stop (daemon gone)" || bad "daemon still alive after 'o' ended"
 [ -d "$_SNAP_LOCK" ] && bad "lock left behind" || ok "lock cleaned up"
 [ -z "$(ls "$_SNAP_TMPROOT" 2>/dev/null)" ] && ok "no temp copies left behind" || bad "temp copies left: $(ls "$_SNAP_TMPROOT")"
 # reopen after a long time: exactly ONE snapshot, no matter how many intervals were missed
-n3=$(q1 "select count(*) from snapshots"); echo v5 >> "$T/work/watch/f.txt"; sleep 1.1; touch "$T/work/watch/f.txt"
+n3=$(q1 "select count(*) from snapshots"); bump v5
 echo $(( $(date +%s) - 864000 )) > "$_SNAP_LASTRUN"        # last pass was 10 days ago
 snapshot_interval_seconds=600
 ln=$(_snap_interval); chk "interval honoured" "$ln" "600"
-bash "$T/o_sim.sh" & OSIM=$!
-for _ in $(seq 1 30); do [ "$(q1 "select count(*) from snapshots")" -gt "$n3" ] && break; sleep 0.5; done; sleep 3
+rm -f "$T/o_stop"; bash "$T/o_sim.sh" & OSIM=$!
+_gt_n3() { [ "$(snapcount)" -gt "$n3" ]; }; wait_until 40 "the catch-up snapshot" _gt_n3; settle 8 1.5 snapcount      # then it must STAY at one new snapshot (nothing more arrives for 1.5 s)
 chk "reopened after 10 days → exactly one new snapshot" "$(q1 "select count(*) from snapshots")" "$((n3+1))"
-wait $OSIM 2>/dev/null; sleep 4
+dpid2=$(cat "$_SNAP_LOCK/pid" 2>/dev/null); touch "$T/o_stop"; wait $OSIM 2>/dev/null; [ -n "$dpid2" ] && wait_gone 30 "$dpid2"
 
 echo "── 6. settings ──"
 snapshot_interval_seconds=30; chk "interval below 1 minute is rejected → default" "$(_snap_interval)" "3600"

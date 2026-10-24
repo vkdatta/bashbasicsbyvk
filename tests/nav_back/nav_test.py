@@ -4,11 +4,11 @@
 usage: python3 nav_test.py [only-case-substring]"""
 import os, pty, sys, time, select, fcntl, termios, struct, tempfile, shutil, signal
 here = os.path.dirname(os.path.abspath(__file__)); root = os.path.abspath(os.path.join(here, '..', '..'))
-sys.path.insert(0, os.path.join(root, 'tests', 'paste_input')); from vt import Screen
+sys.path.insert(0, os.path.join(root, 'tests', 'paste_input')); from ptyapp import PtyApp
 COLS, ROWS = 100, 40
 only = sys.argv[1] if len(sys.argv) > 1 else ''
 
-class App:
+class App(PtyApp):
     @staticmethod
     def fake_user(home):   # an active -auth profile (made up: no server is ever reached), so nf / sn / rbam / cs / api open
         import random, string
@@ -22,45 +22,10 @@ class App:
         open(os.path.join(d, 'profiles', pid), 'w').write('MAIL=test@example.com\nDISEPS=%s\nDINONS=%s\nAPIKEY=%s\nSEALKEY=%s\nCREATED=2026-10-21T00:00:00Z\n' % (
             codes(27), codes(29), 'k' * 40, 's' * 50))
     def __init__(self, user=True):
-        self.tmp = tempfile.mkdtemp(); binp = os.path.join(self.tmp, 'bin'); os.makedirs(binp)
-        for dp, dn, fn in os.walk(os.path.join(root, 'script')):
-            if 'bvk-ls' in dp: continue
-            for f in fn:
-                if not os.path.exists(os.path.join(binp, f)): os.symlink(os.path.join(dp, f), os.path.join(binp, f))
-        home = os.path.join(self.tmp, 'home'); work = os.path.join(home, 'work'); os.makedirs(work)
-        for n in ('alpha.txt', 'beta.txt'): open(os.path.join(work, n), 'w').write('x')
-        if user: self.fake_user(home)
-        self.pid, self.fd = pty.fork()
-        if self.pid == 0:
-            os.environ.update(TERM='xterm-256color', LANG='C.UTF-8', LC_ALL='C.UTF-8', HOME=home, COLUMNS=str(COLS), LINES=str(ROWS),
-                              PATH=binp + ':' + os.environ['PATH'], BVK_BROWSER_TERM='0')
-            os.chdir(work); os.execvp('bash', ['bash', os.path.join(binp, 'o')])
-        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', ROWS, COLS, 0, 0))
-        self.scr = Screen(COLS, ROWS); self.alive = True; self.pump(4)
-    def pump(self, t):
-        end = time.time() + t
-        while time.time() < end:
-            r, _, _ = select.select([self.fd], [], [], 0.05)
-            if r:
-                try: d = os.read(self.fd, 1 << 20)
-                except OSError: self.alive = False; return
-                if not d: self.alive = False; return
-                self.scr.feed(d)
-        try:
-            p, _ = os.waitpid(self.pid, os.WNOHANG)
-            if p: self.alive = False
-        except ChildProcessError: self.alive = False
-    def send(self, s, t=0.7):
-        if isinstance(s, str): s = s.encode()
-        try: os.write(self.fd, s)
-        except OSError: self.alive = False; return
-        self.pump(t)
-    def line(self, text, t=1.2): self.send(text, 0.15); self.send(b'\r', t)
-    def text(self): return '\n'.join(self.scr.lines())
-    def close(self):
-        try: os.kill(self.pid, signal.SIGKILL); os.waitpid(self.pid, 0)
-        except Exception: pass
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        def populate(home, work):
+            for n in ('alpha.txt', 'beta.txt'): open(os.path.join(work, n), 'w').write('x')
+            if user: self.fake_user(home)
+        super().__init__(root, COLS, ROWS, populate)
 
 def on_main(a):  return a.alive and 'nav path:' in a.text().split('Select')[-2 if False else 0] or (a.alive and 'nav path:' in a.text())
 def on_home(a):  return a.alive and 'Home' in a.text() and 'Local Surf' in a.text() and 'Cloud Surf' in a.text()
@@ -73,8 +38,10 @@ def case(name, steps, expect, why):
     if only and only not in name: return
     a = App(user=True)
     try:
-        for s in steps: a.line(s) if s != '<wait>' else a.pump(1.0)
-        ok = expect(a); results.append(ok)
+        for s in steps: a.line(s) if s != '<wait>' else a.settle(0.5)         # each line returns when the app went quiet, never after a guessed time
+        ok = a.wait(lambda: expect(a), 8)                                      # the expected screen must appear ...
+        if ok: a.settle(0.4); ok = expect(a)                                   # ... and must still be the state once the app is quiet (a screen that flashes by is a failure)
+        results.append(ok)
         print(('PASS ' if ok else 'FAIL ') + name + ('' if ok else '   [' + why + ']'))
         if not ok: print('   alive=%s\n   ' % a.alive + '\n   '.join(l for l in a.scr.lines() if l.strip())[-1500:])
     finally: a.close()

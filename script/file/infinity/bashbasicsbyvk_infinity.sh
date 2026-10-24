@@ -29,7 +29,7 @@ infinity_stones_menu() {
   while true; do
     _mc_menu "💎 Infinity Stones" -- \
       "Extract Tables and Links from Web" "JavaScript Audit" "Python Audit" \
-      "Git Push" "Generate SQL" "LocalHost" -- @infinity
+      "Git Push" "Generate SQL" "LocalHost" "Polyglot Clone Finder" -- @infinity
 
     read -e -p "Select: " is_choice
 
@@ -42,6 +42,7 @@ infinity_stones_menu() {
       4) bash "$SCRIPT_DIR/bashbasicsbyvk_gitpush" "$path" ;;
       5) python "$SCRIPT_DIR/bashbasicsbyvk_gen_sql" "$path" ;;
       6) bash "$SCRIPT_DIR/bashbasicsbyvk_localhost" "$path" ;;
+      7) python "$SCRIPT_DIR/bashbasicsbyvk_polyglot" "$path" ;;
       *) _bvk_invalid; continue ;;      # redraw THIS menu, not the parent
     esac
     return

@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""bashbasicsbyvk_polyglot - Polyglot Clone Finder: finds CANDIDATE duplicate functions across a codebase, even across languages.
+
+    bashbasicsbyvk_polyglot [PATH] [options]
+
+PATH is the folder to scan (default: the current folder).  Like the JavaScript and Python audits it changes into that folder and writes
+"Polyglot Report.xlsx" and "Polyglot Report.json" there.  Replaces bashbasicsbyvk_dupscan.
+
+It reports POSSIBLE CANDIDATES for deduplication - it is NOT a 100% reliable mechanism (it can miss real duplicates and flag look-alikes).
+Pipeline: crawl -> AST extraction (tree-sitter > stdlib ast > regex) -> token normalisation -> feature-hashing candidate search ->
+exact LCS verification -> clustering -> metrics.  No ML model, no GPU, no downloads.
+
+Self-bootstrapping: when numpy, rich, openpyxl, tree-sitter or the grammar of a language found in PATH is missing it is pip-installed
+(bashbasicsbyvk_polyglot_bootstrap); --no-install turns that off.  Whatever cannot be installed degrades gracefully (stdlib ast / regex).
+Exit code: 0 ok, 1 duplication above --fail-above, 2 error.
+"""
+import argparse
+import os
+import sys
+from pathlib import Path
+
+from bashbasicsbyvk_polyglot_constants import REPORT_NAME, VERSION
+from bashbasicsbyvk_polyglot_crawler import crawl
+from bashbasicsbyvk_polyglot_languages import LANGUAGES
+
+
+def build_parser():
+    p = argparse.ArgumentParser(
+        prog="bashbasicsbyvk_polyglot",
+        description="Find candidate duplicate functions across a (multi-language) codebase: AST extraction + feature-hashing "
+                    "candidate search + exact LCS verification (no ML model, no GPU). Candidates only - not 100%% reliable.")
+    p.add_argument("path", nargs="?", default=None, help="folder to scan (default: the current folder)")
+    p.add_argument("-o", "--output", default=None, help=f"JSON report path (default: '{REPORT_NAME}.json' in the scanned folder)")
+    p.add_argument("-t", "--threshold", type=float, default=None,
+                   help="candidate-search cosine threshold (default 0.65; verification does the real filtering)")
+    p.add_argument("--min-lines", type=int, default=6, help="ignore functions with fewer non-blank lines")
+    p.add_argument("--min-tokens", type=int, default=20, help="ignore functions with fewer normalised tokens")
+    p.add_argument("--parser", choices=["auto", "treesitter", "regex"], default="auto",
+                   help="auto = tree-sitter, then stdlib ast (Python), then regex; treesitter = strict (error if a grammar is missing)")
+    p.add_argument("--lang", action="append", choices=sorted(LANGUAGES), help="restrict to language (repeatable)")
+    p.add_argument("--exclude", action="append", default=[], metavar="GLOB", help="extra ignore glob (repeatable)")
+    p.add_argument("--use-names", action="store_true", help="include function names in the compared token stream")
+    p.add_argument("--cross-language-only", action="store_true", help="only report matches across different languages")
+    p.add_argument("--no-verify", action="store_true",
+                   help="skip the ordered-token verification stage (more candidates, many false positives)")
+    p.add_argument("--verify-threshold", type=float, default=0.60, metavar="X",
+                   help="min verified token similarity (0-1) for a pair, and the average a cluster member must keep")
+    p.add_argument("--min-confidence", choices=["low", "medium", "high"], default="low",
+                   help="only report clusters at/above this reliability band (high >= 80%%, medium >= 70%% verified)")
+    p.add_argument("--min-size-ratio", type=float, default=0.4, metavar="X",
+                   help="ignore pairs where the smaller function has < X * the tokens of the larger")
+    p.add_argument("--max-file-kb", type=int, default=1024)
+    p.add_argument("--max-clusters", type=int, default=20, help="clusters shown on console (the reports have all)")
+    p.add_argument("--top-files", type=int, default=10)
+    p.add_argument("--fail-above", type=float, default=None, metavar="PCT",
+                   help="exit with status 1 if overall duplication exceeds PCT (CI gate)")
+    p.add_argument("--no-install", action="store_true", help="do not pip-install missing packages / grammars")
+    p.add_argument("--no-xlsx", action="store_true", help="write only the JSON report")
+    p.add_argument("--plain", action="store_true", help="disable rich output")
+    p.add_argument("-q", "--quiet", action="store_true", help="no progress bars / console report")
+    p.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    return p
+
+
+def _numpy_hint():
+    if os.environ.get("TERMUX_VERSION") or "com.termux" in str(Path.home()):
+        return "Termux: pkg install python-numpy"
+    return "pip install numpy"
+
+
+def main(argv=None):
+    a = build_parser().parse_args(argv)
+    target = Path(a.path or os.getcwd()).resolve()
+    try:
+        os.chdir(target)
+    except OSError:
+        print(f"❌ Cannot cd to {target}")
+        return 2
+    print(f"Working directory: {target}")
+
+    paths = list(crawl(target, a.exclude, a.lang))        # first, to know which tree-sitter grammars are worth installing
+    if not paths:
+        print("No supported source files found here.")
+        return 0
+
+    if not a.no_install:
+        try:
+            from bashbasicsbyvk_polyglot_bootstrap import bootstrap
+        except ImportError as exc:       # not installed flat: bashbasicsbyvk_pipboot (script/file/engine) is not beside the tool
+            print(f"❌ {exc.name} not found next to the tool - reinstall bashbasicsbyvk, or from the repo: PYTHONPATH=script/file/engine")
+            return 2
+        missing = bootstrap(sorted({lang for _, lang in paths}), a.parser, print, want_xlsx=not a.no_xlsx)
+        if missing:
+            print(f"❌ Required package(s) missing and could not be installed: {', '.join(missing)}  ({_numpy_hint()})")
+            return 2
+    try:        # imported only now: they need numpy, and rich is detected at import time
+        from bashbasicsbyvk_polyglot_pipeline import AnalysisError, Config, run
+        from bashbasicsbyvk_polyglot_report import build_report, print_report, write_json
+        from bashbasicsbyvk_polyglot_ui import ProgressUI
+    except ImportError as exc:
+        print(f"❌ Missing Python package '{exc.name}' - run without --no-install, or: {_numpy_hint()}")
+        return 2
+
+    cfg = Config(root=str(target), threshold=a.threshold, min_lines=a.min_lines, min_tokens=a.min_tokens, parser=a.parser,
+                 use_names=a.use_names, cross_language_only=a.cross_language_only, excludes=a.exclude, languages=a.lang,
+                 max_file_kb=a.max_file_kb, verify=not a.no_verify, min_confidence=a.min_confidence,
+                 verify_threshold=a.verify_threshold, min_size_ratio=a.min_size_ratio)
+    ui = ProgressUI(quiet=a.quiet, plain=a.plain)
+    try:
+        with ui:
+            result = run(cfg, ui, paths)
+    except AnalysisError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("interrupted", file=sys.stderr)
+        return 130
+
+    report = build_report(result)
+    json_path = a.output or f"{REPORT_NAME}.json"
+    write_json(report, json_path)
+    written = [json_path]
+    if not a.no_xlsx:
+        try:
+            from bashbasicsbyvk_polyglot_xlsx import write_xlsx
+            xlsx_path = f"{REPORT_NAME}.xlsx"
+            write_xlsx(report, xlsx_path)
+            written.insert(0, xlsx_path)
+        except ImportError:
+            print("⚠️  openpyxl is not available - Excel report skipped (JSON written).")
+    if not a.quiet:
+        print_report(report, " + ".join(written), a.max_clusters, a.top_files, plain=a.plain)
+    if a.fail_above is not None and report["summary"]["overall_duplication_pct"] > a.fail_above:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

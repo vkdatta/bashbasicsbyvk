@@ -5,9 +5,10 @@
 # (3) end to end inside tmux when tmux is installed: main prompt, filter, c- then numbers,
 #     Settings screen, item picker, text prompt, cancel
 set -u
+source "$(dirname "${BASH_SOURCE[0]}")/wait_lib.sh"   # UTF-8 locale + wait_until / tmx_* (no fixed sleeps)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 F="$ROOT/script/file"
-T="$(mktemp -d)"; trap 'tmux kill-session -t bvkcc 2>/dev/null; rm -rf "$T"' EXIT
+T="$(mktemp -d)"; trap 'tmux kill-session -t bvkcc 2>/dev/null; bvk_reap "$T"; rm -rf "$T"' EXIT
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 has() { grep -qF -- "$2" <<<"$1"; }
 keys() { local i; for i in "${!_CC_KEY[@]}"; do printf '%s\n' "${_CC_KEY[i]}"; done; }
@@ -62,45 +63,50 @@ got=""; _CC_PREFILL="=lo"; _cc_replay kf bf; [ "$got" = "[=][l][o]" ] && ok "= g
 
 # ---- (3) tmux end to end ---------------------------------------------------------------
 if ! command -v tmux >/dev/null 2>&1; then echo "  skip tmux not installed"; [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"; exit "$fail"; fi
-BIN="$T/bin"; mkdir -p "$BIN" "$T/home/.bashbasicsbyvk" "$T/play/docs"
+BIN="$T/bin"; mkdir -p "$BIN" "$T/home/.bashbasicsbyvk" "$T/play/docs" "$T/home/.config/bashbasicsbyvk/telemetry"
+# the app pings its telemetry once a day (no off switch): mark today as reported, so no test waits on the network
+echo 00000000-0000-4000-8000-000000000000 >"$T/home/.config/bashbasicsbyvk/telemetry/uuid"; echo "$(date -u +%F) true" >"$T/home/.config/bashbasicsbyvk/telemetry/daily"
 find "$ROOT/script" -type f -not -path '*/bvk-ls/*' -not -name '*.pyc' -exec cp {} "$BIN"/ \;
 chmod +x "$BIN"/*; touch "$T/play"/{a.txt,b.py,c.png,notes.md}
-run() { tmux kill-session -t bvkcc 2>/dev/null
-        tmux new-session -d -s bvkcc -x 110 -y 40 -c "$T/play" "env HOME=$T/home VK_TELEMETRY=0 PATH=$BIN:$PATH bash $BIN/o"; sleep 4; }
-k() { tmux send-keys -t bvkcc "$@"; }
-scr() { sleep "${1:-0.8}"; tmux capture-pane -t bvkcc -p; }
+S=bvkcc; WAIT_DUMP="tmx_screen $S"
+run() { tmx_start $S 110 40 "$T/play" "env HOME=$T/home PATH=$BIN:$PATH bash $BIN/o"; tmx_wait $S 15 "a.txt"; }
+k() { tmux send-keys -t $S "$@"; }
+scr() { tmx_screen $S; }
 lastsel() { grep -a '^Select:\|Item numbers:\|Enter folder names' <<<"$1" | tail -1; }
+_sel_is() { [ "$(lastsel "$(scr)")" = "$1" ]; }
+want_sel() { wait_until "${2:-8}" "prompt line '$1'" _sel_is "$1"; }       # the prompt line must BECOME this (polled, then shown on failure)
+quiet_screen() { settle 3 0.4 scr; }                                         # for "nothing else may happen" checks only
 
-run
-s="$(scr 0.3)"; has "$s" "a.txt" && ok "e2e: app starts" || { bad "app did not start"; echo "$s"; }
+t_start; run
+tmx_wait $S 1 "a.txt" && ok "e2e: app starts" || bad "app did not start"
 
-k "cc" Enter; sleep 1.2; k "=lo" Enter; sleep 0.6; s="$(scr 0.3)"
+k "cc" Enter; tmx_wait $S 8 "Cheat codes"; k "=lo" Enter; tmx_wait $S 8 "1) loadtime"; s="$(scr)"
 has "$s" "Cheat codes" && has "$s" "1) loadtime" && ok "e2e: cc opens a list, =lo narrows it to loadtime" || { bad "cc list"; echo "$s"; }
-k 1 Enter; s="$(scr 1.5)"
-[ "$(lastsel "$s")" = "Select: loadtime" ] && ok "e2e: the pick sits in the prompt" || { bad "pick not in prompt"; lastsel "$s"; }
-has "$s" "RECENT SCREEN CHANGES" && bad "e2e: loadtime ran before Enter" || ok "e2e: nothing ran before Enter"
-k Enter; s="$(scr 1.5)"; has "$s" "RECENT SCREEN CHANGES" && ok "e2e: Enter runs it" || bad "Enter did not run loadtime"
-k u Enter; sleep 1; k u Enter; sleep 1
+k 1 Enter; want_sel "Select: loadtime" && ok "e2e: the pick sits in the prompt" || { bad "pick not in prompt"; lastsel "$(scr)"; }
+quiet_screen; has "$(scr)" "RECENT SCREEN CHANGES" && bad "e2e: loadtime ran before Enter" || ok "e2e: nothing ran before Enter"
+k Enter; tmx_wait $S 8 "RECENT SCREEN CHANGES" && ok "e2e: Enter runs it" || bad "Enter did not run loadtime"
+tmx_do $S u Enter; tmx_do $S u Enter        # (same two steps as before: close the report, then back out of the screen)
 
-k "cc" Enter; sleep 1.2; k "=c-" Enter; sleep 0.5; k 1 Enter; s="$(scr 1.2)"
-[ "$(lastsel "$s")" = "Select: c-" ] && ok "e2e: c- waits for its numbers (running c- alone is invalid)" || { bad "c- pick"; lastsel "$s"; }
-k "1-2"; s="$(scr 0.8)"; [ "$(lastsel "$s")" = "Select: c-1-2" ] && ok "e2e: finished as c-1-2" || { bad "c-1-2"; lastsel "$s"; }
-k Enter; s="$(scr 1.5)"; has "$s" "Buffered 2 item(s)" && ok "e2e: Enter ran c-1-2" || { bad "c-1-2 did not run"; echo "$s" | tail -8; }
+k "cc" Enter; tmx_wait $S 8 "Cheat codes"; k "=c-" Enter; tmx_wait $S 8 "1) c-"; k 1 Enter
+want_sel "Select: c-" && ok "e2e: c- waits for its numbers (running c- alone is invalid)" || { bad "c- pick"; lastsel "$(scr)"; }
+k "1-2"; want_sel "Select: c-1-2" && ok "e2e: finished as c-1-2" || { bad "c-1-2"; lastsel "$(scr)"; }
+k Enter; tmx_wait $S 8 "Buffered 2 item(s)" && ok "e2e: Enter ran c-1-2" || { bad "c-1-2 did not run"; scr | tail -8; }
 
-k "cc" Enter; sleep 1.2; k u Enter; s="$(scr 1)"
-[ "$(lastsel "$s")" = "Select:" ] && ok "e2e: u cancels, prompt stays empty" || { bad "cancel"; lastsel "$s"; }
+k "cc" Enter; tmx_wait $S 8 "Cheat codes"; k u Enter; quiet_screen
+[ "$(lastsel "$(scr)")" = "Select:" ] && ok "e2e: u cancels, prompt stays empty" || { bad "cancel"; lastsel "$(scr)"; }
 
-k "s" Enter; sleep 1.5; k "cc" Enter; sleep 1.2; s="$(scr 0.3)"
+tmx_do $S s Enter; k "cc" Enter; tmx_wait $S 8 "Cheat codes · this screen"; s="$(scr)"
 has "$s" "Cheat codes · this screen" && has "$s" "Close Settings" && ok "e2e: Settings screen lists its own commands" || { bad "settings cc"; echo "$s"; }
-k 2 Enter; s="$(scr 1.2)"; [ "$(lastsel "$s")" = "Select: q" ] && ok "e2e: pick lands in the Settings prompt" || { bad "settings pick"; lastsel "$s"; }
-k Enter; sleep 1
+k 2 Enter; want_sel "Select: q" && ok "e2e: pick lands in the Settings prompt" || { bad "settings pick"; lastsel "$(scr)"; }
+tmx_do $S Enter
 
-k "d" Enter; sleep 1.5; k "cc" Enter; sleep 1.2; s="$(scr 0.3)"
+tmx_do $S d Enter; k "cc" Enter; tmx_wait $S 8 "Cheat codes"; s="$(scr)"
 { has "$s" "loadtime" && ! has "$s" ") c- "; } && ok "e2e: item picker lists only what it accepts" || { bad "picker list"; echo "$s" | tail -20; }
-k u Enter; sleep 1; k "u" Enter; sleep 1
+tmx_do $S u Enter; tmx_do $S u Enter        # (same two steps as before: close the report, then back out of the screen)
 
-k "c" Enter; sleep 1.2; k 1 Enter; sleep 1.2; k "cc" Enter; sleep 1.2; k "=dis" Enter; sleep 0.5; k 1 Enter; s="$(scr 1.2)"
-[ "$(lastsel "$s")" = "📂 Enter folder names (separated by ,): disk" ] && ok "e2e: a text prompt gets the pick too" || { bad "text prompt pick"; lastsel "$s"; }
+tmx_do $S c Enter; k 1 Enter; tmx_wait $S 8 "Enter folder names"; k "cc" Enter; tmx_wait $S 8 "Cheat codes"; k "=dis" Enter; tmx_wait $S 8 "1) disk"; k 1 Enter
+want_sel "📂 Enter folder names (separated by ,): disk" && ok "e2e: a text prompt gets the pick too" || { bad "text prompt pick"; lastsel "$(scr)"; }
+echo "  tmux part: $(t_since)s"
 
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"
 exit "$fail"

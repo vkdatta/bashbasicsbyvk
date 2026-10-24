@@ -11,6 +11,24 @@ _REGEX_AFTER = {"return", "typeof", "case", "throw", "in", "of", "void", "delete
 _PURE = re.compile(r'/\*\s*@__(?:PURE|NO_SIDE_EFFECTS)__\s*\*/[ \t]*')
 _CLOSER = {"(": ")", "[": "]", "{": "}"}
 
+def _skip_regex(code, j):
+    """`code[j]` is the opening "/" of a regex literal: the index just after its closing "/" and its flags.
+    (A "/" inside [...] does not close it; an unterminated literal stops at the line end.)"""
+    n = len(code)
+    j, incls = j + 1, False
+    while j < n:
+        ch = code[j]
+        if ch == "\\": j += 2; continue
+        if ch == "[": incls = True
+        elif ch == "]": incls = False
+        elif ch == "/" and not incls: break
+        elif ch == "\n": break
+        j += 1
+    j += 1
+    while j < n and code[j].isalpha(): j += 1
+    return j
+
+
 def _scan_group(code, j, closer, commas=None):
     """Scan from just after an opener to just after its matching `closer`; skips strings, templates, comments, regex
     literals. If `commas` is a list, depth-0 comma positions are appended to it."""
@@ -34,17 +52,7 @@ def _scan_group(code, j, closer, commas=None):
             if d == "/": k = code.find("\n", j); j = n if k < 0 else k; continue
             if d == "*": k = code.find("*/", j + 2); j = n if k < 0 else k + 2; continue
             if last == "" or last in _REGEX_AFTER or (len(last) == 1 and last in "(,=:[!&|?{};+-*%<>~^"):
-                j += 1; incls = False
-                while j < n:
-                    ch = code[j]
-                    if ch == "\\": j += 2; continue
-                    if ch == "[": incls = True
-                    elif ch == "]": incls = False
-                    elif ch == "/" and not incls: break
-                    elif ch == "\n": break
-                    j += 1
-                j += 1
-                while j < n and code[j].isalpha(): j += 1
+                j = _skip_regex(code, j)
                 last = "/re/"; continue
             j += 1; last = "/"; continue
         if c in _CLOSER: j = _scan_group(code, j + 1, _CLOSER[c]); last = ")"; continue
@@ -123,18 +131,7 @@ def lex_idents(code):
             if d == "/": j = code.find("\n", i); i = n if j < 0 else j; continue
             if d == "*": j = code.find("*/", i + 2); i = n if j < 0 else j + 2; continue
             if regex_ok():
-                j, incls = i + 1, False
-                while j < n:
-                    ch = code[j]
-                    if ch == "\\": j += 2; continue
-                    if ch == "[": incls = True
-                    elif ch == "]": incls = False
-                    elif ch == "/" and not incls: break
-                    elif ch == "\n": break
-                    j += 1
-                j += 1
-                while j < n and code[j].isalpha(): j += 1
-                i, prev_tok = j, "/re/"; continue
+                i, prev_tok = _skip_regex(code, i), "/re/"; continue
             i += 1; prev_tok = "/"; continue
         if c in "\"'":
             j = i + 1

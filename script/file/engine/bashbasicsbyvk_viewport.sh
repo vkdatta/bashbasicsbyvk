@@ -216,8 +216,18 @@ _vp_poll_cur="0.5"
 _vp_idle=0
 _vp_rule="   ─────────────────────────────"
 
-_vp_poll_active() { _vp_idle=0; _vp_poll_cur="$_vp_poll_fast"; }
+# The idle tick brings the mouse reports back once a hand-back is over (bashbasicsbyvk_mouse.sh).  A typed key brings them back at
+# once; a byte of an escape sequence does not (the button release of the tap / the tail of a swipe is one, and it must not undo the
+# hand-back): the read loops call this right after reading the first byte, which is their local  key.
+_vp_poll_active() {
+  _vp_idle=0; _vp_poll_cur="$_vp_poll_fast"
+  if [ "${_BVK_MOUSE_PASS:-0}" = 1 ]; then
+    if [ "${key-}" = $'\x1b' ]; then _bvk_mouse_rearm; else _bvk_mouse_rearm force; fi
+  fi
+  return 0
+}
 _vp_poll_tick() {
+  [ "${_BVK_MOUSE_PASS:-0}" = 1 ] && _bvk_mouse_rearm
   _vp_idle=$(( _vp_idle + 1 ))
   (( _vp_idle > 12 )) && _vp_poll_cur="$_vp_poll_slow"
 }
@@ -1327,6 +1337,7 @@ _multi_click() {
       fi ;;
     pgup) _BVK_LAST_ITEM=""; _bvk_mouse_scroll $(( - _vp_page )) ;;
     pgdn) _BVK_LAST_ITEM=""; _bvk_mouse_scroll "$_vp_page" ;;
+    prompt) _bvk_mouse_other "$_MS_Y" "$_BVK_CROW" ;;            # hands the touch back: the next tap opens the keyboard
   esac
   _multi_print_input_line
   return $rc
@@ -1391,8 +1402,8 @@ _multi_prompt_loop_raw() {
       if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
         case "$_MS_ACT" in
           press)     _multi_click; (( $? == 2 )) && break ;;
-          wheelup)   _bvk_blk_park; _bvk_mouse_scroll $(( - _BVK_WHEEL_STEP )); _multi_print_input_line ;;
-          wheeldown) _bvk_blk_park; _bvk_mouse_scroll "$_BVK_WHEEL_STEP"; _multi_print_input_line ;;
+          wheelup)   _bvk_mouse_wheel_window -1; _multi_print_input_line ;;
+          wheeldown) _bvk_mouse_wheel_window 1;  _multi_print_input_line ;;
         esac
         continue
       fi

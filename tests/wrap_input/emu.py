@@ -1,6 +1,7 @@
 """Tiny terminal emulator + pty driver. Feeds a paste into the app's line editor on a NARROW screen and reports how many
 screen rows hold the prompt (must be 1) and what the app returned.   python3 emu.py <repo-root> <editor> <cols> <text>"""
 import os, pty, sys, time, select, struct, fcntl, termios, re, unicodedata
+F = float(os.environ.get('TEST_TIME_FACTOR', '1') or 1)   # stretches every wait on an oversubscribed machine (see tests/run.sh)
 root, ed, cols, text = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
 rows = 24
 here = os.path.dirname(os.path.abspath(__file__))
@@ -50,23 +51,37 @@ def feed(s):
             cx += cw
             if cx >= cols: cx = cols - 1; pend = True
         i += 1
-def pump(t):
+def pump(t, stop=None):
+    """read for at most t seconds; returns False when the app ended (EOF). stop() ends the wait early (a condition, not a guess)."""
     global tail
     end = time.time() + t
-    while time.time() < end:
-        r, _, _ = select.select([fd], [], [], 0.05)
+    while True:
+        left = end - time.time()
+        if left <= 0: return True
+        r, _, _ = select.select([fd], [], [], min(0.02, left))      # (a pump(0.004) used to block 50 ms per key: 8 cases took 65 s)
         if r:
             try: d = os.read(fd, 65536)
             except OSError: return False
             if not d: return False
             tail += d.decode('utf-8', 'replace'); feed(d.decode('utf-8', 'replace'))
-    return True
-pump(1.0)
+        if stop and stop(): return True
+def screen_text(): return '\n'.join(''.join(r) for r in screen)
+def settle(quiet=0.3, ceiling=4.0):
+    quiet *= F; ceiling *= F
+    """return once the app printed nothing for `quiet` seconds"""
+    last = len(tail); since = time.time(); end = time.time() + ceiling
+    while time.time() < end:
+        pump(0.02)
+        if len(tail) != last: last = len(tail); since = time.time()
+        elif time.time() - since >= quiet: return
+# ready = the editor printed its prompt (cm) / the harness announced READY (browse); no blind 1 s
+pump(10 * F, lambda: ('Paste link' in screen_text()) if ed == 'cm' else ('READY' in tail))
+if ed != 'cm': settle(0.3)
 for ch in re.findall(r'\x1b\[[A-Z~0-9]*|.', text.replace('<LEFT>', '\x1b[D').replace('<BS>', '\x7f'), re.S):   # a paste: keys arrive back to back
     os.write(fd, ch.encode()); pump(0.004)
-pump(0.6)
+settle(0.3)
 mid = [''.join(r).rstrip() for r in screen]
-os.write(fd, b'\r'); pump(1.0)
+os.write(fd, b'\r'); pump(6 * F, lambda: 'RESULT=[' in tail and tail.rstrip().endswith(']')); settle(0.15, 2)
 end = [''.join(r).rstrip() for r in screen]
 prompt_rows = sum(1 for r in end if 'Paste link' in r or r.startswith('Select:') or 'Select: ' in r)
 print('---- screen while typing (cols=%d) ----' % cols)

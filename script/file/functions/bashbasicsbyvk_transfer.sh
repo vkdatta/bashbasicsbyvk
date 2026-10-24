@@ -168,6 +168,42 @@ _view_selections_menu() {
   done
 }
 
+# ── input helpers shared by the local and the gcloud navigator ────────────────────────────────────────────
+# _nav_parse_select <typed>  → is_select (true when it starts with s, or has a , or - : "pick several") and cleaned_input (the typed text
+# without the s) in the CALLER's variables.
+_nav_parse_select() {
+  is_select=false
+  [[ "$1" =~ ^[sS] ]] && is_select=true
+  cleaned_input=$(printf '%s' "$1" | sed 's/[Ss]\([0-9]\)/\1/g; s/^[Ss]//')
+  [[ "$cleaned_input" =~ [,\-] ]] && is_select=true
+  return 0
+}
+# _nav_index_ok <typed> <count>  → 0 when <typed> is a row number 1..<count>
+_nav_index_ok() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le "$2" ]; }
+
+# _nav_add_range <cleaned-input like "1,3-5"> <items-array> <selected-array> [<dir>]
+# The multi-select of both navigators (local and GCloud): appends every picked item that is not selected yet to <selected-array>
+# and prints the summary.  With <dir> the stored path is  <dir>/<item without its trailing />  (GCloud: names are relative), else the item itself.
+_nav_add_range() {
+  local -n _ar_items="$2" _ar_sel="$3"
+  local indices idx item added=0 skipped=0 msg
+  indices=($(parse_selection "$1" "${#_ar_items[@]}"))
+  if [ ${#indices[@]} -eq 0 ]; then echo "🔴  No valid numbers"; return 0; fi
+  for idx in "${indices[@]}"; do
+    item="${_ar_items[$((idx-1))]}"
+    [ $# -ge 4 ] && item="$4/${item%/}"
+    if _in_selection "$item" "${_ar_sel[@]}"; then
+      skipped=$((skipped+1))
+    else
+      _ar_sel+=("$item")
+      added=$((added+1))
+    fi
+  done
+  msg="➕ Added $added item(s)"
+  [ $skipped -gt 0 ] && msg="$msg (skipped $skipped duplicate(s))"
+  echo "$msg — total selected: ${#_ar_sel[@]}  (v to review)"
+}
+
 local_navigator() {
   local mode="$1"
   local start_path="${2:-$HOME}"
@@ -186,33 +222,14 @@ local_navigator() {
       echo "📂 SELECT DESTINATION — Location: $nav_path${nav_prefix:+ [filter: ${nav_prefix^^}*]}"
     fi
 
-    local nav_total
-    nav_total=$(count_items_in_path "$nav_path")
     local nav_imaginary=false
     local nav_items=()
 
-    if [ "$nav_total" -gt "${index_mode_threshold:-200}" ] && ! $nav_force_show; then
-      nav_imaginary=true
-      if [ -n "$nav_prefix" ]; then
-        local local_arr=()
-        while IFS= read -r -d '' _f; do
-          _bn="${_f##*/}"
-          [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-          ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
-          [[ "${_bn,,}" != "$nav_prefix"* ]] && continue
-          local_arr+=("$_f")
-        done < <(find "$nav_path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
-        local pfx_count="${#local_arr[@]}"
-        if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
-          nav_imaginary=false
-          nav_items=("${local_arr[@]}")
-        else
-          display_imaginary_groups "$nav_path" "$nav_prefix" "$pfx_count"
-        fi
-      else
-        display_imaginary_groups "$nav_path" "" "$nav_total"
-      fi
-    fi
+    _bvk_index_decide "$nav_path" "$nav_prefix" "$nav_force_show"
+    case "$_bvk_ix_kind" in
+      groups) nav_imaginary=true; display_imaginary_groups "$nav_path" "$_bvk_ix_pfx" "$_bvk_ix_count" ;;
+      flat)   nav_items=("${_bvk_pfx_items[@]}") ;;
+    esac
 
     if ! $nav_imaginary; then
       if [ ${#nav_items[@]} -eq 0 ] && [ -n "$nav_prefix" ]; then
@@ -307,7 +324,7 @@ local_navigator() {
         if $nav_imaginary; then
           local matched=false
           local ch=""
-          if [[ "$nav_choice" =~ ^[0-9]+$ ]] && [ "$nav_choice" -ge 1 ] && [ "$nav_choice" -le "${#imaginary_map[@]}" ]; then
+          if _nav_index_ok "$nav_choice" "${#imaginary_map[@]}"; then
             ch="${imaginary_map[$((nav_choice-1))]}"
             matched=true
           elif [[ ${#nav_choice} -eq 1 ]]; then
@@ -325,41 +342,14 @@ local_navigator() {
           fi
         else
           if [ "$mode" == "source" ]; then
-            local raw_input="$nav_choice"
-            local is_select=false
-
-            [[ "$raw_input" =~ ^[sS] ]] && is_select=true
-
-            local cleaned_input
-            cleaned_input=$(printf '%s' "$raw_input" | sed 's/[Ss]\([0-9]\)/\1/g; s/^[Ss]//')
-
-            [[ "$cleaned_input" =~ [,\-] ]] && is_select=true
+            local is_select cleaned_input
+            _nav_parse_select "$nav_choice"
 
             if [[ "$cleaned_input" =~ ^[0-9,\-]+$ ]]; then
               if $is_select; then
-                local indices
-                indices=($(parse_selection "$cleaned_input" "${#nav_items[@]}"))
-                if [ ${#indices[@]} -eq 0 ]; then
-                  echo "🔴  No valid numbers"
-                else
-                  local added=0 skipped=0
-                  for idx in "${indices[@]}"; do
-                    local new_item="${nav_items[$((idx-1))]}"
-                    if _in_selection "$new_item" "${nav_selected_items[@]}"; then
-                      skipped=$((skipped+1))
-                    else
-                      nav_selected_items+=("$new_item")
-                      added=$((added+1))
-                    fi
-                  done
-                  local msg="➕ Added $added item(s)"
-                  [ $skipped -gt 0 ] && msg="$msg (skipped $skipped duplicate(s))"
-                  echo "$msg — total selected: ${#nav_selected_items[@]}  (v to review)"
-                fi
+                _nav_add_range "$cleaned_input" nav_items nav_selected_items
               else
-                if [[ "$cleaned_input" =~ ^[0-9]+$ ]] && \
-                   [ "$cleaned_input" -ge 1 ] && \
-                   [ "$cleaned_input" -le "${#nav_items[@]}" ]; then
+                if _nav_index_ok "$cleaned_input" "${#nav_items[@]}"; then
                   local sel="${nav_items[$((cleaned_input-1))]}"
                   if [ -d "$sel" ]; then
                     nav_path="$sel"
@@ -381,7 +371,7 @@ local_navigator() {
               echo "🔴  Invalid input"
             fi
           else
-            if [[ "$nav_choice" =~ ^[0-9]+$ ]] && [ "$nav_choice" -ge 1 ] && [ "$nav_choice" -le "${#nav_items[@]}" ]; then
+            if _nav_index_ok "$nav_choice" "${#nav_items[@]}"; then
               local sel="${nav_items[$((nav_choice-1))]}"
               if [ -d "$sel" ]; then
                 nav_path="$sel"
@@ -495,42 +485,14 @@ gcloud_navigator() {
         ;;
       *)
         if [ "$mode" == "source" ]; then
-          local raw_input="$gnav_choice"
-          local is_select=false
-
-          [[ "$raw_input" =~ ^[sS] ]] && is_select=true
-
-          local cleaned_input
-          cleaned_input=$(printf '%s' "$raw_input" | sed 's/[Ss]\([0-9]\)/\1/g; s/^[Ss]//')
-
-          [[ "$cleaned_input" =~ [,\-] ]] && is_select=true
+          local is_select cleaned_input
+          _nav_parse_select "$gnav_choice"
 
           if [[ "$cleaned_input" =~ ^[0-9,\-]+$ ]]; then
             if $is_select; then
-              local indices
-              indices=($(parse_selection "$cleaned_input" "${#remote_items[@]}"))
-              if [ ${#indices[@]} -eq 0 ]; then
-                echo "🔴  No valid numbers"
-              else
-                local added=0 skipped=0
-                for idx in "${indices[@]}"; do
-                  local chosen="${remote_items[$((idx-1))]}"
-                  local full_path="$remote_path/${chosen%/}"
-                  if _in_selection "$full_path" "${gcloud_nav_selected_items[@]}"; then
-                    skipped=$((skipped+1))
-                  else
-                    gcloud_nav_selected_items+=("$full_path")
-                    added=$((added+1))
-                  fi
-                done
-                local msg="➕ Added $added item(s)"
-                [ $skipped -gt 0 ] && msg="$msg (skipped $skipped duplicate(s))"
-                echo "$msg — total selected: ${#gcloud_nav_selected_items[@]}  (v to review)"
-              fi
+              _nav_add_range "$cleaned_input" remote_items gcloud_nav_selected_items "$remote_path"
             else
-              if [[ "$cleaned_input" =~ ^[0-9]+$ ]] && \
-                 [ "$cleaned_input" -ge 1 ] && \
-                 [ "$cleaned_input" -le "${#remote_items[@]}" ]; then
+              if _nav_index_ok "$cleaned_input" "${#remote_items[@]}"; then
                 local sel="${remote_items[$((cleaned_input-1))]}"
                 if [[ "$sel" == */ ]]; then
                   _nav_history+=("$remote_path")
@@ -552,9 +514,7 @@ gcloud_navigator() {
             echo "🔴  Invalid input"
           fi
         else
-          if [[ "$gnav_choice" =~ ^[0-9]+$ ]] && \
-             [ "$gnav_choice" -ge 1 ] && \
-             [ "$gnav_choice" -le "${#remote_items[@]}" ]; then
+          if _nav_index_ok "$gnav_choice" "${#remote_items[@]}"; then
             local sel="${remote_items[$((gnav_choice-1))]}"
             if [[ "$sel" == */ ]]; then
               _nav_history+=("$remote_path")

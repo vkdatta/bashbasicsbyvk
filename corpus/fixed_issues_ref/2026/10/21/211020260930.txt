@@ -1,0 +1,47 @@
+1. ISSUE IN BRIEF
+Lower the maximum accepted input and paste length from 2000 to 512 characters.
+
+1. HOW DID YOU DEBUG
+grep for _BVK_MAX_INPUT / 2000 in script/ and tests/; ran tests/paste_input/ui_test.py (80) and run.sh (80 and 40 cols) afterwards.
+
+1. CAUSE
+_BVK_MAX_INPUT=2000 (viewport.sh) and the ":-2000" fallbacks in cmdmap.sh and settings_ui.sh. (Earlier note said "2000, do not change": the user changed it on purpose.)
+
+1. FIX
+All set to 512; browse.sh message text updated; tests moved to 400 accepted / 513 refused / 500+20 refused. ui_test and run.sh: ALL OK. _multi_is_big_text (>2000) can no longer trigger; left as is.
+
+2. ISSUE IN BRIEF
+Stop searching commands on every keystroke once the typed text passes 56 characters. Longer text is resolved only when Enter is pressed.
+
+2. HOW DID YOU DEBUG
+Read what runs per keystroke: _cm_hint (live hint), browse.sh _sync_highlight_from_buf, smartmenu.sh _sm_sync_from_buf.
+
+2. CAUSE
+Per-keystroke lookups only stopped at 255 characters.
+
+2. FIX
+_CM_LIVE_MAX=56 (cmdmap.sh). _cm_hint returns at once past it; the two highlight syncs skip their command parsing past it. Enter gates (_cm_gate_*, _cm_resolve, guard 255) still resolve the whole text = the fallback. The "=" filter is untouched (a filter text can be long). Not covered by an automated test.
+
+3. ISSUE IN BRIEF
+Pressing u in a Links screen opened from Home went to Local Surf instead of back to Home.
+
+3. HOW DID YOU DEBUG
+Reproduced in a pty (tests/nav_back/nav_test.py): Home > 10 > u showed the file list.
+
+3. CAUSE
+home.sh _home_act set _st_back=1 after every action, closing Home.
+
+3. FIX
+_home_act now leaves Home open (it redraws) after u; only "Local Surf" or a q (flag _BVK_TO_MAIN) closes it. Same for every Home entry (Functions, Switch, Rules, Cloud, ...). Local Surf > api > u still returns to Local Surf. Tests PASS.
+
+4. ISSUE IN BRIEF
+Pressing q inside fx, switch, rules and other menus quit the whole app instead of returning to the main loop.
+
+4. HOW DID YOU DEBUG
+nav_test.py: before, 17 of 23 cases failed (q left the app). Listed every _bvk_quit / exit 0 under script/file.
+
+4. CAUSE
+_bvk_quit did "exit 0" (and fx/sw/transfer/csv/run had literal exit 0), used by every menu and prompt; cmdmap bvk_main_exec q called it for any screen.
+
+4. FIX
+viewport.sh: _bvk_exit = real exit (only the main loop's own q: o and cmdmap when MAP=main and FLOW=0). _bvk_quit now only sets _BVK_TO_MAIN. Menu loops (fx, sw, .r, api/bk/sv, upgrade, xui = rbam/nf/cs, auth) break on q and after every command; _inner_run stops on the flag; Home closes on it; o resets it (and _cm_abort_clear) at the top of the main loop. cmdmap gates: q in a menu passes to the menu's own q) case, q in a text prompt cancels the flow silently. Every prompt-level "q) _bvk_quit" got a return (organise, transfer, create, find, bundle_io, rules, infinity, hidefiles, staging*, fx delete scripts, snapshot; snapshot loops also check the flag), literal exit 0 sites in transfer/csv/run replaced. nav_test.py: ALL OK (sn not testable offline).

@@ -1,0 +1,59 @@
+1. ISSUE IN BRIEF
+Home, Settings and other menus did not show the dim command-suggestion row that the main menu shows while typing.
+
+1. HOW DID YOU DEBUG
+_cm_hint (cmdmap.sh) builds the text; the main list paints it through _input_hint_sync (browse.sh), but only when _vp_hint_row=1, which _vp_geometry set only for the viewport input functions (_print_input_line, _sm_input_fn, _multi_print_input_line). Home and Settings are not viewport menus: they are _st_run / _st_draw (settings_ui.sh), which prints its own screen and never called _cm_hint. Confirmed in a pty (tests/nav_back App + vt.py): typing s on Home showed nothing, after the fix "s  →  Settings (also: sw, sv, sn, s-)". Checked Settings, Home, fx and main in tests/hints/hint_test.py. Other loop menus (fx, sw, api, bk, rules, upgrade, xui) already use _print_input_line and were fine; plain read -p prompts use _cm_text_read which already shows the hint.
+
+1. CAUSE
+Two separate screen engines; only one of them had a suggestion row.
+
+1. FIX
+settings_ui.sh: _st_hint_text (new) fills the blank row under the footer of _st_draw: _cm_ctx_find + _cm_hint for commands, plus "Enter → open/switch <row>" for a typed row number and a text for the = filter. Rule for the future: a new screen that draws its own "Select:" must call _st_hint_text / _cm_hint (tests/hints/hint_test.py covers main, Home, Settings, fx).
+
+2. ISSUE IN BRIEF
+New main-screen layout: a status row, separate cd path and nav path lines, and the suggestion row above the Select prompt instead of below it.
+
+2. HOW DID YOU DEBUG
+Read _menu_header (browse.sh), _vp_build_chrome / _vp_geometry / _vp_emit / _vp_dist (viewport.sh) and every user of _blk_h and the hint row (browse, smartmenu, viewport). Compared screens with the original archive in the pty emulator (original had footer, blank, Select, hint below).
+
+2. CAUSE
+Not a bug: layout change. The hint row used to be reserved UNDER the prompt; _bvk_notice shared it.
+
+2. FIX
+viewport.sh: _vp_wants_hint_row; the suggestion row is now part of the frame (_vp_emit prints it, _blk_h and _vp_dist count it) and REPLACES the old blank linebreak under the footer, so the screen is not taller. _bvk_hint_paint / _bvk_hint_leave paint and wipe it above the prompt (cursor goes up _BLK_CROW+1 rows and back); _bvk_notice uses the same row; a multi-row input block wipes it when it starts. browse.sh _input_hint_sync and the two leave sites (browse.sh, smartmenu.sh, viewport.sh) use the helpers. browse.sh _menu_header: status row (_bvk_hdr_status), cd path = real folder, nav path = browsed location (+ group / filter / [loaded by c]). Counts: pending = _pn_count_cached (20 s cache, staging_pending.sh); notifications = _nf_cnt_get (notify.sh): reads a cache file ~/.local/state/bashbasicsbyvk/nf_count, refreshed by a silent background _nf_load at most once a minute, also written whenever nf loads; no -auth user = 0, unknown yet = –. "lang" has no setting in the app, so it shows the locale code (EN when C/POSIX). Text prompts (read -p, _cm_text_read) keep the hint below the text: they have no Select frame. nav_test.py now looks for "nav path:". Not tested against the real notification server (offline sandbox).
+
+3. ISSUE IN BRIEF
+Replace a fixed set of status and navigation icons with new ones across the app.
+
+3. HOW DID YOU DEBUG
+Counted every use (⚠ 230, ✅ 147, ℹ 104, ➡ 5, ⬆ 4, 🤖 1; ⬅ ⬇ none) and checked none is parsed by code (only printed; tests/e2e_pending.sh matched ℹ️ and was replaced with the rest).
+
+3. CAUSE
+n/a (request).
+
+3. FIX
+Bulk replace (with and without U+FE0F) in script/, tests/, README, llms.txt; corpus notes untouched. ◀️ ▶️ keep U+FE0F, so they are 1 cell like 🗄️ (text-default emoji, see 201020261500 / _vp_cpw). The old icons stay in tests/width as explicit \u escapes so the width rule is still checked.
+
+4. ISSUE IN BRIEF
+The language field in the new status row should show which engine loaded the folder (c or py), not a human language.
+
+4. HOW DID YOU DEBUG
+Read _bvk_src_tag_v (displayer.sh): it sets _bst_out to " [loaded by c]" / " [loaded by py]". My first version showed the locale code; wrong reading of the request.
+
+4. CAUSE
+Misread "lang".
+
+4. FIX
+browse.sh _bvk_hdr_lang now derives c / py from _bvk_src_tag_v (– when hidden by BVK_SHOW_SRC=0 or nothing loaded). The tag is removed from the nav path line (it lives in the status row). Header: "c | ⏰ n | 📣 n". Note 2 above still describes the locale version: this item supersedes it.
+
+5. ISSUE IN BRIEF
+The cd path line should show the shell's current directory, but it showed the browsed folder, the same as the nav path line.
+
+5. HOW DID YOU DEBUG
+Browsing only changes the variable $path (path="$selected"); the process never cd's while you browse, only on q / cd / switch (cd "$path" && exec "$SHELL" in o / viewport.sh). So the shell's own folder is $PWD.
+
+5. CAUSE
+Misread: cd path was printed from $path (the browsed folder), same as nav path.
+
+5. FIX
+browse.sh _menu_header: "📂 cd path: $PWD"; "☁️ nav path:" stays the browsed location ($path / Drive view). They differ as soon as you open a sub-folder. tests/hints/hint_test.py now opens a folder and checks cd path stays and nav path moves.

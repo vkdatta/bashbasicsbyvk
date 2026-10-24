@@ -554,6 +554,27 @@ _cm_local_collect() {   # reads the caller's _sm_rows_text/_sm_rows_token/_sm_ft
   done
 }
 
+# ------------------------------------------------------------ shared tail of the text and item-picker gates
+# _cm_gate_dispatch <typed>   the typed text is not a key of the prompt itself: is it a command?  Sets _CM_OUT (what the prompt gets:
+# the text, its un-escaped literal, or "" when the flow is cancelled).  returns 0 = accept · 3 = a command ran (ask again) · 4 = flow aborted
+_cm_gate_dispatch() {
+  local t="$1"
+  _CM_OUT="$t"
+  [ "$_CM_BOOTED" = 1 ] || _cm_boot
+  _cm_table_build "$_CM_MAP"
+  if _cm_unescape "$t"; then _CM_OUT="$_CM_LIT"; return 0; fi
+  _cm_resolve text "$t"
+  case "$_CM_ACT" in
+    none|local) return 0 ;;
+    run)   _cm_run_main "$t" text
+           [ "${_BVK_TO_MAIN:-0}" = 1 ] && { _cm_abort ""; _CM_OUT=""; return 4; }   # q: cancel this flow silently, the menus close up to the main loop
+           return 3 ;;
+    back)  _cm_abort "↩️  Back"; _CM_OUT=""; return 4 ;;
+    block) _cm_abort "❌ Invalid command: $t — exiting"; _CM_OUT=""; return 4 ;;
+  esac
+  return 0
+}
+
 # ------------------------------------------------------------ gate for the item picker (_multi_prompt_loop)
 # uses the caller's _buf.  returns 0 = accept · 1 = a command ran, ask again
 _cm_gate_multi() {
@@ -563,18 +584,9 @@ _cm_gate_multi() {
   _cm_on || return 0
   [[ "$t" =~ ^[0-9a,\ -]+$ ]] && return 0
   [ -n "${_CM_LOCAL[${t,,}]+x}" ] && return 0
-  [ "$_CM_BOOTED" = 1 ] || _cm_boot
-  _cm_table_build "$_CM_MAP"
-  if _cm_unescape "$t"; then _buf="$_CM_LIT"; return 0; fi
-  _cm_resolve text "$t"
-  case "$_CM_ACT" in
-    none|local) return 0 ;;
-    run)   _cm_run_main "$t" text
-           [ "${_BVK_TO_MAIN:-0}" = 1 ] && { _cm_abort ""; _buf=""; return 0; }   # q: cancel this flow silently, the menus close up to the main loop
-           return 1 ;;
-    back)  _cm_abort "↩️  Back"; _buf=""; return 0 ;;
-    block) _cm_abort "❌ Invalid command: $t — exiting"; _buf=""; return 0 ;;
-  esac
+  _cm_gate_dispatch "$t"
+  [ $? = 3 ] && return 1          # a command ran: ask again
+  _buf="$_CM_OUT"
   return 0
 }
 
@@ -655,19 +667,7 @@ _cm_gate_text() {   # $1 typed  $2 initial text ; sets _CM_OUT ; 0 accept · 3 r
   _cm_on || return 0
   # a key the prompt prints itself is THAT prompt's answer
   [ -n "${_CM_LOCAL[${t,,}]+x}" ] && return 0
-  [ "$_CM_BOOTED" = 1 ] || _cm_boot
-  _cm_table_build "$_CM_MAP"
-  if _cm_unescape "$t"; then _CM_OUT="$_CM_LIT"; return 0; fi
-  _cm_resolve text "$t"
-  case "$_CM_ACT" in
-    none|local) return 0 ;;
-    run)   _cm_run_main "$t" text
-           [ "${_BVK_TO_MAIN:-0}" = 1 ] && { _cm_abort ""; _CM_OUT=""; return 4; }   # q: cancel this flow silently, the menus close up to the main loop
-           return 3 ;;
-    back)  _cm_abort "↩️  Back"; _CM_OUT=""; return 4 ;;
-    block) _cm_abort "❌ Invalid command: $t — exiting"; _CM_OUT=""; return 4 ;;
-  esac
-  return 0
+  _cm_gate_dispatch "$t"
 }
 
 # ---- tiny line editor with a live hint row (replaces `read -e` for plain text prompts)

@@ -2,8 +2,10 @@
 # Resume after a lost connection keeps the blobs that were COMPLETE.  A PUT is all-or-nothing, so with many blobs in flight an outage at
 # 80 MB of 115 MB leaves almost nothing stored (the 201020260630 bug).  Mock worker, no real server needed.   bash tests/resume_inflight.sh
 set -u
+source "$(dirname "${BASH_SOURCE[0]}")/wait_lib.sh"   # UTF-8 locale + wait_until / wait_port / settle (no fixed sleeps)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 X="$ROOT/script/file/staging/!buffer/fileapi/6 pending/bashbasicsbyvk_staging_pending_xfer"
+export BB_JSLIB="$ROOT/script/file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_staging_jslib.js"   # bash hands this to the node tools
 T=$(mktemp -d); trap 'kill $MP 2>/dev/null; rm -rf "$T"' EXIT; MP=""
 cat > "$T/mock.js" <<'JS'
 // mock worker: stores a blob ONLY when its whole PUT body arrived (like R2 put). Shared 30 MB/s bandwidth.
@@ -28,12 +30,14 @@ srv.listen(+process.env.PORT||8799,()=>console.log("up"));
 JS
 ID=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; PORT=${PORT:-8799}
 for i in 0 1 2 3 4 5 6; do head -c 16777216 /dev/urandom > "$T/blob$i"; done; head -c 3000000 /dev/urandom > "$T/blob7"
+_state() { curl -s 127.0.0.1:$PORT/_state; }
+_wire_ge() { local w; w=$(_state | sed -n 's/.*"wireMB":\([0-9.]*\).*/\1/p'); [ "${w%.*}" -ge "$1" ] 2>/dev/null; }
 kept_mb() {   # $1 = concurrency → MB stored on the mock after the connection is cut at ~80 MB on the wire
-  PORT=$PORT node "$T/mock.js" >/dev/null & MP=$!; sleep 0.5
+  PORT=$PORT node "$T/mock.js" >/dev/null & MP=$!; wait_port 10 $PORT
   BB_UTOKEN=t BB_EMAIL=e BB_N=8 BB_CHUNK=94371840 BB_CONC=$1 BB_STATE="$T" BB_DONEFILE=/nonexistent node "$X" upload "http://127.0.0.1:$PORT" $ID "$T" >/dev/null 2>&1 & local xp=$!
-  local w; while :; do w=$(curl -s 127.0.0.1:$PORT/_state | sed -n 's/.*"wireMB":\([0-9.]*\).*/\1/p'); [ "${w%.*}" -ge 80 ] && break; sleep 0.2; done
-  curl -s 127.0.0.1:$PORT/_cut >/dev/null; sleep 1.5
-  curl -s 127.0.0.1:$PORT/_state | sed -n 's/.*"doneMB":\([0-9.]*\).*/\1/p'
+  wait_until 60 "80 MB sent to the mock" _wire_ge 80
+  curl -s 127.0.0.1:$PORT/_cut >/dev/null; settle 5 0.3 _state       # the server's stored-blob count stops changing once the cut connections are dead
+  _state | sed -n 's/.*"doneMB":\([0-9.]*\).*/\1/p'
   kill -TERM $xp 2>/dev/null; wait $xp 2>/dev/null; kill $MP; wait $MP 2>/dev/null
 }
 fail=0

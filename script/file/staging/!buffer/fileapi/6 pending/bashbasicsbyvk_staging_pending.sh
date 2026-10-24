@@ -139,7 +139,8 @@ _pn_xfer() {
     _bb_xfer_note go-fallback "xfer gave no verdict (crashed?) — continued with node"
     bin=$(_pn_xfer_bin) || { unset BB_EMAIL BB_UTOKEN BB_N BB_CHUNK BB_CONC BB_DONEFILE BB_STATE BB_OFFLINE_MAX; echo FAIL; return; }
   fi
-  node "$bin" "$pipe" "$WORKER_URL" "$id" "$d" | tail -n 1
+  local jl; jl=$(_bb_jslib) || { unset BB_EMAIL BB_UTOKEN BB_N BB_CHUNK BB_CONC BB_DONEFILE BB_STATE BB_OFFLINE_MAX; echo FAIL; return; }
+  BB_JSLIB="$jl" node "$bin" "$pipe" "$WORKER_URL" "$id" "$d" | tail -n 1
   unset BB_EMAIL BB_UTOKEN BB_N BB_CHUNK BB_CONC BB_DONEFILE BB_STATE BB_OFFLINE_MAX
 }
 

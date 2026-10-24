@@ -476,18 +476,21 @@ def _cleanup(signum=None, frame=None):
 
 # ── watchdog import / self-install ─────────────────────────────────────────────
 
+def _pipboot():
+    """The shared self-install helper (bashbasicsbyvk_pipboot, installed next to this script). None if it cannot be
+    imported, so the daemon still runs - on the polling backend."""
+    try:
+        import bashbasicsbyvk_pipboot
+        return bashbasicsbyvk_pipboot
+    except ImportError:
+        return None
+
 def _refresh_import_paths():
     """Make sure user site-packages is on sys.path and Python's import
     caches are invalidated. Needed after a fresh `pip install --user`."""
-    try:
-        import site, importlib
-        try:
-            site.addsitedir(site.getusersitepackages())
-        except Exception:
-            pass
-        importlib.invalidate_caches()
-    except Exception:
-        pass
+    pb = _pipboot()
+    if pb is not None:
+        pb.refresh_import_paths()
 
 def _try_import_watchdog():
     _refresh_import_paths()
@@ -500,62 +503,15 @@ def _try_import_watchdog():
         return None, None
 
 def _should_attempt_install():
-    if not SENTINEL.exists():
-        return True
-    try:
-        age = time.time() - SENTINEL.stat().st_mtime
-        return age > INSTALL_RETRY
-    except OSError:
-        return True
-
-def _run_pip(args):
-    cmd = [sys.executable, "-m", "pip", "install",
-           "--no-input", "--disable-pip-version-check"] + args
-    _log(f"pip: {' '.join(cmd)}")
-    try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=PIP_TIMEOUT)
-        out = proc.stdout.decode(errors="replace").strip()
-        err = proc.stderr.decode(errors="replace").strip()
-        if out:
-            _log(f"pip stdout tail: {out[-500:]}")
-        if err:
-            _log(f"pip stderr tail: {err[-500:]}")
-        return proc.returncode
-    except subprocess.TimeoutExpired:
-        _log(f"pip install timed out after {PIP_TIMEOUT}s")
-        return 124
-    except Exception as e:
-        _log(f"pip install raised {type(e).__name__}: {e}")
-        return 1
+    pb = _pipboot()
+    return pb is not None and pb.retry_due(SENTINEL, INSTALL_RETRY)
 
 def _try_install_watchdog():
-    """One-shot pip install. Tries plain --user first, then falls back to
-    --break-system-packages for PEP 668–managed environments. Records a
-    sentinel so we don't hammer pip on every daemon start."""
+    """One-shot pip install (the shared bashbasicsbyvk_pipboot recipe: --user, then --break-system-packages for
+    PEP 668-managed environments). Records a sentinel so we don't hammer pip on every daemon start."""
     _log("watchdog missing — attempting one-shot pip install")
-
-    attempts = [
-        ["--user", "watchdog"],
-        ["--user", "--break-system-packages", "watchdog"],
-    ]
-
-    success = False
-    for extra in attempts:
-        rc = _run_pip(extra)
-        if rc == 0:
-            success = True
-            _log("pip install watchdog succeeded")
-            break
-        _log(f"pip attempt rc={rc} (args={extra})")
-
-    try:
-        _apply_app_timezone()
-        SENTINEL.write_text(
-            f"{time.strftime('%Y-%m-%d %H:%M:%S %Z')} "
-            f"{'ok' if success else 'failed'}\n"
-        )
-    except OSError:
-        pass
+    _apply_app_timezone()
+    _pipboot().install("watchdog", SENTINEL, _log, PIP_TIMEOUT)
 
     # Verify the install by re-importing in this process
     _refresh_import_paths()

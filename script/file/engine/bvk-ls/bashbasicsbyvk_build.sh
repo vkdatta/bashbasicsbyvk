@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
+# One build script for both C engines: bvk-fr/bashbasicsbyvk_build.sh runs this one with BVK_NAME=bvk-fr BVK_DIR=<its folder>.
+NAME="${BVK_NAME:-bvk-ls}"
+cd "${BVK_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
 
 CFLAGS_COMMON=(
   -std=c11
@@ -13,6 +15,7 @@ CFLAGS_COMMON=(
   -Iinclude
   -D_FILE_OFFSET_BITS=64
   -D_DEFAULT_SOURCE
+  ${BVK_EXTRA_DEFS:+$BVK_EXTRA_DEFS}
 )
 
 SRCS=(src/*.c)
@@ -20,7 +23,7 @@ SRCS=(src/*.c)
 if [ "${1:-}" = native ]; then
   make -s -f bashbasicsbyvk_Makefile clean
   make -s -f bashbasicsbyvk_Makefile CC="${CC:-cc}"
-  echo "built ./bvk-ls"
+  echo "built ./$NAME"
   exit 0
 fi
 
@@ -51,7 +54,7 @@ for a in arm64 amd64 arm; do
       -static \
       -s \
       "${SRCS[@]}" \
-      -o "bvk-ls-linux-$a" \
+      -o "${NAME}-linux-$a" \
       -pthread
   else
     $cc \
@@ -59,11 +62,11 @@ for a in arm64 amd64 arm; do
       -static-pie \
       -s \
       "${SRCS[@]}" \
-      -o "bvk-ls-linux-$a" \
+      -o "${NAME}-linux-$a" \
       -pthread
   fi
 
-  echo "built bvk-ls-linux-$a"
+  echo "built ${NAME}-linux-$a"
 done
 
 # ── Android (bionic) builds ────────────────────────────────────────────────
@@ -100,10 +103,10 @@ if NDK="$(find_ndk)"; then
       -pie \
       -s \
       "${SRCS[@]}" \
-      -o "bvk-ls-android-$a"
-    echo "built bvk-ls-android-$a"
+      -o "${NAME}-android-$a"
+    echo "built ${NAME}-android-$a"
   done
 else
-  echo "Android NDK not found; skipping bvk-ls-android-* (set ANDROID_NDK_HOME)" >&2
+  echo "Android NDK not found; skipping ${NAME}-android-* (set ANDROID_NDK_HOME)" >&2
   if [ "${REQUIRE_ANDROID:-0}" = 1 ]; then exit 1; fi
 fi

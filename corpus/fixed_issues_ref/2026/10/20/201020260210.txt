@@ -1,0 +1,37 @@
+1. ISSUE IN BRIEF
+On Android (Termux), uploading with up- printed a regex error and then claimed the link was not kept in the cloud, so the link never reached Home > Links. Bash regexes with repeat counts above 255 are rejected by Android's regex engine, which also broke a local key copy and a comment-skipping pattern in switch.
+
+HOW DID YOU DEBUG
+1. grep "Not kept in the cloud" -> staging/!buffer/fileapi/1 upload/bashbasicsbyvk_staging_upload.sh, _bb_link_store_and_explain:
+   it prints that line whenever `_bb_link_secret_put "$id" "$url"` returns non-zero.
+2. grep for the regex text -> fileapi/0 lib/bashbasicsbyvk_fileapi_lib.sh line 502, inside _bb_link_secret_put:
+   `[[ "$enc" =~ ^[A-Za-z0-9_-]{60,1500}$ ]] || return 1`. So the invalid regex makes the function return 1 BEFORE the
+   PUT /links/<id>/secret is sent -> error 2 is a direct consequence of error 1, not a separate bug.
+3. Why only Android: Termux bash calls the system regcomp (bionic = OpenBSD/BSD). Its RE_DUP_MAX is 255, and "invalid
+   repetition count(s)" is its REG_BADBR text. glibc (Linux) allows 32767, so {60,1500} compiles there.
+4. grepped the whole repo for {n,m} with a count above 255: one more hit, lib line 211 in _bb_key_store: `{1,256}`.
+   It fails the same way on Android, but is silent (`_bb_key_remember` does `2>/dev/null || true`), so the local copy of the
+   link key (~/.bashbasicsbyvk/link_keys) was probably never written on Android either, although the message above claims
+   "still saved on this computer".
+5. Audit of other device-specific spots (grep, read only): bash regex backslash classes, GNU-only tools, /proc, /tmp, clipboard.
+   Found one more regex bug (not Android-specific): bashbasicsbyvk_switch.sh lines 58 and 133 use `^\s*#` inside [[ =~ ]].
+   Bash strips the backslash of an unquoted `\s` there, so it matches a literal "s"; verified by running it on glibc
+   (`[[ "  # c" =~ ^\s*# ]]` does not match). Comment lines in the exclude file were never skipped.
+   Checked and fine: `^count(\<=|\<)([0-9]+)$` in select.sh (bash makes `\<` a literal "<"; ran it, matches).
+(Verified by running the new patterns and `bash -n` on Linux/glibc only. NOT run on a real Termux device: bionic's regcomp is
+not available here, so the Android behaviour is inferred from its documented 255 limit and from the user's error text.)
+
+CAUSE
+Regex repeat counts above 255 ({60,1500}, {1,256}) in bash `[[ =~ ]]`. They work with glibc but are rejected by bionic's regcomp,
+so on Android _bb_link_secret_put (and _bb_key_store) return 1 and the link is neither stored in the cloud nor, apparently,
+in the local key file. The generic "Not kept in the cloud" message hid the real reason.
+
+FIX
+- fileapi/0 lib/bashbasicsbyvk_fileapi_lib.sh: _bb_link_secret_put and _bb_key_store now test the character set with `^[...]+$`
+  and the length with `${#var}` (`-ge 60 -le 1500`, `-le 256`). Same accepted strings, no repeat count above 255.
+- loops/iloop/switch/bashbasicsbyvk_switch.sh (lines 58, 133): `^\s*#` -> `^[[:space:]]*#`.
+- tests/regex_portability.sh (new): lints script/ for {n,m} counts above 255 and for \s \w \d \b inside [[ =~ ]]; passes on the
+  fixed tree and was checked to fail on the old patterns.
+Lesson: in bash regexes keep every repeat count <= 255 and use [[:space:]] / [[:alnum:]] instead of \s \w; check length with
+${#var}. Run tests/regex_portability.sh after touching any regex. Not changed, but worth doing: make _bb_link_secret_put report
+the real reason (bad pattern / no label key / HTTP status) instead of one generic "Not kept in the cloud" line.

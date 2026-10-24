@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+Find & replace in the Find menu (f) only handled names or contents separately and had no "both" mode. Its name search used shell glob semantics, so a pattern such as "hello [c]" matched the wrong files and descended into folders even when only the current folder was meant.
+
+1. HOW DID YOU DEBUG
+Read script/file/functions/bashbasicsbyvk_find.sh: names went through `find -name "*$pat*"` (glob), contents through grep/sed/python heredocs, always recursive, no conflict handling. Reproduced the glob/[c] and folder-descent symptoms by reading the code and again against the new engine with a scratch tree (plain-text "hello [c]" now renames only the exact text). Checked earlier notes on the Find menu (BB-201020260021-1) so the `u) Back` footer convention and read return-code checks stay intact.
+
+1. CAUSE
+Matching was delegated to glob-based shell tools and per-mode ad hoc scripts, so there was no single definition of "match", of flat vs recursive, or of what a rename may overwrite.
+
+1. FIX
+New find menu with six modes (find / find & replace in names, contents, both): script/file/functions/bashbasicsbyvk_find.sh (find_menu, _find_search, _find_replace_single, _find_replace_csv, _find_resolve_options, _find_ask), engine wrapper bashbasicsbyvk_findrun.sh (_fr_engine, _fr_exec, ...), imported in _3bvk_import_functions.sh. Plain text by default, optional regex, case, whole word, flat/recursive, preview before apply.
+
+2. ISSUE IN BRIEF
+The bash implementation of find & replace was slow on recursive trees and not robust (non-atomic edits, no clash detection, binary and VCS folders touched), and the app had no settings for the choices it offers.
+
+2. HOW DID YOU DEBUG
+Wrote an independent oracle and random tree/operation generators (tests/findrep/findrep_test.py): 2739 operations (find, preview, apply, regex fuzz against Python re, 38 scenarios, differential check between the C engine and the Python twin) with 0 failures. A deliberately broken engine (duplicate-target conflict disabled) is caught by the suite. Benchmarked 50k files: preview in ~0.18 s. The shell menu was driven through the real find_menu code with stubbed UI helpers (single and CSV flows, both engines); the full interactive app was not run in a pty. ARM/Android cross builds could not be compiled here and are verified only by the CI yaml.
+
+2. CAUSE
+Per-file shell/sed/python processes and no shared engine; no place to hold the new choices.
+
+2. FIX
+New C engine script/file/engine/bvk-fr (src/, include/, bashbasicsbyvk_Makefile, bashbasicsbyvk_build.sh) with a Python twin script/file/functions/bashbasicsbyvk_findrep as fallback; binary lookup shared via _bvk_engine_target in bashbasicsbyvk_displayer.sh. New Settings group "Find & replace" (settings/bashbasicsbyvk_findsettings.sh; find_* variables in bashbasicsbyvk_settings.sh incl. save/reset, and _GD_SET_VARS in the gdrive profile swap). setup.py/MANIFEST.in ship bvk-fr binaries; health gets a find & replace section; .github/workflows/build.yml builds, verifies and commits bvk-fr-<os>-<arch>. Lesson: a design with several choices goes to Settings with "ask every time" as an option.

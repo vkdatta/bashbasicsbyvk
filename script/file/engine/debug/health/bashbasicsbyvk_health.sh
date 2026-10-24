@@ -23,6 +23,7 @@
 #    8  python fallback   is the fallback itself healthy
 #    9  FileAPI engine    Go (bvk-xfer) or Node?  every candidate checked like section 5, a real pack → decrypt round trip,
 #                         a network check (DNS · CA roots · TLS · HTTP/2), and the log of every time the app fell back to Node
+#    9b Find & replace    C engine (bvk-fr) or Python twin? which one, why, and a real replace on a scratch folder
 #    10 verdict           the root cause + what to fix
 #
 #  Exit code 3 from groups / hashscan / gfilter is NOT a fault: it means "this folder
@@ -454,6 +455,26 @@ _hl_xfer_report() {
   fi
 }
 
+# ── Find & replace engine: C (bvk-fr) or the Python twin (bashbasicsbyvk_findrep) ───────────────────────────────────
+_hl_fr_report() {
+  _hl_h "9b Find & replace engine"
+  if ! declare -F _fr_engine >/dev/null 2>&1; then _hl_warn "the find & replace wrapper is not loaded in this shell (run health inside 'o')"; return 0; fi
+  _FR_RUN=(); _fr_engine
+  if [ "${#_FR_RUN[@]}" -eq 0 ]; then _hl_bad "no find & replace engine can start: ${_FR_WHY:-unknown}"; _hl_fix "reinstall bashbasicsbyvk (pip install -U) — it ships bvk-fr-<os>-<arch> and bashbasicsbyvk_findrep"; return 0; fi
+  if [ "$_FR_KIND" = c ]; then _hl_ok "C engine: ${_FR_RUN[0]}"; else _hl_warn "Python twin in use (slower): ${_FR_WHY:-no C binary}"; fi
+  local w out; w="$(mktemp -d 2>/dev/null)" || { _hl_warn "no scratch dir"; return 0; }
+  mkdir -p "$w/sub"; printf 'a [c] b\n' > "$w/sub/hello [c].txt"; printf 'a c b\n' > "$w/c.txt"
+  printf '%s\0%s\0' '[c]' 'X' > "$w/rules"
+  "${_FR_RUN[@]}" apply --root "$w" --rules "$w/rules" --scope both --depth rec --case exact --regex 0 --word 0 --hidden 0 --vcs 0 \
+      --target both --binary 0 --maxsize 0 --threads 0 --limit 10 --out "$w/o" --stats "$w/s" --log "$w/l" >/dev/null 2>&1
+  if [ -f "$w/sub/hello X.txt" ] && [ "$(cat "$w/sub/hello X.txt")" = "a X b" ] && [ "$(cat "$w/c.txt")" = "a c b" ]; then
+    _hl_ok "real run: '[c]' replaced as plain text in a name and in contents; 'c' untouched"
+  else
+    _hl_bad "real run on a scratch folder gave a wrong result"; _hl_fix "run by hand: ${_FR_RUN[*]} selftest"
+  fi
+  rm -rf "$w"
+}
+
 _hl_report() {
   local _m="" _os="" _o _d b i
   echo "🩺 bashbasicsbyvk health — C engine (bvk-ls) vs Python fallback"
@@ -565,6 +586,7 @@ _hl_report() {
   fi
 
   _hl_xfer_report
+  _hl_fr_report
 
   _hl_h "10  verdict"
   if [ -n "$_HL_BIN" ] && [ "${#_HL_FINDINGS[@]}" -eq 0 ]; then

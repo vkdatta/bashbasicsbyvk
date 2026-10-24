@@ -648,18 +648,28 @@ _sm_click() {
       return $rc ;;
     pgup) _BVK_LAST_ITEM=""; _bvk_mouse_scroll $(( - _vp_page )) ;;
     pgdn) _BVK_LAST_ITEM=""; _bvk_mouse_scroll "$_vp_page" ;;
+    *)
+      if _bvk_mouse_other "$_MS_Y" "$_BVK_CROW"; then           # a footer key (double tap only) or the prompt row (hands the touch back)
+        case "$_MS_FACT" in
+          run)  _buf="$_MS_FTEXT"; _pos=${#_buf}; _sm_after_edit; return 2 ;;   # u) Up  →  "u" typed and Enter, as if pressed
+          type) _buf="$_MS_FTEXT"; _pos=${#_buf}; _sm_after_edit; return 0 ;;
+        esac
+      else _BVK_LAST_ITEM=""; fi ;;
   esac
   _sm_input_fn
   return $rc
 }
+# at the first / last row, or with the touch outside the block, the wheel goes back to the terminal (see _bvk_mouse_pass)
 _sm_wheel() {   # $1 = -1 up · 1 down
-  _bvk_blk_park
-  local n=${#_sm_rows_text[@]} h=${_hl_index:-0}
   if [ "$_sm_mode" = single ]; then
+    _bvk_blk_park
+    _bvk_mouse_wheel_outside && return 0
+    local n=${#_sm_rows_text[@]} h=${_hl_index:-0} before=${_hl_index:-0}
     h=$(( h + $1 * _BVK_WHEEL_STEP )); (( h < 1 )) && h=1; (( h > n )) && h=$n
     h=$(_sm_next_selectable "$h" "$1"); _sm_set_index "$h"
+    [ "${_hl_index:-0}" = "$before" ] && _bvk_mouse_pass
   else
-    _bvk_mouse_scroll $(( $1 * _BVK_WHEEL_STEP )); _sm_input_fn
+    _bvk_mouse_wheel_window "$1"; _sm_input_fn
   fi
 }
 

@@ -393,6 +393,20 @@ Run:
 # Confirmation
 # ============================================================
 
+# Asks whether the new GitHub repository is private (default) or public; sets VISIBILITY for  gh repo create.
+ask_repo_visibility() {
+    read -e -r -p "Make repository private? [Y/n]: " private_answer
+
+    case "${private_answer:-Y}" in
+        n|N|no|NO|No)
+            VISIBILITY="--public"
+            ;;
+        *)
+            VISIBILITY="--private"
+            ;;
+    esac
+}
+
 confirm_action() {
     local description="$1"
 
@@ -970,16 +984,7 @@ if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             echo "  $REPO_FULL"
             echo
 
-            read -e -r -p "Make repository private? [Y/n]: " private_answer
-
-            case "${private_answer:-Y}" in
-                n|N|no|NO|No)
-                    VISIBILITY="--public"
-                    ;;
-                *)
-                    VISIBILITY="--private"
-                    ;;
-            esac
+            ask_repo_visibility
 
             info "Creating GitHub repository..."
 
@@ -1199,16 +1204,7 @@ else
 
         echo
 
-        read -e -r -p "Make repository private? [Y/n]: " private_answer
-
-        case "${private_answer:-Y}" in
-            n|N|no|NO|No)
-                VISIBILITY="--public"
-                ;;
-            *)
-                VISIBILITY="--private"
-                ;;
-        esac
+        ask_repo_visibility
 
         # ----------------------------------------------------
         # Initialize locally first.

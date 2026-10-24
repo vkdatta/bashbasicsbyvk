@@ -1,0 +1,44 @@
+1. ISSUE IN BRIEF
+The copy-paste checker dupscan only matched runs of about ten identical or similarly shaped lines, so it missed duplicate functions that were renamed, reformatted or written in another language. The Polyglot Clone Finder, which parses the code and verifies candidates exactly, was to replace it.
+
+1. HOW DID YOU DEBUG
+Read AGENTS.md, dupscan, both audit launchers and the Infinity menu to copy their conventions (flat install, `$SCRIPT_DIR/<tool> "$path"`, the tool cd's into the path and writes its report there). Unpacked PolyglotCloneFinder_v1_3 and flattened its package modules into script/file/infinity/tools/polyglot/ (relative imports became imports by file stem). Ran the original test-suite ported to tests/polyglot (44 tests) plus 6 new ones: 50 OK. Ran the launcher from a flat copy of script/ (as setup.py installs it) on the sample project and on this repo itself: 248 files, 117 candidate clusters in 2 s, none of them involving the new or changed files. Compared AGENTS checks 1-4 against the original tarball: identical output. NOT run: tree-sitter itself (no network and no tree-sitter in the sandbox, so only the stdlib-ast and regex fallbacks were exercised) and Termux.
+
+1. CAUSE
+Not a bug. dupscan's unit of detection is a window of lines, so a function that was renamed, re-indented or ported cannot match; nothing in the repo compared functions.
+
+1. FIX
+- Deleted script/file/infinity/tools/bashbasicsbyvk_dupscan.
+- New script/file/infinity/tools/polyglot/: launcher bashbasicsbyvk_polyglot and bashbasicsbyvk_polyglot_{constants,languages,crawler,normalize,extractor,embeddings,similarity,verify,metrics,pipeline,report,ui,xlsx,bootstrap}.py; help text in script/file/infinity/help/bashbasicsbyvk_polyglot.md. The package's cli.py is folded into the launcher, core.py became pipeline (no `_core` name); requirements.txt, README and __main__ were not copied (the bootstrap replaces requirements.txt).
+- AGENTS.md check 5 now runs polyglot and says that its output is candidates to review, not a pass/fail gate (it is not 100% reliable). README.md and llms-full.txt list it under Infinity Stones.
+- tests/polyglot/polyglot_test.py and tests/polyglot/sample_project/.
+Lesson: the old check printed "ok"; the new one prints clusters, so a change is judged by the clusters it adds.
+
+2. ISSUE IN BRIEF
+Polyglot had to become a normal Infinity Stones tool that starts and behaves like the JavaScript and Python audits, and its results had to warn that it only finds candidates and is not fully reliable.
+
+2. HOW DID YOU DEBUG
+Read bashbasicsbyvk_infinity.sh and the two audit launchers. Ran option 7 through infinity_stones_menu with a stubbed _mc_menu and the real launcher: it scanned the folder and wrote both reports into it. The tests open the written xlsx and JSON and look for the warning. bash tests/cmd_drift.sh prints ALL OK (it does not cover this menu). NOT run: the full interactive menu in a terminal.
+
+2. CAUSE
+Not a bug: a new feature. Menu numbers are plain positions in the _mc_menu list, so a seventh entry needs no map change.
+
+2. FIX
+- bashbasicsbyvk_infinity.sh: entry "Polyglot Clone Finder", option 7: `python "$SCRIPT_DIR/bashbasicsbyvk_polyglot" "$path"`.
+- The launcher changes into $path (default: the current folder) and writes "Polyglot Report.xlsx" (Summary, Clusters, Files; same colours and font as the JavaScript audit) and "Polyglot Report.json" there.
+- The warning text is WARNING in bashbasicsbyvk_polyglot_constants.py; it is printed last on the console, sits in row 2 of every xlsx sheet and in the JSON field `disclaimer`.
+
+3. ISSUE IN BRIEF
+The only self-install code (a one-shot pip install guarded by a retry sentinel) lived inside the recents daemon, and polyglot needed the same behaviour for numpy, rich, openpyxl and the tree-sitter grammars. Copying it would have created a second copy that could drift.
+
+3. HOW DID YOU DEBUG
+Read the daemon's _refresh_import_paths, _should_attempt_install, _run_pip and _try_install_watchdog, moved them into one shared helper and ran the old and the new daemon install flow side by side with a stubbed subprocess.run in four cases (first attempt ok, second attempt ok, both fail, timeouts): identical log lines, pip commands, sentinel text and retry decisions. Installed a hand-built local wheel through the real pip (`--user --break-system-packages`) and imported it in the same process. Ran polyglot with no network: failed installs degrade to the fallback parsers and are not retried for a day. NOT run: the daemon itself as a background service.
+
+3. CAUSE
+Not a bug: the recipe had no home outside the daemon.
+
+3. FIX
+- New script/file/engine/bashbasicsbyvk_pipboot.py (refresh_import_paths, have, retry_due, run_pip, install).
+- bashbasicsbyvk_recents_daemon: _refresh_import_paths, _should_attempt_install and _try_install_watchdog now call it through a lazy _pipboot(); if the helper cannot be imported the daemon stays on its polling backend. _run_pip was removed (no other caller).
+- bashbasicsbyvk_polyglot_bootstrap.py uses the same helper. One addition to the recipe: inside a venv it runs a plain pip install, because --user is refused there.
+Lesson: new self-install code calls bashbasicsbyvk_pipboot and never starts its own pip subprocess. Repo-layout runs need PYTHONPATH=script/file/engine (the flat install does not).

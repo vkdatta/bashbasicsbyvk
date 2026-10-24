@@ -1,0 +1,24 @@
+# name|tier|timeout seconds|command (run from the repo root)|needs
+# tier fast = seconds, run on every change that touches the area; slow = run when you touched what it covers (tests/covers.map) and before release.
+# findrep_full = 2700+ operations on the C engine and the Python twin (about 3 min); findrep = the quick version
+# needs: node | python3 | fileapi (the ../fileapi repo) - when missing the test is reported as SKIP (never as a pass).
+lint_waits|fast|20|bash tests/lint_waits.sh|
+regex_portability|fast|30|bash tests/regex_portability.sh|
+cmd_drift|fast|90|bash tests/cmd_drift.sh|
+group_view|fast|40|bash tests/group_view.sh|
+width|fast|20|bash tests/width/width_consistency.sh|
+xfer_ux|fast|40|node tests/xfer_ux.mjs|node
+stale_size|fast|30|bash tests/stale_size/run.sh|python3
+wrap_input|fast|60|bash tests/wrap_input/run.sh|python3
+hints|fast|60|python3 tests/hints/hint_test.py|python3
+loadtime_print|fast|60|bash tests/loadtime_print.sh|python3
+polyglot_unit|fast|30|python3 tests/polyglot/polyglot_test.py|python3
+findrep|fast|120|bash tests/findrep/findrep_run.sh quick|python3
+cheatcode|slow|90|bash tests/cheatcode.sh|
+resume_inflight|slow|90|bash tests/resume_inflight.sh|node
+nav_back|slow|120|python3 tests/nav_back/nav_test.py|python3
+paste_input|slow|180|bash tests/paste_input/run.sh|python3
+mouse|slow|240|python3 tests/mouse/mouse_test.py|python3
+e2e_pending|slow|300|bash tests/e2e_pending.sh|fileapi
+e2e_services|slow|300|bash tests/e2e_services.sh|fileapi
+findrep_full|slow|600|bash tests/findrep/findrep_run.sh full|python3

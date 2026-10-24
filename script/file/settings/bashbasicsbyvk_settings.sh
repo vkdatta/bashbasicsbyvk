@@ -36,6 +36,21 @@ DEFAULT_SNAPSHOT_ENABLED="on"             # background snapshots while o runs:  
 DEFAULT_SNAPSHOT_INTERVAL_SECONDS=3600    # how often (1 hour). 1 minute .. 30 days
 DEFAULT_SNAPSHOT_KEEP_SECONDS=604800      # how long each snapshot is kept (7 days). 60 s .. 30 days
 
+# Find & replace (f): see bashbasicsbyvk_findsettings.sh
+DEFAULT_FIND_CASE_MODE="ask"
+DEFAULT_FIND_REGEX_MODE="off"
+DEFAULT_FIND_DEPTH_MODE="ask"
+DEFAULT_FIND_WORD_MODE="off"
+DEFAULT_FIND_HIDDEN_MODE="follow"
+DEFAULT_FIND_TARGET_MODE="both"
+DEFAULT_FIND_BINARY_MODE="skip"
+DEFAULT_FIND_VCS_MODE="skip"
+DEFAULT_FIND_CONFIRM_MODE="preview"
+DEFAULT_FIND_INPUT_MODE="ask"
+DEFAULT_FIND_MAXSIZE_MB="200"
+DEFAULT_FIND_SHOW_LIMIT="300"
+DEFAULT_FIND_THREADS="auto"
+
 unset show_hidden_files
 unset index_mode_threshold
 unset terminal_bg_color
@@ -66,6 +81,19 @@ unset saved_nuke_time_seconds
 unset snapshot_enabled
 unset snapshot_interval_seconds
 unset snapshot_keep_seconds
+unset find_case_mode
+unset find_regex_mode
+unset find_depth_mode
+unset find_word_mode
+unset find_hidden_mode
+unset find_target_mode
+unset find_binary_mode
+unset find_vcs_mode
+unset find_confirm_mode
+unset find_input_mode
+unset find_maxsize_mb
+unset find_show_limit
+unset find_threads
 
 # Reads a settings file written by save_settings (key=value or key="value", one per line).
 # It is DATA, not code: nothing in the file is ever executed, and only lower-case keys are assigned.
@@ -209,6 +237,33 @@ _tz_label() {
 
 _apply_timezone
 
+: "${find_case_mode:=$DEFAULT_FIND_CASE_MODE}"
+[[ "$find_case_mode" =~ ^(ask|exact|any)$ ]] || find_case_mode=$DEFAULT_FIND_CASE_MODE
+: "${find_regex_mode:=$DEFAULT_FIND_REGEX_MODE}"
+[[ "$find_regex_mode" =~ ^(off|on|ask)$ ]] || find_regex_mode=$DEFAULT_FIND_REGEX_MODE
+: "${find_depth_mode:=$DEFAULT_FIND_DEPTH_MODE}"
+[[ "$find_depth_mode" =~ ^(ask|flat|recursive)$ ]] || find_depth_mode=$DEFAULT_FIND_DEPTH_MODE
+: "${find_word_mode:=$DEFAULT_FIND_WORD_MODE}"
+[[ "$find_word_mode" =~ ^(off|on|ask)$ ]] || find_word_mode=$DEFAULT_FIND_WORD_MODE
+: "${find_hidden_mode:=$DEFAULT_FIND_HIDDEN_MODE}"
+[[ "$find_hidden_mode" =~ ^(follow|include|exclude)$ ]] || find_hidden_mode=$DEFAULT_FIND_HIDDEN_MODE
+: "${find_target_mode:=$DEFAULT_FIND_TARGET_MODE}"
+[[ "$find_target_mode" =~ ^(both|files|folders)$ ]] || find_target_mode=$DEFAULT_FIND_TARGET_MODE
+: "${find_binary_mode:=$DEFAULT_FIND_BINARY_MODE}"
+[[ "$find_binary_mode" =~ ^(skip|include)$ ]] || find_binary_mode=$DEFAULT_FIND_BINARY_MODE
+: "${find_vcs_mode:=$DEFAULT_FIND_VCS_MODE}"
+[[ "$find_vcs_mode" =~ ^(skip|include)$ ]] || find_vcs_mode=$DEFAULT_FIND_VCS_MODE
+: "${find_confirm_mode:=$DEFAULT_FIND_CONFIRM_MODE}"
+[[ "$find_confirm_mode" =~ ^(preview|direct)$ ]] || find_confirm_mode=$DEFAULT_FIND_CONFIRM_MODE
+: "${find_input_mode:=$DEFAULT_FIND_INPUT_MODE}"
+[[ "$find_input_mode" =~ ^(ask|single|csv)$ ]] || find_input_mode=$DEFAULT_FIND_INPUT_MODE
+: "${find_maxsize_mb:=$DEFAULT_FIND_MAXSIZE_MB}"
+[[ "$find_maxsize_mb" =~ ^[0-9]{1,6}$ ]] || find_maxsize_mb=$DEFAULT_FIND_MAXSIZE_MB
+: "${find_show_limit:=$DEFAULT_FIND_SHOW_LIMIT}"
+[[ "$find_show_limit" =~ ^[0-9]{1,6}$ ]] || find_show_limit=$DEFAULT_FIND_SHOW_LIMIT
+: "${find_threads:=$DEFAULT_FIND_THREADS}"
+[[ "$find_threads" =~ ^(auto|1|2|4|8)$ ]] || find_threads=$DEFAULT_FIND_THREADS
+
 declare -ga group_view_levels=()
 if [ -n "$group_view_levels_str" ]; then
   read -ra group_view_levels <<< "$group_view_levels_str"
@@ -246,6 +301,19 @@ save_settings() {
     echo "snapshot_enabled=$snapshot_enabled"
     echo "snapshot_interval_seconds=$snapshot_interval_seconds"
     echo "snapshot_keep_seconds=$snapshot_keep_seconds"
+    echo "find_case_mode=$find_case_mode"
+    echo "find_regex_mode=$find_regex_mode"
+    echo "find_depth_mode=$find_depth_mode"
+    echo "find_word_mode=$find_word_mode"
+    echo "find_hidden_mode=$find_hidden_mode"
+    echo "find_target_mode=$find_target_mode"
+    echo "find_binary_mode=$find_binary_mode"
+    echo "find_vcs_mode=$find_vcs_mode"
+    echo "find_confirm_mode=$find_confirm_mode"
+    echo "find_input_mode=$find_input_mode"
+    echo "find_maxsize_mb=$find_maxsize_mb"
+    echo "find_show_limit=$find_show_limit"
+    echo "find_threads=$find_threads"
   } > "$SETTINGS_FILE"
 }
 
@@ -418,31 +486,34 @@ animation_settings() { _st_run "Animation" _st_anim_build _st_anim_act; }
 #  Rate: 1 credit per GB per hour, with a minimum charge by size (0-5 MB: 1 per month, 6-50 MB: 1 per
 #  week, 51-500 MB: 1 per day, >500 MB: 1 per hour). Under 1 hour is billed as 1 hour.
 #  Change or nuke a link later from  api  (extending charges, shortening / nuking refunds whole days).
-_ST_NUKE_PRESETS=(3600 21600 86400 604800 2592000)
-_ST_NUKE_LABELS=("1 hour  (default)" "6 hours" "1 day" "7 days" "30 days  (maximum)")
-
-_st_nuke_build() {
+# The up- and ux- nuke-time screens are the same screen with other presets / other variable: the two generic functions below do the work,
+# _st_nuke_* and _st_uxnuke_* only say which variable (nuke_time_seconds / ux_nuke_time_seconds), presets, labels and wording to use.
+# _st_nuke_build_for <var> <presets-array> <labels-array> <"link" | "ux- share">
+_st_nuke_build_for() {
+  local -n _nv="$1" _np="$2" _nl="$3"
   local i custom=1
   _st_reset
-  _st_add h "How long a new link lives before it is nuked"
-  for i in "${!_ST_NUKE_PRESETS[@]}"; do
-    _st_eq "${_ST_NUKE_PRESETS[$i]}" "$nuke_time_seconds"
+  _st_add h "How long a new $4 lives before it is nuked"
+  for i in "${!_np[@]}"; do
+    _st_eq "${_np[$i]}" "$_nv"
     [ "$_o" = 1 ] && custom=0
-    _st_add r "${_ST_NUKE_LABELS[$i]}" "$_o" "" "p:${_ST_NUKE_PRESETS[$i]}"
+    _st_add r "${_nl[$i]}" "$_o" "" "p:${_np[$i]}"
   done
   _st_add h "Anything else  (1 minute – 30 days; under 1 hour is billed as 1 hour)"
   if [ "$custom" = 1 ]; then
-    _st_add r "Custom" 1 "$(_bb_fmt_duration "$nuke_time_seconds")" custom
+    _st_add r "Custom" 1 "$(_bb_fmt_duration "$_nv")" custom
   else
     _st_add a "Custom…" 0 "" custom
   fi
 }
-_st_nuke_act() {
-  local tag="${_st_tag[$1]}" secs
+# _st_nuke_act_for <var> <"links" | "ux- shares"> <row>
+_st_nuke_act_for() {
+  local -n _nv="$1"
+  local tag="${_st_tag[$3]}" secs
   case "$tag" in
-    p:*) nuke_time_seconds="${tag#p:}"; save_settings ;;
+    p:*) _nv="${tag#p:}"; save_settings ;;
     custom)
-      _st_ask "Nuke time, e.g. 90m · 1 day · 2d12h · 1 week" "$(_bb_fmt_duration "$nuke_time_seconds")" || return
+      _st_ask "Nuke time, e.g. 90m · 1 day · 2d12h · 1 week" "$(_bb_fmt_duration "$_nv")" || return
       if ! secs=$(_bb_parse_duration "$_st_in"); then
         _st_note "🔴  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."
         return
@@ -451,11 +522,17 @@ _st_nuke_act() {
         _st_note "🔴  Nuke time must be between 1 minute and 30 days."
         return
       fi
-      nuke_time_seconds="$secs"; save_settings
+      _nv="$secs"; save_settings
       if [ "$secs" -lt 3600 ]; then _st_note "💫 $(_bb_fmt_duration "$secs") — billed as 1 hour (the minimum)."
-      else _st_note "💫 New links will live $(_bb_fmt_duration "$secs")."; fi ;;
+      else _st_note "💫 New $2 will live $(_bb_fmt_duration "$secs")."; fi ;;
   esac
 }
+
+_ST_NUKE_PRESETS=(3600 21600 86400 604800 2592000)
+_ST_NUKE_LABELS=("1 hour  (default)" "6 hours" "1 day" "7 days" "30 days  (maximum)")
+
+_st_nuke_build() { _st_nuke_build_for nuke_time_seconds _ST_NUKE_PRESETS _ST_NUKE_LABELS "link"; }
+_st_nuke_act() { _st_nuke_act_for nuke_time_seconds "links" "$1"; }
 nuke_time_settings() { _st_run "Nuke time" _st_nuke_build _st_nuke_act; }
 
 # ── nuke time for ux- shares (default 30 days) ───────────────────────────────
@@ -464,41 +541,8 @@ nuke_time_settings() { _st_run "Nuke time" _st_nuke_build _st_nuke_act; }
 _ST_UXNUKE_PRESETS=(86400 604800 1209600 2592000)
 _ST_UXNUKE_LABELS=("1 day" "7 days" "14 days" "30 days  (default, maximum)")
 
-_st_uxnuke_build() {
-  local i custom=1
-  _st_reset
-  _st_add h "How long a new ux- share lives before it is nuked"
-  for i in "${!_ST_UXNUKE_PRESETS[@]}"; do
-    _st_eq "${_ST_UXNUKE_PRESETS[$i]}" "$ux_nuke_time_seconds"
-    [ "$_o" = 1 ] && custom=0
-    _st_add r "${_ST_UXNUKE_LABELS[$i]}" "$_o" "" "p:${_ST_UXNUKE_PRESETS[$i]}"
-  done
-  _st_add h "Anything else  (1 minute – 30 days; under 1 hour is billed as 1 hour)"
-  if [ "$custom" = 1 ]; then
-    _st_add r "Custom" 1 "$(_bb_fmt_duration "$ux_nuke_time_seconds")" custom
-  else
-    _st_add a "Custom…" 0 "" custom
-  fi
-}
-_st_uxnuke_act() {
-  local tag="${_st_tag[$1]}" secs
-  case "$tag" in
-    p:*) ux_nuke_time_seconds="${tag#p:}"; save_settings ;;
-    custom)
-      _st_ask "Nuke time, e.g. 90m · 1 day · 2d12h · 1 week" "$(_bb_fmt_duration "$ux_nuke_time_seconds")" || return
-      if ! secs=$(_bb_parse_duration "$_st_in"); then
-        _st_note "🔴  Could not read '$_st_in' — use a number with a unit (s, m, h, d, w), e.g. 90m or 3 days."
-        return
-      fi
-      if [ "$secs" -lt 60 ] || [ "$secs" -gt 2592000 ]; then
-        _st_note "🔴  Nuke time must be between 1 minute and 30 days."
-        return
-      fi
-      ux_nuke_time_seconds="$secs"; save_settings
-      if [ "$secs" -lt 3600 ]; then _st_note "💫 $(_bb_fmt_duration "$secs") — billed as 1 hour (the minimum)."
-      else _st_note "💫 New ux- shares will live $(_bb_fmt_duration "$secs")."; fi ;;
-  esac
-}
+_st_uxnuke_build() { _st_nuke_build_for ux_nuke_time_seconds _ST_UXNUKE_PRESETS _ST_UXNUKE_LABELS "ux- share"; }
+_st_uxnuke_act() { _st_nuke_act_for ux_nuke_time_seconds "ux- shares" "$1"; }
 ux_nuke_time_settings() { _st_run "Nuke time (ux-)" _st_uxnuke_build _st_uxnuke_act; }
 
 # ── reset ────────────────────────────────────────────────────────────────────
@@ -537,6 +581,19 @@ _st_reset_act() {
   snapshot_enabled=$DEFAULT_SNAPSHOT_ENABLED
   snapshot_interval_seconds=$DEFAULT_SNAPSHOT_INTERVAL_SECONDS
   snapshot_keep_seconds=$DEFAULT_SNAPSHOT_KEEP_SECONDS
+  find_case_mode=$DEFAULT_FIND_CASE_MODE
+  find_regex_mode=$DEFAULT_FIND_REGEX_MODE
+  find_depth_mode=$DEFAULT_FIND_DEPTH_MODE
+  find_word_mode=$DEFAULT_FIND_WORD_MODE
+  find_hidden_mode=$DEFAULT_FIND_HIDDEN_MODE
+  find_target_mode=$DEFAULT_FIND_TARGET_MODE
+  find_binary_mode=$DEFAULT_FIND_BINARY_MODE
+  find_vcs_mode=$DEFAULT_FIND_VCS_MODE
+  find_confirm_mode=$DEFAULT_FIND_CONFIRM_MODE
+  find_input_mode=$DEFAULT_FIND_INPUT_MODE
+  find_maxsize_mb=$DEFAULT_FIND_MAXSIZE_MB
+  find_show_limit=$DEFAULT_FIND_SHOW_LIMIT
+  find_threads=$DEFAULT_FIND_THREADS
   _items_presorted=false
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "${_st_tag[$1]}" in

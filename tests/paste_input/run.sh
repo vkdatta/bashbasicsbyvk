@@ -11,11 +11,11 @@ open(t+'/s.txt','w').write(b); open(t+'/s_eq.txt','w').write('='+b)
 big=(b*20)[:100000]; open(t+'/big.txt','w').write(big); open(t+'/big_eq.txt','w').write('='+big[:99999])
 PY
 check() {  # name editor bracketed file expect(accept|refuse)
-  local out; out="$(RESULT_OUT="$T/r" timeout 150 python3 "$D/driver.py" "$ROOT" "$2" "$3" "$T/$4" 1)"
+  local out; out="$(RESULT_OUT="$T/r" timeout 60 python3 "$D/driver.py" "$ROOT" "$2" "$3" "$T/$4" 1)"
   local fin red len; fin=$(sed -n 's/FINISHED_BEFORE_ENTER=//p' <<<"$out"); red=$(sed -n 's/REDRAWS=//p' <<<"$out"); len=$(sed -n 's/RESULT_LEN=//p' <<<"$out")
   local good=0
   if [ "$5" = accept ]; then [ "$fin" = 0 ] && [ "${len:--1}" -gt 300 ] && [ "${len:--1}" -le 512 ] && [ "${red:-99}" -le 40 ] && good=1
-  else [ "$fin" = 0 ] && [ "${len:--1}" -le 0 ] && good=1; fi     # refused: nothing was taken, the row is empty
+  else [ "$fin" = 0 ] && [ "${len:--1}" = 0 ] && good=1; fi     # refused: the editor answered with an EMPTY row (len 0). -1 = it never answered: that is a failure, not a refusal
   if [ "$good" = 1 ]; then echo "PASS $1 ($2 bracketed=$3, result $len chars, $red redraws)"
   else echo "FAIL $1 ($2 bracketed=$3): $out" | tr '\n' ' '; echo; fail=1; fi
 }

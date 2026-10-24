@@ -166,7 +166,15 @@ _st_readkey() {
   local c
   _st_k="other"; _st_d=""
   if [ "${_ST_PEND_ENTER:-0}" = 1 ]; then _ST_PEND_ENTER=0; _st_k=enter; return; fi
-  IFS= read -rsn1 c || { _st_k="q"; _st_d="q"; _st_k=char; return; }
+  local rc rto
+  while :; do
+    rto=(); [ "${_BVK_MOUSE_PASS:-0}" = 1 ] && rto=(-t 1)        # the touch was handed back to the terminal: wake up to take it again
+    IFS= read -rsn1 "${rto[@]}" c; rc=$?
+    (( rc > 128 )) && { _bvk_mouse_rearm; continue; }            # idle: the reports come back once the hand-back time is over
+    (( rc == 0 )) || { _st_k="q"; _st_d="q"; _st_k=char; return; }
+    break
+  done
+  [ "${_BVK_MOUSE_PASS:-0}" = 1 ] && [ "$c" != $'\033' ] && _bvk_mouse_rearm force     # a typed key: the person is back on the keyboard
   case "$c" in
     "")            _st_k=enter ;;
     " ")           _st_k=space ;;
@@ -235,6 +243,8 @@ _st_draw() {
   esac
   if [ -z "${fq:-}" ] && (( _st_cnt > 1 )); then f2="$f2   =) Filter"; fi
   if [[ "$hint" == *"←/→"* ]]; then f2="clr) Clear all"; fi
+
+  _ST_FTR1="$f1"; _ST_FTR2="$f2"                           # what _st_click needs to find the footer key that was touched
 
   # move back to the first line of the previous block
   if (( prev > 1 )); then out+=$'\r\033['"$(( prev - 1 ))"$'A'; fi
@@ -320,9 +330,18 @@ _st_click() {
   _ST_CLICK_ACT=0
   (( prev > 10 )) || return 0
   _bvk_mouse_prow || return 0
-  local vis=$(( prev - 10 )) rel i
+  local vis=$(( prev - 10 )) rel i d=$(( _BVK_CROW - _MS_Y ))
   rel=$(( _MS_Y - ( _BVK_CROW - vis - 5 ) ))          # 0 = the first list row on screen
-  if (( rel >= 0 && rel < vis )); then
+  if (( d == 0 )); then _BVK_LAST_ITEM=""; _bvk_mouse_pass "$_BVK_PASS_TAP_MS"      # the Select: row: the next tap opens the keyboard
+  elif (( d == 2 || d == 3 )); then                    # footer 2 / footer 1: a key there needs a DOUBLE tap (it is typed and Enter pressed)
+    if _bvk_mouse_cell_key "$( (( d == 3 )) && builtin printf '%s' "$_ST_FTR1" || builtin printf '%s' "$_ST_FTR2" )"; then
+      _bvk_mouse_ftr_tap "$_MS_FKEY"
+      case "$_MS_FACT" in
+        run)  buf="$_MS_FTEXT"; _ST_PEND_ENTER=1; _ST_CLICK_ACT=1 ;;
+        type) buf="$_MS_FTEXT" ;;
+      esac
+    else _BVK_LAST_ITEM=""; fi
+  elif (( rel >= 0 && rel < vis )); then
     i=$(( top + rel ))
     _st_selectable "$i" || return 0
     cur=$i; buf="${_st_num[$i]}"
@@ -332,6 +351,17 @@ _st_click() {
   elif (( rel == -1 && top > 0 )); then _BVK_LAST_ITEM=""; _st_move -1 "$page"; (( cur >= 0 )) && buf="${_st_num[$cur]}"
   elif (( rel == vis && top + vis < ${#_st_lbl[@]} )); then _BVK_LAST_ITEM=""; _st_move 1 "$page"; (( cur >= 0 )) && buf="${_st_num[$cur]}"
   fi
+  return 0
+}
+
+# the wheel (called from _st_run; shares its locals).  Over the screen above the header / below the prompt, or with the highlight already
+# on the first / last row, the touch goes back to the terminal so it can scroll (see _bvk_mouse_pass).   $1 = -1 up · 1 down
+_st_wheel() {
+  _bvk_mouse_wheel_outside "$prev" 0 && return 0
+  local before="$cur"
+  _st_move "$1" "${_BVK_WHEEL_STEP:-3}"
+  (( cur >= 0 )) && buf="${_st_num[$cur]}"
+  [ "$cur" = "$before" ] && _bvk_mouse_pass
   return 0
 }
 
@@ -401,8 +431,8 @@ _st_run() {
       pgup)  need=0; _st_move -1 "$page"; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;   # ±10 like the main menu
       pgdn)  need=0; _st_move 1 "$page";  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       click)     need=0; _st_click; (( _ST_CLICK_ACT )) && need=1 ;;
-      wheelup)   need=0; _st_move -1 "${_BVK_WHEEL_STEP:-3}"; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
-      wheeldown) need=0; _st_move 1 "${_BVK_WHEEL_STEP:-3}";  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
+      wheelup)   need=0; _st_wheel -1 ;;
+      wheeldown) need=0; _st_wheel 1 ;;
       home)  need=0; cur=-1; _st_move 1;  (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       end)   need=0; cur=-1; _st_move -1; (( cur >= 0 )) && buf="${_st_num[$cur]}" ;;
       bksp)

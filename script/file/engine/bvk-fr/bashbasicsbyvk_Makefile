@@ -1,0 +1,25 @@
+# bvk-fr (C, find & replace engine). Needs a C11 compiler + pthreads.
+#   make -f bashbasicsbyvk_Makefile          native build -> ./bvk-fr
+#   make -f bashbasicsbyvk_Makefile clean
+CC      ?= cc
+CFLAGS  ?= -O2
+CFLAGS  += -std=c11 -Wall -Wextra -fPIE -Iinclude -D_FILE_OFFSET_BITS=64 -D_DEFAULT_SOURCE -D_GNU_SOURCE
+LDFLAGS += -pie
+LDLIBS  += -pthread
+
+SRC := $(wildcard src/*.c)
+OBJ := $(SRC:src/%.c=build/%.o)
+
+bvk-fr: $(OBJ)
+	$(CC) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
+
+build/%.o: src/%.c include/bashbasicsbyvk_fr.h | build
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+build:
+	mkdir -p build
+
+clean:
+	rm -rf build bvk-fr
+
+.PHONY: clean

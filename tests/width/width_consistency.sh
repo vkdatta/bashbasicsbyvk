@@ -6,8 +6,9 @@
 # (3) every non-ASCII character used in a read -p / prompt string in script/ is measured identically by both
 # (4) nobody writes a second emoji width table: 0x1F300 may only appear in the viewport helper / the JS Emoji_Presentation tests
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/tests/wait_lib.sh"   # forces a UTF-8 locale (a C locale made every width check fail "from the start") + finds files by name
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
-source "$ROOT/script/file/engine/bashbasicsbyvk_viewport.sh" 2>/dev/null
+source "$(bvk_need bashbasicsbyvk_viewport.sh)" 2>/dev/null
 declare -F _vp_cpw >/dev/null || { echo "FAIL _vp_cpw missing"; exit 1; }
 
 chk() {  # text expected label

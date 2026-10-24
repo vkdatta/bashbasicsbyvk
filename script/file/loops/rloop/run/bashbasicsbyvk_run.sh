@@ -49,7 +49,9 @@ determine_shared_dir() {
     fi
 }
 
-force_open() {
+# _copy_to_shared <file>   copies it into the shared Download folder as <timestamp>_<name>; the copy's path is left in _SHARED_COPY.
+# returns 1 (with a message) when the file is missing or the copy fails.  Used by force_open and force_share.
+_copy_to_shared() {
     local src="$1"
     if [ ! -e "$src" ]; then
         echo "❌ File not found: $src"
@@ -63,6 +65,13 @@ force_open() {
     ts=$(date +%s)
     dest="$shared_dir/${ts}_$base"
     cp -f -- "$src" "$dest" || { echo "❌ Failed to copy to shared storage"; return 1; }
+    _SHARED_COPY="$dest"
+}
+
+force_open() {
+    local dest
+    _copy_to_shared "$1" || return 1
+    dest="$_SHARED_COPY"
     if command -v termux-open >/dev/null 2>&1; then
         termux-open "$dest" && return 0
     fi
@@ -81,19 +90,9 @@ force_open() {
 }
 
 force_share() {
-    local src="$1"
-    if [ ! -e "$src" ]; then
-        echo "❌ File not found: $src"
-        return 1
-    fi
-    local shared_dir
-    shared_dir="$(determine_shared_dir)"
-    mkdir -p "$shared_dir"
-    local base ts dest
-    base=$(basename "$src")
-    ts=$(date +%s)
-    dest="$shared_dir/${ts}_$base"
-    cp -f -- "$src" "$dest" || { echo "❌ Failed to copy to shared storage"; return 1; }
+    local dest
+    _copy_to_shared "$1" || return 1
+    dest="$_SHARED_COPY"
     if command -v termux-share >/dev/null 2>&1; then
         termux-share -a send -c file "$dest" 2>/dev/null || termux-share "$dest"
         return 0

@@ -1,0 +1,21 @@
+ISSUE IN BRIEF
+In the Links list, the chosen sort order showed in the header but the rows never reordered after returning from Settings. The redraw after a command-map action bypassed the menu's own sorting.
+
+HOW DID YOU DEBUG
+- Read the pasted screens: rows 1..8 identical in all three, expiry ascending even under "largest to smallest" -> setting saved, order never applied.
+- Read bashbasicsbyvk_menu_sort.sh (_ms_perm/_ms_tok) and ran _ms_perm on the 8 links of the screen (ids, 2 aliases, expiries): az, za, exp_long, exp_short
+  all give the right permutation. So the sorter and the data (old or new links) are fine. Verified by running.
+- Read api.sh: _api_sort runs only in _api_build_items, i.e. from _api_redraw_fresh. The header text calls _ms_label live (and runs in a subshell: mapfile < <($_vp_header_fn)).
+- Read cmdmap: map api maps  s  to bashbasicsbyvk_maincommands.sh, so _cm_gate_choice runs settings_menu itself and returns 1; _cm_read_choice then only does
+  _vp_cache_reset; _vp_prime_rows; _vp_render_fresh and loops. api_menu's own case never sees "s", so _api_redraw_fresh (and _api_sort) never runs.
+- NOT run end to end (needs the live API/terminal UI): the fix is verified by syntax check (bash -n) and by reading the call path only.
+
+CAUSE
+Not old links. The sort is applied only on api_menu's own redraw path, but a main command typed in the list (s) is executed by the command-map gate and
+the menu is redrawn from the arrays as they were. Label (computed live) and rows (arrays reordered only in _api_sort) disagree.
+
+FIX
+- engine/bashbasicsbyvk_cmdmap.sh _cm_read_choice: before the redraw after a gate-run command it calls the optional hook $_vp_after_cmd_fn.
+- loops/iloop/api/bashbasicsbyvk_api.sh: new _api_after_cmd (_api_sort; items/_all_items refreshed) and  local _vp_after_cmd_fn=_api_after_cmd  in api_menu (local, so it is dropped on leaving).
+- Lesson: any menu that sorts/filters its own arrays must re-apply that when a gate-run command (s, h, i ...) returns; the gate redraw does not go through the menu's loop.
+  Same pattern may affect csurf (shares) and snapshot lists that sort in their build function - check them if the same symptom appears there.

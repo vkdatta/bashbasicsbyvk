@@ -381,45 +381,7 @@ _sw_build_items_for_tab() {
       ;;
 
     bookmarks)
-      local total
-      total=$(count_items_in_path "$path")
-      _has_group_view=false
-      [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
-
-      if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
-        imaginary_mode=true
-        if [ -n "$group_prefix" ]; then
-          local local_arr=()
-          while IFS= read -r -d '' _f; do
-            _bn="${_f##*/}"
-            [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-            ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
-            [[ "${_bn,,}" != "$group_prefix"* ]] && continue
-            local_arr+=("$_f")
-          done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
-          local pfx_count="${#local_arr[@]}"
-          if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
-            imaginary_mode=false; items=("${local_arr[@]}")
-            _collect_metadata; apply_sort
-          else
-            build_imaginary_groups "$path" "$group_prefix" "$pfx_count"
-          fi
-        else
-          build_imaginary_groups "$path" "" "$total"
-        fi
-      elif [ "$total" -gt "${index_mode_threshold:-200}" ] && $force_show; then
-        imaginary_mode=false
-        build_items_with_meta "$path" "${group_prefix:-}"
-        apply_sort
-      fi
-
-      if ! $imaginary_mode; then
-        if [ ${#items[@]} -eq 0 ] && [ -n "$group_prefix" ]; then
-          build_items_with_meta "$path" "$group_prefix"; apply_sort
-        elif [ ${#items[@]} -eq 0 ]; then
-          build_items_with_meta "$path" ""; apply_sort
-        fi
-      fi
+      _bvk_build_path_items
       ;;
   esac
 }
@@ -567,6 +529,21 @@ _sw_tab_redraw() {
 }
 
 # ── Main entry point ──────────────────────────────────────────────────────────
+
+# _sw_perform_switch <dir>   the switch itself: restores the folder view state, cd's there, records it and resets the picker state.
+# (dynamic scope: the caller is the switch loop that owns _sw_saved_* / _sw_result_path / _sw_did_switch / _sw_in_mode)
+_sw_perform_switch() {
+  local _sw_cd_target="$1"
+  group_prefix="$_sw_saved_prefix"
+  force_show="$_sw_saved_force"
+  cd -- "$_sw_cd_target" 2>/dev/null || true
+  path="$_sw_cd_target"
+  _sw_did_switch=true
+  _sw_result_path=""
+  _sw_saved_path=""
+  _sw_in_mode=0
+  printf '🔀 → %s\n' "$_sw_cd_target"
+}
 
 switch_menu() {
   _sw_ensure_store
@@ -767,18 +744,10 @@ switch_menu() {
             _sw_bookmarks_handle_selection "$_sw_choice"
             _sw_rc=$?
             if [ "$_sw_rc" -eq 1 ] && [ -n "$_sw_result_path" ]; then
-              # Perform the switch
-              group_prefix="$_sw_saved_prefix"
-              force_show="$_sw_saved_force"
+              # Perform the switch (a picked file switches to its folder)
               local _sw_cd_target="$_sw_result_path"
               [ -f "$_sw_cd_target" ] && _sw_cd_target="$(dirname "$_sw_cd_target")"
-              cd -- "$_sw_cd_target" 2>/dev/null || true
-              path="$_sw_cd_target"
-              _sw_did_switch=true
-              _sw_result_path=""
-              _sw_saved_path=""
-              _sw_in_mode=0
-              printf '🔀 → %s\n' "$_sw_cd_target"
+              _sw_perform_switch "$_sw_cd_target"
               return 0
             fi
             ;;
@@ -789,16 +758,7 @@ switch_menu() {
             _sw_favourites_handle_selection "$_sw_choice"
             _sw_rc=$?
             if [ "$_sw_rc" -eq 1 ] && [ -n "$_sw_result_path" ]; then
-              group_prefix="$_sw_saved_prefix"
-              force_show="$_sw_saved_force"
-              local _sw_cd_target="$_sw_result_path"
-              cd -- "$_sw_cd_target" 2>/dev/null || true
-              path="$_sw_cd_target"
-              _sw_did_switch=true
-              _sw_result_path=""
-              _sw_saved_path=""
-              _sw_in_mode=0
-              printf '🔀 → %s\n' "$_sw_cd_target"
+              _sw_perform_switch "$_sw_result_path"
               return 0
             fi
             ;;

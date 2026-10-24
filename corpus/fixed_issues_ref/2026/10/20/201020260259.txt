@@ -1,0 +1,34 @@
+ISSUE IN BRIEF
+After the paste-spam fix, a long pasted link in the free-text prompt scrolled sideways inside a single row and hid most of the text. It should wrap onto following lines like a normal read.
+
+HOW DID YOU DEBUG
+1. My first fix (_bvk_fit_input, windowing inside one row) was the wrong trade-off for the free-text prompt: it hides most of the
+   pasted link. It is still right for the fixed-layout menus ("Select:", "Item numbers:", settings) because their geometry
+   (viewport rows, settings block row count, reserved hint row) assumes the input is exactly ONE row; real wrapping there would
+   shift everything below/above it.
+2. For the free-text editor (_cm_line_edit in engine/bashbasicsbyvk_cmdmap.sh) wrapping is possible: it owns everything from the prompt
+   row downwards. A wrapped redraw must (a) move the cursor back UP to the first row of the prompt (needs to know on which row the
+   cursor was left), (b) erase from there to the end of the screen (also wipes the old hint row), (c) print prompt+text, (d) move
+   the cursor from the end of the text to the edit position, (e) paint the hint on the row below the LAST text row.
+3. Edge case that breaks naive versions: text that ends exactly at the right edge leaves the terminal in the "pending wrap" state
+   (cursor still on the last column). Fixed by printing ' \r' so the cursor really sits at column 0 of the next row; the same case
+   is handled when leaving (no extra blank line).
+4. Verified with the pty + VT emulator in tests/wrap_input (emulator now handles cursor up/down/forward/back and pending wrap):
+   widths 30..70 (even, plus the exact-fit widths 31/46/47/93) x 40..42 char text, link paste, editing in the middle (Left x5,
+   insert, backspace) and non-ASCII. Text intact, whole text visible, one prompt, no blank row after Enter.
+   Linux only, NOT on a real phone. Wide emoji that would straddle the right edge are not special-cased (the terminal moves such
+   a character to the next row, which can make the row count one off; the returned text is never affected).
+
+CAUSE
+Not a new bug: the previous fix traded wrapping for a single scrolling row, which is not what a free-text prompt should do.
+
+FIX
+- engine/bashbasicsbyvk_cmdmap.sh: _cm_edit_draw is now wrap-aware (state _CE_ROW = rows from the prompt's first row to the cursor,
+  _CE_ENDROW/_CE_ENDCOL/_CE_FULL for the leave step); new _cm_edit_leave; the hint row is painted by _cm_edit_draw under the last text
+  row (clipped to one row); the old "prompt on its own line + '> '" workaround is removed, so the prompt and the text flow together
+  like `read -e`. _cm_hint_row is no longer used.
+- _bvk_fit_input (one-row window) stays for the fixed-layout menus: smartmenu _sm_input_fn, browse _print_input_line, viewport
+  _multi_print_input_line, settings_ui.
+- tests/wrap_input: run.sh now also requires the whole link to be visible, wrapped, for the free-text editor.
+Lesson: choose per editor: free-flow prompt at the bottom of the output -> real wrapping with a row-counting redraw; prompt inside a
+fixed layout -> keep it to one row. Never mix: a \r/\033[K redraw without row tracking always breaks on wrap.

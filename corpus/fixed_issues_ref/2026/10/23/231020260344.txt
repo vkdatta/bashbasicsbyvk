@@ -1,0 +1,33 @@
+ISSUE IN BRIEF
+Remove all copy-pasted code, including blocks of about ten similar lines, by moving each copy into one shared helper so a later fix cannot miss a duplicate.
+
+HOW DID YOU DEBUG
+Wrote a duplicate finder (now script/file/infinity/tools/bashbasicsbyvk_dupscan): normalised lines (whitespace, comments, blank lines
+ignored), hashed every window of 10 lines, merged overlapping hits. Second pass FUZZY: strings, numbers and $variables abstracted, so copies
+with other names also match. Result on the original tree: 26 blocks of 10-40 lines (also tests/). For each one I read both copies, wrote the shared
+helper, replaced the copies and compared old and new behaviour by running both: stubbed-UI harnesses for the settings and cmdmap
+functions, real files for _nav_add_range / find CSV / stage links / index decide, a local HTTP server for the chunk fetch, real tar streams
+decrypted again for both node pack paths, openpyxl cell-by-cell comparison for xtract and js_audit, the lexer on JS samples. Existing tests run
+before and after: cmd_drift, cheatcode, group_view, regex_portability, resume_inflight, xfer_ux.mjs identical. NOT run (they were already failing
+before the change: loadtime_print, width_consistency; or need the external ../fileapi repo: e2e_pending, e2e_services) — those changes are
+verified by reading, bash -n and the extracted-function runs above. The pty app tests (mouse/nav/hints/ui) were not run: the app phones home
+(telemetry has no off switch); the new tests/paste_input/ptyapp.py was exercised against a stand-in script instead.
+
+CAUSE
+Code was copied instead of shared, so a fix in one copy silently missed the others: the index-mode block (fx / switch / transfer), the
+python icon tables (scan + meta fallback), three HTTP wrappers (_api_http / _ux_http / _bb_call), the stage-symlink + gzip set-up (svc / up- / ux-),
+the 201-headers parse, the stdin-to-encrypted-chunks loop (up- node fallback / ux_crypto), the status-line helpers (4 node tools), two
+nuke-time screens, the find CSV read/write (x4), the nav multi-select (local / GCloud), the cmdmap gates, the duplicate finder (select_expr vs
+index_lib), and smaller ones.
+
+FIX
+Shared helpers (callers now delegate): browse.sh _bvk_prefix_matches / _bvk_index_decide / _bvk_build_path_items; displayer.sh _py_icon_prelude;
+fileapi_lib.sh _bb_call (+timeout arg) / _bb_http_fail / _bb_stage_links / _bb_gzip_setup / _bb_created_emit / _bb_jslib; new
+bashbasicsbyvk_staging_jslib.js (dw/live/fitv, packStatus, writeChunks; node tools get its path in BB_JSLIB — tests that run pending_xfer directly
+must set it); ux_crypto getChunk; settings.sh _st_nuke_build_for / _st_nuke_act_for; transfer.sh _nav_add_range; find.sh _find_csv_read /
+_find_csv_write_counts; cmdmap.sh _cm_gate_dispatch; select_expr uses IDXLIB.dup_groups only (plain fallback removed; the lib is now required
+for .s.dup); xtract write_table_groups; js_audit _write_summary_box; gitpush ask_repo_visibility; run.sh _copy_to_shared; switch.sh
+_sw_perform_switch; staging_buffer.sh _sp_load_all; recover_jslex.py _skip_regex; tests/e2e_common.sh, tests/paste_input/ptyapp.py.
+Behaviour notes: _api_http / _ux_http now set status 000 (not a stale value) when no credentials are available. Lesson: before copying a block,
+grep for an existing helper; run  bashbasicsbyvk_dupscan .  (AGENTS.md check 5). Known leftovers below the 10-line line (7-9 lines): e.g.
+gitpush's repeated 9-line banners, the fx/switch view set-up, the cloudflare adf_* wrappers — the scan with a smaller N lists them.

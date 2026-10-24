@@ -33,13 +33,9 @@ handle_staging_stage() {
   esac
 }
 
-# Apply all non-empty buffers to the current path destination.
-handle_staging_dispatch() {
-  _sp_ensure_store
-  local dest="$path"
-
-  local -a cp_list=() mv_list=() sc_list=() bm_list=()
-  local -a cp_once=() mv_once=() sc_once=() bm_once=()
+# _sp_load_all   loads all eight buffers (copy / move / shortcut / bookmark, each "always" and "once") into the CALLER's local arrays
+# cp_list mv_list sc_list bm_list cp_once mv_once sc_once bm_once  — the one list of buffers; a new buffer is added here only.
+_sp_load_all() {
   _sp_load cp_list "$_SP_CP_FILE"
   _sp_load mv_list "$_SP_MV_FILE"
   _sp_load sc_list "$_SP_SC_FILE"
@@ -48,6 +44,16 @@ handle_staging_dispatch() {
   _sp_load mv_once "$_SP_MV_ONCE_FILE"
   _sp_load sc_once "$_SP_SC_ONCE_FILE"
   _sp_load bm_once "$_SP_BM_ONCE_FILE"
+}
+
+# Apply all non-empty buffers to the current path destination.
+handle_staging_dispatch() {
+  _sp_ensure_store
+  local dest="$path"
+
+  local -a cp_list=() mv_list=() sc_list=() bm_list=()
+  local -a cp_once=() mv_once=() sc_once=() bm_once=()
+  _sp_load_all
 
   if [ ${#cp_list[@]} -eq 0 ] && [ ${#mv_list[@]} -eq 0 ] && [ ${#sc_list[@]} -eq 0 ] && [ ${#bm_list[@]} -eq 0 ] \
      && [ ${#cp_once[@]} -eq 0 ] && [ ${#mv_once[@]} -eq 0 ] && [ ${#sc_once[@]} -eq 0 ] && [ ${#bm_once[@]} -eq 0 ]; then
@@ -166,14 +172,7 @@ handle_staging_view() {
   while true; do
     local -a cp_list=() mv_list=() sc_list=() bm_list=()
     local -a cp_once=() mv_once=() sc_once=() bm_once=()
-    _sp_load cp_list "$_SP_CP_FILE"
-    _sp_load mv_list "$_SP_MV_FILE"
-    _sp_load sc_list "$_SP_SC_FILE"
-    _sp_load bm_list "$_SP_BM_FILE"
-    _sp_load cp_once "$_SP_CP_ONCE_FILE"
-    _sp_load mv_once "$_SP_MV_ONCE_FILE"
-    _sp_load sc_once "$_SP_SC_ONCE_FILE"
-    _sp_load bm_once "$_SP_BM_ONCE_FILE"
+    _sp_load_all
 
     _mc_header "🗂️  Shortpath buffers"
     _mc_options 1 \

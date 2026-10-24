@@ -55,6 +55,48 @@ jobs:
           readelf -lW bvk-ls-android-arm64 | grep -q PHDR
           readelf -lW bvk-ls-android-arm64 | grep -q INTERP
 
+      # ── bvk-fr: the C find & replace engine (find · preview · apply) ───────
+      - name: Build bvk-fr
+        working-directory: script/file/engine/bvk-fr
+        run: |
+          chmod +x bashbasicsbyvk_build.sh
+          REQUIRE_ANDROID=1 ./bashbasicsbyvk_build.sh
+
+      - name: Verify bvk-fr
+        working-directory: script/file/engine/bvk-fr
+        run: |
+          file bvk-fr-linux-arm64
+          file bvk-fr-linux-amd64
+          file bvk-fr-linux-arm
+          file bvk-fr-android-arm64
+          file bvk-fr-android-amd64
+          file bvk-fr-android-arm
+
+          set -x   # the last command shown before an error is the assertion that failed
+
+          # Android's linker needs PT_PHDR + PT_INTERP (same rule as bvk-ls)
+          readelf -lW bvk-fr-android-arm64 > /tmp/fr-android-phdr.txt
+          grep -q PHDR /tmp/fr-android-phdr.txt
+          grep -q INTERP /tmp/fr-android-phdr.txt
+
+          # run the one we can run on this machine: the same self-test + protocol number the app checks
+          test "$(./bvk-fr-linux-amd64 selftest)" = "bvk-fr ok"
+          test "$(./bvk-fr-linux-amd64 proto)" = "1"
+
+          # a real recursive find & replace on a scratch tree: "[c]" is plain text (not a glob), names and contents both
+          bin="$PWD/bvk-fr-linux-amd64"
+          w="$(mktemp -d)"; mkdir -p "$w/t/sub"
+          printf 'a [c] b\n' > "$w/t/sub/hello [c].txt"
+          printf 'a c b\n'   > "$w/t/c.txt"
+          printf '[c]\0X\0' > "$w/rules"
+          "$bin" apply --root "$w/t" --rules "$w/rules" --scope both --depth rec --case exact --regex 0 --word 0 \
+                 --hidden 0 --vcs 0 --target both --binary 0 --maxsize 0 --threads 0 --limit 10 \
+                 --out "$w/out" --stats "$w/stats" --log "$w/log" > /dev/null
+          test "$(cat "$w/t/sub/hello X.txt")" = "a X b"
+          test "$(cat "$w/t/c.txt")" = "a c b"
+          grep -q '^names_renamed=1$' "$w/stats"
+          grep -q '^files_changed=1$' "$w/stats"
+
       # ── bvk-xfer: the Go FileAPI engine (pack · send · jget · netcheck) ─────
       - name: Vet bvk-xfer
         working-directory: script/file/engine/bvk-xfer
@@ -120,6 +162,12 @@ jobs:
             script/file/engine/bvk-ls/bvk-ls-android-arm64 \
             script/file/engine/bvk-ls/bvk-ls-android-amd64 \
             script/file/engine/bvk-ls/bvk-ls-android-arm \
+            script/file/engine/bvk-fr/bvk-fr-linux-arm64 \
+            script/file/engine/bvk-fr/bvk-fr-linux-amd64 \
+            script/file/engine/bvk-fr/bvk-fr-linux-arm \
+            script/file/engine/bvk-fr/bvk-fr-android-arm64 \
+            script/file/engine/bvk-fr/bvk-fr-android-amd64 \
+            script/file/engine/bvk-fr/bvk-fr-android-arm \
             script/file/engine/bvk-xfer/bvk-xfer-linux-arm64 \
             script/file/engine/bvk-xfer/bvk-xfer-linux-amd64 \
             script/file/engine/bvk-xfer/bvk-xfer-linux-arm \

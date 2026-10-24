@@ -1,0 +1,22 @@
+ISSUE IN BRIEF
+The fixed-issue corpus was a flat folder of notes with issues in the reporter's own words, and AGENTS.md did not tell agents to consult it or to reuse and dedupe code. Past fixes were hard to find and match to new symptoms, and new code could drift from existing code.
+
+HOW DID YOU DEBUG
+Read all 18 existing notes (17 fixes plus the dedupe note) to see their areas and kinds of problem and to derive the category and type lists now in
+AGENTS.md rule 5. Wrote a one-off Python migration that rewrites each issue section, moves each note into corpus/fixed_issues_ref/YYYY/MM/DD/, and builds
+corpus/fixed_issues_index.jsonl (first written as CSV, then switched to JSON Lines because each line is self-contained and needs no quoting) from the same data.
+Checked by running: every index line points to an existing note, ids are unique, every note has rows, the
+folder of each note matches its DDMMYYYYHHMM name, and dupscan still prints ok. No application code was changed, so no behaviour could regress.
+The original wording of every issue is NOT kept in the repo (it lives in the pre-change archive only).
+
+CAUSE
+Not a bug: a process gap. The corpus grew one file at a time with no index, no shared vocabulary and no instruction that agents must consult it, and
+nothing in AGENTS.md pushed agents to reuse code before writing new code.
+
+FIX
+- corpus/fixed_issues_ref/: notes moved into year/month/day folders (filenames unchanged, so older cross-references by id still work).
+- Every note: heading ISSUE AS DEFINED BY USER replaced by ISSUE IN BRIEF, with the issue restated briefly in the AI's own words.
+- corpus/fixed_issues_index.jsonl (new): keys issue_id, issue_category, issue_type, issue, path - one JSON object per line, one line per issue, 32 lines.
+- AGENTS.md: new principle section "dedupe. reuse. share."; rule 5 rewritten (consult the index before fixing a bug, new note layout, ISSUE IN BRIEF,
+  index line per issue, category and type lists); check 6 validates the corpus index; rule 1 exception updated.
+Lesson: before fixing, search the index by category, type and keyword and read the linked notes; after fixing, add the note and the index line in the same change.

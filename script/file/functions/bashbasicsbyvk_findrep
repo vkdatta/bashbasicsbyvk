@@ -1,0 +1,565 @@
+#!/usr/bin/env python3
+"""bashbasicsbyvk_findrep — the Python twin of the C engine bvk-fr (same command line, same output).
+
+Used only when no bvk-fr binary runs on this machine (health shows why).  Slower (one thread) but the same rules:
+  bashbasicsbyvk_findrep find|preview|apply --root DIR --rules FILE [--scope names|contents|both] [--depth flat|rec]
+      [--case exact|any] [--regex 0|1] [--word 0|1] [--hidden 0|1] [--vcs 0|1] [--target files|dirs|both] [--binary 0|1]
+      [--maxsize BYTES] [--threads N] [--exclude PATH]... [--only PATH] [--limit N] [--out FILE] [--stats FILE] [--log FILE]
+  selftest | proto
+Regex dialect: Python `re` (the C engine implements the common core of it); POSIX [[:alpha:]] classes are accepted too.
+"""
+import os, re, stat, sys, time, errno
+
+PROTO = 1
+E_REGEX = 1002
+POSIX = {"alpha": "a-zA-Z", "digit": "0-9", "alnum": "a-zA-Z0-9", "upper": "A-Z", "lower": "a-z", "space": " \\t-\\r",
+         "blank": " \\t", "punct": "!-/:-@\\[-`{-~", "xdigit": "0-9a-fA-F", "cntrl": "\\x00-\\x1f\\x7f", "print": " -~", "graph": "!-~"}
+
+
+def fatal(msg):
+    sys.stdout.flush()
+    sys.stderr.write("bvk-fr: %s\n" % msg)
+    sys.exit(2)
+
+
+def dec(b):
+    return b.decode("utf-8", "surrogateescape")
+
+
+def enc(s):
+    return s.encode("utf-8", "surrogateescape")
+
+
+def caret(p):
+    """^ = start of a line, but (like sed / Perl) not after the very last newline: rewritten for Python's re"""
+    out, i, cls = [], 0, False
+    while i < len(p):
+        c = p[i]
+        if c == "\\" and i + 1 < len(p):
+            out.append(p[i:i + 2]); i += 2; continue
+        if cls:
+            if c == "]": cls = False
+        elif c == "[":
+            cls = True
+            out.append(c); i += 1
+            if i < len(p) and p[i] == "^": out.append("^"); i += 1
+            if i < len(p) and p[i] == "]": out.append("]"); i += 1
+            continue
+        elif c == "^":
+            out.append(r"(?:\A|(?<=\n)(?!\Z))"); i += 1; continue
+        out.append(c); i += 1
+    return "".join(out)
+
+
+class Rule:
+    def __init__(self, find, rep, regex, icase, word):
+        if not find:
+            raise ValueError("empty find text")
+        flags = re.M
+        if regex:
+            pat = caret(re.sub(r"\[:(\w+):\]", lambda m: POSIX.get(m.group(1), m.group(0)), find))
+        else:
+            pat = re.escape(find)
+        if icase:
+            flags |= re.I
+        if word:
+            pat = r"(?<!\w)(?:%s)(?!\w)" % pat
+        try:
+            self.rx = re.compile(pat, flags)
+        except re.error as e:
+            raise ValueError(str(e))
+        except (OverflowError, RecursionError) as e:
+            raise ValueError(str(e))
+        self.parts = self._parse(rep, regex, self.rx.groups)
+
+    @staticmethod
+    def _parse(rep, regex, ngroups):
+        if not regex:
+            return [rep]
+        parts, lit, i = [], [], 0
+        while i < len(rep):
+            c = rep[i]
+            if c in "\\$" and i + 1 < len(rep):
+                d = rep[i + 1]
+                if d.isdigit() and d.isascii():
+                    g = int(d)
+                    if g > ngroups:
+                        raise ValueError("the replacement uses group %d but the pattern has %d group(s)" % (g, ngroups))
+                    parts.append("".join(lit)); lit = []; parts.append(g); i += 2; continue
+                if c == "$" and d == "&":
+                    parts.append("".join(lit)); lit = []; parts.append(0); i += 2; continue
+                if c == "\\" and d in "ntr\\$":
+                    lit.append({"n": "\n", "t": "\t", "r": "\r", "\\": "\\", "$": "$"}[d]); i += 2; continue
+                if c == "$" and d == "$":
+                    lit.append("$"); i += 2; continue
+            lit.append(c); i += 1
+        parts.append("".join(lit))
+        return parts
+
+    def expand(self, m):
+        return "".join(p if isinstance(p, str) else (m.group(p) or "") for p in self.parts)
+
+    def sub(self, s):
+        """returns (new text, count)"""
+        n = [0]
+
+        def f(m):
+            n[0] += 1
+            return self.expand(m)
+        out = self.rx.sub(f, s)
+        return out, n[0]
+
+    def test(self, s):
+        return self.rx.search(s) is not None
+
+
+class Item:
+    __slots__ = ("path", "nameoff", "parent", "typ", "nstate", "cstate", "nerr", "cerr", "newname", "rules", "occ", "line",
+                 "snippet", "excl", "subend")
+
+    def __init__(self, path, nameoff, parent, typ):
+        self.path, self.nameoff, self.parent, self.typ = path, nameoff, parent, typ
+        self.nstate = self.cstate = 0
+        self.nerr = self.cerr = 0
+        self.newname = None
+        self.rules = []
+        self.occ = self.line = 0
+        self.snippet = None
+        self.excl = False
+        self.subend = 0
+
+
+NONE, PLAN, DONE, CONFLICT, INVALID, ERROR = 0, 1, 2, 3, 4, 5
+C_NONE, C_MATCH, C_DONE, C_ERROR, C_BINARY, C_LARGE = 0, 1, 2, 3, 4, 5
+
+
+def walk(root, recursive, hidden, vcs):
+    items = []
+
+    def rec(d, parent, depth):
+        try:
+            ents = sorted(os.listdir(d))
+        except OSError:
+            return
+        base = len(d) + (0 if d.endswith(b"/") else 1)
+        for nm in ents:
+            if not hidden and nm.startswith(b"."):
+                continue
+            if not vcs and nm in (b".git", b".hg", b".svn"):
+                continue
+            p = d + (b"" if d.endswith(b"/") else b"/") + nm
+            try:
+                m = os.lstat(p).st_mode
+            except OSError:
+                continue
+            typ = "f" if stat.S_ISREG(m) else "d" if stat.S_ISDIR(m) else "l" if stat.S_ISLNK(m) else "o"
+            it = Item(p, base, parent, typ)
+            items.append(it)
+            idx = len(items) - 1
+            if typ == "d" and recursive and depth < 400:
+                rec(p, idx, depth + 1)
+            it.subend = len(items)
+    rec(root, -1, 0)
+    return items
+
+
+def valid_newname(b):
+    return 0 < len(b) <= 255 and b not in (b".", b"..") and b"/" not in b and b"\0" not in b
+
+
+def snippet_of(data, off):
+    a = data.rfind(b"\n", 0, off) + 1
+    b = data.find(b"\n", off)
+    if b < 0:
+        b = len(data)
+    line = data.count(b"\n", 0, a) + 1
+    s0 = off - 40 if off > a + 40 else a
+    s1 = off + 120 if b > off + 120 else b
+    seg = data[s0:s1]
+    while seg and (seg[0] & 0xC0) == 0x80:
+        seg = seg[1:]
+    seg = seg.replace(b"\r", b"")
+    seg = bytes(32 if (c < 32 or c == 127) else c for c in seg)
+    return line, seg
+
+
+def write_atomic(path, data, st):
+    if st.st_nlink > 1:
+        with open(path, "r+b") as f:
+            f.truncate(0); f.write(data)
+        return
+    d = os.path.dirname(path) or b"."
+    tmp = os.path.join(d, b".bvkfr.%d.tmp" % os.getpid())
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except PermissionError:
+        with open(path, "r+b") as f:
+            f.truncate(0); f.write(data)
+        return
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.chmod(tmp, st.st_mode & 0o7777)
+        try:
+            os.chown(tmp, st.st_uid, st.st_gid)
+        except OSError:
+            pass
+        os.rename(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _esc2(b):
+    out = bytearray()
+    for c in b:
+        if c == 10: out += b"\\n"
+        elif c == 9: out += b"\\t"
+        elif c == 13: out += b"\\r"
+        elif c < 32 or c == 127: out += b"\\x%02x" % c
+        else: out.append(c)
+    return bytes(out)
+
+
+def main(argv):
+    if len(argv) < 2:
+        fatal("usage: bashbasicsbyvk_findrep find|preview|apply ...")
+    cmd = argv[1]
+    if cmd == "proto":
+        print(PROTO); return 0
+    if cmd == "selftest":
+        ok = Rule("a+", "<\\0>", True, False, False).sub("caab")[0] == "c<aa>b"
+        ok = ok and Rule("É", "x", False, True, False).sub("é")[0] == "x"
+        print("bvk-fr ok" if ok else "bvk-fr FAILED"); return 0 if ok else 1
+    if cmd not in ("find", "preview", "apply"):
+        fatal('unknown command "%s"' % cmd)
+    mode = ("find", "preview", "apply").index(cmd)
+    o = dict(scope="names", depth="rec", case="exact", target="both", regex=False, word=False, hidden=False, vcs=False,
+             binary=False, maxsize=0, root=None, rules=None, only=None, out=None, stats=None, log=None, limit=300, exclude=[])
+    i = 2
+    while i < len(argv):
+        a = argv[i]
+        if not a.startswith("--") or a[2:] in ("",):
+            fatal("unknown option %s" % a)
+        k = a[2:]
+        if k not in o and k != "threads":
+            fatal("unknown option %s" % a)
+        if i + 1 >= len(argv):
+            fatal("option %s needs a value" % a)
+        v = argv[i + 1]; i += 2
+        if k in ("regex", "word", "hidden", "vcs", "binary"):
+            o[k] = v[:1] == "1" or v in ("on", "yes", "true")
+        elif k in ("maxsize", "limit"):
+            o[k] = int(v)
+        elif k == "exclude":
+            o["exclude"].append(v)
+        elif k != "threads":
+            o[k] = v
+    if not o["root"] or not o["rules"]:
+        fatal("--root and --rules are required")
+    for k, ok_ in (("scope", ("names", "contents", "both")), ("depth", ("flat", "rec")), ("case", ("exact", "any")),
+                   ("target", ("files", "dirs", "both"))):
+        if o[k] not in ok_:
+            fatal("bad --%s" % k)
+    t0 = time.time()
+    raw = open(o["rules"], "rb").read()
+    toks = raw.split(b"\0")
+    if toks and toks[-1] == b"":
+        toks.pop()
+    pairs = [(toks[j], toks[j + 1] if j + 1 < len(toks) else b"") for j in range(0, len(toks), 2)]
+    if not pairs:
+        fatal("no rules in %s" % o["rules"])
+    rules = []
+    for n, (f, r) in enumerate(pairs):
+        try:
+            rules.append(Rule(dec(f), dec(r), o["regex"], o["case"] == "any", o["word"]))
+        except ValueError as e:
+            fatal("rule %d: %s" % (n + 1, e))
+    nr = len(rules)
+    root = os.fsencode(o["root"])
+    while len(root) > 1 and root.endswith(b"/"):
+        root = root[:-1]
+    rootlen = len(root) + (0 if root == b"/" else 1)
+    if not os.path.isdir(root):
+        fatal("%s is not a folder" % o["root"])
+    do_names = o["scope"] != "contents"
+    do_contents = o["scope"] != "names"
+    items = walk(root, o["depth"] == "rec", o["hidden"], o["vcs"])
+    only = os.fsencode(o["only"]) if o["only"] else None
+    exs = []
+    for e in o["exclude"]:
+        try:
+            s = os.stat(e); exs.append((os.path.basename(os.fsencode(e)), s.st_dev, s.st_ino))
+        except OSError:
+            pass
+    for it in items:
+        if only is not None and it.path != only:
+            it.excl = True; continue
+        if exs:
+            nm = it.path[it.nameoff:]
+            for b, d, ino in exs:
+                if nm == b:
+                    try:
+                        s = os.lstat(it.path)
+                        if s.st_dev == d and s.st_ino == ino:
+                            it.excl = True; break
+                    except OSError:
+                        pass
+    S = dict(files_scanned=0, files_matched=0, files_changed=0, skipped_binary=0, skipped_large=0, content_errors=0,
+             names_matched=0, names_planned=0, names_renamed=0, names_conflict=0, names_invalid=0, names_error=0, occ=0)
+    r_occ, r_files, r_names = [0] * nr, [0] * nr, [0] * nr
+
+    # ---- contents ----
+    if do_contents:
+        for it in items:
+            if it.typ != "f" or it.excl:
+                continue
+            try:
+                fd = os.open(it.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            except OSError as e:
+                it.cstate, it.cerr = C_ERROR, e.errno; S["content_errors"] += 1; continue
+            try:
+                st = os.fstat(fd)
+                if not stat.S_ISREG(st.st_mode):
+                    continue
+                if o["maxsize"] and st.st_size > o["maxsize"]:
+                    it.cstate = C_LARGE; S["skipped_large"] += 1; continue
+                with os.fdopen(fd, "rb", closefd=False) as f:
+                    data = f.read()
+            except OSError as e:
+                it.cstate, it.cerr = C_ERROR, e.errno; S["content_errors"] += 1; continue
+            finally:
+                os.close(fd)
+            S["files_scanned"] += 1
+            if not o["binary"] and b"\0" in data[:8000]:
+                it.cstate = C_BINARY; S["skipped_binary"] += 1; continue
+            cur = data
+            text = dec(data)
+            total, snip, build = 0, False, mode == 2 or nr > 1
+            try:
+                for r, rule in enumerate(rules):
+                    if build:
+                        new, cnt = rule.sub(text)
+                    else:
+                        cnt = sum(1 for _ in rule.rx.finditer(text)); new = text
+                    if not cnt:
+                        continue
+                    r_occ[r] += cnt; r_files[r] += 1; total += cnt
+                    if not snip:
+                        m = rule.rx.search(text)
+                        it.line, it.snippet = snippet_of(enc(text), len(enc(text[:m.start()])))
+                        snip = True
+                    text = new
+            except (RecursionError, re.error):
+                it.cstate, it.cerr = C_ERROR, E_REGEX; S["content_errors"] += 1; continue
+            if not total:
+                continue
+            it.occ = total; it.cstate = C_MATCH
+            S["files_matched"] += 1; S["occ"] += total
+            if mode == 2:
+                new = enc(text)
+                if new != data:
+                    try:
+                        write_atomic(it.path, new, st)
+                        it.cstate = C_DONE; S["files_changed"] += 1
+                    except OSError as e:
+                        it.cstate, it.cerr = C_ERROR, e.errno; S["content_errors"] += 1
+                else:
+                    it.cstate = C_DONE
+
+    # ---- names ----
+    if do_names:
+        for it in items:
+            if it.excl:
+                continue
+            isdir = it.typ == "d"
+            if (isdir and o["target"] == "files") or (not isdir and o["target"] == "dirs"):
+                continue
+            name = it.path[it.nameoff:]
+            text = dec(name)
+            if mode == 0:
+                hit = False
+                for r, rule in enumerate(rules):
+                    if rule.test(text):
+                        hit = True; r_names[r] += 1
+                if hit:
+                    it.nstate = PLAN; S["names_matched"] += 1
+                continue
+            cur, touched = text, []
+            try:
+                for r, rule in enumerate(rules):
+                    new, cnt = rule.sub(cur)
+                    if cnt:
+                        touched.append(r); cur = new
+            except (RecursionError, re.error):
+                it.nstate, it.nerr = ERROR, E_REGEX; S["names_error"] += 1; continue
+            nb = enc(cur)
+            if not touched or nb == name:
+                continue
+            S["names_matched"] += 1
+            it.rules, it.newname = touched, nb
+            if not valid_newname(nb):
+                it.nstate = INVALID; S["names_invalid"] += 1; continue
+            it.nstate = PLAN
+        if mode != 0:
+            cand = [k for k, it in enumerate(items) if it.nstate == PLAN]
+            seen = {}
+            for k in sorted(cand, key=lambda k: (items[k].parent, items[k].newname, k)):
+                it = items[k]
+                key = (it.parent, it.newname)
+                if key in seen:
+                    it.nstate, it.nerr = CONFLICT, errno.EEXIST; S["names_conflict"] += 1
+                else:
+                    seen[key] = k
+            cand = [k for k in cand if items[k].nstate == PLAN]
+            byold = {(items[k].parent, items[k].path[items[k].nameoff:]): k for k in cand}
+            for k in cand:
+                it = items[k]
+                dest = it.path[:it.nameoff] + it.newname
+                if os.path.lexists(dest):
+                    s = byold.get((it.parent, it.newname))
+                    vac = s is not None and s != k and items[s].nstate == PLAN
+                    if not vac and not same_case_only(it.path, dest, it.path[it.nameoff:], it.newname):
+                        it.nstate, it.nerr = CONFLICT, errno.EEXIST; S["names_conflict"] += 1
+            for it in items:
+                if it.nstate == PLAN:
+                    S["names_planned"] += 1
+                    for r in it.rules:
+                        r_names[r] += 1
+            if mode == 2:
+                apply_names(items, o, S, r_names)
+
+    # ---- listing ----
+    def reportable(it):
+        if mode == 0:
+            return it.nstate == PLAN or it.cstate == C_MATCH
+        if mode == 1:
+            return it.nstate in (PLAN, CONFLICT, INVALID, ERROR) or it.cstate in (C_MATCH, C_ERROR)
+        return it.nstate in (CONFLICT, INVALID, ERROR) or it.cstate == C_ERROR
+
+    def why(e):
+        return "pattern too complex for this text" if e == E_REGEX else "a name like that already exists" if e == errno.EEXIST else os.strerror(e)
+
+    w = sys.stdout.buffer
+    outf = open(o["out"], "wb") if o["out"] else None
+    listed = 0
+    for it in items:
+        if not reportable(it):
+            continue
+        listed += 1
+        if outf and mode != 2:
+            outf.write(it.path + b"\0")
+        if o["limit"] <= 0 or listed <= o["limit"]:
+            line = bytearray()
+            line += "  ⚠ ".encode() if mode == 2 else ("%4d) " % listed).encode()
+            line += _esc2(it.path[rootlen:]) + (b"/" if it.typ == "d" else b"")
+            if it.newname is not None and mode != 0 and it.nstate in (PLAN, CONFLICT, INVALID, ERROR):
+                line += "  →  ".encode() + _esc2(it.newname) + (b"/" if it.typ == "d" else b"")
+            if it.nstate == CONFLICT:
+                line += "   ⚠ skipped: a name like that already exists".encode()
+            elif it.nstate == INVALID:
+                line += "   ⚠ skipped: not a usable name".encode()
+            elif it.nstate == ERROR:
+                line += ("   ⚠ %s" % why(it.nerr)).encode()
+            if it.cstate in (C_MATCH, C_DONE):
+                line += ("  (%d match%s)" % (it.occ, "" if it.occ == 1 else "es")).encode()
+            if it.cstate == C_ERROR:
+                line += ("   ⚠ not edited: %s" % why(it.cerr)).encode()
+            line += b"\n"
+            if it.snippet is not None and mode != 2:
+                line += ("        L%d: " % it.line).encode() + _esc2(it.snippet) + b"\n"
+            w.write(bytes(line))
+    if o["limit"] > 0 and listed > o["limit"]:
+        w.write(("  … and %d more (not shown)\n" % (listed - o["limit"])).encode())
+    if outf:
+        outf.close()
+    if o["stats"]:
+        with open(o["stats"], "w") as f:
+            f.write("items=%d\ndirs_scanned=0\nunreadable=0\nlisted=%d\nms=%d\n" % (len(items), listed, (time.time() - t0) * 1000))
+            for k in ("names_matched", "names_planned", "names_renamed", "names_conflict", "names_invalid", "names_error",
+                      "files_scanned", "files_matched", "files_changed"):
+                f.write("%s=%d\n" % (k, S[k]))
+            f.write("occurrences=%d\ncontent_errors=%d\nskipped_binary=%d\nskipped_large=%d\nrules=%d\n" %
+                    (S["occ"], S["content_errors"], S["skipped_binary"], S["skipped_large"], nr))
+            for r in range(nr):
+                f.write("r%d_occ=%d\nr%d_files=%d\nr%d_names=%d\n" % (r, r_occ[r], r, r_files[r], r, r_names[r]))
+    w.flush()
+    return 0
+
+
+def same_case_only(old, new, oldname, newname):
+    lo = bytes(c + 32 if 65 <= c <= 90 else c for c in oldname)
+    ln = bytes(c + 32 if 65 <= c <= 90 else c for c in newname)
+    if lo != ln:
+        return False
+    try:
+        a, b = os.lstat(old), os.lstat(new)
+    except OSError:
+        return False
+    return a.st_dev == b.st_dev and a.st_ino == b.st_ino and a.st_nlink == 1
+
+
+def rename_noreplace(a, b):
+    if os.path.lexists(b):
+        raise FileExistsError(errno.EEXIST, "exists")
+    os.rename(a, b)
+
+
+def apply_names(items, o, S, r_names):
+    cand = [k for k, it in enumerate(items) if it.nstate == PLAN]
+    byold = {(items[k].parent, items[k].path[items[k].nameoff:]): k for k in cand}
+    lf = open(o["log"], "ab") if o["log"] else None
+    deferred_any = False
+    while True:
+        progress = deferred = False
+        for k in reversed(cand):
+            it = items[k]
+            if it.nstate != PLAN:
+                continue
+            if it.typ == "d" and (deferred or deferred_any):
+                if any(items[j].nstate == PLAN for j in range(k + 1, min(it.subend, len(items)))):
+                    deferred = True; continue
+            dest = it.path[:it.nameoff] + it.newname
+            oldname = it.path[it.nameoff:]
+            try:
+                rename_noreplace(it.path, dest)
+                rc, e = 0, 0
+            except OSError as ex:
+                rc, e = -1, ex.errno
+            if rc != 0 and e in (errno.EEXIST, errno.ENOTEMPTY):
+                if same_case_only(it.path, dest, oldname, it.newname):
+                    try:
+                        os.rename(it.path, dest); rc, e = 0, 0
+                    except OSError as ex:
+                        rc, e = -1, ex.errno
+                else:
+                    s = byold.get((it.parent, it.newname))
+                    if s is not None and s != k and items[s].nstate == PLAN:
+                        deferred = True; continue
+            if rc == 0:
+                it.nstate = DONE; S["names_renamed"] += 1
+                for r in it.rules:
+                    r_names[r] += 1
+                if lf and b"\t" not in it.path + dest and b"\n" not in it.path + dest:
+                    lf.write(it.path + b"\t" + dest + b"\n")
+                progress = True
+            elif e in (errno.EEXIST, errno.ENOTEMPTY):
+                it.nstate, it.nerr = CONFLICT, errno.EEXIST; S["names_conflict"] += 1
+            else:
+                it.nstate, it.nerr = ERROR, e; S["names_error"] += 1
+        deferred_any = deferred
+        if not deferred or not progress:
+            break
+    for k in cand:
+        it = items[k]
+        if it.nstate == PLAN:
+            it.nstate, it.nerr = CONFLICT, errno.EEXIST; S["names_conflict"] += 1
+    if lf:
+        lf.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

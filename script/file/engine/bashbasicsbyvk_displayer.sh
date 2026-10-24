@@ -13,6 +13,24 @@
 # ── Native (C) fast path: use bvk-ls when installed, else fall back to Python ─────────
 # _BVK_GO_WHY records why the native binary is NOT in use (read by the `health` command).
 declare -g _BVK_GO_WHY=""
+# _bvk_engine_target — which prebuilt engine binary fits this machine: sets _bet_m (arm64 | amd64 | arm | "" = none) and
+# _bet_os (android | linux).  ONE place for bvk-ls, bvk-fr (find & replace) and anything else that ships per-CPU binaries.
+#   Android (bionic) cannot run the static glibc "linux" builds: its linker needs PT_PHDR, which a glibc static-pie binary
+#   does not have, and aborts ("Could not find a PHDR: broken executable?"). Android uses the NDK "android" builds.
+_bvk_engine_target() {
+  case "$(uname -m)" in
+    aarch64|arm64) _bet_m=arm64 ;;
+    x86_64|amd64)  _bet_m=amd64 ;;
+    armv7*|armv8l) _bet_m=arm ;;
+    *)             _bet_m="" ;;
+  esac
+  # $OSTYPE says "linux-android" on Android: saves a process (~20 ms on a phone); else ask uname
+  case "$OSTYPE" in
+    *android*) _bet_os=android ;;
+    *) case "$(uname -o 2>/dev/null)" in Android) _bet_os=android ;; *) _bet_os=linux ;; esac ;;
+  esac
+}
+
 _bvk_go_bin() {
   if [ -z "${_BVK_GO_BIN+x}" ]; then
     _BVK_GO_BIN=""
@@ -22,21 +40,8 @@ _bvk_go_bin() {
     else
       local _m _os _b _o _d _old=""
       local -a _cand=()
-      case "$(uname -m)" in
-        aarch64|arm64) _m=arm64 ;;
-        x86_64|amd64)  _m=amd64 ;;
-        armv7*|armv8l) _m=arm ;;
-        *)             _m="" ; _BVK_GO_WHY="no prebuilt bvk-ls for CPU '$(uname -m)'" ;;
-      esac
-      # Android (bionic) cannot run the static glibc "linux" builds: its linker
-      # needs PT_PHDR, which a glibc static-pie binary does not have, and aborts
-      # ("Could not find a PHDR: broken executable?"). Android uses the NDK
-      # "android" builds; everything else uses the "linux" ones.
-      # $OSTYPE says "linux-android" on Android: saves a process (~20 ms on a phone); else ask uname
-      case "$OSTYPE" in
-        *android*) _os=android ;;
-        *) case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac ;;
-      esac
+      _bvk_engine_target; _m="$_bet_m"; _os="$_bet_os"
+      [ -n "$_m" ] || _BVK_GO_WHY="no prebuilt bvk-ls for CPU '$(uname -m)'"
       _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
       _cand=("$(command -v bvk-ls 2>/dev/null)")
       if [ -n "$_m" ]; then
@@ -200,18 +205,14 @@ _is_plugin() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# _py_scan_script — Layer 1: name index with optional parallel stat.
+# _py_icon_prelude — the ONE copy of the python fallback's imports, extension tables, icon() and _pick_ctx().
+# Printed in front of each embedded python body below (_py_scan_python, _py_meta_python), so a table
+# edit lands in both. (The Go / C engines have their own tables: bvk-ls/src/bashbasicsbyvk_icon.c.)
 # ═══════════════════════════════════════════════════════════════════════════════
-_py_scan_python() {
-python3 - "$@" <<'PYEOF'
+_py_icon_prelude() {
+cat <<'PYEOF'
 import os, sys, stat as st_mod
 import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor
-
-dirpath  = sys.argv[1]
-mode     = sys.argv[2]
-hidden   = sys.argv[3] == "1"
-pfx      = sys.argv[4].lower() if len(sys.argv) > 4 else ""
 
 _ARCHIVE_MULTI = (".tar.gz",".tar.bz2",".tar.xz",".tar.zst",".tar.lz",
                   ".tar.lzma",".tar.lz4",".tar.z",".tar.sz",".tar.br")
@@ -252,6 +253,27 @@ def icon(name, is_dir, mode_bits):
     if ext in _EXEC or bool(mode_bits & 0o111): return "exec"
     return "plain"
 
+def _pick_ctx():
+    methods = mp.get_all_start_methods()
+    if "fork" in methods:
+        return mp.get_context("fork")
+    return mp.get_context()
+PYEOF
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _py_scan_script — Layer 1: name index with optional parallel stat.
+# ═══════════════════════════════════════════════════════════════════════════════
+_py_scan_python() {
+{ _py_icon_prelude; cat <<'PYEOF'
+from concurrent.futures import ProcessPoolExecutor
+
+dirpath  = sys.argv[1]
+mode     = sys.argv[2]
+hidden   = sys.argv[3] == "1"
+pfx      = sys.argv[4].lower() if len(sys.argv) > 4 else ""
+
+
 def _stat_chunk(args):
     dirpath_c, names = args
     out = []
@@ -267,11 +289,6 @@ def _stat_chunk(args):
             out.append((p, name.lower(), 0, 0.0))
     return out
 
-def _pick_ctx():
-    methods = mp.get_all_start_methods()
-    if "fork" in methods:
-        return mp.get_context("fork")
-    return mp.get_context()
 
 names = []
 try:
@@ -317,6 +334,7 @@ elif mode == "small": entries.sort(key=lambda x: x[2])
 for e in entries:
     print(e[0])
 PYEOF
+} | python3 - "$@"
 }
 
 # C first, Python if the binary is missing or fails (legacy entry point).
@@ -329,51 +347,11 @@ _py_scan_script() {
 # _py_meta_script — Layer 2: batch stat for the visible window.
 # ═══════════════════════════════════════════════════════════════════════════════
 _py_meta_python() {
-python3 - "$1" <<'PYEOF'
-import os, sys, stat as st_mod
-import multiprocessing as mp
+{ _py_icon_prelude; cat <<'PYEOF'
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 paths_file = sys.argv[1]
 
-_ARCHIVE_MULTI = (".tar.gz",".tar.bz2",".tar.xz",".tar.zst",".tar.lz",
-                  ".tar.lzma",".tar.lz4",".tar.z",".tar.sz",".tar.br")
-_ARCHIVE = frozenset((".zip",".7z",".rar",".tar",".tgz",".tbz",".tbz2",".txz",".tzst",
-    ".gz",".bz2",".xz",".zst",".lz",".lzma",".lz4",".z",".zz",".br",".sz",
-    ".jar",".war",".ear",".apk",".aab",".ipa",".deb",".rpm",".pkg",".snap",".flatpak",
-    ".dmg",".iso",".img",".wim",".cab",".arj",".lzh",".lha",".ace",".arc",".zoo",
-    ".sit",".sitx",".sea",".cpio",".shar",".pax",".hqx",".bin"))
-_IMAGE  = frozenset((".jpg",".jpeg",".png",".gif",".bmp",".tif",".tiff",".webp",
-    ".avif",".heic",".heif",".ico",".cur",".psd",".psb",".xcf",".ppm",".pgm",
-    ".pbm",".pnm",".pfm",".pam",".xbm",".xpm",".tga",".dds",".exr",".hdr",
-    ".sgi",".rgb",".rgba",".svg",".svgz",".ai",".eps",".raw",".cr2",".cr3",
-    ".nef",".nrw",".arw",".srf",".sr2",".orf",".rw2",".rwl",".pef",".ptx",
-    ".dng",".raf",".mrw",".dcr",".kdc",".erf",".x3f",".srw",".bay",
-    ".apng",".flif",".jxl",".jp2",".jpx",".j2k",".jpf",".jpm",".mj2"))
-_PLUGIN = frozenset((".crx",".xpi",".safariextz",".vsix",".visx",".natvis",
-    ".sublime-package",".plugin",".bundle",".kext",".mdimporter",
-    ".addon",".addin",".adp",".vst",".vst3",".au",".lv2",".ladspa",".dssi",
-    ".sketchplugin",".figma",".xdx"))
-_EXEC   = frozenset((".sh",".bash",".zsh",".fish",".ksh",".csh",".tcsh",".dash",
-    ".py",".pyc",".pyo",".pyw",".rb",".pl",".pm",".lua",".tcl",".tk",
-    ".js",".mjs",".cjs",".ts",".mts",".cts",".class",".jar",
-    ".exe",".com",".out",".elf",".o",".a",".lib",
-    ".bat",".cmd",".ps1",".psm1",".psd1",".vbs",".vbe",".wsf",".wsh",
-    ".app",".command",".run",".wasm",".beam",".elc",".rbc",".luac"))
-
-def icon(name, is_dir, mode_bits):
-    if name.endswith(".shortcut"): return "shortcut"
-    if is_dir: return "dir"
-    lo = name.lower()
-    for m in _ARCHIVE_MULTI:
-        if lo.endswith(m): return "archive"
-    dot = lo.rfind(".")
-    ext = lo[dot:] if dot >= 0 else ""
-    if ext in _ARCHIVE: return "archive"
-    if ext in _IMAGE:   return "image"
-    if ext in _PLUGIN:  return "plugin"
-    if ext in _EXEC or bool(mode_bits & 0o111): return "exec"
-    return "plain"
 
 def stat_one(p):
     try:
@@ -396,11 +374,6 @@ def stat_one(p):
 def _meta_chunk(chunk):
     return [stat_one(p) for p in chunk]
 
-def _pick_ctx():
-    methods = mp.get_all_start_methods()
-    if "fork" in methods:
-        return mp.get_context("fork")
-    return mp.get_context()
 
 with open(paths_file) as fh:
     paths = [l.rstrip("\n") for l in fh if l.strip()]
@@ -430,6 +403,7 @@ else:
 
 sys.stdout.write("\n".join(results) + "\n")
 PYEOF
+} | python3 - "$1"
 }
 
 _py_meta_script() {

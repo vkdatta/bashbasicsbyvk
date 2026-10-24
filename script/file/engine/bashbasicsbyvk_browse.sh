@@ -282,6 +282,61 @@ display_imaginary_groups() {
   builtin printf "%s\n" "$_imag_banner" "${imaginary_lines[@]}"
 }
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Index mode (big folders) — the ONE place that decides "list it" or "show prefix groups".
+# Shared by the fx / switch loops (_bvk_build_path_items) and the transfer navigator.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# _bvk_prefix_matches <dir> <prefix>  → _bvk_pfx_items[]: the visible entries of <dir> whose lower-cased name starts with <prefix>
+_bvk_prefix_matches() {
+  local _f _bn
+  _bvk_pfx_items=()
+  while IFS= read -r -d '' _f; do
+    _bn="${_f##*/}"
+    [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
+    ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
+    [[ "${_bn,,}" != "$2"* ]] && continue
+    _bvk_pfx_items+=("$_f")
+  done < <(find "$1" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
+}
+
+# _bvk_index_decide <dir> <prefix> <force_show: true|false>
+#   sets  _bvk_ix_kind   groups = too many entries: show prefix groups (_bvk_ix_pfx / _bvk_ix_count are the arguments for
+#                                 build_imaginary_groups / display_imaginary_groups)
+#                        flat   = the prefix narrows it down to a listable set: _bvk_pfx_items[]
+#                        none   = list the folder normally (small, or force_show) — the caller's usual builder runs
+_bvk_index_decide() {
+  local _dir="$1" _pfx="$2" _force="$3" _total
+  local _thr="${index_mode_threshold:-200}"
+  _bvk_ix_kind=none; _bvk_ix_pfx="$_pfx"; _bvk_ix_count=0; _bvk_pfx_items=()
+  _total=$(count_items_in_path "$_dir")
+  { [ "$_total" -gt "$_thr" ] && ! $_force; } || return 0
+  _bvk_ix_kind=groups; _bvk_ix_count="$_total"
+  [ -n "$_pfx" ] || return 0
+  _bvk_prefix_matches "$_dir" "$_pfx"
+  _bvk_ix_count="${#_bvk_pfx_items[@]}"
+  [ "$_bvk_ix_count" -le "$_thr" ] && _bvk_ix_kind=flat
+  return 0
+}
+
+# _bvk_build_path_items — fills items[] / imaginary_mode for the folder `path` (+ group_prefix, force_show) in the fx and switch loops.
+_bvk_build_path_items() {
+  _has_group_view=false
+  [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
+  _bvk_index_decide "$path" "$group_prefix" "$force_show"
+  case "$_bvk_ix_kind" in
+    groups) imaginary_mode=true; build_imaginary_groups "$path" "$_bvk_ix_pfx" "$_bvk_ix_count" ;;
+    flat)   imaginary_mode=false; items=("${_bvk_pfx_items[@]}"); _collect_metadata; apply_sort ;;
+  esac
+  if ! $imaginary_mode; then
+    if [ ${#items[@]} -eq 0 ] && [ -n "$group_prefix" ]; then
+      build_items_with_meta "$path" "$group_prefix"; apply_sort
+    elif [ ${#items[@]} -eq 0 ]; then
+      build_items_with_meta "$path" ""; apply_sort
+    fi
+  fi
+}
+
 # select_items_common <PROMPT> [allow_a]
 #   allow_a: also accept  a  (all)  and  a-<exclusions>  (all except),
 #            e.g. a-1-5,7 — same grammar as the c-/m-/s- staging shortcuts.
@@ -728,12 +783,16 @@ _rc_type_text() {
 
 # ── mouse / touch (see bashbasicsbyvk_mouse.sh) ──────────────────────────────────────────────────────────────────────
 # wheel / swipe: scroll the highlight (clamped, no wrap-around: a wheel that jumps from the top to the bottom is useless)
+# At the first / last row, or with the touch outside the block (above its header / below its prompt), the wheel goes back to the terminal.
 _rc_wheel() {
-  $_can_nav || return 0
   _bvk_blk_park
+  _bvk_mouse_wheel_outside && return 0
+  $_can_nav || { _bvk_mouse_pass; return 0; }
+  local before="${_hl_index:-0}"
   if [ "$1" = up ]; then _nav_jump_to $(( ${_hl_index:-1} - _BVK_WHEEL_STEP ))
   else                   _nav_jump_to $(( ${_hl_index:-0} + _BVK_WHEEL_STEP )); fi
   (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line
+  [ "${_hl_index:-0}" = "$before" ] && _bvk_mouse_pass
   return 0
 }
 # a left click / tap at (_MS_X, _MS_Y).   returns 2 = double click: accept the line now (Enter)
@@ -751,14 +810,19 @@ _rc_click() {
     pgup) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-1} - _vp_page_step )) ;;
     pgdn) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-0} + _vp_page_step )) ;;
     *)
-      _BVK_LAST_ITEM=""
-      if _bvk_mouse_hdr_hit "$_MS_Y" "$_BVK_CROW"; then
+      if _bvk_mouse_other "$_MS_Y" "$_BVK_CROW"; then            # a footer key (double tap only) or the prompt row (hands the touch back)
+        case "$_MS_FACT" in
+          run)  _buf="$_MS_FTEXT"; _pos=${#_buf}; rc=3 ;;        # u) Up  →  "u" typed and Enter, as if pressed
+          type) _buf="$_MS_FTEXT"; _pos=${#_buf}; _sync_highlight_from_buf ;;   # x-N  →  "x-" typed, the number is yours
+        esac
+      elif _bvk_mouse_hdr_hit "$_MS_Y" "$_BVK_CROW"; then
+        _BVK_LAST_ITEM=""
         case "$_MS_HKIND" in
           cmd) _bvk_mouse_hdr_ok && { _buf="$_MS_CMD"; _pos=${#_buf}; rc=3; } ;;        # py | ⏰ 0 | 📣 0  →  lang | nf | pn, as if typed
           tab) [ "${_sw_in_mode:-0}" = 1 ] && { _BVK_TAB_STEPS=$_MS_TABDELTA; _BVK_TAB_SCREEN="${_vp_header_fn:-}"; } ;;   # consumed at the top of the key loop
           nav) _bvk_mouse_nav_ok && [ -d "$_MS_NAV" ] && { _BVK_NAV_TARGET="$_MS_NAV"; _buf="__navpath__"; _pos=${#_buf}; rc=3; } ;;
         esac
-      fi ;;
+      else _BVK_LAST_ITEM=""; fi ;;
   esac
   (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line
   (( rc == 3 )) && [ "$_buf" != "__navpath__" ] && _print_input_line     # show the command that was "typed"

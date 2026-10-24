@@ -9,3 +9,4 @@ _lt_b "load importnano"; source "bashbasicsbyvk_importnano.sh"; _lt_e
 _lt_b "load compress"; source "bashbasicsbyvk_compress.sh"; _lt_e
 _lt_b "load filter"; source "bashbasicsbyvk_filter.sh"; _lt_e
 _lt_b "load timezone"; source "bashbasicsbyvk_timezone.sh"; _lt_e
+_lt_b "load findsettings"; source "bashbasicsbyvk_findsettings.sh"; _lt_e

@@ -270,46 +270,7 @@ _fx_build_items_for_tab() {
       ;;
 
     udf)
-      local total
-      total=$(count_items_in_path "$path")
-      _has_group_view=false
-      [ "${#group_view_levels[@]}" -gt 0 ] && _has_group_view=true
-
-      if [ "$total" -gt "${index_mode_threshold:-200}" ] && ! $force_show; then
-        imaginary_mode=true
-        if [ -n "$group_prefix" ]; then
-          local local_arr=()
-          while IFS= read -r -d '' _f; do
-            _bn="${_f##*/}"
-            [[ "$_bn" == "." || "$_bn" == ".." ]] && continue
-            ! $show_hidden_files && [[ "$_bn" == .* ]] && continue
-            [[ "${_bn,,}" != "$group_prefix"* ]] && continue
-            local_arr+=("$_f")
-          done < <(find "$path" -maxdepth 1 -mindepth 1 -print0 2>/dev/null)
-          local pfx_count="${#local_arr[@]}"
-          if [ "$pfx_count" -le "${index_mode_threshold:-200}" ]; then
-            imaginary_mode=false; items=("${local_arr[@]}")
-            _collect_metadata; apply_sort
-          else
-            build_imaginary_groups "$path" "$group_prefix" "$pfx_count"
-          fi
-        else
-          build_imaginary_groups "$path" "" "$total"
-        fi
-      elif [ "$total" -gt "${index_mode_threshold:-200}" ] && $force_show; then
-        imaginary_mode=false
-        build_items_with_meta "$path" "${group_prefix:-}"
-        apply_sort
-      fi
-
-      if ! $imaginary_mode; then
-        if [ ${#items[@]} -eq 0 ] && [ -n "$group_prefix" ]; then
-          build_items_with_meta "$path" "$group_prefix"; apply_sort
-        elif [ ${#items[@]} -eq 0 ]; then
-          build_items_with_meta "$path" ""; apply_sort
-        fi
-      fi
-
+      _bvk_build_path_items
       ;;
   esac
 }

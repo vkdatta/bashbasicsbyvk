@@ -37,12 +37,7 @@ _bb_authed_put() {
     body=$(echo "$response" | sed '$d')
 
     if [ "$http_status" == "201" ]; then
-      local deducted balance expires
-      deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-      balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-      expires=$(grep -i '^X-Link-Expires:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-      rm -f "$hdrfile"
-      printf '%s\n%s\n%s\n%s\n' "$body" "$deducted" "$balance" "$expires"
+      _bb_created_emit "$hdrfile" "$body"
       return 0
     fi
     rm -f "$hdrfile"
@@ -198,15 +193,11 @@ _announce_link() {
 # usage: <tar.gz stream> | _crypto_stream_pack <outdir> <display-name>
 # prints: key \n total-cipher-bytes \n blob-count
 _crypto_stream_pack() {
-  local outdir="$1" arcname="$2"
-  BB_PACK_BYTES="${_BB_PACK_BYTES}" BB_ARC_NAME="$arcname" node -e '
-    // one way to draw a \r status line: clipped (auto-wrap OFF), never wider than the screen
-    const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, "")) { const c = ch.codePointAt(0);
-      if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
-      w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || /\p{Emoji_Presentation}/u.test(ch)) ? 2 : 1; } return w; };
-    const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
-    const live = (s) => process.stderr.write("\u001b[?7l\r\u001b[K" + s + "\u001b[?7h");
-    const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
+  local outdir="$1" arcname="$2" jl
+  jl=$(_bb_jslib) || return 1
+  BB_JSLIB="$jl" BB_PACK_BYTES="${_BB_PACK_BYTES}" BB_ARC_NAME="$arcname" node -e '
+    // status line, pack status and chunk writer: shared with the other node transfer tools (bashbasicsbyvk_staging_jslib.js)
+    const { packStatus, writeChunks } = require(process.env.BB_JSLIB);
     const fs = require("fs"), path = require("path"), crypto = require("crypto");
     const outdir = process.argv[1];
     const CHUNK = parseInt(process.env.BB_PACK_BYTES, 10) || 16 * 1024 * 1024;
@@ -221,46 +212,20 @@ _crypto_stream_pack() {
       return Buffer.concat([iv, ct, cipher.getAuthTag()]);
     }
 
-    const TTY = process.stderr.isTTY, t0 = Date.now();
-    let lastDraw = 0, seen = 0;
-    function status(final) {
-      if (!TTY) return;
-      const now = Date.now();
-      if (!final && now - lastDraw < 150) return;
-      lastDraw = now;
-      const mb = (seen / 1048576).toFixed(1), s = Math.floor((now - t0) / 1000);
-      live("\u001b[36m" + fitv(["\uD83D\uDCE6 Packing tar.gz \u2192 \uD83D\uDD10 Encrypting  " + mb + " MB packed  (" + s + "s)", "\uD83D\uDCE6 Packing \u2192 \uD83D\uDD10 Encrypting  " + mb + " MB (" + s + "s)", "\uD83D\uDCE6\u2192\uD83D\uDD10 " + mb + " MB (" + s + "s)", "\uD83D\uDCE6\u2192\uD83D\uDD10 " + mb + " MB"]) + "\u001b[0m");
-      if (final) process.stderr.write("\n");
-    }
+    const TTY = process.stderr.isTTY, status = packStatus();
 
     (async () => {
-      const buf = Buffer.allocUnsafe(CHUNK);
-      let fill = 0, idx = 0, plainTotal = 0, cipherTotal = 0;
-      function flush() {
-        if (fill === 0) return;
-        const rec = encrypt(buf.subarray(0, fill), "bbvk4|blob|" + idx);
-        fs.writeFileSync(path.join(outdir, "blob" + idx), rec, { mode: 0o600 });
-        cipherTotal += rec.length; plainTotal += fill; idx++; fill = 0;
-      }
+      let res;
       try {
-        for await (const piece of process.stdin) {
-          let off = 0;
-          while (off < piece.length) {
-            const n = Math.min(CHUNK - fill, piece.length - off);
-            piece.copy(buf, fill, off, off + n);
-            fill += n; off += n;
-            if (fill === CHUNK) flush();
-          }
-          seen += piece.length;
-          status(false);
-        }
-        flush();
+        res = await writeChunks(process.stdin, { chunk: CHUNK, onBytes: status.add,
+          seal: (piece, i) => encrypt(piece, "bbvk4|blob|" + i), fileFor: (i) => path.join(outdir, "blob" + i) });
       } catch (e) {
         if (TTY) process.stderr.write("\n");
         console.error("  \u274c " + (e && e.code === "ENOSPC" ? "Disk full while writing encrypted blobs." : "Packing failed: " + (e && e.message)));
         process.exit(3);
       }
-      status(true);
+      const { idx, plainTotal, cipherTotal } = res;
+      status.done();
       if (idx === 0) { console.error("  \u274c Nothing to pack."); process.exit(2); }
 
       const manifest = { version: 4, format: "tar.gz", name: process.env.BB_ARC_NAME || "files.tar.gz",
@@ -284,14 +249,10 @@ _crypto_fetch_archive() {
     esac
     _bb_xfer_note go-fallback "fetch gave no verdict (crashed?) — continued with node"
   fi
-  BB_KEY="$key" node -e '
-    // one way to draw a \r status line: clipped (auto-wrap OFF), never wider than the screen
-    const dw = (s) => { let w = 0; for (const ch of String(s).replace(/\u001b\[[0-9;]*m/g, "")) { const c = ch.codePointAt(0);
-      if (c === 0xFE0F || c === 0xFE0E || c === 0x200D || (c >= 0x300 && c <= 0x36F)) continue;
-      w += ((c >= 0x1100 && c <= 0x115F) || (c >= 0x2E80 && c <= 0xA4CF) || (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60) || /\p{Emoji_Presentation}/u.test(ch)) ? 2 : 1; } return w; };
-    const scols = () => Math.max(20, (process.stderr.columns || process.stdout.columns || 60) - 1);
-    const live = (s) => process.stderr.write("\u001b[?7l\r\u001b[K" + s + "\u001b[?7h");
-    const fitv = (vs) => { const c = scols(); for (const v of vs) if (dw(v) <= c) return v; return vs[vs.length - 1]; };
+  local jl; jl=$(_bb_jslib) || { echo FAILED; return 0; }
+  BB_JSLIB="$jl" BB_KEY="$key" node -e '
+    // status-line helpers: shared with the other node transfer tools (bashbasicsbyvk_staging_jslib.js)
+    const { live } = require(process.env.BB_JSLIB);
     const fs = require("fs"), crypto = require("crypto");
     const link = process.argv[1], outfile = process.argv[2];
     const key = Buffer.from(process.env.BB_KEY.replace(/-/g,"+").replace(/_/g,"/"), "base64");
@@ -541,12 +502,7 @@ _bb_upload_commit() {
   body=$(echo "$response" | sed '$d')
 
   if [ "$http_status" == "201" ]; then
-    local deducted balance expires
-    deducted=$(grep -i '^X-Credits-Deducted:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-    balance=$(grep -i '^X-Credits-Balance:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-    expires=$(grep -i '^X-Link-Expires:' "$hdrfile" | tr -d '\r' | cut -d' ' -f2-)
-    rm -f "$hdrfile"
-    printf '%s\n%s\n%s\n%s\n' "$body" "$deducted" "$balance" "$expires"
+    _bb_created_emit "$hdrfile" "$body"
     return 0
   fi
   rm -f "$hdrfile"
@@ -625,10 +581,7 @@ _up_do_multipart_upload() {
       return 1
     fi
   fi
-  local -a gz=(gzip)
-  command -v pigz &>/dev/null && gz=(pigz)          # parallel gzip when available
-  local lvl="${FILEAPI_BASHBASICS_GZIP_LEVEL:-6}"
-  [[ "$lvl" =~ ^[1-9]$ ]] || lvl=6
+  local -a gz; local lvl; _bb_gzip_setup
 
   echo "🔎 Scanning selection..."
   # Stage the selection by name as symlinks so the archive holds "<name>/..." entries relative
@@ -639,15 +592,7 @@ _up_do_multipart_upload() {
   _up_cleanup() { rm -rf "$stage" ${tmpdir:+"$tmpdir"} "$rcfile" "$errfile"; }
 
   local -a rel_items=()
-  local p bn cand n
-  for p in "${paths[@]}"; do
-    p="${p%/}"; [[ "$p" == /* ]] || p="$PWD/$p"
-    if [ ! -f "$p" ] && [ ! -d "$p" ]; then echo "  🔴  Skipping missing item: $p" >&2; continue; fi
-    bn="${p##*/}"; cand="$bn"; n=1
-    while [ -e "$stage/$cand" ] || [ -L "$stage/$cand" ]; do n=$((n + 1)); cand="${bn}_$n"; done
-    ln -s "$p" "$stage/$cand"
-    rel_items+=("./$cand")                            # "./" so a name starting with "-" is never an option
-  done
+  _bb_stage_links "$stage" echo "${paths[@]}"
   if [ ${#rel_items[@]} -eq 0 ]; then
     echo "❌ No valid files found in selection"; _up_cleanup; return 1
   fi

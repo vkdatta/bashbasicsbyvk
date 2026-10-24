@@ -86,6 +86,23 @@ IE_HEADERS = ['Sub Audit', 'Source File', 'Destination File', 'Status', 'Comment
 IE_WIDTHS  = [28, 38, 38, 12, 70, 55]
 
 
+def _write_summary_box(ws, summary_col, items, label_width):
+    """The little label / value box at the right of a sheet: items = [(label, value, value_bg, value_fg)], one per row from row 2."""
+    for row_i, (label, val, bg, fg) in enumerate(items, start=2):
+        lc           = ws.cell(row_i, summary_col, label)
+        lc.font      = Font(name=FONT_NAME, bold=True, size=10, color=CLR_HEADER_FG)
+        lc.fill      = _fill(CLR_HEADER_BG)
+        lc.alignment = _align(h='center', wrap=False)
+        lc.border    = _border_thin()
+        vc           = ws.cell(row_i, summary_col + 1, val)
+        vc.fill      = _fill(bg)
+        vc.font      = Font(name=FONT_NAME, bold=True, size=10, color=fg)
+        vc.alignment = _align(h='center', wrap=False)
+        vc.border    = _border_thin()
+    ws.column_dimensions[get_column_letter(summary_col)].width     = label_width
+    ws.column_dimensions[get_column_letter(summary_col + 1)].width = 10
+
+
 def build_sheet_import_export(wb, ie_rows):
     ws       = wb.active
     ws.title = "Import Export"
@@ -143,24 +160,12 @@ def build_sheet_import_export(wb, ie_rows):
     err_count   = sum(1 for r in ie_rows if r.get('Status') == 'Error')
     info_count  = sum(1 for r in ie_rows if r.get('Status') == 'Info')
     summary_col = len(IE_HEADERS) + 2
-    for row_i, (label, val, bg, fg) in enumerate([
+    _write_summary_box(ws, summary_col, [
         ('Total Rows', len(ie_rows), CLR_HEADER_BG, CLR_HEADER_FG),
         ('OK',         ok_count,     CLR_OK_BG,     CLR_OK_FG),
         ('Errors',     err_count,    CLR_ERROR_BG,  CLR_ERROR_FG),
         ('Info',       info_count,   CLR_INFO_BG,   CLR_INFO_FG),
-    ], start=2):
-        lc           = ws.cell(row_i, summary_col, label)
-        lc.font      = Font(name=FONT_NAME, bold=True, size=10, color=CLR_HEADER_FG)
-        lc.fill      = _fill(CLR_HEADER_BG)
-        lc.alignment = _align(h='center', wrap=False)
-        lc.border    = _border_thin()
-        vc           = ws.cell(row_i, summary_col + 1, val)
-        vc.fill      = _fill(bg)
-        vc.font      = Font(name=FONT_NAME, bold=True, size=10, color=fg)
-        vc.alignment = _align(h='center', wrap=False)
-        vc.border    = _border_thin()
-    ws.column_dimensions[get_column_letter(summary_col)].width     = 14
-    ws.column_dimensions[get_column_letter(summary_col + 1)].width = 10
+    ], label_width=14)
 
 
 AD_HEADERS = ['Source File', 'Function Name', 'Status', 'Usage Count', 'Comment']
@@ -195,23 +200,11 @@ def build_sheet_active_dead(wb, ad_rows):
     active_count = sum(1 for r in ad_rows if r.get('Status') == 'Active')
     dead_count   = sum(1 for r in ad_rows if r.get('Status') == 'Dead')
     summary_col  = len(AD_HEADERS) + 2
-    for row_i, (label, val, bg, fg) in enumerate([
+    _write_summary_box(ws, summary_col, [
         ('Total Functions', len(ad_rows), CLR_HEADER_BG, CLR_HEADER_FG),
         ('Active',          active_count, CLR_OK_BG,     CLR_OK_FG),
         ('Dead',            dead_count,   CLR_DEAD_BG,   CLR_DEAD_FG),
-    ], start=2):
-        lc           = ws.cell(row_i, summary_col, label)
-        lc.font      = Font(name=FONT_NAME, bold=True, size=10, color=CLR_HEADER_FG)
-        lc.fill      = _fill(CLR_HEADER_BG)
-        lc.alignment = _align(h='center', wrap=False)
-        lc.border    = _border_thin()
-        vc           = ws.cell(row_i, summary_col + 1, val)
-        vc.fill      = _fill(bg)
-        vc.font      = Font(name=FONT_NAME, bold=True, size=10, color=fg)
-        vc.alignment = _align(h='center', wrap=False)
-        vc.border    = _border_thin()
-    ws.column_dimensions[get_column_letter(summary_col)].width     = 18
-    ws.column_dimensions[get_column_letter(summary_col + 1)].width = 10
+    ], label_width=18)
 
 
 ANN_HEADERS = ['Annexure #', 'Source File', 'Destination File', 'Function Name', 'Comment']

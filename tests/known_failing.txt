@@ -1,0 +1,3 @@
+# Tests that are KNOWN to fail, one per line:  <test name from tests.list><TAB><why, and since when>
+# A listed test that fails does not fail the run (it is printed as KNOWN); one that passes is reported "now passes - remove it from this file".
+# This is how an agent tells "my change broke it" from "it was already red". Never add a line to hide a failure you caused.

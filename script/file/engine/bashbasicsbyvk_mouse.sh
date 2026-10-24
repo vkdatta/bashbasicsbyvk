@@ -7,6 +7,13 @@
 #   click / tap the status row  (py | ⏰ 0 | 📣 0)  → runs  lang / nf / pn  (first / second / third field)
 #   click / tap a tab name (sw, fx, -u, .r, cs, rbam ...)  → that tab (a tab bar is found by the labels its screen registered)
 #   click / tap a folder name in the  nav path:  → browse that folder (the shell's  cd path  is never touched)
+#   DOUBLE click / tap a footer key  (u) Up   q) Quit   h) Home ...)  → that key is typed and Enter pressed for you.  A single tap does
+#        nothing: footers sit next to the prompt and are the easiest thing to touch by accident.  A key with a placeholder
+#        (x-N, r-N ...) only has its prefix typed (x-), never Enter.
+#   wheel / swipe at the END of a list, or started OUTSIDE the menu block (on the screen above its header / below its prompt)
+#        → handed back to the terminal, so its own scrollback scrolls (see _bvk_mouse_pass).
+#   tap on the Select: prompt row → handed back to the terminal for a moment, so the NEXT tap opens the soft keyboard
+#        (a terminal never opens the keyboard on a tap while mouse reports are on; the tap that is reported is the one that is lost).
 # Wired into every loop that shows a numbered list: the file list and the menus built on it (fx, sw, api, ...), Settings / Home /
 # cc (_st_run), every  read -p  menu (_sm_run: the file menu, find, create, ...) and the Item numbers picker.
 #
@@ -30,6 +37,10 @@ _BVK_LAST_MS=0
 _BVK_NAV_TARGET=""           # the folder a touched nav-path name asks for (read by the main loop on  __navpath__ )
 _BVK_DBL_MS="${BVK_DBLCLICK_MS:-500}"        # two clicks on the same item within this many ms = double click (500: taps are slower than clicks)
 _BVK_WHEEL_STEP=3
+_BVK_MOUSE_PASS=0            # 1 = reports are switched off on purpose for a while, the terminal gets scroll / tap back (_bvk_mouse_pass)
+_BVK_PASS_UNTIL=0
+_BVK_PASS_SCROLL_MS=1500     # how long after the last wheel event that was handed back the reports come on again
+_BVK_PASS_TAP_MS=8000        # ... after a tap on the prompt row (long enough to tap again and get the keyboard)
 
 _bvk_mouse_enabled() {
   [ "${mouse_mode:-on}" = on ] && [ "${BVK_MOUSE:-1}" != 0 ] && [ "$_BVK_MOUSE_BROKEN" = 0 ] || return 1
@@ -37,7 +48,7 @@ _bvk_mouse_enabled() {
 }
 _bvk_mouse_on() {
   _bvk_mouse_enabled || return 0
-  builtin printf '\033[?1000h\033[?1006h'; _BVK_MOUSE_ON=1
+  builtin printf '\033[?1000h\033[?1006h'; _BVK_MOUSE_ON=1; _BVK_MOUSE_PASS=0
   return 0
 }
 _bvk_mouse_off() {
@@ -63,7 +74,7 @@ _bvk_mouse_decode() {
   local s="$1" re='^\[<([0-9]+);([0-9]+);([0-9]+)([Mm])$' b
   _MS_ACT=ignore
   [[ "$s" == '[M'* ]] && return 0                      # the old X10 format (a terminal without SGR): swallowed, never typed into the prompt
-  [[ "$s" =~ $re ]] || return 1
+  [[ "$s" =~ $re ]] || { _bvk_mouse_rearm force; return 1; }      # an arrow / Home / ... : the person is on the keyboard again
   b=$(( 10#${BASH_REMATCH[1]} )); _MS_X=$(( 10#${BASH_REMATCH[2]} )); _MS_Y=$(( 10#${BASH_REMATCH[3]} ))
   [ "${BASH_REMATCH[4]}" = M ] && (( _BVK_MOUSE_ON )) || return 0     # a release, or a stray report while the feature is off: swallowed, not acted on
   if   (( b & 64 )); then
@@ -88,6 +99,7 @@ _bvk_cursor_row() {
 _bvk_mouse_hit() {
   local d=$(( $2 - $1 )) base r it
   _MS_KIND=none; _MS_ITEM=0
+  (( d <= 0 && d > - ${_BLK_ROWS:-1} )) && { _MS_KIND=prompt; return 0; }       # the Select: row itself (a long text spans several rows)
   (( d > 0 )) || return 0
   base=$(( ${_vp_ind:-0} + ${_vp_ftr_show:-0} + ${_vp_hint_row:-0} ))
   r=$(( _vp_end + base + 1 - d ))                       # screen row of the list (inverse of _vp_dist)
@@ -164,6 +176,102 @@ _bvk_mouse_scroll() {
   (( s == _vp_start )) && return 0
   _vp_start=$s; _vp_rerender
   return 0
+}
+
+# Handing the touch back to the terminal.  While reports are on, the terminal gives US every wheel event and every tap: it can no longer
+# scroll its own scrollback (the screen above / below the menu) and a tap no longer opens the soft keyboard.  So reports go off on purpose:
+#   _bvk_mouse_pass [MS]   off now, and back on after MS ms without input (the read loops call _bvk_mouse_rearm from their idle tick and
+#                          with "force" on every key, because a typed key means the person is back at the list).
+# Reports that were already on their way are decoded as "ignore" while the feature is off, so none is ever typed into the prompt.
+_bvk_mouse_pass() {
+  (( _BVK_MOUSE_ON )) || return 0
+  _bvk_mouse_off; _BVK_MOUSE_PASS=1
+  _bvk_now_ms; _BVK_PASS_UNTIL=$(( _BVK_MS + ${1:-$_BVK_PASS_SCROLL_MS} ))
+  return 0
+}
+_bvk_mouse_rearm() {    # [force]
+  (( _BVK_MOUSE_PASS )) || return 0
+  if [ "${1:-}" != force ]; then _bvk_now_ms; (( _BVK_MS < _BVK_PASS_UNTIL )) && return 0; fi
+  _bvk_mouse_on
+  return 0
+}
+
+# _bvk_mouse_wheel_outside [BLOCK_ROWS] [EXTRA_ROWS_BELOW_PROMPT]
+#   For a wheel event at _MS_Y: 0 = it was NOT over the menu block (on the screen above its header, or below its prompt), and the
+#   touch has just been handed back (_bvk_mouse_pass); the caller then does nothing else.  1 = over the block: the caller scrolls the list.
+#   The cursor must be on the prompt's first row (the callers _bvk_blk_park first).
+_bvk_mouse_wheel_outside() {
+  _bvk_mouse_prow || return 1
+  local h=${1:-${_blk_h:-0}} below=${2:-$(( ${_BLK_ROWS:-1} - 1 ))} top
+  (( h > 0 )) || return 1
+  top=$(( _BVK_CROW - h + 1 ))
+  if (( _MS_Y < top || _MS_Y > _BVK_CROW + below )); then _bvk_mouse_pass; return 0; fi
+  return 1
+}
+
+# wheel over a list that scrolls as a window (the picker, multi / command menus): park, hand back when the wheel is outside the block,
+# scroll, and hand back when the window did not move (already at the first / last row).   $1 = -1 up · 1 down
+_bvk_mouse_wheel_window() {
+  _bvk_blk_park
+  _bvk_mouse_wheel_outside && return 0
+  local before=$_vp_start
+  _bvk_mouse_scroll $(( $1 * _BVK_WHEEL_STEP ))
+  [ "$_vp_start" = "$before" ] && _bvk_mouse_pass
+  return 0
+}
+
+# Footer rows.  A footer line holds cells  "key) Label"  split by three spaces (see _mc_footer).  The footer lines sit between the
+# ▼/rule line and the suggestion row:  prompt (d=0) · hint row · LAST footer line (d=hint+1) ... FIRST footer line (d=hint+shown).
+#   _bvk_mouse_ftr_hit CLICKED_ROW PROMPT_ROW  -> 0 and _MS_FKEY = the key of the cell that was touched (the text before the ")"), else 1
+_bvk_mouse_ftr_hit() {
+  _MS_FKEY=""
+  local d=$(( $2 - $1 )) h=${_vp_hint_row:-0} f=${_vp_ftr_show:-0}
+  (( f > 0 && d > h && d <= h + f )) || return 1
+  local k=$(( f - (d - h) ))
+  _vp_strip_ansi "${_vp_ftr_out[k]:-}"
+  _bvk_mouse_cell_key "$_vp_plain"
+}
+
+# _bvk_mouse_cell_key PLAIN_LINE  -> 0 and _MS_FKEY when the click column (_MS_X) is on a  "key) Label"  cell of the line, else 1
+_bvk_mouse_cell_key() {
+  _MS_FKEY=""
+  local rest="$1" cell off=0 w lead re='^([^[:space:])]+)\) ' c=$(( _MS_X - 1 ))
+  while [ -n "$rest" ]; do
+    lead="${rest%%[![:space:]]*}"; off=$(( off + ${#lead} )); rest="${rest#"$lead"}"        # spaces in front of a cell are no cell
+    [ -n "$rest" ] || break
+    cell="${rest%%   *}"
+    _bvk_dispw "$cell"; w=$_BVK_W
+    # a cell owns its text and the gap after it (a fingertip is wider than one cell)
+    if (( c >= off && c <= off + w + 2 )); then
+      [[ "$cell" =~ $re ]] || return 1
+      _MS_FKEY="${BASH_REMATCH[1]}"; return 0
+    fi
+    off=$(( off + w )); rest="${rest#"$cell"}"
+  done
+  return 1
+}
+
+# _bvk_mouse_ftr_tap  KEY  -> sets _MS_FACT:   run  = a DOUBLE tap on a plain key: type _MS_FTEXT and press Enter
+#                                              type = a double tap on a key with a placeholder (x-N): only the prefix (x-) is typed
+#                                              none = first tap (remembered), or a key that cannot be typed
+_bvk_mouse_ftr_tap() {
+  local key="$1" re='^[A-Za-z0-9=.?+-]+$'
+  _MS_FACT=none; _MS_FTEXT=""
+  [[ "$key" =~ $re ]] || { _BVK_LAST_ITEM=""; return 0; }
+  _bvk_mouse_dbl "f:$key" || return 0
+  if [[ "$key" == *N* ]]; then
+    [ -n "${key%%N*}" ] && { _MS_FACT=type; _MS_FTEXT="${key%%N*}"; }
+  else _MS_FACT=run; _MS_FTEXT="$key"; fi
+  return 0
+}
+
+# _bvk_mouse_other CLICKED_ROW PROMPT_ROW  — the tap landed on no list row and no ▲/▼: a footer key or the prompt row.
+#   0 = it was a footer / prompt tap (_MS_FACT / _MS_FTEXT say what to do, see _bvk_mouse_ftr_tap); 1 = something else
+_bvk_mouse_other() {
+  _MS_FACT=none; _MS_FTEXT=""
+  if [ "$_MS_KIND" = prompt ]; then _BVK_LAST_ITEM=""; _bvk_mouse_pass "$_BVK_PASS_TAP_MS"; return 0; fi
+  if _bvk_mouse_ftr_hit "$1" "$2"; then _bvk_mouse_ftr_tap "$_MS_FKEY"; return 0; fi
+  return 1
 }
 
 # Header rows.  The block's top row is (prompt row - _blk_h + 1) and the header lines are its first rows (_vp_hdr_out).

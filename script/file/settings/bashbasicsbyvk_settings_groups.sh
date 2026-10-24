@@ -5,6 +5,7 @@
 #      2) Filters
 #      3) Colors
 #      4) Files & archives
+#      (Find & replace — see bashbasicsbyvk_findsettings.sh)
 #      5) File API          
 #      6) Menu specific       (sort order of Links, Backup, Saved Surf, Cloud Surf, Snapshots, Pending)
 #      7) System
@@ -268,6 +269,7 @@ _st_top_build() {
   _st_add a "Filters"             0 "" filters
   _st_add a "Colors"              0 "" colors
   _st_add a "Files & archives"    0 "" files
+  _st_add a "Find & replace"      0 "" findrep
   _st_add a "File API"            0 "" fileapi
   _st_add a "Menu specific"       0 "" menuspec
   _st_add a "System"              0 "" system
@@ -280,6 +282,7 @@ _st_top_act() {
     filters) filters_group_settings ;;
     colors)  colors_group_settings ;;
     files)   files_group_settings ;;
+    findrep) find_group_settings ;;
     fileapi) fileapi_group_settings ;;
     menuspec) menu_specific_settings ;;
     system)  system_group_settings ;;

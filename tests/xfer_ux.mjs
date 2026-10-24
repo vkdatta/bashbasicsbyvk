@@ -2,6 +2,7 @@
 //   node tests/xfer_ux.mjs
 import http from "node:http"; import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { spawn } from "node:child_process"; import assert from "node:assert/strict";
 const XFER = path.resolve("script/file/staging/!buffer/fileapi/6 pending/bashbasicsbyvk_staging_pending_xfer");
+const JSLIB = path.resolve("script/file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_staging_jslib.js");   // bash hands this to the node tools (BB_JSLIB)
 const got = new Map(); let failNext = 0, slow = 0, tokenBad = false;
 const srv = http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);
@@ -15,7 +16,7 @@ const ID = "A".repeat(43), tmp = fs.mkdtempSync(path.join(os.tmpdir(), "xf-")), 
 const items = [{ k: "f", i: "I".repeat(22), c: 4 }, { k: "d", i: "D".repeat(22), c: 0 }];
 fs.writeFileSync(path.join(tmp, "commit.json"), JSON.stringify({ items }));
 for (let i = 0; i < 4; i++) fs.writeFileSync(path.join(tmp, `${items[0].i}.${i}`), Buffer.alloc(1000 + i, i));
-const run = (env, onSpawn) => new Promise((res) => { const p = spawn("node", [XFER, "ux", base, ID, tmp], { env: { ...process.env, BB_UTOKEN: "t", BB_STATE: state, BB_OFFLINE_MAX: "20", ...env } }); let out = ""; p.stdout.on("data", (d) => out += d); onSpawn?.(p); p.on("close", () => res(out.trim().split("\n").pop())); });
+const run = (env, onSpawn) => new Promise((res) => { const p = spawn("node", [XFER, "ux", base, ID, tmp], { env: { ...process.env, BB_JSLIB: JSLIB, BB_UTOKEN: "t", BB_STATE: state, BB_OFFLINE_MAX: "20", ...env } }); let out = ""; p.stdout.on("data", (d) => out += d); onSpawn?.(p); p.on("close", () => res(out.trim().split("\n").pop())); });
 const sizes = { [`${items[0].i}.0`]: 1000, [`${items[0].i}.1`]: 1001, [`${items[0].i}.2`]: 9 /* truncated on the server */ };
 fs.writeFileSync(path.join(tmp, "server.json"), JSON.stringify({ doneItems: { [items[0].i]: "0-2" }, sizes }));
 assert.equal(await run({ BB_DONEFILE: path.join(tmp, "server.json") }), "OK");

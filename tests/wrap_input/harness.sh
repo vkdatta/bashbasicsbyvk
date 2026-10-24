@@ -13,7 +13,7 @@ case "$ED" in
   browse)
     source "$F/engine/bashbasicsbyvk_smartmenu.sh" 2>/dev/null; source "$F/engine/bashbasicsbyvk_browse.sh" 2>/dev/null
     _buf=""; _pos=0; _vp_hint_row=0
-    stty -icanon -echo min 1 time 0
+    stty -icanon -echo min 1 time 0; printf 'READY\n'
     while IFS= builtin read -rsn1 k; do [ -z "$k" ] && break; _buf="${_buf:0:_pos}${k}${_buf:_pos}"; _pos=$((_pos+1)); _print_input_line; done
     printf '\nRESULT=[%s]\n' "$_buf" ;;
 esac

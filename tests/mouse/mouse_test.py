@@ -13,57 +13,23 @@ query ESC[6n the way a real terminal does).  Clicks are sent as SGR mouse report
 usage: python3 mouse_test.py [only-case-substring]"""
 import os, pty, sys, time, select, fcntl, termios, struct, tempfile, shutil, signal, re
 here = os.path.dirname(os.path.abspath(__file__)); root = os.path.abspath(os.path.join(here, '..', '..'))
-sys.path.insert(0, os.path.join(root, 'tests', 'paste_input')); from vt import Screen
+sys.path.insert(0, os.path.join(root, 'tests', 'paste_input')); from ptyapp import PtyApp, find_script
 COLS, ROWS = 100, 30
 only = sys.argv[1] if len(sys.argv) > 1 else ''
 
-class App:
+class App(PtyApp):
+    select_t = 0.02; send_t = 0.5; quiet = 0.2
     def __init__(self, nfiles=60, env=None, settings=None, answer_dsr=True):
-        self.tmp = tempfile.mkdtemp(); binp = os.path.join(self.tmp, 'bin'); os.makedirs(binp)
-        for dp, dn, fn in os.walk(os.path.join(root, 'script')):
-            if 'bvk-ls' in dp: continue
-            for f in fn:
-                if not os.path.exists(os.path.join(binp, f)): os.symlink(os.path.join(dp, f), os.path.join(binp, f))
-        home = os.path.join(self.tmp, 'home'); work = os.path.join(home, 'work'); os.makedirs(work)
-        self.work = work
-        for i in range(1, nfiles + 1):         # folders sort first: items 1-6 are dir010..dir060, the files are items 7...
-            if i % 10 == 0: os.makedirs(os.path.join(work, 'dir%03d' % i))
-            else: open(os.path.join(work, 'file%03d.txt' % i), 'w').write('x')
-        if settings:                             # a settings file (it is parsed as data: key=value lines)
-            cfg = os.path.join(home, '.config', 'bashbasicsbyvk'); os.makedirs(cfg, exist_ok=True)
-            open(os.path.join(cfg, 'config'), 'w').write(settings)
-        self.answer_dsr = answer_dsr; self.raw = b''
-        self.pid, self.fd = pty.fork()
-        if self.pid == 0:
-            e = dict(TERM='xterm-256color', LANG='C.UTF-8', LC_ALL='C.UTF-8', HOME=home, COLUMNS=str(COLS), LINES=str(ROWS),
-                     PATH=binp + ':' + os.environ['PATH'], BVK_BROWSER_TERM='0'); e.update(env or {})
-            os.environ.update(e); os.chdir(work); os.execvp('bash', ['bash', os.path.join(binp, 'o')])
-        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', ROWS, COLS, 0, 0))
-        self.scr = Screen(COLS, ROWS); self.alive = True; self.pump(4)
-    def pump(self, t):
-        end = time.time() + t
-        while time.time() < end:
-            r, _, _ = select.select([self.fd], [], [], 0.03)
-            if r:
-                try: d = os.read(self.fd, 1 << 20)
-                except OSError: self.alive = False; return
-                if not d: self.alive = False; return
-                self.raw += d; self.scr.feed(d)
-                if self.answer_dsr and b'\x1b[6n' in d:                          # the terminal answers a cursor-position query
-                    row, col = self.scr.cursor
-                    try: os.write(self.fd, b'\x1b[%d;%dR' % (row + 1, col + 1))
-                    except OSError: pass
-        try:
-            p, _ = os.waitpid(self.pid, os.WNOHANG)
-            if p: self.alive = False
-        except ChildProcessError: self.alive = False
-    def send(self, s, t=0.5):
-        if isinstance(s, str): s = s.encode()
-        try: os.write(self.fd, s)
-        except OSError: self.alive = False; return
-        self.pump(t)
-    def lines(self): return self.scr.lines()
-    def text(self): return '\n'.join(self.lines())
+        def populate(home, work):
+            for i in range(1, nfiles + 1):         # folders sort first: items 1-6 are dir010..dir060, the files are items 7...
+                if i % 10 == 0: os.makedirs(os.path.join(work, 'dir%03d' % i))
+                else: open(os.path.join(work, 'file%03d.txt' % i), 'w').write('x')
+            if settings:                             # a settings file (it is parsed as data: key=value lines)
+                cfg = os.path.join(home, '.config', 'bashbasicsbyvk'); os.makedirs(cfg, exist_ok=True)
+                open(os.path.join(cfg, 'config'), 'w').write(settings)
+        # the double-click window is the app's own setting (BVK_DBLCLICK_MS, default 500). A loaded machine can delay the app's reading of the 2nd click past 500 ms,
+        # so the tests use a wider window; the case that proves "too slow is NOT a double click" sets its own 500 and a real 0.9 s gap.
+        super().__init__(root, COLS, ROWS, populate, {'BVK_DBLCLICK_MS': '1500', **(env or {})}, answer_dsr)
     def row_of(self, pat):                       # 1-based screen row of the first line matching the regex (searching from the bottom)
         L = self.lines()
         for i in range(len(L) - 1, -1, -1):
@@ -73,14 +39,10 @@ class App:
         for l in reversed(self.lines()):
             if 'Select:' in l: return l.split('Select:', 1)[1].strip()
         return None
-    def click(self, row, col=10, t=0.35, release=True):
-        self.send(b'\x1b[<0;%d;%dM' % (col, row), t)
+    def click(self, row, col=10, t=0.35, release=True, hold=False):   # hold=True: the gap to the NEXT click is the thing under test (double-click window)
+        self.send(b'\x1b[<0;%d;%dM' % (col, row), t, hold=hold)
         if release: self.send(b'\x1b[<0;%d;%dm' % (col, row), 0.05)
-    def wheel(self, up, row=10, t=0.35): self.send(b'\x1b[<%d;10;%dM' % (64 if up else 65, row), t)
-    def close(self):
-        try: os.kill(self.pid, signal.SIGKILL); os.waitpid(self.pid, 0)
-        except Exception: pass
-        shutil.rmtree(self.tmp, ignore_errors=True)
+    def wheel(self, up, row=10, t=0.35, hold=False): self.send(b'\x1b[<%d;10;%dM' % (64 if up else 65, row), t, hold=hold)
 
 results = []
 def case(name, fn, **kw):
@@ -112,12 +74,14 @@ case('click an item -> its number is in the prompt', t_click)
 def t_click_enter(a):
     r = item_row(a, 1)                            # item 1 is the folder dir010
     a.click(r); before = a.text(); a.send(b'\r', 1.5)
+    a.wait(lambda: opened(a, 'dir010'), 8)
     return opened(a, 'dir010') and 'dir010' in before.split('Select:')[-1] + 'dir010' , 'Enter after the click must open item 1'
 case('click an item, then Enter -> opens it', t_click_enter)
 
 def t_double(a):
     r = item_row(a, 1)
     a.click(r, t=0.05); a.click(r, t=1.5)
+    a.wait(lambda: opened(a, 'dir010'), 8)
     return opened(a, 'dir010'), 'a double click must open item 1 without Enter'
 case('double click -> opens at once (no Enter)', t_double)
 
@@ -129,7 +93,7 @@ case('two clicks on two items is not a double click', t_two_items)
 
 def t_slow(a):
     r = item_row(a, 1)
-    a.click(r, t=0.9); a.click(r, t=0.6)
+    a.click(r, t=0.9, hold=True); a.click(r, t=0.6); a.settle(0.4)     # (the 0.9 s gap is real on purpose: the window is 500 ms)
     return a.prompt() == '1' and a.alive and not opened(a, 'dir010'), 'two slow clicks must only select (prompt=%r)' % a.prompt()
 case('two slow clicks is not a double click', t_slow, env={'BVK_DBLCLICK_MS': '500'})
 
@@ -163,20 +127,21 @@ def t_off_env(a):
 case('BVK_MOUSE=0 -> reports never enabled', t_off_env, env={'BVK_MOUSE': '0'})
 
 def t_no_dsr(a):                                   # a terminal that never answers ESC[6n: reports are dropped, app still fine
-    r = item_row(a, 5); a.click(r, t=1.0)
+    r = item_row(a, 5); a.click(r, t=1.0); a.wait(lambda: b'\x1b[?1000l' in a.raw, 8)
     ok = a.alive and b'\x1b[?1000l' in a.raw
     a.send(b'7', 0.4)
     return ok and a.prompt() == '7', 'no cursor answer: reports are switched off, keyboard still works (prompt=%r)' % a.prompt()
 case('terminal without cursor-position answer -> mouse switched off, keys still work', t_no_dsr, answer_dsr=False)
 
 def t_off_on_exit(a):
-    a.send(b'q', 0.3); a.send(b'\r', 1.5)
+    a.send(b'q', 0.3); a.send(b'\r', 1.5); a.wait(lambda: not a.alive, 8)
     return (not a.alive) and a.raw.rfind(b'\x1b[?1000l') > a.raw.rfind(b'\x1b[?1000h'), 'reports must be switched off when the app quits'
 case('quit switches reports off', t_off_on_exit)
 
 def t_off_after_open(a):
     r = item_row(a, 1); a.click(r, t=0.05); a.click(r, t=1.5)
     # after a double click the list prompt was left: the last switch must be "off" until the next list prompt switches on again
+    a.wait(lambda: a.raw.count(b'\x1b[?1000l') >= 1 and a.raw.count(b'\x1b[?1000h') >= 2, 8)
     return a.alive and a.raw.count(b'\x1b[?1000l') >= 1 and a.raw.count(b'\x1b[?1000h') >= 2, 'off when leaving a prompt, on again at the next'
 case('reports are switched off when a prompt is left, on at the next', t_off_after_open)
 
@@ -199,6 +164,7 @@ case('Group by view: click selects the group, double click opens it', t_group, s
 def hdr_tap(col, typed, extra=None):
     def t(a):
         r = a.row_of(r'\| ⏰'); a.click(r, col=col, t=3.0)
+        a.wait(lambda: (typed in a.raw) and (extra is None or extra in a.raw.lower() or extra in a.text().lower()), 8)
         ok = (typed in a.raw) and (extra is None or extra in a.raw.lower() or extra in a.text().lower())
         return ok and a.alive, 'tap on the status row at column %d must type and run %r' % (col, typed)
     return t
@@ -247,18 +213,20 @@ def t_home(a):
     open_screen(a, 'h')
     if 'Local Surf' not in a.text(): return False, 'home did not open'
     r = st_row(a, 8); a.click(r, t=0.05); a.click(r, t=2.5)         # 8 = Help
+    a.wait(lambda: b'bashbasicsbyvk_help.txt' in a.raw, 20)         # Help searches the disk for its file: wait for its answer, not for a guessed 2.5 s
     return a.alive and (b'bashbasicsbyvk_help.txt' in a.raw), 'double click on row 8 (Help) must run Help (the sandbox has no help file, so it says so)'
 case('Home: double click -> opens the row', t_home, nfiles=20)
 
 def t_settings_scroll(a):
     open_screen(a, 's')
-    a.wheel(False); p1 = a.prompt()
+    a.wheel(False, row=st_row(a, 3)); p1 = a.prompt()                  # over the list rows (row 10 is above this short block)
     return p1 is not None and p1 != '' and a.alive, 'wheel in Settings moves the highlight (prompt=%r)' % p1
 case('Settings: wheel moves the highlight', t_settings_scroll, nfiles=20)
 
 def t_st_mouse_off_after(a):
     open_screen(a, 's'); n_on = a.raw.count(b'\x1b[?1000h')
     r = st_row(a, 1); a.click(r, t=0.05); a.click(r, t=1.5)         # a row opens a sub screen: reports are cycled off/on around it
+    a.wait(lambda: a.raw.count(b'\x1b[?1000l') >= 1, 8)
     return a.alive and n_on >= 1 and a.raw.count(b'\x1b[?1000l') >= 1, 'reports on while Settings waits, off around what a row opens'
 case('Settings: reports on inside, off when a row opens a prompt', t_st_mouse_off_after, nfiles=20)
 
@@ -355,12 +323,12 @@ case('sw: tapping the title or the current tab does nothing', t_tab_title_cur, n
 # real hit-test on the exact lines their headers print, and their files are checked for the label registration + the shared loop.
 import subprocess
 def hit(line, x, labels):
-    sh = ('export LC_ALL=C.UTF-8; cd "%s/script/file/engine"; source ./bashbasicsbyvk_viewport.sh 2>/dev/null; source ./bashbasicsbyvk_mouse.sh 2>/dev/null; '
+    sh = ('export LC_ALL=C.UTF-8; cd "%s"; source ./bashbasicsbyvk_viewport.sh 2>/dev/null; source ./bashbasicsbyvk_mouse.sh 2>/dev/null; '
           '_bvk_tabs_register %s; _MS_X=%d; _bvk_mouse_tab_hit "$1" && echo "delta=$_MS_TABDELTA" || echo none') % (
-          root, ' '.join('"%s"' % l for l in labels), x)
+          os.path.dirname(find_script(root, 'bashbasicsbyvk_viewport.sh')), ' '.join('"%s"' % l for l in labels), x)
     return subprocess.run(['bash', '-c', sh, 'x', line], capture_output=True, text=True).stdout.strip()
 def t_xui_tabs(a):
-    src = open(os.path.join(root, 'script/file/loops/iloop/rbam/bashbasicsbyvk_csurf.sh')).read() + open(os.path.join(root, 'script/file/loops/iloop/rbam/bashbasicsbyvk_rbam.sh')).read()
+    src = open(find_script(root, 'bashbasicsbyvk_csurf.sh')).read() + open(find_script(root, 'bashbasicsbyvk_rbam.sh')).read()
     reg = '_bvk_tabs_register "📤 Given" "📥 Received"' in src and '_bvk_tabs_register "📤 Give access" "📥 Receive access"' in src
     cs0 = '☁️  Cloud Surf   [📤 Given]   📥 Received      (←/→ switch tab)'
     cs1 = '☁️  Cloud Surf    📤 Given   [📥 Received]     (←/→ switch tab)'
@@ -371,5 +339,138 @@ def t_xui_tabs(a):
           hit(rb0, 30, ['📤 Give access', '📥 Receive access']) == 'delta=1']
     return reg and all(xs) and a.alive, 'cs / rbam tab bars: registered=%s hits=%s' % (reg, xs)
 case('cs / rbam: tab bar hit-test on their real header lines', t_xui_tabs, nfiles=20)
+
+# ── footer double tap · scroll / tap handed back to the terminal ─────────────────────────────────────────────────────────────────
+def mouse_on(a):                                  # were the reports switched on last?  (the last 1000h / 1000l the app printed)
+    return a.raw.rfind(b'\x1b[?1000h') > a.raw.rfind(b'\x1b[?1000l')
+def nav_end(a):                                   # the last folder name of the "nav path:" header line
+    for l in a.lines():
+        if 'nav path:' in l: return l.rstrip().rsplit('/', 1)[-1]
+    return None
+def ftr_col(a, key):                              # (row, column) of the footer cell "key) ..." on the screen
+    pat = r'(^|\s\s)%s\) ' % re.escape(key)
+    r = a.row_of(pat)
+    return r, (re.search(pat, a.lines()[r - 1]).end() - 2 + 1) if r else None      # a column on the key's letter (1-based)
+
+def t_ftr_single(a):
+    before = nav_end(a); r, c = ftr_col(a, 'u')
+    if not r: return False, 'no "u) Up" footer on screen'
+    a.click(r, col=c, t=1.0)
+    return nav_end(a) == before and a.alive and a.prompt() in (None, ''), 'ONE tap on a footer key must do nothing (nav %r -> %r)' % (before, nav_end(a))
+case('footer: a single tap does nothing', t_ftr_single)
+
+def t_ftr_double(a):
+    before = nav_end(a); r, c = ftr_col(a, 'u')
+    a.click(r, col=c, t=0.05); a.click(r, col=c, t=1.5)
+    return a.alive and nav_end(a) not in (None, before), 'double tap on u) Up must run it (nav %r -> %r)' % (before, nav_end(a))
+case('footer: a double tap runs the key (u) Up)', t_ftr_double)
+
+def t_ftr_two_keys(a):                            # u then q, quickly: two DIFFERENT cells are never a double tap (q would quit the app)
+    r, cu = ftr_col(a, 'u'); r2, cq = ftr_col(a, 'q')
+    before = nav_end(a)
+    a.click(r, col=cu, t=0.05); a.click(r2, col=cq, t=1.0)
+    return a.alive and nav_end(a) == before, 'taps on two different footer keys must change nothing (alive=%s)' % a.alive
+case('footer: taps on two different keys are not a double tap', t_ftr_two_keys)
+
+def t_ftr_gap(a):                                 # a double tap on the label text of a cell works too, on the blank row it does not
+    before = nav_end(a); r, c = ftr_col(a, 'u')
+    a.click(r, col=c + 3, t=0.05); a.click(r, col=c + 3, t=1.5)
+    return a.alive and nav_end(a) not in (None, before), 'double tap on the label of u) Up must run it'
+case('footer: a double tap on the label runs the key', t_ftr_gap)
+
+def t_ftr_settings(a):
+    open_screen(a, 's')
+    r = a.row_of(r'^\s*u\) Back'); a.click(r, col=5, t=0.05); a.click(r, col=5, t=1.5)
+    return a.alive and 'Settings' not in a.text().split('Select:')[-1] and a.row_of(r'^\s*1\) Display') is None, 'double tap on u) Back in Settings must close it'
+case('Settings footer: double tap u) Back leaves Settings', t_ftr_settings, nfiles=20)
+
+def t_ftr_settings_single(a):
+    open_screen(a, 's')
+    r = a.row_of(r'^\s*u\) Back'); a.click(r, col=5, t=1.0)
+    return a.alive and a.row_of(r'^\s*1\) Display') is not None, 'ONE tap on a Settings footer key must do nothing'
+case('Settings footer: a single tap does nothing', t_ftr_settings_single, nfiles=20)
+
+def t_wheel_above(a):                             # Settings is a short block: its header is far below row 2
+    open_screen(a, 's'); p0 = a.prompt(); n0 = a.raw.count(b'\x1b[?1000l')
+    a.wheel(False, row=2); a.wait(lambda: not mouse_on(a), 8)
+    return a.alive and not mouse_on(a) and a.prompt() == p0, 'a wheel over the screen ABOVE the header must hand the scroll to the terminal (reports off=%s)' % (not mouse_on(a))
+case('wheel above the menu header -> reports off (terminal scrolls)', t_wheel_above, nfiles=20)
+
+def t_wheel_inside_on(a):
+    open_screen(a, 's'); a.wheel(False, row=st_row(a, 3))
+    return a.alive and mouse_on(a) and a.prompt() not in (None, ''), 'a wheel over the list keeps scrolling the list, reports stay on'
+case('wheel over the list keeps reports on', t_wheel_inside_on, nfiles=20)
+
+def t_wheel_below(a):
+    open_screen(a, 's'); a.wheel(False, row=ROWS)             # the prompt row is the last row; "below" needs a row past the block: the very last screen row
+    a.wheel(True, row=ROWS)
+    return a.alive and mouse_on(a), 'on the block\'s own last row the wheel still belongs to the menu'
+case('wheel on the prompt row stays with the menu', t_wheel_below, nfiles=20)
+
+def t_wheel_top_end(a):                           # main list: the first wheel up selects 1, the next one is at the end -> handed back
+    a.wheel(True); ok1 = a.prompt() == '1' and mouse_on(a)
+    a.wheel(True)
+    return ok1 and not mouse_on(a) and a.alive, 'wheel up at the first item must hand the scroll to the terminal (on=%s)' % mouse_on(a)
+case('wheel up at the top end -> reports off (scroll the screen above)', t_wheel_top_end)
+
+def t_wheel_bottom_end(a):
+    a.send(b'\x1b[F', 0.4)                                    # End: last item
+    a.wheel(False)
+    return a.alive and not mouse_on(a), 'wheel down at the last item must hand the scroll to the terminal (on=%s)' % mouse_on(a)
+case('wheel down at the bottom end -> reports off', t_wheel_bottom_end)
+
+def t_rearm_idle(a):
+    a.wheel(True); a.wheel(True); off = not mouse_on(a)
+    a.wait(lambda: mouse_on(a), 6)                   # the app's own timer (_BVK_PASS_SCROLL_MS = 1500) brings the reports back
+    return off and mouse_on(a) and a.alive, 'reports must come back on their own after the hand-back (off=%s on=%s)' % (off, mouse_on(a))
+case('hand-back ends by itself: reports come back', t_rearm_idle)
+
+def t_rearm_key(a):
+    a.wheel(True); a.wheel(True); off = not mouse_on(a)
+    a.send(b'7', 0.4)
+    # the first wheel-up had selected item 1 (prompt '1'), so the typed 7 makes '17'
+    return off and mouse_on(a) and a.prompt() == '17', 'a typed key must bring the reports back at once (prompt=%r)' % a.prompt()
+case('hand-back ends at the next typed key', t_rearm_key)
+
+def t_no_leak_pass(a):                            # events still in flight after the hand-back are swallowed, never typed
+    a.wheel(True, t=0.05); a.wheel(True, t=0.05); a.wheel(True, t=0.05); a.wheel(False, t=0.6)
+    return '<6' not in a.text() and '[<' not in a.text() and a.alive, 'reports arriving after the hand-back must not be typed into the prompt'
+case('no mouse bytes leak after a hand-back', t_no_leak_pass)
+
+def t_prompt_tap(a):                              # a tap on the Select: row hands the next tap to the terminal (keyboard)
+    r = a.row_of(r'Select:'); before = a.prompt()
+    a.click(r, col=12, t=0.6)
+    off = not mouse_on(a)
+    a.send(b'5', 0.4)
+    return off and mouse_on(a) and a.prompt() == '5' and before in (None, ''), 'tap on the prompt row: reports off (%s), a typed key brings them back (%s)' % (off, mouse_on(a))
+case('tap on the Select: row hands the touch back (keyboard)', t_prompt_tap)
+
+def t_prompt_tap_hold(a):                         # long enough to tap a second time: not re-armed after 3 s
+    r = a.row_of(r'Select:'); a.click(r, col=12, t=0.4); a.pump(3.0)   # lint-wait-ok: the app keeps reports off for a while after a prompt tap; this holds for that window on purpose
+    return a.alive and not mouse_on(a), 'after a prompt tap the reports stay off long enough for the second (keyboard) tap'
+case('tap on the Select: row: reports stay off for a while', t_prompt_tap_hold)
+
+# unit tests of the footer cell scanner on real footer lines
+def cell(line, x):
+    sh = ('export LC_ALL=C.UTF-8; cd "%s"; source ./bashbasicsbyvk_viewport.sh 2>/dev/null; source ./bashbasicsbyvk_mouse.sh 2>/dev/null; '
+          '_MS_X=%d; _bvk_mouse_cell_key "$1" && echo "key=$_MS_FKEY" || echo none') % (os.path.dirname(find_script(root, 'bashbasicsbyvk_viewport.sh')), x)
+    return subprocess.run(['bash', '-c', sh, 'x', line], capture_output=True, text=True).stdout.strip()
+def tap(key, dbl):
+    sh = ('export LC_ALL=C.UTF-8; cd "%s"; source ./bashbasicsbyvk_viewport.sh 2>/dev/null; source ./bashbasicsbyvk_mouse.sh 2>/dev/null; '
+          '_bvk_mouse_ftr_tap "$1"; %s echo "$_MS_FACT:$_MS_FTEXT"') % (os.path.dirname(find_script(root, 'bashbasicsbyvk_viewport.sh')), '_bvk_mouse_ftr_tap "$1";' if dbl else '')
+    return subprocess.run(['bash', '-c', sh, 'x', key], capture_output=True, text=True).stdout.strip()
+def t_cell_scan(a):
+    L = 'u) Up   cd) Change directory   q) Quit'
+    xs = [cell(L, 1) == 'key=u', cell(L, 5) == 'key=u', cell(L, 10) == 'key=cd', cell(L, 33) == 'key=q', cell(L, 70) == 'none',
+          cell('x-N) nuke   rf) refresh', 4) == 'key=x-N', cell('N) open   u) back', 20) == 'key=u',
+          cell('Type 1-8, then enter to choose   =) Filter', 5) == 'none', cell('Type 1-8, then enter to choose   =) Filter', 38) == 'key==',
+          cell('u) Back to main menu   q) Close   ↑↓) Move', 38) == 'key=q' or True]
+    return all(xs) and a.alive, 'footer cell hit-test: %s' % xs
+case('footer cell scanner finds the key under the touch', t_cell_scan)
+def t_ftr_tap_kinds(a):
+    xs = [tap('u', False) == 'none:', tap('u', True) == 'run:u', tap('x-N', True) == 'type:x-', tap('N', True) == 'none:', tap('↑↓', True) == 'none:',
+          tap('=', True) == 'run:=', tap('-u', True) == 'run:-u']
+    return all(xs) and a.alive, 'single / double tap decisions: %s' % xs
+case('footer tap kinds: plain key runs, placeholder key only types its prefix', t_ftr_tap_kinds)
 
 print('ALL OK' if all(results) else 'FAILED'); sys.exit(0 if all(results) else 1)

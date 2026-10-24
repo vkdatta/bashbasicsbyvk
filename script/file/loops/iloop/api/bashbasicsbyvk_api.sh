@@ -44,29 +44,14 @@ _API_US=$'\x1f'
 
 # ── network ───────────────────────────────────────────────────────────────────
 # _api_http METHOD PATH [json-body]  → _API_STATUS / _API_BODY.  Credentials travel in a curl config on
-# stdin, never in argv.
+# stdin, never in argv.  (The call itself is _bb_call in fileapi_lib.sh.)
 _api_http() {
-  local method="$1" path="$2" body="${3:-}" cfg out
-  _bb_get_credentials || return 1
-  cfg=$({ _bb_auth_cfg; [ -n "$body" ] && _bb_cfg_header Content-Type application/json; true; })
-  if [ -n "$body" ]; then
-    out=$(curl -s --max-time 40 "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X "$method" --data-binary "$body" "$WORKER_URL$path" <<<"$cfg")
-  else
-    out=$(curl -s --max-time 40 "${_BB_CURL_OPTS[@]}" -K - -w "\n%{http_code}" -H "Expect:" -X "$method" "$WORKER_URL$path" <<<"$cfg")
-  fi
-  _API_STATUS="${out##*$'\n'}"
-  _API_BODY="${out%$'\n'*}"
-  [[ "$_API_STATUS" =~ ^[0-9]{3}$ ]] || _API_STATUS=000
-  return 0
+  _bb_call "$1" "$2" "${3:-}" 40; local rc=$?
+  _API_STATUS="$_BB_STATUS"; _API_BODY="$_BB_BODY"
+  return $rc
 }
 
-_api_fail() {            # prints the server's reason for the last call
-  case "$_API_STATUS" in
-    000) echo "❌ Could not reach the server (offline?)." ;;
-    401) echo "❌ $(_bb_json_get "$_API_BODY" message)"; echo "🔁 Fix the active user with  -auth  inside 'o', then try again." ;;
-    *)   echo "❌ $(_bb_fail_reason "$_API_BODY" "$_API_STATUS")" ;;
-  esac
-}
+_api_fail() { _bb_http_fail "$_API_STATUS" "$_API_BODY"; }   # prints the server's reason for the last call
 
 # ── loading ───────────────────────────────────────────────────────────────────
 # _API_SVC: "" = the Links screen · backup = Backup · saved = Saved Surf.  They share this whole loop (alias, expiry, nuke).
