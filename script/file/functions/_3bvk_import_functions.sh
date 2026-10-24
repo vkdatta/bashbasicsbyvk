@@ -9,3 +9,4 @@ _lt_b "load bundle_io"; source "bashbasicsbyvk_bundle_io.sh"; _lt_e
 _lt_b "load action_confirm_key"; source "bashbasicsbyvk_action_confirm_key.sh"; _lt_e
 _lt_b "load lock"; source "bashbasicsbyvk_lock.sh"; _lt_e
 _lt_b "load carry"; source "bashbasicsbyvk_carry.sh"; _lt_e
+_lt_b "load ghlib"; source "bashbasicsbyvk_ghlib.sh"; _lt_e   # GitHub helpers shared by the upgrade loop (-u) and fx → github_fx

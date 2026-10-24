@@ -1,0 +1,1105 @@
+#!/usr/bin/env python3
+"""
+bashbasicsbyvk_github - GitHub for the file manager (the ONLY file the github screens and the upgrade loop talk to).
+
+Key (token) discovery - nothing is ever asked for, nothing is ever stored, nothing is put on a command line
+(the key reaches git through its environment; only git older than 2.31 needs a private temp helper, removed right after):
+    1. the environment      GITHUB_TOKEN GH_TOKEN GITHUB_PAT GH_PAT GITHUB_ACCESS_TOKEN BVK_GH_TOKEN
+    2. ~/.bashrc (+ .bash_profile .bash_login .profile .bash_aliases, + $BVK_GH_SECRETS) and every file they
+       `source` / `.` (read as DATA, never executed): lines like  export GITHUB_TOKEN="..."  or  =$(cat FILE)
+    3. the GitHub CLI       ~/.config/gh/hosts.yml
+    4. ~/.git-credentials   and   ~/.netrc          (github.com entries)
+
+    bashbasicsbyvk_github auth                          one line  OK<US>login<US>source<US>index | NONE<US>searched places
+    bashbasicsbyvk_github repos                         every repo you can reach
+    bashbasicsbyvk_github releases REPO [--all]         stable releases (newest first); --all adds drafts and pre-releases
+    bashbasicsbyvk_github tags REPO                     every tag, newest version first, with its release (if any)
+    bashbasicsbyvk_github info REPO TAG                 everything about one tag / release
+    bashbasicsbyvk_github get REPO TAG FIELD            the current raw text of title | body | tag_message | commit_message (for editing)
+    bashbasicsbyvk_github create-release --job DIR      new stable release (new or existing tag)
+    bashbasicsbyvk_github create-tag --job DIR          new tag (annotated when a message is given)
+    bashbasicsbyvk_github edit --job DIR                title, notes, tag message, commit message (one or many, text transforms)
+    bashbasicsbyvk_github rename --job DIR [--plan]     rename tags / releases with conflict checks (plan = check only)
+    bashbasicsbyvk_github delete --job DIR              delete releases and / or tags
+    bashbasicsbyvk_github clone --job DIR               clone at a tag (full or --depth N), optionally with the release notes + assets
+    bashbasicsbyvk_github parse-releases FILE           the upgrade loop's list  (tag US name US date US body)
+    bashbasicsbyvk_github parse-commit FILE             the upgrade loop's commit line (date US author US message)
+
+A job is a folder of plain files (so no quoting ever touches what a person typed):
+    repo  tags (one per line)  <field>.mode / .a / .b  (field = title body tag_message commit_message)  and so on - see each command.
+    mode = set | replace (a -> b) | prepend | append        text is used exactly as typed
+
+Environment:  BVK_GH_API (default https://api.github.com)  BVK_GH_WEB (https://github.com)  BVK_GH_GIT_BASE (clone base url)
+              BVK_GH_PICK (which key `auth` chose)  BVK_GH_SECRETS (one more secrets file to read)  BVK_GH_MAX_PAGES (default 50)
+Exit codes: 0 ok - 1 error (or any item failed) - 2 usage - 3 not found / nothing to do - 5 no key
+"""
+import base64, datetime, json, os, re, shutil, subprocess, sys, tempfile, urllib.error, urllib.parse, urllib.request
+try:                                   # loadtime: join the app's timeline (no-op unless a screen change is being timed)
+    import bashbasicsbyvk_lt as _lt; _lt.install("github")
+except Exception:
+    _lt = None
+
+US = "\x1f"
+API = (os.environ.get("BVK_GH_API") or "https://api.github.com").rstrip("/")
+WEB = (os.environ.get("BVK_GH_WEB") or "https://github.com").rstrip("/")
+GIT_BASE = (os.environ.get("BVK_GH_GIT_BASE") or WEB).rstrip("/")
+TOKEN_NAMES = ("GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PAT", "GH_PAT", "GITHUB_ACCESS_TOKEN", "BVK_GH_TOKEN")
+RC_FILES = (".bashrc", ".bash_profile", ".bash_login", ".profile", ".bash_aliases")
+MAX_PAGES = int(os.environ.get("BVK_GH_MAX_PAGES") or 50)
+FIELDS = ("title", "body", "tag_message", "commit_message")
+
+
+class GhError(Exception):
+    def __init__(self, msg, status=0):
+        Exception.__init__(self, msg)
+        self.status = status
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  1. finding the key
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_ASSIGN = re.compile(r'^\s*(?:export\s+|declare\s+-x\s+|typeset\s+-x\s+)?(%s)=(.*)$' % "|".join(TOKEN_NAMES))
+_SOURCE = re.compile(r'(?:^|[;&|{(]|\bthen\b|\bdo\b)\s*(?:source|\.)\s+("[^"]+"|\'[^\']+\'|[^\s;&|)]+)')
+
+
+def _home():
+    return os.environ.get("HOME") or os.path.expanduser("~")
+
+
+def _expand(p):
+    p = os.path.expandvars(p.replace("${HOME}", _home()).replace("$HOME", _home()))
+    return os.path.expanduser(p)
+
+
+def _unquote_value(raw):
+    """the value of NAME=<raw> as far as plain text goes; None when it needs a shell to evaluate"""
+    raw = raw.strip()
+    if not raw:
+        return None
+    if raw[0] in "\"'":
+        q = raw[0]
+        end = raw.find(q, 1)
+        if end < 0:
+            return None
+        val = raw[1:end]
+        if q == '"' and ("`" in val or "$(" in val):
+            return _eval_cat(val)
+        val = os.path.expandvars(val) if q == '"' else val
+        return None if "$" in val and q == '"' else val
+    val = re.split(r'\s+#', raw, 1)[0].strip()
+    if val.startswith("$(") or val.startswith("`"):
+        return _eval_cat(val)
+    val = os.path.expandvars(val)
+    return None if "$" in val else val
+
+
+def _eval_cat(val):
+    """the one command substitution that is safe to follow as data:  $(cat FILE)"""
+    m = re.fullmatch(r'\$\(\s*cat\s+("[^"]+"|\'[^\']+\'|\S+)\s*\)', val.strip()) or re.fullmatch(r'`\s*cat\s+("[^"]+"|\'[^\']+\'|\S+)\s*`', val.strip())
+    if not m:
+        return None
+    f = _expand(m.group(1).strip("\"'"))
+    try:
+        with open(f, encoding="utf-8", errors="replace") as fh:
+            return fh.read().strip() or None
+    except OSError:
+        return None
+
+
+def _scan_rc(path, seen, found, searched, depth=0):
+    """read one shell file as data; keep the LAST assignment (as the shell would); follow `source` lines"""
+    path = os.path.abspath(path)
+    if path in seen or depth > 4:
+        return
+    seen.add(path)
+    try:
+        if not os.path.isfile(path) or os.path.getsize(path) > (1 << 20):      # never a fifo / device / huge file
+            return
+    except OSError:
+        return
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return
+    searched.append(path)
+    for line in lines:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        m = _ASSIGN.match(line)
+        if m:
+            v = _unquote_value(m.group(2))
+            if v:
+                found[m.group(1)] = (v, path)
+        for sm in _SOURCE.finditer(s):
+            tgt = _expand(sm.group(1).strip("\"'"))
+            if not os.path.isabs(tgt):
+                tgt = os.path.join(os.path.dirname(path), tgt)
+            _scan_rc(tgt, seen, found, searched, depth + 1)
+
+
+def _gh_hosts_token():
+    f = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(_home(), ".config"), "gh", "hosts.yml")
+    try:
+        txt = open(f, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return None, f
+    blk = re.search(r'^github\.com:\s*\n((?:[ \t]+.*\n?)*)', txt, re.M)
+    m = re.search(r'^\s+oauth_token:\s*(\S+)', blk.group(1) if blk else "", re.M)
+    return (m.group(1).strip("\"'") if m else None), f
+
+
+def _credential_files():
+    out = []
+    f = os.path.join(_home(), ".git-credentials")
+    try:
+        for ln in open(f, encoding="utf-8", errors="replace"):
+            m = re.match(r'https?://(?:[^:@/\s]+):([^@/\s]+)@github\.com', ln.strip())
+            if m:
+                out.append((urllib.parse.unquote(m.group(1)), f))
+    except OSError:
+        pass
+    f = os.path.join(_home(), ".netrc")
+    try:
+        txt = open(f, encoding="utf-8", errors="replace").read()
+        m = re.search(r'machine\s+(?:api\.)?github\.com\b[^\n]*?\bpassword\s+(\S+)', txt) or \
+            re.search(r'machine\s+(?:api\.)?github\.com\s*\n(?:[ \t]*(?:login|account)[^\n]*\n)*[ \t]*password\s+(\S+)', txt)
+        if m:
+            out.append((m.group(1), f))
+    except OSError:
+        pass
+    return out
+
+
+def key_candidates():
+    """-> ([(token, where), ...] in priority order, [places looked at])"""
+    cands, looked = [], []
+    for n in TOKEN_NAMES:
+        v = (os.environ.get(n) or "").strip()
+        if v:
+            cands.append((v, "environment %s" % n))
+    looked.append("environment: " + " ".join(TOKEN_NAMES))
+    found, seen, searched = {}, set(), []
+    start = [os.path.join(_home(), r) for r in RC_FILES]
+    if os.environ.get("BVK_GH_SECRETS"):
+        start.append(_expand(os.environ["BVK_GH_SECRETS"]))
+    for f in start:
+        _scan_rc(f, seen, found, searched)
+    for n in TOKEN_NAMES:
+        if n in found:
+            cands.append((found[n][0], "%s in %s" % (n, found[n][1])))
+    looked.append("shell files (read, not run): " + (" ".join(searched) if searched else "none of ~/.bashrc ~/.bash_profile ~/.profile exists"))
+    tok, f = _gh_hosts_token()
+    looked.append(f)
+    if tok:
+        cands.append((tok, "GitHub CLI login in %s" % f))
+    for tok, f in _credential_files():
+        cands.append((tok, "login in %s" % f))
+    looked.append("~/.git-credentials ~/.netrc")
+    uniq, have = [], set()
+    for t, w in cands:                                        # same token twice = one candidate
+        if t not in have:
+            have.add(t); uniq.append((t, w))
+    return uniq, looked
+
+
+def get_key():
+    cands, _ = key_candidates()
+    if not cands:
+        raise GhError("no GitHub key found", 5)
+    pick = os.environ.get("BVK_GH_PICK", "")
+    i = int(pick) if pick.isdigit() and int(pick) < len(cands) else 0
+    return cands[i]
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  2. talking to GitHub
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+class _NoAuthOnHop(urllib.request.HTTPRedirectHandler):
+    """a download redirect to another host (S3 ...) must NOT carry the key along"""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = urllib.request.HTTPRedirectHandler.redirect_request(self, req, fp, code, msg, headers, newurl)
+        if new is not None and urllib.parse.urlparse(newurl).netloc != urllib.parse.urlparse(req.full_url).netloc:
+            new.headers.pop("Authorization", None); new.unredirected_hdrs.pop("Authorization", None)
+        return new
+
+
+_OPENER = urllib.request.build_opener(_NoAuthOnHop)
+_TOKEN = None
+
+
+def _token():
+    global _TOKEN
+    if _TOKEN is None:
+        _TOKEN = get_key()[0]
+    return _TOKEN
+
+
+def _err_text(e):
+    try:
+        d = json.loads(e.read().decode("utf-8", "replace"))
+        msg = d.get("message") or ""
+        errs = d.get("errors")
+        if errs:
+            msg += " " + json.dumps(errs)[:200]
+        if e.code in (403, 429) and e.headers.get("x-ratelimit-remaining") == "0":
+            reset = e.headers.get("x-ratelimit-reset")
+            when = datetime.datetime.fromtimestamp(int(reset)).strftime("%H:%M") if reset and reset.isdigit() else "later"
+            msg = "API rate limit reached - try again after %s" % when
+        return msg or "HTTP %d" % e.code
+    except Exception:
+        return "HTTP %d" % e.code
+
+
+def http(method, path, body=None, accept="application/vnd.github+json", want_headers=False, tries=3):
+    url = path if path.startswith("http") else API + path
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    for attempt in range(tries):
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Authorization", "Bearer " + _token())
+        req.add_header("Accept", accept)
+        req.add_header("X-GitHub-Api-Version", "2022-11-28")
+        req.add_header("User-Agent", "bashbasicsbyvk")
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
+        try:
+            with _OPENER.open(req, timeout=40) as r:
+                raw = r.read()
+                out = json.loads(raw.decode("utf-8")) if raw and "json" in (r.headers.get("Content-Type") or "") else raw
+                return (out, r.headers) if want_headers else out
+        except urllib.error.HTTPError as e:
+            if e.code in (502, 503, 504) and attempt + 1 < tries:
+                continue
+            if e.code == 404:
+                raise GhError(_err_text(e) or "not found", 404)
+            if e.code == 401:
+                raise GhError("GitHub rejected the key (expired, revoked or wrong) - %s" % get_key()[1], 401)
+            raise GhError(_err_text(e), e.code)
+        except urllib.error.URLError as e:
+            if attempt + 1 < tries:
+                continue
+            raise GhError("could not reach GitHub (%s)" % getattr(e, "reason", e), 0)
+
+
+def paginate(path, per_page=100):
+    out, url, n = [], API + path + ("&" if "?" in path else "?") + "per_page=%d" % per_page, 0
+    while url and n < MAX_PAGES:
+        data, hdr = http("GET", url, want_headers=True)
+        if isinstance(data, list):
+            out.extend(data)
+        elif isinstance(data, dict):
+            out.extend(data.get("items") or [])
+        m = re.search(r'<([^>]+)>;\s*rel="next"', hdr.get("Link") or "")
+        url, n = (m.group(1) if m else None), n + 1
+    return out
+
+
+def q(s):                                  # a tag name in a URL path ("release/1.0" keeps its slash)
+    return urllib.parse.quote(s, safe="/")
+
+
+def now_iso():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  3. lists (the rows the screens draw; escaping is the same as the upgrade loop's)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def esc(text):
+    return (text or "").replace("\r", "").replace("\\", "\\\\").replace("\n", "\\n").replace(US, " ")
+
+
+def one_line(text):
+    return (text or "").replace(US, " ").replace("\n", " ")
+
+
+def release_rows(data, with_id=False, everything=False):
+    """GitHub's release list -> rows.  upgrade loop (with_id False):  tag US name US date US body
+       github screens (with_id True):  tag US name US date US id US flags US body      flags: D draft  P pre-release"""
+    rows = []
+    for r in data:
+        if not everything and (r.get("draft") or r.get("prerelease")):
+            continue
+        body = esc(r.get("body") or "")
+        name = one_line(r.get("name") or "")
+        date = ((r.get("published_at") or r.get("created_at") or "") if with_id else (r.get("published_at") or ""))[:10]
+        if with_id:
+            flags = ("D" if r.get("draft") else "") + ("P" if r.get("prerelease") else "")
+            rows.append(US.join([r.get("tag_name") or "", name, date, str(r.get("id") or ""), flags, body]))
+        else:
+            rows.append(US.join([r.get("tag_name") or "", name, date, body]))
+    return rows
+
+
+def commit_row(d):
+    c = d["commit"]
+    msg = esc((c.get("message") or ""))
+    au = c.get("author") or {}
+    return US.join([(au.get("date") or "")[:10], (au.get("name") or "").replace(US, " "), msg])
+
+
+def version_key(tag):
+    parts = re.split(r'(\d+)', tag)
+    return [(0, int(p)) if p.isdigit() else (1, p) for p in parts if p != ""]
+
+
+def list_releases(repo):
+    return paginate("/repos/%s/releases" % repo)
+
+
+def list_tag_refs(repo):
+    try:
+        refs = paginate("/repos/%s/git/matching-refs/tags" % repo)
+    except GhError as e:
+        if e.status == 404:
+            return []
+        raise
+    return [(r["ref"][len("refs/tags/"):], r["object"]["type"], r["object"]["sha"]) for r in refs if r["ref"].startswith("refs/tags/")]
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  4. git data helpers (tags and commits through the API - no clone needed)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def get_ref(repo, tag):
+    try:
+        return http("GET", "/repos/%s/git/ref/tags/%s" % (repo, q(tag)))
+    except GhError as e:
+        if e.status == 404:
+            return None
+        raise
+
+
+def create_ref(repo, tag, sha):
+    http("POST", "/repos/%s/git/refs" % repo, {"ref": "refs/tags/" + tag, "sha": sha})
+
+
+def move_ref(repo, tag, sha):
+    http("PATCH", "/repos/%s/git/refs/tags/%s" % (repo, q(tag)), {"sha": sha, "force": True})
+
+
+def delete_ref(repo, tag):
+    http("DELETE", "/repos/%s/git/refs/tags/%s" % (repo, q(tag)))
+
+
+def tag_state(repo, tag):
+    """-> dict(annotated, tag_sha, commit_sha, message, tagger, obj_type) for a tag, or None when it does not exist"""
+    ref = get_ref(repo, tag)
+    if not ref:
+        return None
+    o = ref["object"]
+    if o["type"] != "tag":
+        return {"annotated": False, "tag_sha": None, "commit_sha": o["sha"], "message": "", "tagger": None, "obj_type": "commit"}
+    t = http("GET", "/repos/%s/git/tags/%s" % (repo, o["sha"]))
+    first = t
+    while t["object"]["type"] == "tag":                      # a tag of a tag: follow to the commit
+        t = http("GET", "/repos/%s/git/tags/%s" % (repo, t["object"]["sha"]))
+    return {"annotated": True, "tag_sha": o["sha"], "commit_sha": t["object"]["sha"], "message": first.get("message") or "",
+            "tagger": first.get("tagger"), "obj_type": first["object"]["type"], "obj_sha": first["object"]["sha"]}
+
+
+def whoami():
+    return http("GET", "/user")
+
+
+def my_identity():
+    u = whoami()
+    name = u.get("name") or u.get("login")
+    email = u.get("email") or "%s+%s@users.noreply.github.com" % (u.get("id"), u.get("login"))
+    return {"name": name, "email": email, "date": now_iso()}
+
+
+def write_tag(repo, tag, commit_sha, message, old=None):
+    """make `tag` point at commit_sha.  message None = keep the shape (lightweight stays lightweight, annotated keeps its text);
+       a message turns a lightweight tag into an annotated one.  The ref is updated last and atomically."""
+    exists = old is not None
+    annotated = bool(old and old["annotated"])
+    if message is None and not annotated:
+        (move_ref if exists else create_ref)(repo, tag, commit_sha)
+        return
+    msg = message if message is not None else old["message"]
+    tagger = (old["tagger"] if annotated and old.get("tagger") else None) or my_identity()
+    t = http("POST", "/repos/%s/git/tags" % repo, {"tag": tag, "message": msg, "object": commit_sha, "type": "commit", "tagger": tagger})
+    (move_ref if exists else create_ref)(repo, tag, t["sha"])
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  5. text transforms and names
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def apply_text(old, mode, a, b):
+    """-> (new_text, note)   note is "" or why nothing changed"""
+    old = old or ""
+    if mode == "set":
+        return a, ""
+    if mode == "replace":
+        if not a:
+            return old, "nothing to find"
+        if a not in old:
+            return old, "'%s' not found" % a
+        return old.replace(a, b), ""
+    if mode == "prepend":
+        return a + old, ""
+    if mode == "append":
+        return old + a, ""
+    raise GhError("unknown mode " + mode, 2)
+
+
+_BAD_REF = re.compile(r'[\x00-\x20\x7f~^:?*\[\\]|\.\.|@\{|//')
+
+
+def valid_tag_name(name):
+    """git check-ref-format rules for refs/tags/<name>, plus the 255-byte limit the app uses everywhere"""
+    if not name or name in ("@", "HEAD"):
+        return "empty name" if not name else "'%s' is reserved" % name
+    if len(name.encode("utf-8")) > 255:
+        return "longer than 255 bytes"
+    if _BAD_REF.search(name):
+        return "contains a space, control character, one of ~ ^ : ? * [ \\ or '..' '@{' '//'"
+    if name.startswith(("-", ".", "/")) or name.endswith(("/", ".", ".lock")):
+        return "must not start with - . / or end with / . .lock"
+    if any(p.startswith(".") or p.endswith(".lock") for p in name.split("/")):
+        return "a part between slashes must not start with . or end with .lock"
+    return ""
+
+
+def plan_renames(pairs, existing_tags, release_tags):
+    """pairs [(old,new)] -> (steps [(old,new,is_temp_hop)], notes [str], errors [str]).
+       A new name may not equal (ignoring case) another new name, a tag that stays, or the tag of a release that stays.
+       A name that is freed by this same batch is fine, even when it is a swap or a chain (a->b, b->c): temp names break cycles."""
+    errors, notes, work = [], [], []
+    olds = [o for o, _ in pairs]
+    if len(set(olds)) != len(olds):
+        errors.append("the same item is listed twice")
+    for o, n in pairs:
+        if o == n:
+            notes.append("%s: new name is the same - left alone" % o)
+            continue
+        bad = valid_tag_name(n)
+        if bad:
+            errors.append("%s -> %s: %s" % (o, n or "(empty)", bad)); continue
+        work.append((o, n))
+    moving = {o for o, _ in work}
+    stay = {t.lower(): t for t in list(existing_tags) + list(release_tags) if t not in moving}
+    seen = {}
+    for o, n in work:
+        k = n.lower()
+        if k in seen:
+            errors.append("%s and %s would both become '%s'%s" % (seen[k][0], o, n, "" if seen[k][1] == n else " (names that differ only in case clash)"))
+        else:
+            seen[k] = (o, n)
+        if k in stay:
+            errors.append("%s -> %s: '%s' already exists%s" % (o, n, stay[k],
+                          " as a release" if stay[k] not in existing_tags else ""))
+    if errors:
+        return [], notes, errors
+    # order: a rename can run once its new name is not (any more) occupied by a name that is still waiting to move
+    waiting = dict(work)                                      # old -> new
+    occupied = {t.lower() for t in existing_tags} | {t.lower() for t in release_tags}
+    steps, n_tmp, guard = [], 0, 4 * len(work) + 8
+    while waiting:
+        guard -= 1
+        if guard < 0:                                         # cannot happen after the checks above; never loop forever if it does
+            return [], notes, ["could not find a safe order for these renames"]
+        ready = [o for o, n in waiting.items() if n.lower() not in occupied or (n.lower() == o.lower())]
+        if ready:
+            for o in ready:
+                n = waiting.pop(o)
+                steps.append((o, n, False))
+                occupied.discard(o.lower()); occupied.add(n.lower())
+            continue
+        o = sorted(waiting)[0]                                # a cycle: park one item under a temp name first
+        while True:
+            n_tmp += 1
+            tmp = "%s.bvk-tmp-%d" % (o, n_tmp)
+            if tmp.lower() not in occupied and not valid_tag_name(tmp):
+                break
+        steps.append((o, tmp, True))
+        occupied.discard(o.lower()); occupied.add(tmp.lower())
+        waiting[tmp] = waiting.pop(o)
+    return steps, notes, errors
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  6. jobs (a folder of plain files)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+class Job:
+    def __init__(self, d):
+        self.d = d
+
+    def get(self, name, default=""):
+        try:
+            with open(os.path.join(self.d, name), encoding="utf-8", newline="") as fh:
+                return fh.read()
+        except OSError:
+            return default
+
+    def has(self, name):
+        return os.path.exists(os.path.join(self.d, name))
+
+    def lines(self, name):
+        return [l for l in self.get(name).splitlines() if l != ""]
+
+    def flag(self, name):
+        return self.get(name).strip() in ("1", "y", "yes", "true")
+
+    @property
+    def repo(self):
+        r = self.get("repo").strip()
+        if not re.fullmatch(r'[\w.-]+/[\w.-]+', r):
+            raise GhError("bad repo name '%s'" % r, 2)
+        return r
+
+    def spec(self, field):
+        if not self.has(field + ".mode"):
+            return None
+        return (self.get(field + ".mode").strip(), self.get(field + ".a"), self.get(field + ".b"))
+
+
+def ok(msg):   print("💫 " + msg)
+def bad(msg):  print("❌ " + msg)
+def note(msg): print("   " + msg)
+
+
+def releases_by_tag(repo):
+    return {r["tag_name"]: r for r in list_releases(repo)}
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  7. commands
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def cmd_auth(args):
+    global _TOKEN
+    cands, looked = key_candidates()
+    if not cands:
+        print(US.join(["NONE"] + looked)); return 5
+    last = ""
+    for i, (tok, where) in enumerate(cands):
+        _TOKEN = tok
+        try:
+            u = whoami()
+            print(US.join(["OK", u.get("login") or "", where, str(i)])); return 0
+        except GhError as e:
+            last = "%s: %s" % (where, e)
+            if e.status not in (401, 403):
+                print(US.join(["ERR", str(e)])); return 1
+    print(US.join(["REJECTED", last])); return 5
+
+
+def cmd_repos(args):
+    seen, rows = set(), []
+    for r in paginate("/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&direction=desc"):
+        if r["full_name"] in seen:
+            continue
+        seen.add(r["full_name"])
+        flags = ("F" if r.get("fork") else "") + ("A" if r.get("archived") else "") + ("T" if r.get("is_template") else "")
+        rows.append(US.join([r["full_name"], "private" if r.get("private") else "public", flags,
+                             (r.get("pushed_at") or "")[:10], one_line(r.get("description") or "")]))
+    print("\n".join(rows))
+    return 0
+
+
+def cmd_releases(args):
+    repo = args[0]
+    rows = release_rows(list_releases(repo), with_id=True, everything="--all" in args)
+    print("\n".join(rows))
+    return 0
+
+
+def cmd_tags(args):
+    repo = args[0]
+    rels = releases_by_tag(repo)
+    tags = sorted(list_tag_refs(repo), key=lambda t: version_key(t[0]), reverse=True)
+    rows = []
+    for name, typ, sha in tags:
+        r = rels.get(name)
+        state = "" if not r else ("draft" if r.get("draft") else "pre" if r.get("prerelease") else "stable")
+        rows.append(US.join([name, "annotated" if typ == "tag" else "lightweight", sha[:7], str(r["id"]) if r else "", state]))
+    print("\n".join(rows))
+    return 0
+
+
+def cmd_info(args):
+    repo, tag = args[0], args[1]
+    st = tag_state(repo, tag)
+    rel = releases_by_tag(repo).get(tag)
+    if not st and not rel:
+        bad("'%s' is not a tag or release of %s" % (tag, repo)); return 3
+    print("🔖 %s   (%s)" % (tag, repo))
+    if st:
+        print("   type      : %s" % ("annotated tag" if st["annotated"] else "lightweight tag"))
+        if st["annotated"]:
+            tg = st["tagger"] or {}
+            print("   tagged by : %s %s" % (tg.get("name", "?"), (tg.get("date") or "")[:10]))
+            print("   tag message:")
+            print("\n".join("      " + l for l in (st["message"].rstrip("\n") or "(empty)").split("\n")[:20]))
+        c = http("GET", "/repos/%s/git/commits/%s" % (repo, st["commit_sha"]))
+        au = c.get("author") or {}
+        print("   commit    : %s  %s  by %s" % (st["commit_sha"][:10], (au.get("date") or "")[:10], au.get("name", "?")))
+        print("   commit message:")
+        print("\n".join("      " + l for l in (c.get("message") or "(empty)").rstrip("\n").split("\n")[:20]))
+    else:
+        print("   (no git tag with this name - the release points at a tag that is gone)")
+    if rel:
+        kind = "draft" if rel.get("draft") else "pre-release" if rel.get("prerelease") else "stable release"
+        print("   release   : %s  (%s)" % (kind, (rel.get("published_at") or rel.get("created_at") or "")[:10]))
+        print("   title     : %s" % (rel.get("name") or "(none)"))
+        print("   page      : %s" % rel.get("html_url", "%s/%s/releases/tag/%s" % (WEB, repo, tag)))
+        print("   assets    : %d" % len(rel.get("assets") or []))
+        print("   notes:")
+        body = (rel.get("body") or "").replace("\r", "").rstrip("\n").split("\n")
+        print("\n".join("      " + l for l in body[:30]) if body != [""] else "      (no notes)")
+        if len(body) > 30:
+            print("      ... (%d more line(s))" % (len(body) - 30))
+    else:
+        print("   release   : none (this is a tag only)")
+    return 0
+
+
+def cmd_get(args):
+    repo, tag, field = args[0], args[1], args[2]
+    if field in ("title", "body"):
+        rel = releases_by_tag(repo).get(tag)
+        if not rel:
+            return 3
+        sys.stdout.write(rel.get("name" if field == "title" else "body") or "")
+        return 0
+    st = tag_state(repo, tag)
+    if not st:
+        return 3
+    if field == "tag_message":
+        sys.stdout.write(st["message"])
+    elif field == "commit_message":
+        sys.stdout.write(http("GET", "/repos/%s/git/commits/%s" % (repo, st["commit_sha"])).get("message") or "")
+    else:
+        return 2
+    return 0
+
+
+def _default_target(repo, target):
+    if target:
+        return target
+    return http("GET", "/repos/%s" % repo).get("default_branch") or "main"
+
+
+def _resolve_commit(repo, target):
+    """branch name / tag / sha -> commit sha"""
+    try:
+        return http("GET", "/repos/%s/commits/%s" % (repo, q(target)))["sha"]
+    except GhError as e:
+        raise GhError("cannot find '%s' in %s (%s)" % (target, repo, e), 404)
+
+
+def cmd_create_tag(args):
+    job = _job(args); repo = job.repo
+    tag = job.get("tag").strip()
+    bad_name = valid_tag_name(tag)
+    if bad_name:
+        bad("%s: %s" % (tag or "(empty)", bad_name)); return 1
+    if get_ref(repo, tag) or tag in releases_by_tag(repo):
+        bad("'%s' already exists in %s" % (tag, repo)); return 1
+    sha = _resolve_commit(repo, _default_target(repo, job.get("target").strip()))
+    msg = job.get("tag_message")
+    write_tag(repo, tag, sha, msg if msg.strip() else None)
+    ok("created %s tag %s at %s" % ("annotated" if msg.strip() else "lightweight", tag, sha[:10]))
+    return 0
+
+
+def cmd_create_release(args):
+    job = _job(args); repo = job.repo
+    tag = job.get("tag").strip()
+    bad_name = valid_tag_name(tag)
+    if bad_name:
+        bad("%s: %s" % (tag or "(empty)", bad_name)); return 1
+    if tag in releases_by_tag(repo):
+        bad("a release for '%s' already exists in %s" % (tag, repo)); return 1
+    title, body, msg = job.get("title").strip(), job.get("body"), job.get("tag_message")
+    st = tag_state(repo, tag)
+    payload = {"tag_name": tag, "name": title or tag, "body": body, "draft": False, "prerelease": False}
+    if st:
+        note("tag %s exists - the release is attached to it" % tag)
+        if msg.strip():
+            note("(the tag message of an existing tag is changed with edit, not here)")
+    else:
+        target = _default_target(repo, job.get("target").strip())
+        sha = _resolve_commit(repo, target)
+        if msg.strip():
+            write_tag(repo, tag, sha, msg)                    # annotated tag first, then the release picks it up
+            note("created annotated tag %s at %s" % (tag, sha[:10]))
+        else:
+            payload["target_commitish"] = target
+    r = http("POST", "/repos/%s/releases" % repo, payload)
+    ok("created stable release %s  %s" % (tag, r.get("html_url", "")))
+    return 0
+
+
+def _edit_one(repo, tag, specs, st, rel, move_branch):
+    """apply the given text transforms to one tag/release; returns (changes[str], problems[str])"""
+    changes, problems = [], []
+    new_commit, new_msg, rel_patch = None, None, {}
+    tm, cm = specs.get("tag_message"), specs.get("commit_message")
+    if cm:
+        if not st:
+            problems.append("no git tag - commit message not changed")
+        else:
+            c = http("GET", "/repos/%s/git/commits/%s" % (repo, st["commit_sha"]))
+            text, why = apply_text(c.get("message") or "", *cm)
+            if why:
+                problems.append("commit message: " + why)
+            elif text == (c.get("message") or ""):
+                problems.append("commit message: already that text")
+            else:
+                nc = http("POST", "/repos/%s/git/commits" % repo, {
+                    "message": text, "tree": c["tree"]["sha"], "parents": [p["sha"] for p in c.get("parents", [])],
+                    "author": c.get("author"), "committer": c.get("committer")})
+                new_commit = nc["sha"]
+                changes.append("commit message (new commit %s - the old one is %s)" % (nc["sha"][:10], st["commit_sha"][:10]))
+    if tm:
+        if not st:
+            problems.append("no git tag - tag message not changed")
+        else:
+            text, why = apply_text(st["message"], *tm)
+            if why:
+                problems.append("tag message: " + why)
+            elif st["annotated"] and text == st["message"]:
+                problems.append("tag message: already that text")
+            else:
+                new_msg = text
+                changes.append("tag message" + ("" if st["annotated"] else " (the lightweight tag became annotated)"))
+    if new_commit or new_msg is not None:
+        write_tag(repo, tag, new_commit or st["commit_sha"], new_msg, st)
+        if new_commit and move_branch:
+            moved = 0
+            for r in http("GET", "/repos/%s/git/matching-refs/heads" % repo):
+                if r["object"]["sha"] == st["commit_sha"]:
+                    http("PATCH", "/repos/%s/git/refs/heads/%s" % (repo, q(r["ref"][len("refs/heads/"):])), {"sha": new_commit, "force": True})
+                    moved += 1
+            changes.append("moved %d branch(es) to the new commit" % moved if moved else "no branch ends at the old commit - no branch moved")
+    for f, key in (("title", "name"), ("body", "body")):
+        sp = specs.get(f)
+        if not sp:
+            continue
+        if not rel:
+            problems.append("no release - %s not changed" % ("title" if f == "title" else "notes")); continue
+        text, why = apply_text(rel.get(key) or "", *sp)
+        if why:
+            problems.append("%s: %s" % ("title" if f == "title" else "notes", why))
+        elif text == (rel.get(key) or ""):
+            problems.append("%s: already that text" % ("title" if f == "title" else "notes"))
+        else:
+            rel_patch[key] = text
+            changes.append("title" if f == "title" else "notes")
+    if rel_patch:
+        http("PATCH", "/repos/%s/releases/%d" % (repo, rel["id"]), rel_patch)
+    return changes, problems
+
+
+def cmd_edit(args):
+    job = _job(args); repo = job.repo
+    tags = job.lines("tags")
+    specs = {f: job.spec(f) for f in FIELDS if job.spec(f)}
+    if not tags or not specs:
+        bad("nothing to edit"); return 3
+    rels = releases_by_tag(repo)
+    fails = 0
+    for tag in tags:
+        try:
+            st = tag_state(repo, tag)
+            if not st and tag not in rels:
+                raise GhError("not found", 404)
+            changes, problems = _edit_one(repo, tag, specs, st, rels.get(tag), job.flag("move_branch"))
+            if changes:
+                ok("%s: changed %s" % (tag, ", ".join(changes)))
+            for p in problems:
+                note("%s: %s" % (tag, p))
+            if not changes and not problems:
+                note("%s: nothing to do" % tag)
+        except GhError as e:
+            fails += 1; bad("%s: %s" % (tag, e))
+    return 1 if fails else 0
+
+
+def _rename_pairs(job, tags):
+    mode, a, b = job.get("rule.mode").strip(), job.get("rule.a"), job.get("rule.b")
+    pairs = []
+    if mode == "manual":
+        m = dict(l.split("\t", 1) for l in job.lines("map") if "\t" in l)
+        return [(t, m.get(t, t)) for t in tags]
+    for t in tags:
+        if mode == "prefix":    n = a + t
+        elif mode == "suffix":  n = t + a
+        elif mode == "replace": n = t.replace(a, b) if a else t
+        elif mode == "regex":
+            try:
+                n = re.sub(a, b, t)
+            except re.error as e:
+                raise GhError("bad pattern: %s" % e, 2)
+        else:
+            raise GhError("unknown rename rule '%s'" % mode, 2)
+        pairs.append((t, n))
+    return pairs
+
+
+def _rename_one(repo, old, new, rel, retitle):
+    ref = get_ref(repo, old)
+    if not ref:
+        raise GhError("tag '%s' not found" % old, 404)
+    o = ref["object"]
+    if o["type"] == "tag":                                  # the tag object carries its own name: make a new one for the new name
+        t = http("GET", "/repos/%s/git/tags/%s" % (repo, o["sha"]))
+        n = http("POST", "/repos/%s/git/tags" % repo, {"tag": new, "message": t.get("message") or "", "object": t["object"]["sha"],
+                                                       "type": t["object"]["type"], "tagger": t.get("tagger") or my_identity()})
+        create_ref(repo, new, n["sha"])
+    else:
+        create_ref(repo, new, o["sha"])
+    if rel:
+        patch = {"tag_name": new}
+        if retitle and (rel.get("name") or "") == old:
+            patch["name"] = new
+        try:
+            http("PATCH", "/repos/%s/releases/%d" % (repo, rel["id"]), patch)
+        except GhError:
+            try:
+                delete_ref(repo, new)                        # undo: nothing half-renamed
+            except GhError:
+                pass
+            raise
+    try:
+        delete_ref(repo, old)
+    except GhError as e:
+        raise GhError("'%s' now exists, but the old '%s' could not be removed (%s)" % (new, old, e), e.status)
+
+
+def cmd_rename(args):
+    job = _job(args); repo = job.repo
+    tags = job.lines("tags")
+    if not tags:
+        bad("nothing selected"); return 3
+    try:
+        pairs = _rename_pairs(job, tags)
+    except GhError as e:
+        bad(str(e)); return 2
+    refs = {t for t, _, _ in list_tag_refs(repo)}
+    rels = releases_by_tag(repo)
+    for t in tags:                                           # an item must exist: as a tag, or as a release whose tag exists
+        if t not in refs:
+            bad("%s: no such tag in %s" % (t, repo)); return 3
+    steps, notes, errors = plan_renames(pairs, refs, set(rels))
+    for n in notes:
+        note(n)
+    if errors:
+        print("🔴 %d naming problem(s) - nothing was renamed:" % len(errors))
+        for e in errors:
+            print("   ❌ " + e)
+        return 1
+    if not steps:
+        note("nothing to rename"); return 3
+    if "--plan" in args:
+        for o, n in pairs:
+            if o != n:
+                print("   %s  ->  %s%s" % (o, n, "   (release follows)" if o in rels else ""))
+        hops = sum(1 for _, _, t in steps if t)
+        if hops:
+            print("   (%d name(s) swap places: a temporary name is used for a moment)" % hops)
+        return 0
+    fails, retitle = 0, job.get("retitle", "1").strip() != "0"
+    for o, n, tmp in steps:                                  # steps carry the CURRENT name of each item (a parked item has its temp name)
+        try:
+            _rename_one(repo, o, n, rels.get(o), retitle)
+            r = rels.pop(o, None)
+            if r:                                            # keep the local release map in step with GitHub
+                r["tag_name"] = n
+                if retitle and (r.get("name") or "") == o:
+                    r["name"] = n
+                rels[n] = r
+            if not tmp:
+                ok("%s -> %s" % (o, n))
+        except GhError as e:
+            fails += 1; bad("%s -> %s: %s" % (o, n, e))
+            if tmp:                                          # a parked item could not be parked: the later steps would be wrong
+                bad("stopped: the remaining renames of this swap were not attempted"); break
+    return 1 if fails else 0
+
+
+def cmd_delete(args):
+    job = _job(args); repo = job.repo
+    tags = job.lines("tags")
+    do_rel, do_tag = job.flag("release"), job.flag("tag")
+    if not tags or not (do_rel or do_tag):
+        bad("nothing to delete"); return 3
+    rels = releases_by_tag(repo)
+    fails = 0
+    for t in tags:
+        try:
+            r = rels.get(t)
+            if do_rel:
+                if r:
+                    http("DELETE", "/repos/%s/releases/%d" % (repo, r["id"])); ok("%s: release deleted" % t)
+                else:
+                    note("%s: no release to delete" % t)
+            if do_tag:
+                if get_ref(repo, t):
+                    delete_ref(repo, t); ok("%s: tag deleted" % t)
+                else:
+                    note("%s: no tag to delete" % t)
+        except GhError as e:
+            fails += 1; bad("%s: %s" % (t, e))
+    return 1 if fails else 0
+
+
+# ── clone / download ────────────────────────────────────────────────────────────────────────
+def _git_version():
+    try:
+        m = re.search(r'(\d+)\.(\d+)', subprocess.run(["git", "--version"], capture_output=True, text=True).stdout)
+        return (int(m.group(1)), int(m.group(2)))
+    except Exception:
+        return (0, 0)
+
+
+def _git_env():
+    """the key reaches git through its environment only (never argv, never a file git keeps)"""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    cleanup = None
+    if not GIT_BASE.startswith("https://") and not GIT_BASE.startswith("http://"):
+        return env, None
+    tok = _token()
+    if _git_version() >= (2, 31):
+        hdr = "Authorization: Basic " + base64.b64encode(("x-access-token:" + tok).encode()).decode()
+        env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="http.extraHeader", GIT_CONFIG_VALUE_0=hdr)
+    else:                                                    # old git: a private askpass helper
+        fd, p = tempfile.mkstemp(prefix="bvk_askpass_")
+        os.write(fd, ("#!/bin/sh\ncase \"$1\" in Username*) echo x-access-token ;; *) echo '%s' ;; esac\n" % tok).encode()); os.close(fd)
+        os.chmod(p, 0o700); env.update(GIT_ASKPASS=p); cleanup = p
+    return env, cleanup
+
+
+def safe_name(s):
+    return re.sub(r'[^\w.+-]+', "_", s).strip("_") or "x"
+
+
+def unique_dir(parent, base):
+    p, n = os.path.join(parent, base), 1
+    while os.path.exists(p):
+        n += 1; p = os.path.join(parent, "%s-%d" % (base, n))
+    return p
+
+
+def _download_asset(repo, asset, dest):
+    data = http("GET", "/repos/%s/releases/assets/%d" % (repo, asset["id"]), accept="application/octet-stream")
+    with open(dest, "wb") as fh:
+        fh.write(data if isinstance(data, bytes) else json.dumps(data).encode())
+
+
+def _fetch_release(repo, rel, base):
+    d = unique_dir(os.path.dirname(base), os.path.basename(base) + "-release")
+    os.makedirs(d)
+    with open(os.path.join(d, "release.md"), "w", encoding="utf-8") as fh:
+        fh.write("# %s\n\ntag: %s\npublished: %s\n\n%s\n" % (rel.get("name") or rel["tag_name"], rel["tag_name"],
+                 (rel.get("published_at") or rel.get("created_at") or "")[:10], (rel.get("body") or "").replace("\r", "")))
+    n = 0
+    for a in rel.get("assets") or []:
+        _download_asset(repo, a, os.path.join(d, safe_name(a["name"]) if safe_name(a["name"]) != "x" else "asset-%d" % a["id"]))
+        n += 1
+    return d, n
+
+
+def cmd_clone(args):
+    job = _job(args); repo = job.repo
+    tags = job.lines("tags")
+    dest = job.get("dest").strip() or "."
+    depth = job.get("depth").strip()
+    depth = int(depth) if depth.isdigit() and int(depth) > 0 else 0
+    with_rel = job.flag("with_release")
+    if not tags:
+        bad("nothing to download"); return 3
+    if shutil.which("git") is None:
+        bad("git is not installed"); return 1
+    os.makedirs(dest, exist_ok=True)
+    rels = releases_by_tag(repo) if with_rel else {}
+    env, cleanup = _git_env()
+    url = "%s/%s.git" % (GIT_BASE, repo)
+    fails = 0
+    try:
+        for t in tags:
+            target = unique_dir(dest, "%s-%s" % (repo.split("/")[1], safe_name(t)))
+            try:
+                if depth:
+                    cmds = [["git", "init", "-q", target], ["git", "-C", target, "remote", "add", "origin", url],
+                            ["git", "-C", target, "fetch", "--depth", str(depth), "origin", "+refs/tags/%s:refs/tags/%s" % (t, t)],
+                            ["git", "-C", target, "-c", "advice.detachedHead=false", "checkout", "-q", "--detach", "refs/tags/" + t]]
+                else:
+                    cmds = [["git", "clone", "--no-checkout", url, target],
+                            ["git", "-C", target, "-c", "advice.detachedHead=false", "checkout", "-q", "--detach", "refs/tags/" + t]]
+                for c in cmds:
+                    r = subprocess.run(c, env=env, stdout=subprocess.DEVNULL)       # stderr stays on the terminal: git's progress and errors
+                    if r.returncode:
+                        shutil.rmtree(target, ignore_errors=True)
+                        raise GhError("git failed (exit %d) - see git's message above" % r.returncode)
+                extra = ""
+                if with_rel:
+                    if t in rels:
+                        d, n = _fetch_release(repo, rels[t], target)
+                        extra = "  + release notes and %d asset(s) in %s" % (n, d)
+                    else:
+                        extra = "  (no release for this tag)"
+                ok("%s -> %s  [%s]%s" % (t, target, "depth %d" % depth if depth else "full history", extra))
+            except GhError as e:
+                fails += 1; bad("%s: %s" % (t, e))
+    finally:
+        if cleanup:
+            try: os.unlink(cleanup)
+            except OSError: pass
+    return 1 if fails else 0
+
+
+# ── shared with the upgrade loop ─────────────────────────────────────────────────────────────
+def cmd_parse_releases(args):
+    try:
+        data = json.load(open(args[0], encoding="utf-8"))
+    except Exception:
+        return 2
+    if not isinstance(data, list):
+        return 2
+    rows = release_rows(data)
+    if rows:
+        print("\n".join(rows))
+    return 0
+
+
+def cmd_parse_commit(args):
+    try:
+        d = json.load(open(args[0], encoding="utf-8"))
+        print(commit_row(d))
+    except Exception:
+        return 2
+    return 0
+
+
+def _job(args):
+    if "--job" not in args or args.index("--job") + 1 >= len(args):
+        raise GhError("--job DIR is required", 2)
+    return Job(args[args.index("--job") + 1])
+
+
+COMMANDS = {"auth": cmd_auth, "repos": cmd_repos, "releases": cmd_releases, "tags": cmd_tags, "info": cmd_info, "get": cmd_get,
+            "create-release": cmd_create_release, "create-tag": cmd_create_tag, "edit": cmd_edit, "rename": cmd_rename,
+            "delete": cmd_delete, "clone": cmd_clone, "parse-releases": cmd_parse_releases, "parse-commit": cmd_parse_commit}
+
+
+def main(argv):
+    for st in (sys.stdout, sys.stderr):
+        try: st.reconfigure(encoding="utf-8", errors="replace")
+        except Exception: pass
+    if len(argv) < 2 or argv[1] not in COMMANDS:
+        print(__doc__); return 2
+    try:
+        return COMMANDS[argv[1]](argv[2:])
+    except GhError as e:
+        if e.status == 5:
+            print("❌ No GitHub key found."); return 5
+        print("❌ %s" % e, file=sys.stderr); return 1 if e.status != 404 else 3
+    except (IndexError, KeyboardInterrupt) as e:
+        return 2 if isinstance(e, IndexError) else 130
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

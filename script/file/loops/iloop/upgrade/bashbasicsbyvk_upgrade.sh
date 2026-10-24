@@ -24,6 +24,8 @@
 #  Env:  BVK_UPG_REPO=owner/name   (default vkdatta/bashbasicsbyvk)
 #        BVK_UPG_MAX=40            how many versions per tab
 #
+#  Shared with the GitHub screens (fx → github_fx → open github): bashbasicsbyvk_ghlib.sh (parsing, tag order, body printing).
+#
 #  Uses (from the main app): _vp_* viewport, _read_choice_filtered, _inner_run,
 #  _filter_reset_state, _bvk_quit, handle_staging_map
 # ════════════════════════════════════════════════════════════════════════════
@@ -46,7 +48,7 @@ _UPG_T_LOADED=0
 _UPG_S_ERR=""
 _UPG_T_ERR=""
 
-_UPG_US=$'\x1f'
+_UPG_US="$_GH_US"                  # shared with the GitHub screens: bashbasicsbyvk_ghlib.sh
 
 # ── network (the only place that touches GitHub; override in tests) ──────────
 _upg_http_get() {
@@ -78,26 +80,10 @@ _upg_load_stable() {
     rm -f "$tmp"; _UPG_S_ERR="could not reach GitHub (offline, or API rate limit)"; return 1
   fi
   local out
-  out="$(python3 - "$tmp" <<'PYEOF'
-import json, sys
-try:
-    data = json.load(open(sys.argv[1], encoding="utf-8"))
-except Exception:
-    sys.exit(2)
-if not isinstance(data, list):
-    sys.exit(2)
-US = "\x1f"
-for r in data:
-    if r.get("draft") or r.get("prerelease"):
-        continue
-    body = (r.get("body") or "").replace("\r", "")
-    body = body.replace("\\", "\\\\").replace("\n", "\\n").replace(US, " ")
-    name = (r.get("name") or "").replace(US, " ").replace("\n", " ")
-    print(US.join([r.get("tag_name") or "", name, (r.get("published_at") or "")[:10], body]))
-PYEOF
-)"
+  out="$(_gh_releases_rows "$tmp")"       # the parsing is shared with the GitHub screens (bashbasicsbyvk_ghlib.sh)
   local rc=$?
   rm -f "$tmp"
+  if [ $rc -eq 127 ]; then _UPG_S_ERR="bashbasicsbyvk_github (the GitHub engine) was not found"; return 1; fi
   if [ $rc -ne 0 ]; then _UPG_S_ERR="GitHub answered, but not with a release list"; return 1; fi
   local t n d b i=0
   while IFS="$_UPG_US" read -r t n d b; do
@@ -117,10 +103,9 @@ _upg_load_tags() {
     _UPG_T_ERR="could not list tags (offline, or the repo has none)"; return 1
   fi
   local line ref
-  # newest first: the auto-tagger bumps a SemVer tag on every build, so version order = age order
   while IFS= read -r ref; do
     [ -n "$ref" ] && _UPG_T_TAG+=("$ref")
-  done < <(printf '%s\n' "$raw" | sed -n 's|^[0-9a-f]\{7,64\}[[:space:]]\{1,\}refs/tags/||p' | sort -rV | head -n "$_UPG_MAX")
+  done < <(printf '%s\n' "$raw" | _gh_tags_newest_first "$_UPG_MAX")
   [ "${#_UPG_T_TAG[@]}" -gt 0 ] || { _UPG_T_ERR="the repo has no tags"; return 1; }
   return 0
 }
@@ -248,33 +233,12 @@ _upg_cmd_install() {
   _upg_do_install "$_upg_ref" "$_upg_ref"
 }
 
-_upg_print_body() {              # _upg_print_body <escaped-body>
-  local body="$1" text lines
-  [ -n "$body" ] || { echo "   (no description)"; return; }
-  text="$(printf '%b' "$body")"
-  lines="$(printf '%s\n' "$text" | wc -l)"
-  printf '%s\n' "$text" | head -n 40 | sed 's/^/   /'
-  [ "$lines" -gt 40 ] && echo "   … ($((lines-40)) more line(s))"
-}
-
 _upg_fetch_commit() {            # _upg_fetch_commit <tag> → fills _UPG_T_CACHE[tag]
   local tag="$1" tmp out
   [ -n "${_UPG_T_CACHE[$tag]+x}" ] && return 0
   tmp="$(mktemp 2>/dev/null)" || return 1
   if ! _upg_http_get "$_UPG_API/commits/$tag" > "$tmp" || [ ! -s "$tmp" ]; then rm -f "$tmp"; return 1; fi
-  out="$(python3 - "$tmp" <<'PYEOF'
-import json, sys
-try:
-    d = json.load(open(sys.argv[1], encoding="utf-8"))
-    c = d["commit"]
-except Exception:
-    sys.exit(2)
-US = "\x1f"
-msg = (c.get("message") or "").replace("\r", "").replace("\\", "\\\\").replace("\n", "\\n").replace(US, " ")
-au = c.get("author") or {}
-print(US.join([(au.get("date") or "")[:10], (au.get("name") or "").replace(US, " "), msg]))
-PYEOF
-)"
+  out="$(_gh_commit_row "$tmp")"
   local rc=$?
   rm -f "$tmp"
   [ $rc -eq 0 ] && [ -n "$out" ] || return 1
@@ -292,7 +256,7 @@ _upg_cmd_info() {
     [ "$inst" = "$tag" ] && echo "   status   : ★ installed"
     echo "   page     : $_UPG_WEB/releases/tag/$tag"
     echo "   description:"
-    _upg_print_body "${_UPG_S_BODY[$ix]}"
+    _gh_print_body "${_UPG_S_BODY[$ix]}"
   else
     echo "🧪 $tag   (tag)"
     if [ -n "${_UPG_S_IDX[$tag]+x}" ]; then echo "   stable   : yes — it is a published release (see the Stable tab)"
@@ -304,14 +268,14 @@ _upg_cmd_info() {
       local d a m; IFS="$_UPG_US" read -r d a m <<<"${_UPG_T_CACHE[$tag]}"
       echo "   commit   : ${d:-unknown}${a:+  by $a}"
       echo "   message  :"
-      _upg_print_body "$m"
+      _gh_print_body "$m"
     else
       echo "   message  : (could not fetch the commit — offline, or API rate limit)"
     fi
     if [ -n "${_UPG_S_IDX[$tag]+x}" ]; then
       local ix="${_UPG_S_IDX[$tag]}"
       echo "   release notes:"
-      _upg_print_body "${_UPG_S_BODY[$ix]}"
+      _gh_print_body "${_UPG_S_BODY[$ix]}"
     fi
   fi
 }

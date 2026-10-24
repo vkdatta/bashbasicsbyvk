@@ -19,3 +19,5 @@ functions/bashbasicsbyvk_find(run\.sh|rep|\.sh)	findrep
 settings/bashbasicsbyvk_findsettings	findrep hints
 functions/	choose_plain
 staging/buffer!/|select/|loops/iloop/fx/file_fx/bashbasicsbyvk_adf_selection|functions/bashbasicsbyvk_transfer	buffer_sets
+fx/github_fx/	github_engine github_ui github_upgrade_shared choose_plain
+functions/bashbasicsbyvk_ghlib|loops/iloop/upgrade/	github_engine github_upgrade_shared

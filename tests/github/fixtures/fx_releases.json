@@ -1,0 +1,4 @@
+[{"tag_name":"v0.0.9","name":"Nine","published_at":"2026-10-09T10:00:00Z","body":"first line\r\nsecond \\ back\\slash\n\n- item é 日本\n","draft":false,"prerelease":false},
+ {"tag_name":"v0.0.8-beta","name":"b","published_at":"2026-10-08T10:00:00Z","body":"beta","draft":false,"prerelease":true},
+ {"tag_name":"v0.0.7","name":"v0.0.7","published_at":"2026-10-07T10:00:00Z","body":null,"draft":false,"prerelease":false},
+ {"tag_name":"v0.0.6","name":null,"published_at":null,"body":"x","draft":true,"prerelease":false}]

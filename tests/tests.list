@@ -25,3 +25,6 @@ e2e_pending|slow|300|bash tests/e2e_pending.sh|fileapi
 e2e_services|slow|300|bash tests/e2e_services.sh|fileapi
 findrep_full|slow|600|bash tests/findrep/findrep_run.sh full|python3
 buffer_sets|fast|40|bash tests/buffer_sets.sh|
+github_engine|fast|120|python3 tests/github/github_test.py|python3
+github_upgrade_shared|fast|30|bash tests/github/upgrade_shared.sh|python3
+github_ui|slow|180|python3 tests/github/ui_test.py|python3

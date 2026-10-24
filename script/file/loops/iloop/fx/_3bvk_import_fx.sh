@@ -17,4 +17,5 @@ _lt_b "load adf_selection"; source "bashbasicsbyvk_adf_selection.sh"; _lt_e
 _lt_b "load adf_selected"; source "bashbasicsbyvk_adf_selected.sh"; _lt_e
 _lt_b "load adf_gdrive"; source "bashbasicsbyvk_adf_gdrive.sh"; _lt_e   # google_drive_fx/open google drive — rclone profiles → the Drive as the main screen (bashbasicsbyvk_gdrive.sh, bashbasicsbyvk_gd)
 _lt_b "load adf_cfwp"; source "bashbasicsbyvk_adf_cfwp.sh"; _lt_e   # cloudflare_fx/workers and pages — single button: list · export · recover (python: bashbasicsbyvk_cfwp_*, bashbasicsbyvk_recover_*)
+_lt_b "load adf_github"; source "bashbasicsbyvk_adf_github.sh"; _lt_e   # github_fx/open github — all your repos → Stable releases and Tags: create · edit · rename · delete · download (python: bashbasicsbyvk_github, helpers: bashbasicsbyvk_ghlib.sh)
 _lt_b "load udf_io"; source "bashbasicsbyvk_udf_io.sh"; _lt_e

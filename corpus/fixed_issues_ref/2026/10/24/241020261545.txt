@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+A GitHub management feature was wanted inside fx: one ADF button that signs in with a key already on the machine (or explains where to put one), lists all repos, and for a repo manages Stable releases and Tags (create, edit title / notes / tag message / commit message, rename with conflict checks, delete, download = clone with or without depth), singly and in bulk.
+
+HOW DID YOU DEBUG
+Read AGENTS.md, the fx ADF registry (_fx_adf_register), the sibling buttons adf_gdrive / adf_cfwp, the xui screen toolkit, _bvk_menu / _bvk_yn, rename.sh (conflict handling) and the upgrade loop. Wrote tests/github/mock_github.py (an in-memory GitHub REST API, stricter than GitHub where it matters: a release on a missing tag is refused, a download redirect must arrive without the key) and ran bashbasicsbyvk_github against it (tests/github/github_test.py, 138 checks: key discovery incl. cycles and a fifo named in bashrc, lists, create / edit / rename / delete, clone full and depth, release assets). Drove the REAL app through a pty (tests/github/ui_test.py, 14 checks: no-key message, repos, both tabs, info, rename refused then done, bulk edit, download, delete). Broke the code on purpose (no conflict check, key forwarded on redirect, no rollback, bashrc reader opening fifos, rename plan skipped, no-key advice removed) and saw each test go red, then restored. One mutation hung instead of failing: plan_renames now has a loop guard. NOT verified: nothing was run against the real api.github.com (no network here), so GitHub-side behaviours are as documented, not observed: git tag objects created through /git/tags with an explicit tagger, PATCH of a release tag_name to an existing tag, and repos with "immutable releases" turned on (GitHub may refuse changing or deleting their tags; the tool then prints GitHub's own message and, for rename, removes the new tag again). tests/run.sh was run for the covering tests; tmux and node are not installed here.
+
+CAUSE
+New feature. Design choices a future agent should know: the key is read by the engine itself (never typed, never in argv; git gets it through GIT_CONFIG_* environment, so it is not stored in the clone's config); shell files are read as data and never run (only $(cat FILE) is followed); tags cannot be renamed on GitHub, so rename = new ref (a NEW tag object for annotated tags, because the object carries its own name) + move the release + delete the old ref, undone if the release cannot move; swaps and chains in one batch go through temp names; editing a commit message makes a new commit (same tree, parents, author) and moves the tag, branches only if asked.
+
+FIX
+New: script/file/loops/iloop/fx/github_fx/gh/bashbasicsbyvk_github (python engine), .../open_github/bashbasicsbyvk_adf_github.sh (the button and screens, registered in _3bvk_import_fx.sh), script/file/functions/bashbasicsbyvk_ghlib.sh (shared helpers, loaded from _3bvk_import_functions.sh), tests/github/*, README bullet, tests.list / covers.map lines.
+
+2. ISSUE IN BRIEF
+The upgrade loop carried its own copies of the release-list parser, the commit parser, the tag ordering pipeline and the body printer, which the new GitHub screens also needed.
+
+HOW DID YOU DEBUG
+Ran the ORIGINAL upgrade loop and the changed one through the same fixtures with the network seams (_upg_http_get, _upg_ls_remote_tags) stubbed, including an offline run and edge characters (CR, backslash, the 0x1f separator, unicode, null fields, drafts, pre-releases): the outputs are byte-identical; the original's output is frozen as tests/github/fixtures/upgrade_golden.txt and checked by tests/github/upgrade_shared.sh. github_test.py also compares parse-releases / parse-commit with a verbatim copy of the old inline code.
+
+CAUSE
+Logic needed in two places was written inline in one (AGENTS: share, never copy).
+
+FIX
+bashbasicsbyvk_upgrade.sh now calls _gh_releases_rows, _gh_commit_row, _gh_tags_newest_first and _gh_print_body (bashbasicsbyvk_ghlib.sh); the python bodies moved into the engine as parse-releases / parse-commit. One behaviour added for a broken install only: a missing engine gives its own error text instead of "not a release list". The upgrade loop's own _upg_trunc duplicates _xui_trunc; left alone (xui loads after the upgrade loop).

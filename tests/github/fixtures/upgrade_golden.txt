@@ -1,0 +1,31 @@
+stable rc=0 err=[]
+declare -a _UPG_S_TAG=([0]="v0.0.9" [1]="v0.0.7")
+declare -a _UPG_S_NAME=([0]="Nine" [1]="v0.0.7")
+declare -a _UPG_S_DATE=([0]="2026-10-09" [1]="2026-10-07")
+declare -a _UPG_S_BODY=([0]="first line\\nsecond \\\\ back\\\\slash\\n\\n- item é 日本\\n" [1]="")
+tags rc=0 err=[]
+declare -a _UPG_T_TAG=([0]="v0.0.10" [1]="v0.0.9" [2]="v0.0.2" [3]="v0.0.1-beta")
+📦 v0.0.9   (stable release)
+   title    : Nine
+   published: 2026-10-09
+   page     : https://github.com/vkdatta/bashbasicsbyvk/releases/tag/v0.0.9
+   description:
+   first line
+   second \ back\slash
+   
+   - item é 日本
+📦 v0.0.7   (stable release)
+   title    : v0.0.7
+   published: 2026-10-07
+   page     : https://github.com/vkdatta/bashbasicsbyvk/releases/tag/v0.0.7
+   description:
+   (no description)
+🧪 v0.0.10   (tag)
+   stable   : no — a tag only, treat it as a beta
+   page     : https://github.com/vkdatta/bashbasicsbyvk/tree/v0.0.10
+   commit   : 2026-10-07  by Ann Å
+   message  :
+   subject
+   
+   body \ line
+offline stable rc=1 err=[could not reach GitHub (offline, or API rate limit)]
