@@ -247,6 +247,45 @@ _st_grp_files_build() {
 _st_grp_files_act() { case "${_st_tag[$1]}" in compress) compress_format_settings ;; ziphidden) zip_hidden_settings ;; esac; }
 files_group_settings() { _st_run "Files & archives" _st_grp_files_build _st_grp_files_act; }
 
+# ── Buffers (c- m- k- b- s-) ─────────────────────────────────────────────────────────────────────────────
+#  One rule per buffer for the case  c-1,3 as set1  when a set called set1 is ALREADY in that buffer:
+#     add     = put the new items into the existing set        replace = the new items take the old set's place
+#     deny    = keep the existing set, do nothing              ask     = ask every time (default; also lets you pick another name)
+#  (v- → open a buffer → n renames a set.)
+_buffer_conflict_label() {
+  case "$1" in
+    add)     echo "add to it" ;;
+    replace) echo "replace it" ;;
+    deny)    echo "deny" ;;
+    *)       echo "ask every time" ;;
+  esac
+}
+_st_buf_open() {              # <op> <title>
+  _st_choice_open "$2" "buffer_conflict_$1" "$2: when a set with the same name already exists" "💫 Saved" \
+    add     "Add to it — the new items join the existing set" \
+    replace "Replace it — the new items take the existing set's place" \
+    deny    "Deny — keep the existing set, change nothing" \
+    ask     "Ask every time (default)"
+}
+_st_grp_buffers_build() {
+  _st_reset
+  _st_add a "Copy buffer (c-)"     0 "$(_buffer_conflict_label "$buffer_conflict_cp")" cp
+  _st_add a "Move buffer (m-)"     0 "$(_buffer_conflict_label "$buffer_conflict_mv")" mv
+  _st_add a "Shortcut buffer (k-)" 0 "$(_buffer_conflict_label "$buffer_conflict_sc")" sc
+  _st_add a "Bookmark buffer (b-)" 0 "$(_buffer_conflict_label "$buffer_conflict_bm")" bm
+  _st_add a "Select buffer (s-)"   0 "$(_buffer_conflict_label "$buffer_conflict_sl")" sl
+}
+_st_grp_buffers_act() {
+  case "${_st_tag[$1]}" in
+    cp) _st_buf_open cp "Copy buffer (c-)" ;;
+    mv) _st_buf_open mv "Move buffer (m-)" ;;
+    sc) _st_buf_open sc "Shortcut buffer (k-)" ;;
+    bm) _st_buf_open bm "Bookmark buffer (b-)" ;;
+    sl) _st_buf_open sl "Select buffer (s-)" ;;
+  esac
+}
+buffers_group_settings() { _st_run "Buffers — same name twice  (c- m- k- b- s-)" _st_grp_buffers_build _st_grp_buffers_act; }
+
 # ── System ───────────────────────────────────────────────────────────────────────────────────────────────
 _st_grp_system_build() {
   local _tzabbr; printf -v _tzabbr '%(%Z)T' -1
@@ -269,6 +308,7 @@ _st_top_build() {
   _st_add a "Filters"             0 "" filters
   _st_add a "Colors"              0 "" colors
   _st_add a "Files & archives"    0 "" files
+  _st_add a "Buffers (c- m- k- b- s-)" 0 "" buffers
   _st_add a "Find & replace"      0 "" findrep
   _st_add a "File API"            0 "" fileapi
   _st_add a "Menu specific"       0 "" menuspec
@@ -282,6 +322,7 @@ _st_top_act() {
     filters) filters_group_settings ;;
     colors)  colors_group_settings ;;
     files)   files_group_settings ;;
+    buffers) buffers_group_settings ;;
     findrep) find_group_settings ;;
     fileapi) fileapi_group_settings ;;
     menuspec) menu_specific_settings ;;

@@ -227,7 +227,7 @@ _upg_do_install() {              # _upg_do_install <ref|main> <label>
   echo "🔼  Install $label"
   [ -n "$inst" ] && [ "$inst" != "$ref" ] && echo "   currently installed: $inst"
   [ -n "$inst" ] && [ "$inst" = "$ref" ] && echo "   (this is already the installed version — it will be reinstalled)"
-  read -e -r -p "   Continue? (y/N): " ans
+  _bvk_yn ans "Continue?" -d n
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   core="$(command -v bashbasicsbyvk_upgrade_install 2>/dev/null)"
   [ -n "$core" ] || core="$SCRIPT_DIR/bashbasicsbyvk_upgrade_install"

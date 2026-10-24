@@ -31,8 +31,8 @@ done
 # ---- (2) -------------------------------------------------------------------------------
 p_cost="   [c] continue  ·  [r] reduce time  ·  [i] increase time  ·  [s] stop: "
 p_link="   c) copy link   g) regenerate link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: "
-p_ask="🗄️  Back up 2 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: "
-p_name="🗄️  Name this backup (Enter = just the date and time): "
+p_ask="Back up 2 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: "
+p_name="Name this backup (Enter = just the date and time): "
 _CM_MAP=main; _cm_table_build main
 for k in c r i s; do _cm_prompt_collect "$p_cost"; _cm_gate_text "$k" ""; [ $? = 0 ] && [ "$_CM_ABORT" = 0 ] && ok "cost prompt: [$k] is the prompt's own key" || { bad "cost prompt: $k aborted the flow"; _cm_abort_clear; }; done
 for k in c g e a x; do _cm_prompt_collect "$p_link"; _cm_gate_text "$k" ""; [ $? = 0 ] && [ "$_CM_ABORT" = 0 ] && ok "link prompt: $k) is the prompt's own key" || { bad "link prompt: $k aborted the flow"; _cm_abort_clear; }; done
@@ -77,6 +77,7 @@ eval "$(sed -n '/^_sw_remove_paths()/,/^}/p' "$SW")"
 eval "$(sed -n '/^_sp_resolve_itemlist()/,/^}/p' "$F/staging/buffer!/bashbasicsbyvk_staging_helpers.sh")"
 parse_selection() { local spec="$1" max="$2" p a b i; for p in ${spec//,/ }; do if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then for ((i=BASH_REMATCH[1]; i<=BASH_REMATCH[2]; i++)); do [ "$i" -le "$max" ] && echo "$i"; done; elif [[ "$p" =~ ^[0-9]+$ ]] && [ "$p" -le "$max" ]; then echo "$p"; fi; done; }
 _carry_forget() { :; }; read() { builtin printf -v "${@: -1}" '%s' "$ANS"; }
+_bvk_yn() { builtin printf -v "$1" '%s' "$ANS"; }       # the yes/no menu answers with $ANS here
 touch "$T/a.swlink" "$T/b.swlink" "$T/c.swlink"; mkdir "$T/target"
 items=("$T/a.swlink" "$T/b.swlink" "$T/c.swlink"); imaginary_mode=false
 ANS=y; _sw_remove_paths "b-2" >/dev/null
@@ -86,7 +87,7 @@ ANS=y; _sw_remove_paths "b-1,3" >/dev/null; { [ ! -e "$T/a.swlink" ] && [ ! -e "
 
 # ---- (5) -------------------------------------------------------------------------------
 BK="$F/staging/!buffer/fileapi/3 backup/bashbasicsbyvk_staging_backup.sh"
-n=$(grep -c 'read -e -r -p "🗄️  Name this backup' "$BK"); m=$(grep 'read -e -r -p "🗄️  Name this backup' "$BK" | grep -c '|| return 1')
+n=$(grep -c 'read -e -r -p "Name this backup' "$BK"); m=$(grep 'read -e -r -p "Name this backup' "$BK" | grep -c '|| return 1')
 [ "$n" = "$m" ] && [ "$n" -ge 1 ] && ok "backup: every 'Name this backup' prompt returns when cancelled" || bad "backup: a name prompt ignores a cancel ($m of $n)"
 grep -A2 'Name this backup' "$BK" | grep -q '_CM_ABORT' && ok "backup: checks _CM_ABORT after the name prompt" || bad "backup: no _CM_ABORT check"
 

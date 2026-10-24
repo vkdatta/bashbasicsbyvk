@@ -250,7 +250,7 @@ _scr_validate() {
     echo "   • $sf"
   done
 
-  read -e -p "Remove stale entries from registry? (y/n): " confirm
+  _bvk_yn confirm "Remove stale entries from registry?" -d n
   if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
     _scr_save kept
     echo "🗑️  Removed ${#stale[@]} stale entry/entries. Registry now holds ${#kept[@]}."
@@ -293,7 +293,7 @@ handle_scr_sync() {
       ;;
     2) _scr_validate ;;
     3)
-      read -e -p "Full rebuild will rescan all of \$HOME. Continue? (y/n): " confirm
+      _bvk_yn confirm "Full rebuild will rescan all of \$HOME. Continue?" -d n
       [[ "$confirm" == "y" || "$confirm" == "Y" ]] && _scr_rebuild || echo "🚫 Cancelled."
       ;;
     q|Q|"") return 0 ;;

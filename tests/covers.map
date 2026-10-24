@@ -1,15 +1,15 @@
 # Which tests cover which part of script/.  Used by:  bash tests/run.sh for <changed files>   (or no files: uses `git diff --name-only`)
 # <regex matched against the changed file's path><TAB><tests, space separated>.  A changed file that matches nothing runs the whole `fast` tier.
 # Add a line when you add a test or a new area; keep one test in as many lines as it really covers.
-engine/bashbasicsbyvk_(viewport|browse|smartmenu|filter)	paste_input wrap_input stale_size width hints nav_back mouse cheatcode
+engine/bashbasicsbyvk_(viewport|browse|smartmenu|filter)	paste_input wrap_input stale_size width hints nav_back mouse cheatcode choose choose_plain
 engine/bashbasicsbyvk_mouse	mouse
 engine/bashbasicsbyvk_(cmdmap|cheatcode)	cmd_drift cheatcode hints
 engine/debug/	loadtime_print
 cmdmap/	cmd_drift cheatcode nav_back hints
-settings/	hints nav_back stale_size width cheatcode
-loops/	nav_back mouse hints
+settings/	hints nav_back stale_size width cheatcode choose choose_plain
+loops/	nav_back mouse hints choose_plain
 home/	nav_back mouse hints
-staging/	xfer_ux resume_inflight e2e_pending e2e_services
+staging/	xfer_ux resume_inflight e2e_pending e2e_services choose_plain
 telemetry/	nav_back
 infinity/tools/polyglot/	polyglot_unit
 group	group_view
@@ -17,3 +17,5 @@ bashbasicsbyvk_.*_commands|menucommands	cmd_drift
 engine/bvk-fr/	findrep findrep_full
 functions/bashbasicsbyvk_find(run\.sh|rep|\.sh)	findrep
 settings/bashbasicsbyvk_findsettings	findrep hints
+functions/	choose_plain
+staging/buffer!/|select/|loops/iloop/fx/file_fx/bashbasicsbyvk_adf_selection|functions/bashbasicsbyvk_transfer	buffer_sets

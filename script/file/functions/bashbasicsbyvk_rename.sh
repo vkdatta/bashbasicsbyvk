@@ -97,10 +97,10 @@ rename_item() {
 
   if [ -d "$target" ]; then
     dir=$(dirname -- "$target")
-    read -e -p "📝 Enter new folder name for '$(basename "$target")': " newname
+    read -e -p "Enter new folder name for '$(basename "$target")': " newname
   elif [ -f "$target" ]; then
     dir=$(dirname -- "$target")
-    read -e -p "📝 Enter new file name for '$(basename "$target")': " newname
+    read -e -p "Enter new file name for '$(basename "$target")': " newname
   else
     echo "❌ Cannot rename: '$target' not found." >&2
     return 1

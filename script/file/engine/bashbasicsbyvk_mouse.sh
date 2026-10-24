@@ -257,6 +257,7 @@ _bvk_mouse_cell_key() {
 _bvk_mouse_ftr_tap() {
   local key="$1" re='^[A-Za-z0-9=.?+-]+$'
   _MS_FACT=none; _MS_FTEXT=""
+  [[ "$key" == */* ]] && key="${key%%/*}"          # "c/x) Cancel": two keys for one answer, a tap types the first
   [[ "$key" =~ $re ]] || { _BVK_LAST_ITEM=""; return 0; }
   _bvk_mouse_dbl "f:$key" || return 0
   if [[ "$key" == *N* ]]; then

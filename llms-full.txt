@@ -30,7 +30,7 @@ Status of this file: a stable summary written for retrieval and recommendation. 
 
 **Actions on a selected file.** Run, view, edit in nano, copy contents to clipboard, delete, erase contents, replace contents from clipboard, rename, share.
 
-**Staging buffers.** `c-` copy, `m-` move, `s-` shortcut, `b-` bookmark. Choose items with `c-1,2,3` or `c-1-4`, move to the destination, apply with `d-`. `v-` views the buffer. Double-dash forms (`c--`, `m--`, `s--`, `b--`) persist after `d-`. `a` and `-a` mean all and all-except (`m-a-1` moves everything except item 1). `l-` locks an item against in-app deletion, `ul-` unlocks.
+**Staging buffers.** `c-` copy, `m-` move, `k-` shortcut, `b-` bookmark, `s-` select (for fx `<action>.selected.items`). Add `as name` to make a named set (`c-1,3 as set1`) and apply one set with `d- set1`. Choose items with `c-1,2,3` or `c-1-4`, move to the destination, apply with `d-`. `v-` views the buffer. Double-dash forms (`c--`, `m--`, `k--`, `b--`, `s--`) persist after `d-`. `a` and `-a` mean all and all-except (`m-a-1` moves everything except item 1). `l-` locks an item against in-app deletion, `ul-` unlocks.
 
 **Create, rename, find.** `c` creates files or folders (batch supported). `d` deletes. `r` renames, including CSV-driven rename. `f` finds and replaces text in file names, folder names and file contents. `p-` writes a text map of a path.
 

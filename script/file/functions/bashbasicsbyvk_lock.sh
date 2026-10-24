@@ -189,7 +189,7 @@ _lk_confirm_delete() {
   done
 
   if [ "${#prot[@]}" -eq 0 ]; then
-    read -e -p "$prompt" ans
+    _bvk_yn ans "${prompt% (y/n): }" -d n -t "Confirm delete" -i "🗑️"
     [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
     return 0
   fi
@@ -197,7 +197,7 @@ _lk_confirm_delete() {
   # ── exactly one item selected, and it is locked ──
   if [ "${#selected_items[@]}" -eq 1 ]; then
     it="${selected_items[0]}"
-    read -e -p "$prompt" ans
+    _bvk_yn ans "${prompt% (y/n): }" -d n -t "Confirm delete" -i "🗑️"
     [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
     local -a detail=()
     if _lk_is_locked "$it"; then
@@ -218,14 +218,11 @@ _lk_confirm_delete() {
     if _lk_is_locked "$it"; then echo "   🔒 ${it##*/}"
     else _lk_count_inside "$it"; echo "   🔒 ${it##*/}  (contains $_lk_inside locked item(s))"; fi
   done
-  read -e -p "$prompt" ans
+  _bvk_yn ans "${prompt% (y/n): }" -d n -t "Confirm delete" -i "🗑️"
   [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
 
   echo
-  echo "What should happen to the locked items?"
-  echo "  1. Don't delete locked items"
-  echo "  2. Delete locked items"
-  read -e -p "Select (1/2): " ans
+  _bvk_menu ans -q "What should happen to the locked items?" -t "Locked items" -i "🔒" "1:Don't delete locked items" "2:Delete locked items"
   local choice
   case "$ans" in
     1) choice=skip ;;
@@ -237,10 +234,10 @@ _lk_confirm_delete() {
   if [ "$choice" = skip ]; then
     final=("${free[@]}")
     if [ "${#final[@]}" -eq 0 ]; then echo "📜  Everything selected is locked — nothing to delete"; return 1; fi
-    read -e -p "Delete ${#final[@]} unlocked item(s), keeping ${#prot[@]} locked? (y/n): " ans
+    _bvk_yn ans "Delete ${#final[@]} unlocked item(s), keeping ${#prot[@]} locked?" -d n
   else
     final=("${selected_items[@]}")
-    read -e -p "Delete ALL ${#final[@]} item(s), including ${#prot[@]} locked? (y/n): " ans
+    _bvk_yn ans "Delete ALL ${#final[@]} item(s), including ${#prot[@]} locked?" -d n
   fi
   [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
 

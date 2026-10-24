@@ -128,7 +128,7 @@ _pn_item_act() {
       echo; _pn_pause "$_PN_CUR_ID"; _pn_pause_enter; _st_back=1 ;;
     stop)
       echo
-      read -e -r -p "  Stop ${_PN_CUR_ID:0:10}… for good and DELETE its incomplete blobs? Nothing is charged. [y/N]: " ans || ans=n
+      _bvk_yn ans "Stop ${_PN_CUR_ID:0:10}… for good and DELETE its incomplete blobs? Nothing is charged." -d n || ans=n
       case "${ans,,}" in
         y|yes) _pn_stop "$_PN_CUR_ID" && _pn_pause_enter; _st_back=1 ;;
         *) echo "  🚫 Nothing was stopped."; _pn_pause_enter ;;

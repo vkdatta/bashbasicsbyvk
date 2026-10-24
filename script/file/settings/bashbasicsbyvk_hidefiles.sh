@@ -72,13 +72,9 @@ _hidden_decide() {
     ask)
       _hid_inc=false
       _hidden_any "$@" || return 0            # nothing hidden in there: no need to ask
-      read -e -r -p "👁️  Include hidden files in $what? [y/N, u = cancel]: " a
-      a="${a%$'\r'}"
-      case "${a,,}" in
-        y|yes) _hid_inc=true ;;
-        u)     echo "🚫 Cancelled."; return 1 ;;
-        q)     _bvk_quit; return 1 ;;
-      esac
+      # u (back) and q (close) are the menu's own keys: they cancel the whole flow and make _bvk_yn return 1
+      _bvk_yn a "Include hidden files in $what?" -d n -i "👁️" || { echo "🚫 Cancelled."; return 1; }
+      [ "$a" = y ] && _hid_inc=true
       return 0 ;;
     *) [ "${show_hidden_files:-false}" = true ] && _hid_inc=true || _hid_inc=false ;;
   esac

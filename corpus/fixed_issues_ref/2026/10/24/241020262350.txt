@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Two agents changed the same base independently: one replaced one-line prompts with the shared choice menu (no emoji on a read line, [o] radio vs [x] checkbox), the other added named buffer sets ("as <name>", k- for shortcut, s- for select, d- <name>, conflict rules, the w prefix in the fx pickers). Their work had to become one version where the new set code follows the new menu rules.
+
+HOW DID YOU DEBUG
+Diffed both trees against the base: 9 files were changed by both (smartmenu, transfer, gdrive, switch, fileapi lib, staging_buffer, covers.map, tests.list, the corpus index). Merged with a three-way merge per file; 3 conflicted (index, covers.map, staging_buffer clear-all prompt), the rest merged clean. Then audited the result against the new rules: grep for emoji in read -p, for (y/n) and [c] take style one-line prompts, bash -n on every script. Ran tests/run.sh fast and choose, nav_back, paste_input, mouse, cheatcode (all pass). e2e_pending, e2e_services, resume_inflight and findrep_full were not run (they need the ../fileapi repo or are long).
+
+CAUSE
+Each agent worked without the other's code, so the buffer-set code still had three one-line prompts (y/n clear confirmations, the "[1/2/3/n]" name-conflict question, the "[c] take [v] review" picker prompts), and its test did not load bashbasicsbyvk_choose.sh, so the menu was undefined there.
+
+FIX
+Index and covers.map keep both sets of lines (index in date order). staging_buffer.sh: clear-all prompt = _bvk_yn with the "ten buffers" wording; the two clear-set / clear-flat prompts use _bvk_yn. staging_helpers.sh _sp_conflict_decide: the ask case is one _bvk_menu (Add / Replace / Deny / Use another name, default Deny). adf_selection.sh: picker prompts shortened to "Pick: " / "Selected items: " like the Transfer menu (the keys are in the footer). tests/buffer_sets.sh loads bashbasicsbyvk_choose.sh. Two grep -c . lines written grep -c '.' so the source check has no false hit. Lesson: a new prompt in a buffer or fx flow goes through _bvk_yn / _bvk_menu from the start.

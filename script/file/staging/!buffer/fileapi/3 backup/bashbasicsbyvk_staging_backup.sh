@@ -35,21 +35,21 @@ _bk_before_delete() {
 
   local a nm alias
   if [ "$mode" = ask ]; then
-    # A prompt that was cancelled (u = go back, or a command that is not allowed here) makes read fail and
+    # A menu that was cancelled (u = go back, or a command that is not allowed here) returns 1 and
     # raises _CM_ABORT: the whole flow stops RIGHT HERE — nothing is packed, uploaded or deleted.
-    read -e -r -p "🗄️  Back up ${#real[@]} item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: " a || return 1
+    _bvk_yn a "Back up ${#real[@]} item(s) to the cloud before deleting?" -d y -c -t "Back up before deleting" -i "🗄️" || return 1
     [ "${_CM_ABORT:-0}" = 1 ] && return 1
-    case "${a,,}" in
-      c|cancel|u|back) echo "🚫 Nothing deleted."; return 1 ;;
-      n|no)     return 0 ;;
+    case "$a" in
+      c) echo "🚫 Nothing deleted."; return 1 ;;
+      n) return 0 ;;
     esac
   fi
 
-  read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm || return 1
+  read -e -r -p "Name this backup (Enter = just the date and time): " nm || return 1
   [ "${_CM_ABORT:-0}" = 1 ] && return 1
   while ! alias=$(_bb_svc_alias "$nm"); do
     echo "   🔴  A name may use letters, digits, spaces and . _ @ + -  (up to ~34 characters after the date)."
-    read -e -r -p "🗄️  Name this backup (Enter = just the date and time): " nm || return 1
+    read -e -r -p "Name this backup (Enter = just the date and time): " nm || return 1
     [ "${_CM_ABORT:-0}" = 1 ] && return 1
   done
 
@@ -63,7 +63,7 @@ _bk_before_delete() {
     4) echo "⏸  The backup was interrupted. It is KEPT — finish it from Pending (pn). Nothing is deleted yet." ;;
     *) echo "🔴  The backup FAILED — nothing was saved to the cloud." ;;
   esac
-  read -e -r -p "   Delete anyway, without a backup? (y/N): " a || { echo "🚫 Nothing deleted."; return 1; }
+  _bvk_yn a "Delete anyway, without a backup?" -d n || { echo "🚫 Nothing deleted."; return 1; }
   case "${a,,}" in
     y|yes) return 0 ;;
     *)     echo "🚫 Nothing deleted."; return 1 ;;

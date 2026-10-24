@@ -43,6 +43,7 @@ p-         .mapto()  p-         from bashbasicsbyvk_maincommands.sh
 c-         .mapto()  c-         from bashbasicsbyvk_maincommands.sh
 m-         .mapto()  m-         from bashbasicsbyvk_maincommands.sh
 s-         .mapto()  s-         from bashbasicsbyvk_maincommands.sh
+k-         .mapto()  k-         from bashbasicsbyvk_maincommands.sh
 b-         .mapto()  b-         from bashbasicsbyvk_maincommands.sh
 d-         .mapto()  d-         from bashbasicsbyvk_maincommands.sh
 v-         .mapto()  v-         from bashbasicsbyvk_maincommands.sh

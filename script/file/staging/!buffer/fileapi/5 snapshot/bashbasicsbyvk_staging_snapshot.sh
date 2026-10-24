@@ -396,7 +396,7 @@ _snap_menu_device_view() {   # one device: its watched paths, and its snapshots
       x-*)
         n="${a#*-}"
         if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le ${#T_ID[@]} ]; then
-          read -e -r -p "   Stop snapshotting '${T_PATH[$((n-1))]}'? Existing snapshots stay until they expire. (y/N): " a
+          _bvk_yn a "Stop snapshotting '${T_PATH[$((n-1))]}'? Existing snapshots stay until they expire." -d n
           case "${a,,}" in y|yes)
             _BB_CALL_HDRS=(); _bb_call DELETE "/snapshots/targets/$dev/${T_ID[$((n-1))]}" || true
             if [ "$_BB_STATUS" = 200 ]; then echo "💫 Removed from the list."; [ "$is_self" = 1 ] && _snap_target_drop "${T_ID[$((n-1))]}"
@@ -448,7 +448,7 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
         if ! [[ "$n" =~ ^[0-9]+$ ]] || [ "$n" -lt 1 ] || [ "$n" -gt ${#S_ID[@]} ]; then echo "🔴  Pick a number from the list."; continue; fi
         i=$((n-1))
         if [ "$verb" = x ]; then
-          read -e -r -p "   Nuke $(_snap_name "${S_AT[$i]}") now? (y/N): " a
+          _bvk_yn a "Nuke $(_snap_name "${S_AT[$i]}") now?" -d n
           case "${a,,}" in y|yes)
             _BB_CALL_HDRS=(); _bb_call DELETE "/links/${S_ID[$i]}" || true
             [ "$_BB_STATUS" = 200 ] && echo "💫 Nuked." || echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;;
@@ -482,10 +482,10 @@ _snap_extend() {             # _snap_extend <id> <taken-ms> <expires-ms> [spec] 
         if [ "$ch" -gt "$bal" ]; then
           echo "💳 Not enough credits: that costs $ch, you have $bal."
           [[ "$mx" =~ ^[0-9]+$ ]] && [ "$mx" -gt "$cur" ] || { echo "❌ Nothing more can be afforded."; return 1; }
-          read -e -r -p "   Longest you can afford: total $(_bb_fmt_duration "$mx"). Use that? (y/N): " ans
+          _bvk_yn ans "Longest you can afford: total $(_bb_fmt_duration "$mx"). Use that?" -d n
           case "${ans,,}" in y|yes) total="$mx" ;; *) echo "🚫 Cancelled"; return 1 ;; esac
         elif [ "$ch" -gt 0 ]; then
-          read -e -r -p "   Costs $ch credit(s) (balance $bal → $((bal-ch))). Continue? (y/N): " ans
+          _bvk_yn ans "Costs $ch credit(s) (balance $bal → $((bal-ch))). Continue?" -d n
           case "${ans,,}" in y|yes) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
         fi
       fi

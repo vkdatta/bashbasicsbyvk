@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+An independent audit of v23 found two defects and a doc gap: items staged with a plain s-1,2 (no "as") sat in the select buffer but the fx <action>.selected.items picker ignored them ("Nothing selected"); the cheatcode test still expected the old emoji prompt and failed; llms-full.txt still called s- the shortcut key.
+
+HOW DID YOU DEBUG
+Drove the real app in a pty: s-1,2 then fx > move > move.selected.items printed "Nothing selected - use a .s command". Ran tests/run.sh cheatcode alone on base (pass), the prompt-1 tree and v23 (fail on "text prompt pick"); with the emoji dropped from the expected line it passes.
+
+CAUSE
+_fx_sel_entries listed only NAMED select sets and the .s selection file as "flat items"; unnamed lines of the s-/s-- buffers were never read. The cheatcode expectation was not updated when the emoji left the read prompt.
+
+FIX
+"flat items" = the .s selection plus the unnamed items of s-- and s- (new _fx_sel_flat); the row appears only when it has items; with no named set and no unnamed s- item the .s selection is used directly as before. Taken unnamed s- items leave the once buffer (_sp_drop_unnamed_paths), s-- stays. tests/buffer_sets.sh section 6 covers it; cheatcode.sh expects the prompt without the emoji; llms-full.txt names k- / s- / as / d- <name>. Not changed: items taken from an s- set leave it when picked, before the action runs, so cancelling the action afterwards does not put them back.

@@ -271,7 +271,7 @@ _find_replace_csv() {
   elif [ "$find_confirm_mode" != direct ]; then
     echo "📋 Total — $(_find_preview_summary)"
     _fr_notes
-    read -e -r -p "Apply all ${#csv_finds[@]} row(s)? [y/N]: " ok || return 0
+    _bvk_yn ok "Apply all ${#csv_finds[@]} row(s)?" -d n || return 0
     [[ "$ok" =~ ^[Yy]$ ]] || { echo "Aborted."; return 0; }
   fi
   echo "⏳ Applying…"

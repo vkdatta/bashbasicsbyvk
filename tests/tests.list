@@ -7,6 +7,8 @@ regex_portability|fast|30|bash tests/regex_portability.sh|
 cmd_drift|fast|90|bash tests/cmd_drift.sh|
 group_view|fast|40|bash tests/group_view.sh|
 width|fast|20|bash tests/width/width_consistency.sh|
+choose_plain|fast|20|bash tests/choose/plain_test.sh|
+choose|slow|90|python3 tests/choose/choose_test.py|python3
 xfer_ux|fast|40|node tests/xfer_ux.mjs|node
 stale_size|fast|30|bash tests/stale_size/run.sh|python3
 wrap_input|fast|60|bash tests/wrap_input/run.sh|python3
@@ -22,3 +24,4 @@ mouse|slow|240|python3 tests/mouse/mouse_test.py|python3
 e2e_pending|slow|300|bash tests/e2e_pending.sh|fileapi
 e2e_services|slow|300|bash tests/e2e_services.sh|fileapi
 findrep_full|slow|600|bash tests/findrep/findrep_run.sh full|python3
+buffer_sets|fast|40|bash tests/buffer_sets.sh|

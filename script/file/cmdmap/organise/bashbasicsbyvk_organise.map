@@ -44,6 +44,7 @@ p-         .mapto()  p-         from bashbasicsbyvk_maincommands.sh   # AUTO: lo
 c-         .mapto()  c-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
 m-         .mapto()  m-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
 s-         .mapto()  s-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
+k-         .mapto()  k-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
 b-         .mapto()  b-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
 d-         .mapto()  d-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()
 v-         .mapto()  v-         from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()

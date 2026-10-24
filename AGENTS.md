@@ -70,6 +70,21 @@ So before you create anything, work in this order:
    - Old notes are history: do not rename or rewrite them (a new note that points to the old `issue_id` is how you follow up).
    - The naming checks below only scan `script/`, so they do not apply to `corpus/`; check 6 covers the corpus.
 
+6. **Ask with the shared choice menu, and keep emoji off the line the caret sits on.** (Follow-up of `BB-211020261500-1`.)
+   - **No emoji in any `read ... -p` prompt**, and none in a variable that becomes one. A terminal and the width table can disagree about an emoji's
+     width, and then the caret lands in the wrong cell on some devices; text without emoji cannot disagree. Emoji stay in headers, `echo` lines and menu icons.
+     `tests/width` fails on one; the `read` shim also strips them at run time (`_bvk_noemoji`) as a net, never as the fix: write the prompt without them.
+   - **A question with fixed answers is never a one-line `read -p "... (y/N): "` and never a hand-made key row (`c) copy   x) nuke   Enter) back:`).**
+     Use `script/file/settings/bashbasicsbyvk_choose.sh` (it is the Settings screen engine in a small box: same look, arrows, touch/click, `u`/`q`):
+     `_bvk_yn VAR "Question" [-d y|n] [-c]` gives `y`/`n`/`c` (`-c` adds the Cancel row; `c` and `x` both cancel; `-d` is what a bare Enter answers, `n` unless the
+     question is harmless); `_bvk_menu VAR [-t Title] [-i Icon] [-q Question] [-d key] [-k] [-m] key:Label ...` for one-of-many, many-of-many (`-m`) and actions.
+     Both return 1 and leave VAR empty when the user backs out (`u`/`q`): stop the flow, as for every prompt. Keep the old `case` on the answer; the keys are `y n c`.
+   - **The shape** (do not invent another): `{emoji} Title`, a rule, numbered rows, a rule, `u) Back   q) Close`, an optional second line with the answer keys
+     (`y) Yes   n) No   c/x) Cancel`), then `Select:`. Rows are `N) [ ] Label`; the answer is a number, a tap or click, the arrows + Enter, or the printed key + Enter.
+   - **Marks: `[o]` radio = exactly one is on (one-of-many, the mark follows the highlight); `[x]` checkbox = any number can be on (many-of-many); `[ ]` off.**
+     Settings rows use the same marks (`_st_add r` radio, `_st_add t` checkbox). Never use `[x]` for a radio or `[o]` for a checkbox.
+   - A stand-alone tool (rule 3) cannot load the menu; its plain prompt still has no emoji. New code in the app uses the menu, and a new test goes in `tests/choose`.
+
 ## Tests: seconds, not half an hour (the rules the owner and the agents framed)
 
 A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes because they slept for guessed times, started the app dozens of times with a blind

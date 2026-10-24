@@ -29,6 +29,7 @@ p-         .mapto()  p-         from bashbasicsbyvk_fxmenucommands.sh
 c-         .mapto()  c-         from bashbasicsbyvk_fxmenucommands.sh
 m-         .mapto()  m-         from bashbasicsbyvk_fxmenucommands.sh
 s-         .mapto()  s-         from bashbasicsbyvk_fxmenucommands.sh
+k-         .mapto()  k-         from bashbasicsbyvk_fxmenucommands.sh
 e-         .mapto()  e-         from bashbasicsbyvk_fxmenucommands.sh
 ux         .mapto()  ux         from bashbasicsbyvk_fxmenucommands.sh
 udf.export .mapto()  udf.export from bashbasicsbyvk_fxmenucommands.sh

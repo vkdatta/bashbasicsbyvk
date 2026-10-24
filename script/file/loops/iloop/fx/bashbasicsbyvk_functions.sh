@@ -523,7 +523,7 @@ functions_menu() {
         fi
         ;;
 
-      d-) handle_staging_dispatch ;;
+      d-|d-\ *) handle_staging_dispatch "${_fx_choice:2}" ;;
       v-) handle_staging_view ;;
 
       p-*)
@@ -534,7 +534,7 @@ functions_menu() {
         fi
         ;;
 
-      c-*|m-*|s-*)
+      c-*|m-*|k-*|s-*)
         if [ "$_fx_tab" = "udf" ]; then
           local _saved_path_rs="$path"; path="$_fx_udf_path"
           handle_staging_stage "$_fx_choice"

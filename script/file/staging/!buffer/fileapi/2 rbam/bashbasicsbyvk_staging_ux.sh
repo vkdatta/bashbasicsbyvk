@@ -246,7 +246,7 @@ _ux_init() {
     if [ "$status" = 401 ]; then echo "❌ ${msg:-Authentication failed.}" >&2; echo "🔁 Fix the active user with  -auth  inside 'o', then try again." >&2; return 1; fi
     if [ "$status" = 409 ] && [ "$err" = oversized_confirmation_required ] && ! $confirmed; then
       echo "🔴  ${msg}" >&2
-      read -e -r -p "   Proceed at 1.2x credit cost? (y/n): " ans
+      _bvk_yn ans "Proceed at 1.2x credit cost?" -d n
       if [[ "$ans" == y || "$ans" == Y ]]; then confirmed=true; continue; fi
       echo "🚫 Cancelled." >&2; return 1
     fi

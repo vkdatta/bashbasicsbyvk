@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+Buffers (copy, move, shortcut, bookmark) held only flat path lists, and "as <name>" existed only for FileAPI links. Wanted: named sets in every buffer, applied one at a time with d- <name>, shown grouped in v-, a new select buffer feeding the fx *.selected.items actions, and a rule for a set name that is used twice.
+
+HOW DID YOU DEBUG
+Read AGENTS.md, the corpus index, the staging buffer/helpers files, _bb_split_alias (fileapi lib), the .s selection engine and adf_selected/adf_selection, the transfer navigators, the cmdmap maps/commands and the settings plumbing (one existing setting traced end to end). Wrote tests/buffer_sets.sh (real helper code, stubbed screen/read), broke the replace rule on purpose and saw it go red, restored. Ran tests/run.sh fast: all pass. cheatcode failed once under parallel load and passed twice alone and on the untouched copy (flaky timing, not caused here). The interactive screens were exercised through stubbed read only, not in a live terminal.
+
+CAUSE
+No place in the file format for a set name, and the "as" parser was private to the FileAPI commands.
+
+FIX
+Named lines "@name<TAB>path" in the existing buffer files (_sp_load still returns every path; new _sp_load_set/_sp_names/_sp_drop*/_sp_append_as in staging_helpers.sh). handle_staging_stage uses _bb_split_alias (now with _bb_alias_ok and an example argument) for all five buffers; _sp_conflict_decide applies Settings → Buffers (buffer_conflict_cp/mv/sc/bm/sl = add|replace|deny|ask). s- shortcut became k- (k--), s-/s-- is the select buffer; d- is now a word command taking set names (o, switch, fx loops, gdrive wrapper, cmd defs, every .map got a k- line mirroring its s- line; api keeps its own k-). v- views are grouped by set with n to rename and x to remove sets. _fx_sel_need opens a picker when named select sets exist (same N = go inside, wN = select convention as transfer). The transfer select prefix changed from s to w in _nav_parse_select. Lesson: bash read stubs in tests must only intercept prompts (-p), or file-reading loops hang.
+
+2. ISSUE IN BRIEF
+_sp_count style helpers printed "0" twice when grep -c found nothing (grep exits 1 after printing 0, then || echo 0 added a second line), breaking numeric tests.
+
+HOW DID YOU DEBUG
+Seen as "syntax error in expression" from d- in the new test.
+
+CAUSE
+grep -c ... || echo 0 duplicates the zero.
+
+FIX
+_sp_count captures grep's output and defaults it. Other existing copies of the same pattern (gdrive _gd_dispatch) were left alone.

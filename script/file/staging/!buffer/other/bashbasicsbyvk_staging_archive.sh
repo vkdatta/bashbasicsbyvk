@@ -79,9 +79,9 @@ _compress_paths() {
   # ── Archive name prompt ─────────────────────────────────────────────────
   echo ""
   if [ "$fmt" = "zip" ]; then
-    read -e -r -p "📦 Name for the archive (without .zip): " arc_name
+    read -e -r -p "Name for the archive (without .zip): " arc_name
   else
-    read -e -r -p "📦 Name for the archive (without .tar.gz): " arc_name
+    read -e -r -p "Name for the archive (without .tar.gz): " arc_name
   fi
   arc_name="${arc_name%$'\r'}"
   [ -z "$arc_name" ] && echo "🚫 Cancelled — no name given." && return
@@ -105,7 +105,7 @@ _compress_paths() {
   # ── Overwrite check ──────────────────────────────────────────────────────
   if [ -e "$arc_path" ]; then
     local ext; ext="${arc_path##*/}"
-    read -e -r -p "🔴  '${ext}' already exists. Overwrite? [y/N]: " ow
+    _bvk_yn ow "'${ext}' already exists. Overwrite?" -d n
     ow="${ow%$'\r'}"
     [[ "$ow" =~ ^[Yy]$ ]] || { echo "🚫 Cancelled."; return; }
     rm -f "$arc_path"

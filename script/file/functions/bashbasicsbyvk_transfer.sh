@@ -169,12 +169,15 @@ _view_selections_menu() {
 }
 
 # ── input helpers shared by the local and the gcloud navigator ────────────────────────────────────────────
-# _nav_parse_select <typed>  → is_select (true when it starts with s, or has a , or - : "pick several") and cleaned_input (the typed text
-# without the s) in the CALLER's variables.
+# THE prefix convention of every "pick items / go inside" list (the transfer navigators, and the fx <action>.selected.items picker):
+#     5      a folder → go INSIDE it · a file → select it
+#     w5     SELECT the item (a folder is taken whole, not entered)      w1,3 · w2-4 · 1,3 · 2-4 → select several
+# _nav_parse_select <typed>  → is_select (true when it starts with w, or has a , or - : "pick several") and cleaned_input (the typed text
+# without the w) in the CALLER's variables.
 _nav_parse_select() {
   is_select=false
-  [[ "$1" =~ ^[sS] ]] && is_select=true
-  cleaned_input=$(printf '%s' "$1" | sed 's/[Ss]\([0-9]\)/\1/g; s/^[Ss]//')
+  [[ "$1" =~ ^[wW] ]] && is_select=true
+  cleaned_input=$(printf '%s' "$1" | sed 's/[Ww]\([0-9]\)/\1/g; s/^[Ww]//')
   [[ "$cleaned_input" =~ [,\-] ]] && is_select=true
   return 0
 }
@@ -269,7 +272,7 @@ local_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer "u:Up" "v:View selections" "z:Cancel" "q:Quit" "#tip: use prefix 's' to select a folder"
+      _mc_footer "u:Up" "v:View selections" "z:Cancel" "q:Quit" "#tip: use prefix 'w' to select a folder"
     else
       _mc_footer "u:Up" "n:New folder" "c:Confirm destination" "z:Cancel" "q:Quit"
     fi
@@ -291,7 +294,7 @@ local_navigator() {
         ;;
       n|N)
         if [ "$mode" == "dest" ]; then
-          read -e -p "📂 New folder name: " new_dir_name
+          read -e -p "New folder name: " new_dir_name
           if [ -n "$new_dir_name" ] && _bvk_name_too_long "$new_dir_name"; then
             _bvk_name_refuse "$new_dir_name" "Folder"
           elif [ -n "$new_dir_name" ]; then
@@ -434,7 +437,7 @@ gcloud_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer "u:Up" "v:View selections" "z:Cancel" "q:Quit" "#tip: use prefix 's' to select a folder"
+      _mc_footer "u:Up" "v:View selections" "z:Cancel" "q:Quit" "#tip: use prefix 'w' to select a folder"
     else
       _mc_footer "u:Up" "n:New folder" "c:Confirm destination" "z:Cancel" "q:Quit"
     fi
@@ -456,7 +459,7 @@ gcloud_navigator() {
         ;;
       n|N)
         if [ "$mode" == "dest" ]; then
-          read -e -p "📂 New remote folder name: " new_rdir
+          read -e -p "New remote folder name: " new_rdir
           if [ -n "$new_rdir" ]; then
             _gcloud_cmd "mkdir -p '$remote_path/$new_rdir'"
             echo "💫 Created remote: $remote_path/$new_rdir"

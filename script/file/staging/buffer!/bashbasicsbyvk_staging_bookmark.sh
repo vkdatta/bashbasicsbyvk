@@ -1,15 +1,13 @@
 
-# Stage / apply logic lives in _sp_stage_buffer / _sp_apply_buffer (helpers.sh).
-staging_bookmark_stage() { _sp_stage_buffer bm "$1" "$2"; }
-
 # Apply: create a .swlink file at $dest for every path in $file.
 # _swlink_write is defined in bashbasicsbyvk_switch.sh and is always
 # sourced before this is called.
+# $3 = names-csv: only those named sets (d- set1).
 staging_bookmark_apply() {
   local file="$1" dest="$2"
 
   local -a list=()
-  _sp_load list "$file"
+  _sp_load_apply list "$file" "${3:-}"
   [ ${#list[@]} -eq 0 ] && return 0
 
   local -a live=()

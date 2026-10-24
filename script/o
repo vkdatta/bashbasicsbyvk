@@ -214,10 +214,10 @@ while true; do
     kl)          kill -9 -1 ;;
     i)           infinity_stones_menu ;;
     -u)          _inner_run upg ;;
-    d-)          handle_staging_dispatch ;;
+    d-|d-\ *)    handle_staging_dispatch "${choice:2}" ;;
     v-)          handle_staging_view ;;
     p-*)         handle_staging_map "$choice" ;;
-    c-*|m-*|s-*|b-*)  handle_staging_stage "$choice" ;;
+    c-*|m-*|k-*|b-*|s-*)  handle_staging_stage "$choice" ;;
     do-)         handle_do_import ;;
     c2c-*)       handle_c2c_upload "$choice" ;;
     up-*)        handle_up_upload "$choice" ;;

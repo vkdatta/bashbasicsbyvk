@@ -45,6 +45,7 @@ p-         .mapto()  block()
 c-         .mapto()  c-         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
 m-         .mapto()  block()
 s-         .mapto()  block()
+k-         .mapto()  block()
 b-         .mapto()  block()
 d-         .mapto()  block()
 v-         .mapto()  block()

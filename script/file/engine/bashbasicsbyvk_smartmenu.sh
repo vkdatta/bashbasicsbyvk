@@ -348,7 +348,7 @@ _sm_looks_multi() {
 # Does the surrounding menu advertise a command-prefix grammar?
 # Two shapes are recognised:
 #   dashed  — c-1,3 / m--2-4  (staging staging)
-#   bare    — s1-5 / s1,3     (transfer "prefix s to select")
+#   bare    — w1-5 / w1,3     (transfer "prefix w to select")
 # We look at help text for either a literal "letter-digit" example
 # or an explicit "prefix <x>" tip, and remember which letters are
 # valid command prefixes so the splitter can strip exactly those.
@@ -368,7 +368,7 @@ _sm_looks_command() {
         fi
         ;;
     esac
-    # bare grammar advertised as: prefix 's' / use prefix s / 's' to select
+    # bare grammar advertised as: prefix 'w' / use prefix w / 'w' to select
     if [[ "$l" =~ [Pp]refix[[:space:]]+.?([A-Za-z]).? ]]; then
       ch="${BASH_REMATCH[1]}"
       [[ "$_sm_cmd_letters" == *"$ch"* ]] || _sm_cmd_letters+="$ch"
@@ -396,8 +396,8 @@ _sm_classify_mode() {
 declare -gA _msel_set=()
 
 # Strip a command prefix off the buffer, leaving just the selection
-# list. Handles both  c-1,3 / m--2-4  (dashed) and  s1-5  (bare, when
-# 's' was advertised as a prefix). Sets _sm_cmd_prefix, _sm_sel_body.
+# list. Handles both  c-1,3 / m--2-4  (dashed) and  w1-5  (bare, when
+# 'w' was advertised as a prefix). Sets _sm_cmd_prefix, _sm_sel_body.
 _sm_split_command() {
   local b="$1"
   _sm_cmd_prefix=""; _sm_sel_body="$b"
@@ -408,7 +408,7 @@ _sm_split_command() {
     return
   fi
   # bare form: a single advertised command letter immediately
-  # followed by a digit, e.g. s1-5  (only strip letters we know are
+  # followed by a digit, e.g. w1-5  (only strip letters we know are
   # command prefixes, so a stray leading digit is never touched)
   if [ -n "$_sm_cmd_letters" ] && [[ "$b" =~ ^([A-Za-z])([0-9].*)$ ]]; then
     local lead="${BASH_REMATCH[1]}"
@@ -910,6 +910,26 @@ _cm_read_fallback() {
   return "$__cmf_rc"
 }
 
+# _bvk_noemoji VAR — drop emoji from the text in VAR (the "read -p" prompt line has none: a wrong width table or a terminal
+# that disagrees about an emoji's width puts the caret in the wrong cell, and emoji-free text can not disagree).
+# Arrows, dashes, dots and other one-cell symbols stay. Only text with a non-ASCII character is looked at.
+_bvk_noemoji() {
+  local -n __ne_ref="$1"
+  [[ "$__ne_ref" == *[![:ascii:]]* ]] || return 0
+  local __ne_in="$__ne_ref" __ne_out="" __ne_c __ne_n __ne_drop=0 __ne_i
+  for ((__ne_i=0; __ne_i<${#__ne_in}; __ne_i++)); do
+    __ne_c="${__ne_in:__ne_i:1}"
+    printf -v __ne_n '%d' "'$__ne_c" 2>/dev/null || __ne_n=0
+    if (( (__ne_n>=0x231a && __ne_n<=0x23ff) || __ne_n==0x24c2 || (__ne_n>=0x25aa && __ne_n<=0x25fe) || (__ne_n>=0x2600 && __ne_n<=0x27bf) \
+       || __ne_n==0x2934 || __ne_n==0x2935 || (__ne_n>=0x2b05 && __ne_n<=0x2b55) || __ne_n==0x3030 || __ne_n==0x303d \
+       || __ne_n==0xfe0f || __ne_n==0x200d || __ne_n>=0x1f000 )); then __ne_drop=1; continue; fi
+    if (( __ne_drop )) && [ "$__ne_c" = " " ]; then continue; fi       # the spaces that followed the emoji go with it
+    [ "$__ne_c" != " " ] && __ne_drop=0
+    __ne_out+="$__ne_c"
+  done
+  __ne_ref="$__ne_out"
+}
+
 read() {
   # a flow that is being cancelled (blocked command / "back"): every prompt answers at once
   if [ "${_CM_ABORT:-0}" = 1 ] && [ -t 0 ] && declare -F _cm_abort_swallow >/dev/null 2>&1 && _cm_abort_swallow; then
@@ -967,6 +987,7 @@ read() {
     esac
   done
   [ -z "$_sm_var" ] && _sm_var="REPLY"
+  _bvk_noemoji _sm_prompt          # no emoji on the line the caret sits on (see _bvk_noemoji)
 
   # A read consumes whatever was printed above it, so the capture
   # is reset on every path out of here. Without this, a menu printed

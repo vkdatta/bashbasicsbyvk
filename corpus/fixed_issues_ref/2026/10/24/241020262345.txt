@@ -1,0 +1,47 @@
+1. ISSUE IN BRIEF
+The caret in text prompts that start with an emoji (for example the backup confirmation) can land one cell off on some devices, because terminals and the width table disagree about emoji width. An earlier fix covered only some devices.
+
+1. HOW DID YOU DEBUG
+Read corpus note 211020261500 (BB-211020261500-1), then scanned every read -p prompt in script/ with a script: 21 lines still began with or contained an emoji, plus prompts built in variables (lock.sh $prompt) and printf-then-read. Verified by running: tests/width (new check 5: no emoji in a read -p prompt) fails before and passes after; the rest of the suite is green.
+
+1. CAUSE
+The prompt line carried emoji, so its width depends on how each terminal measures them. The earlier fix made two width tables agree but could not make every terminal agree.
+
+1. FIX
+Emoji removed from all 21 read prompts (rules, create, rename, upload, backup, run, fileapi_lib and others). The read shim (_bvk_noemoji in bashbasicsbyvk_smartmenu.sh) also strips emoji from any -p prompt at run time as a net. tests/width_consistency.sh check 5 fails on a new one. AGENTS.md rule 6 says so for future code. Stand-alone tools (gitpush, localhost, xtract, erase, py_audit) were already emoji-free and were not touched.
+
+2. ISSUE IN BRIEF
+Yes/no/cancel questions were one-line prompts such as "[Y/n, c = cancel the delete]:" which look old and do not take touch or click.
+
+2. HOW DID YOU DEBUG
+Listed every y/n style prompt (about 40). Found the Settings engine (_st_run) already draws the wanted look (title, rules, numbered rows, u/q footer, touch and arrows), so built on it instead of a second engine. Ran the menu in a real pty through tests/paste_input/ptyapp.py: default Enter, number, x as cancel, u backs out (rc 1, _CM_ABORT), no-terminal fallback via pipes. The converted call sites in the app were NOT each run by hand; they are covered by the unchanged case statements (answers are y/n/c), the syntax check and the suite. tests/e2e_pending.sh and e2e_services.sh need ../fileapi and were skipped.
+
+2. CAUSE
+Every flow wrote its own read prompt and parsed its own letters, so there was no shared menu to give them the app look.
+
+2. FIX
+New script/file/settings/bashbasicsbyvk_choose.sh (_bvk_yn, _bvk_menu), loaded from _3bvk_import_settings.sh. Small additions to bashbasicsbyvk_settings_ui.sh: _st_f2_custom (second footer line), _st_start_num (start highlight on the default), _st_choice, _st_radio_follow, and a cmd_fn that ends the screen. bashbasicsbyvk_mouse.sh: a footer key like "c/x)" taps as c. 33 prompts converted by script; hand edits in api, snapshot, hidefiles, backup, lock (_lk_confirm_delete and the locked-items choice) and switch. Tests: tests/choose/choose_test.py (pty), tests/choose/plain_test.sh, tests/cmd_drift.sh stub updated. Lesson: keep answers as y/n/c so the old case statements still work.
+
+3. ISSUE IN BRIEF
+Fixed-action prompts such as "c) copy link   g) regenerate link   e) edit expiry   a) alias/rename   x) nuke   Enter) back:" were hand-made one-line key rows.
+
+3. HOW DID YOU DEBUG
+Found them in api.sh (3 variants by service) and fileapi_lib.sh (the credit gate and the not-enough-credits gate). Checked tests for text that depends on the old rows: only e2e tests that pipe answers, which the no-terminal fallback still reads.
+
+3. CAUSE
+No shared action menu existed.
+
+3. FIX
+_bvk_menu with key:Label rows replaces them (Copy Link, Regenerate Link, Edit Expiry, Rename, Nuke; Continue, Reduce Time, Increase Time, Stop). u replaces "Enter) back". Not converted on purpose: list prompts with a grammar (x-N, e-N in the snapshot list).
+
+4. ISSUE IN BRIEF
+Radio and checkbox rows looked the same ([x] / [ ]), so a one-of-many choice could not be told from a many-of-many one.
+
+4. HOW DID YOU DEBUG
+Read _st_draw in bashbasicsbyvk_settings_ui.sh: kinds t and r shared one mark. Ran the menu in a pty: radio shows one [o] that follows the highlight, checkbox shows any number of [x].
+
+4. CAUSE
+One mark was used for both row kinds.
+
+4. FIX
+_st_draw: radio (r) is [o], checkbox (t) is [x]. This changes every existing Settings radio row to [o]. AGENTS.md rule 6 states the two marks. Touch and click on the new menu rely on the existing _st_click and were not tested separately.

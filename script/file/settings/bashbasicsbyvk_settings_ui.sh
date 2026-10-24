@@ -32,8 +32,13 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #         the rows shown. = + Enter (or u) clears it. Partial/Exact follows
 #         Settings → Search filter.
 #
-#  Row kinds   t toggle [x]/[ ]   r radio [x]/[ ]   a action ›   h heading
+#  Row kinds   t checkbox [x]/[ ] (many can be on)   r radio [o]/[ ] (one is on)   a action ›   h heading
 #  (headings are not numbered)
+#  Optional, set by the caller as locals/globals before _st_run (bashbasicsbyvk_choose.sh uses all of them):
+#     _st_f1_custom / _st_f2_custom   the two footer lines
+#     _st_start_num                   number of the row the highlight starts on (default: none)
+#     _st_radio_follow=1              the [o] of a radio row follows the highlight instead of the stored state
+#     _st_choice=1                    a choice menu: no =) Filter hint, Enter says "choose" (not "switch")
 # ════════════════════════════════════════════════════════════════════════════
 
 declare -ga _st_lbl=() _st_kind=() _st_on=() _st_val=() _st_tag=()
@@ -241,8 +246,9 @@ _st_draw() {
     1) f2="Type 1, then enter to ${_st_verb:-choose}" ;;
     *) f2="Type 1-$_st_cnt, then enter to ${_st_verb:-choose}" ;;
   esac
-  if [ -z "${fq:-}" ] && (( _st_cnt > 1 )); then f2="$f2   =) Filter"; fi
+  if [ -z "${fq:-}" ] && (( _st_cnt > 1 )) && [ "${_st_choice:-0}" != 1 ]; then f2="$f2   =) Filter"; fi
   if [[ "$hint" == *"←/→"* ]]; then f2="clr) Clear all"; fi
+  [ -n "${_st_f2_custom:-}" ] && f2="$_st_f2_custom"           # a choice menu lists its own keys (y) Yes   n) No ...)
 
   _ST_FTR1="$f1"; _ST_FTR2="$f2"                           # what _st_click needs to find the footer key that was touched
 
@@ -267,8 +273,11 @@ _st_draw() {
     mark=""
     if (( marks )); then
       case "${_st_kind[$i]}" in
-        t|r) mark="[ ] "; [ "${_st_on[$i]}" = 1 ] && mark="[x] " ;;
-        *)   mark="    " ;;
+        t) mark="[ ] "; [ "${_st_on[$i]}" = 1 ] && mark="[x] " ;;      # checkbox: many can be on
+        r) mark="[ ] "
+           if [ "${_st_radio_follow:-0}" = 1 ] && (( cur >= 0 )); then (( i == cur )) && mark="[o] "      # a choice menu: the mark follows the highlight
+           elif [ "${_st_on[$i]}" = 1 ]; then mark="[o] "; fi ;;                                          # radio: only one is on
+        *) mark="    " ;;
       esac
     fi
     [ "${_st_kind[$i]}" = a ] && val="${val:+$val }›"
@@ -306,7 +315,7 @@ _st_hint_text() {   # $1 typed text  $2 columns
     _ST_HINT="=  →  filter this list live  (= + Enter clears it)"
   elif [[ "$b" =~ ^[0-9]+$ ]] && (( ${#b} < 9 )); then
     k=$(( 10#$b ))
-    if (( k >= 1 && k <= ${_st_cnt:-0} )) && [ -n "${_st_nrow[$k]+x}" ]; then case "${_st_kind[${_st_nrow[$k]}]}" in t|r) _ST_HINT="Enter  →  switch  ${_st_lbl[${_st_nrow[$k]}]}" ;; *) _ST_HINT="Enter  →  open  ${_st_lbl[${_st_nrow[$k]}]}" ;; esac; else _ST_HINT="no row $k here  (1-${_st_cnt:-0})"; fi
+    if (( k >= 1 && k <= ${_st_cnt:-0} )) && [ -n "${_st_nrow[$k]+x}" ]; then case "${_st_kind[${_st_nrow[$k]}]}" in t|r) if [ "${_st_choice:-0}" = 1 ]; then _ST_HINT="Enter  →  choose  ${_st_lbl[${_st_nrow[$k]}]}"; else _ST_HINT="Enter  →  switch  ${_st_lbl[${_st_nrow[$k]}]}"; fi ;; *) _ST_HINT="Enter  →  open  ${_st_lbl[${_st_nrow[$k]}]}" ;; esac; else _ST_HINT="no row $k here  (1-${_st_cnt:-0})"; fi
   elif declare -F _cm_hint >/dev/null 2>&1; then
     declare -F _cm_ctx_find >/dev/null 2>&1 && _cm_ctx_find
     _cm_hint "$b" menu; _ST_HINT="$_hint_want"
@@ -416,6 +425,10 @@ _st_run() {
       need=0
     fi
     n=${#_st_lbl[@]}
+    if [ -n "${_st_start_num:-}" ]; then      # a choice menu starts on its default row
+      [ -n "${_st_nrow[$_st_start_num]+x}" ] && cur=${_st_nrow[$_st_start_num]}
+      _st_start_num=""
+    fi
     (( cur >= n )) && cur=$(( n - 1 ))
     (( cur < 0 && n == 0 )) && cur=-1
     _lt_b "settings: draw the screen"
@@ -486,7 +499,12 @@ _st_run() {
         esac
         _ltl=""; (( cur >= 0 )) && _ltl="${_st_lbl[$cur]}"
         _lt_enter "${buf:-enter}" "$_ltl"
-        if [ -n "$cmdfn" ] && "$cmdfn" "${buf,,}"; then buf=""; continue; fi
+        if [ -n "$cmdfn" ] && "$cmdfn" "${buf,,}"; then
+          buf=""
+          (( _st_quit )) && break
+          (( _st_back )) && { _st_back=0; break; }          # the handler finished this screen (a choice was made)
+          continue
+        fi
         case "${buf,,}" in
           u) if [ -n "$fq" ]; then fq=""; buf=""; cur=-1; top=0; continue; fi
              break ;;                       # buf keeps "u" so the prompt line can stay

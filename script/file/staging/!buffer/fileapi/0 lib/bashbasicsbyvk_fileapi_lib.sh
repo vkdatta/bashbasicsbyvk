@@ -195,14 +195,18 @@ _bb_fmt_when() {
 _BB_ALIAS_RE='^[A-Za-z0-9 ._@+-]{1,48}$'
 _BB_LINK_ALIAS=""
 
-# _bb_split_alias "<itemlist> as <alias>"  → _BB_ITEMLIST + _BB_LINK_ALIAS.  Returns 1 (message printed) on a bad alias.
+# The ONE reader of "<items> as <name>" — up- / ux- / save- / snap- / c2c- (link names) and c- m- k- b- s- (buffer set names) all call it.
+# _bb_alias_ok "<name>"  → 0 when the name is allowed
+_bb_alias_ok() { [[ "$1" =~ $_BB_ALIAS_RE ]]; }
+
+# _bb_split_alias "<itemlist> as <alias>" ["<example for the message>"]  → _BB_ITEMLIST + _BB_LINK_ALIAS.  Returns 1 (message printed) on a bad alias.
 # "as" must be a separate word, so names such as "class" or "alias" are not split.
 _bb_split_alias() {
   local raw="$1" lc idx pre
   _BB_ITEMLIST="$raw"; _BB_LINK_ALIAS=""
   lc="${raw,,}"
   if [[ "$lc" == *" as" ]]; then
-    echo "🔴  Alias missing — use:  <items> as <alias>   e.g.  up-1-5 as user data"
+    echo "🔴  Alias missing — use:  <items> as <alias>   e.g.  ${2:-up-1-5 as user data}"
     return 1
   fi
   [[ "$lc" == *" as "* ]] || return 0
@@ -211,7 +215,7 @@ _bb_split_alias() {
   _BB_LINK_ALIAS="${raw:$((idx + 4))}"
   _BB_LINK_ALIAS="${_BB_LINK_ALIAS#"${_BB_LINK_ALIAS%%[![:space:]]*}"}"
   _BB_LINK_ALIAS="${_BB_LINK_ALIAS%"${_BB_LINK_ALIAS##*[![:space:]]}"}"
-  if [[ ! "$_BB_LINK_ALIAS" =~ $_BB_ALIAS_RE ]]; then
+  if ! _bb_alias_ok "$_BB_LINK_ALIAS"; then
     echo "🔴  Alias may use letters, digits, spaces and . _ @ + -  (1-48 characters)."
     _BB_LINK_ALIAS=""
     return 1
@@ -445,7 +449,7 @@ _bb_estimate() {
 _bb_ask_time() {
   local cur="$1" hint="$2" dflt="$3" a n rc
   while :; do
-    read -e -r -p "   ⏱️  $hint: " a || return 1
+    read -e -r -p "   $hint: " a || return 1
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
       s|stop|n|no|q|cancel) return 1 ;;
@@ -496,7 +500,7 @@ _bb_credit_gate() {
     if [ "$_BB_E_OK" = "1" ]; then
       if [ "$_BB_E_CREDITS" -le 1 ] && [ "$_BB_E_OVER" != "1" ]; then return 0; fi
       echo "💳 $what costs $_BB_E_CREDITS credits for $(_bb_fmt_duration "$ttl")$over — balance $_BB_E_BAL → $after."
-      read -e -r -p "   [c] continue  ·  [r] reduce time  ·  [i] increase time  ·  [s] stop: " a || { echo "🚫 Stopped."; return 1; }
+      _bvk_menu a -t "Credits" -i "💳" "c:Continue" "r:Reduce Time" "i:Increase Time" "s:Stop" || { echo "🚫 Stopped."; return 1; }
       case "${a,,}" in
         c|y|yes|continue) [ "$_BB_E_OVER" = "1" ] && _BB_OVERSIZE_OK=1; return 0 ;;
         r|reduce)   _bb_ask_time "$ttl" "New time (e.g. 12h · 2d · -1d)" "" || { echo "🚫 Stopped."; return 1; }; ttl="$_BB_NEWTTL"; _BB_TTL_OVERRIDE="$ttl" ;;
@@ -511,7 +515,7 @@ _bb_credit_gate() {
       fi
       local sug="$_BB_E_MAXS"
       echo "💳 Not enough credits: keeping $what for $(_bb_fmt_duration "$ttl") costs $_BB_E_CREDITS$over; you have $_BB_E_BAL."
-      read -e -r -p "   [r] reduce time  ·  [s] stop: " a || { echo "🚫 Stopped."; return 1; }
+      _bvk_menu a -t "Not enough credits" -i "💳" "r:Reduce Time" "s:Stop" || { echo "🚫 Stopped."; return 1; }
       case "${a,,}" in
         r|reduce)
           _bb_ask_time "$ttl" "Longest your credits cover: $(_bb_fmt_duration "$sug") — Enter to use it, or type a time" "$sug" || { echo "🚫 Stopped."; return 1; }

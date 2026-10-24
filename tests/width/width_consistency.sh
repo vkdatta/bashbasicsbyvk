@@ -16,7 +16,7 @@ chk() {  # text expected label
   [ "$a" = "$2" ] && [ "$b" = "$2" ] && ok "$3 = $2" || bad "$3: dispw=$a cells=$b expected $2"
 }
 chk "🗄️" 1 "file cabinet + VS16"
-chk "🗄️  Back up" 10 "backup prompt start"
+chk "🗄️  Back up" 10 "backup prompt start (the old emoji prompt: the width tables still agree)"
 chk "👁️" 1 "eye + VS16"; chk "⚠️" 1 "warning (text-default)"; chk "ℹ️" 1 "info (text-default)"; chk "◀️" 1 "left triangle"; chk "▶️" 1 "right triangle"; chk "✏️" 1 "pencil"; chk "⚙️" 1 "gear"; chk "⏱️" 1 "stopwatch"
 chk "🖥️" 1 "desktop"; chk "🗑️" 1 "wastebasket"
 chk "📁" 2 "folder"; chk "👤" 2 "bust"; chk "🚫" 2 "no entry"; chk "💳" 2 "card"; chk "💫" 2 "sparkle"; chk "🔴" 2 "red circle"; chk "📜" 2 "scroll"; chk "🔼" 2 "up"; chk "🔽" 2 "down"; chk "🔮" 2 "crystal ball"; chk "✅" 2 "check"; chk "❌" 2 "cross"; chk "⭐" 2 "star"
@@ -34,5 +34,8 @@ done < <(grep -rhE 'read .*-p|_ask=|p_[a-z]+=' "$ROOT/script" 2>/dev/null | grep
 # (4)
 hits=$(grep -rnE '0x1F[0-9A-Fa-f]{3}' "$ROOT/script" | grep -v 'bashbasicsbyvk_viewport.sh')
 [ -z "$hits" ] && ok "no second emoji width table" || { bad "extra width table:"; echo "$hits"; }
+# (5) the line the caret sits on has no emoji at all (the read shim also strips them at run time: _bvk_noemoji)
+hits=$(LC_ALL=C.UTF-8 grep -rnP 'read\b[^\n]*-[a-zA-Z]*p\s+"[^"]*[\x{1F000}-\x{1FFFF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{FE0F}]' "$ROOT/script" 2>/dev/null)
+[ -z "$hits" ] && ok "no emoji in any read -p prompt" || { bad "emoji in a read prompt (ask with _bvk_yn / _bvk_menu, header icons are fine):"; echo "$hits"; }
 [ "$fail" = 0 ] && echo "width consistency: OK" || echo "width consistency: FAILED"
 exit "$fail"

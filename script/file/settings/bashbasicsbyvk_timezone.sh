@@ -63,7 +63,7 @@ _tz_bootstrap() {
   echo "     Package to download : $_TZ_PKG_NAME"
   echo "     Why                 : to list every timezone and convert times correctly, including daylight saving"
   echo "     Command it will run : ${_TZ_PKG_CMD[*]}"
-  read -e -r -p "     Download and install it now? (y/N): " ans
+  _bvk_yn ans "Download and install it now?" -d n
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "  ↩️  Not installed — using the manual list of fixed offsets instead."; return 1 ;; esac
   if "${_TZ_PKG_CMD[@]}" && _tz_db_present; then echo "  💫 $_TZ_PKG_NAME installed."; return 0; fi
   echo "  🔴  The install did not finish — using the manual list of fixed offsets instead."

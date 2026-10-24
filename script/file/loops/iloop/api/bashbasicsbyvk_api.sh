@@ -325,7 +325,7 @@ _api_cmd_regen() {
   echo "🔄 Regenerate ${#ks[@]} link(s) — each gets a NEW address; the current address stops working immediately,"
   echo "   for everyone who has it. Nothing is re-uploaded, expiry and credits are unchanged."
   for k in "${ks[@]}"; do printf '   • %s\n' "$(_api_name "$k")"; done
-  read -e -r -p "   Regenerate now? (y/N): " ans
+  _bvk_yn ans "Regenerate now?" -d n
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   for k in "${ks[@]}"; do
     id="${_API_ID[$k]}"
@@ -555,12 +555,13 @@ _api_show() {            # details of link idx
 _api_cmd_open() {
   _api_pick "$1" || return 1
   _api_show "$_api_k"
-  local ans
+  local ans; local -a _ao=()
   case "$_API_SVC" in
-    backup) read -e -r -p "   r) restore here   c) copy link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans ;;
-    saved)  read -e -r -p "   r) restore here   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans ;;
-    *)      read -e -r -p "   c) copy link   g) regenerate link   e) edit expiry   a) alias/rename   x) nuke   Enter) back: " ans ;;
+    backup) _ao=("r:Restore Here" "c:Copy Link" "e:Edit Expiry" "a:Rename" "x:Nuke") ;;
+    saved)  _ao=("r:Restore Here" "e:Edit Expiry" "a:Rename" "x:Nuke") ;;
+    *)      _ao=("c:Copy Link" "g:Regenerate Link" "e:Edit Expiry" "a:Rename" "x:Nuke") ;;
   esac
+  _bvk_menu ans -t "Link actions" -i "🔗" "${_ao[@]}" || return 0       # u = back to the list (the menu has no "Enter) back" row any more)
   case "${ans,,}" in
     r) [ -n "$_API_SVC" ] && _api_cmd_restore "$((_api_k + 1))" ;;
     c) [ "$_API_SVC" = saved ] || _api_cmd_copy "$((_api_k + 1))" ;;
@@ -624,7 +625,7 @@ _api_do_edit() {         # _api_do_edit <idx> [spec]
           local cur0=$(( (${_API_EXPIRES[$k]} - ${_API_CREATED[$k]}) / 1000 ))
           if [[ "$mx0" =~ ^[0-9]+$ ]] && [ "$mx0" -gt "$cur0" ]; then
             echo "💳 Not enough credits: that extension costs $ch0, you have $bal0."
-            read -e -r -p "   Longest you can afford: total life $(_bb_fmt_duration "$mx0"). Use that instead? (y/N): " ans
+            _bvk_yn ans "Longest you can afford: total life $(_bb_fmt_duration "$mx0"). Use that instead?" -d n
             case "$ans" in [yY]|[yY][eE][sS]) total="$mx0"; nexp=$(( ${_API_CREATED[$k]} + total * 1000 )) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
           else
             echo "❌ Not enough credits: that extension costs $ch0, you have $bal0 — and there is nothing you can afford to add."; return 1
@@ -635,7 +636,7 @@ _api_do_edit() {         # _api_do_edit <idx> [spec]
       fi
     fi
   fi
-  read -e -r -p "   $(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it.$costnote Continue? (y/N): " ans
+  _bvk_yn ans "$(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it.$costnote Continue?" -d n
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total}" || return 1
   if [ "$_API_STATUS" != "200" ]; then _api_fail; return 1; fi
@@ -662,7 +663,7 @@ _api_do_nuke() {         # _api_do_nuke <idx>...
     total=$((total + ${_API_RFND[$k]}))
   done
   echo "   Refund is in whole days only; time already used rounds up to a full day."
-  read -e -r -p "   Nuke now and refund about $total credit(s)? (y/N): " ans
+  _bvk_yn ans "Nuke now and refund about $total credit(s)?" -d n
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   local ok=0 bal="" rf rd
   for k in "${ks[@]}"; do

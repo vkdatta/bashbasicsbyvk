@@ -189,12 +189,12 @@ _rule_save_as() {
   fi
   local dir; dir="$(_rl_dir "$scope" "$name")"
   if [ -e "$dir" ]; then
-    read -e -r -p "Rule '$name' exists in $scope — overwrite the expression? (y/n): " ans
+    _bvk_yn ans "Rule '$name' exists in $scope — overwrite the expression?" -d n
     [[ "$ans" == [yY] ]] || { echo "🚫 Cancelled"; return 1; }
     printf '%s\n' "$expr" > "$dir/$name.rule"
     echo "💾 Updated $scope rule '$name'"; return 0
   fi
-  read -e -r -p "📝 Description (optional): " desc
+  read -e -r -p "Description (optional): " desc
   _rl_write_bundle "$scope" "$name" "$expr" "$desc" || { echo "❌ Could not write the rule"; return 1; }
   echo "💾 Saved $scope rule '$name'   (.r to manage it)"
 }
@@ -393,15 +393,15 @@ _rl_cmd_create() {
     esac
   fi
   local head=.s; [ "$kind" = display ] && head=.d
-  read -e -r -p "📄 Rule name (e.g. mango or mango.txt): " raw
+  read -e -r -p "Rule name (e.g. mango or mango.txt): " raw
   case "$raw" in u|U) return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   name="$(_rl_clean_name "$raw")"
   if [ -z "$name" ]; then echo "🚫 Cancelled"; return 1; fi
   if ! _rule_valid_name "$name"; then echo "❌ Rule names: letters, digits, _ and - only"; return 1; fi
   if [ -e "$(_rl_dir "$kind" "$name")" ]; then echo "❌ A $kind rule called '$name' already exists"; return 1; fi
-  read -e -r -p "✏️  Expression (e.g. $head.ext png ; blank = open editor): " expr
+  read -e -r -p "Expression (e.g. $head.ext png ; blank = open editor): " expr
   case "$expr" in u|U) return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
-  read -e -r -p "📝 Description (optional): " desc
+  read -e -r -p "Description (optional): " desc
   _rl_write_bundle "$kind" "$name" "$expr" "$desc" || { echo "❌ Could not create the rule"; return 1; }
   if [ -z "$expr" ]; then
     printf '# %s — %s rule.  Write ONE expression below; this file is the rule.\n# e.g.  %s.ext png,jpg    %s.size >3mb -r    %s.rule other_rule\n' \
@@ -447,11 +447,11 @@ _rl_cmd_rename() {
   fi
   if [ "${#items[@]}" -eq 0 ]; then echo "📜  No rules here"; return 1; fi
   local num raw new
-  read -e -r -p "✏️  Rename which rule number? " num
+  read -e -r -p "Rename which rule number? " num
   case "$num" in u|U|"") return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   _rl_pick "$num" || return 1
   _rl_is_bundle "$_rl_p" || { echo "🔒 Protected item"; return 1; }
-  read -e -r -p "📝 New name for '$_rl_n': " raw
+  read -e -r -p "New name for '$_rl_n': " raw
   case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   new="$(_rl_clean_name "$raw")"
   _rule_valid_name "$new" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
@@ -510,12 +510,12 @@ _rl_cmd_save_hist() {
     *) echo "❌ This expression mixes .s and .d clauses — it can't be one rule"; return 1 ;;
   esac
   echo "💾 $expr   → will be a $kind rule"
-  read -e -r -p "📄 Rule name (u = cancel): " raw
+  read -e -r -p "Rule name (u = cancel): " raw
   case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   name="$(_rl_clean_name "$raw")"
   _rule_valid_name "$name" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
   [ -e "$(_rl_dir "$kind" "$name")" ] && { echo "❌ A $kind rule called '$name' already exists"; return 1; }
-  read -e -r -p "📝 Description (optional): " desc
+  read -e -r -p "Description (optional): " desc
   _rl_write_bundle "$kind" "$name" "$expr" "$desc" || { echo "❌ Could not save"; return 1; }
   local h tmp; h="$(_rl_hist_file)"; tmp="$h.tmp.$$"
   grep -vxF -- "$expr" "$h" > "$tmp" 2>/dev/null; mv -f -- "$tmp" "$h"
@@ -609,7 +609,7 @@ rules_menu() {
 
       clr)
         if [ "$_rl_tab" = last ]; then
-          local _a; read -e -r -p "Clear the last-used list? Your saved rules are not touched. (y/N): " _a
+          local _a; _bvk_yn _a "Clear the last-used list? Your saved rules are not touched." -d n
           if [[ "$_a" == [yY] ]]; then : > "$(_rl_hist_file)"; echo "💫 Last-used list cleared"; else echo "🚫 Cancelled"; _rl_fresh=false; fi
         else echo "🔴  clr works in the Last used tab"; _rl_fresh=false; fi ;;
 

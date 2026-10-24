@@ -51,7 +51,8 @@ _GD_TTL="${BVK_GD_TTL:-120}"
 
 # settings that live in the config file (see save_settings in bashbasicsbyvk_settings.sh)
 _GD_SET_VARS=(show_hidden_files index_mode_threshold terminal_bg_color terminal_text_color sort_mode menu_sort_str display_suffix_set
-  display_time_format group_view_levels_str compress_format upload_hidden_mode zip_hidden_mode ux_hidden_mode filter_mode
+  display_time_format group_view_levels_str compress_format upload_hidden_mode zip_hidden_mode ux_hidden_mode
+  buffer_conflict_cp buffer_conflict_mv buffer_conflict_sc buffer_conflict_bm buffer_conflict_sl filter_mode
   filter_hidden_mode filter_recursive display_filter_persist anim_outer anim_inner nuke_time_seconds
   ux_nuke_time_seconds app_timezone credit_prompts backup_mode backup_nuke_time_seconds saved_nuke_time_seconds
   snapshot_enabled snapshot_interval_seconds snapshot_keep_seconds
@@ -361,23 +362,23 @@ _gd_copy_inside() {
   _transfer_report "Copied" "$ok" "$total" "$dest" "${failed[@]}"
 }
 
-# apply this Drive's buffers (native), and offer the buffers staged OUTSIDE Drive as well
+# apply this Drive's buffers (native), and offer the buffers staged OUTSIDE Drive as well      $1 = what followed "d-" (a set name, or empty)
 _gd_dispatch() {
   local -a names=(_SP_CP_FILE _SP_MV_FILE _SP_CP_ONCE_FILE _SP_MV_ONCE_FILE)
   local n f cnt=0 g
   for n in "${names[@]}"; do
-    f="${_GD_SAVED[$n]:-}"; [ -n "$f" ] && [ -s "$f" ] && cnt=$(( cnt + $(grep -c . "$f" 2>/dev/null || echo 0) ))
+    f="${_GD_SAVED[$n]:-}"; [ -n "$f" ] && [ -s "$f" ] && cnt=$(( cnt + $(grep -c '.' "$f" 2>/dev/null || echo 0) ))
   done
   if [ "$cnt" -gt 0 ]; then
     echo "📦 $cnt item(s) are staged for copy/move OUTSIDE Google Drive (your normal buffers)."
-    local a; read -e -r -p "   Apply them into this Drive folder too? (y/N): " a
+    local a; _bvk_yn a "Apply them into this Drive folder too?" -d n
     case "$a" in
       [yY]|[yY][eE][sS])
         local -a keep=()
         for n in _SP_CP_FILE _SP_MV_FILE _SP_SC_FILE _SP_BM_FILE _SP_CP_ONCE_FILE _SP_MV_ONCE_FILE _SP_SC_ONCE_FILE _SP_BM_ONCE_FILE; do
           keep+=("${!n}"); printf -v "$n" '%s' "${_GD_SAVED[$n]:-${!n}}"
         done
-        _gd_orig_handle_staging_dispatch
+        _gd_orig_handle_staging_dispatch "$@"
         local i=0
         for n in _SP_CP_FILE _SP_MV_FILE _SP_SC_FILE _SP_BM_FILE _SP_CP_ONCE_FILE _SP_MV_ONCE_FILE _SP_SC_ONCE_FILE _SP_BM_ONCE_FILE; do
           printf -v "$n" '%s' "${keep[$i]}"; i=$((i+1))
@@ -385,7 +386,7 @@ _gd_dispatch() {
         echo ;;
     esac
   fi
-  _gd_orig_handle_staging_dispatch
+  _gd_orig_handle_staging_dispatch "$@"
 }
 
 _gd_install_wrappers() {
@@ -469,7 +470,7 @@ _gd_install_wrappers() {
 
   if _gd_rename_fn handle_staging_dispatch _gd_orig_handle_staging_dispatch; then
     handle_staging_dispatch() {
-      if [ "$_GD_ACTIVE" = 1 ]; then _gd_dispatch; else _gd_orig_handle_staging_dispatch "$@"; fi
+      if [ "$_GD_ACTIVE" = 1 ]; then _gd_dispatch "$@"; else _gd_orig_handle_staging_dispatch "$@"; fi
     }
   fi
 }
@@ -585,7 +586,7 @@ handle_gd_cmd() {
       _gd_py sync "$path" --force --recursive && echo "💫 Listed everything below $(_gd_view_path "$path"; echo "$_gd_vp")" ;;
     gd.clean)
       echo "📜  Downloaded files you did not change turn back into placeholders (they download again when needed)."
-      read -e -r -p "   Free the downloaded content of this whole Drive? (y/N): " a
+      _bvk_yn a "Free the downloaded content of this whole Drive?" -d n
       case "$a" in [yY]|[yY][eE][sS]) _gd_push; local r; r="$(_gd_py clean)"; echo "💫 ${r%%$'\t'*} file(s) freed (≈ ${r#*$'\t'} bytes of disk)." ;; *) echo "🚫 Cancelled" ;; esac ;;
     gd.push) _gd_push && echo "💫 Nothing pending." ;;
     gd.export|gd.ex) _gd_export_cmd "$1" ;;

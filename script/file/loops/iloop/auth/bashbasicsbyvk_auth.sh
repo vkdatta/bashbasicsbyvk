@@ -529,7 +529,7 @@ _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary l
     echo "   🔴  Fill Billing details first (at least NAME and EMAIL), then try again."; return 1; }
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
   body=$(_bvk_pay_build "$kind" "$amount" "$accts") || { echo "   ❌ Could not build the request (node is required)."; return 1; }
-  echo "   $4"; read -r -p "   Create the payment link? (y/n): " ans </dev/tty
+  echo "   $4"; _bvk_yn ans "Create the payment link?" -d n </dev/tty
   [[ "${ans,,}" == y* ]] || { echo "   Cancelled."; return 1; }
   echo "   ⏳ Creating link…"
   if ! _bvk_auth_call POST /api/orders "$body" creds "$_BVK_PAY_URL"; then _bvk_auth_err; return 1; fi
@@ -538,7 +538,7 @@ _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary l
   echo; echo "   💫 Payment link ready — total US\$$total · valid for 30 minutes, or until it is paid"
   echo "   🔗 $link"
   echo "   Open it, choose Razorpay or PayPal, and pay. Credits are added once the payment is confirmed."
-  read -r -p "   Open in browser now? (y/n): " ans </dev/tty
+  _bvk_yn ans "Open in browser now?" -d n </dev/tty
   [[ "${ans,,}" == y* ]] && { _bvk_pay_open "$link" || echo "   (no browser opener found — copy the link)"; }
   return 0
 }
@@ -710,7 +710,7 @@ _au_export_ids() {  # profile ids...
 _au_remove_ids() {  # profile ids...
   local ans id
   echo "🔴  Removes $# user(s) from THIS machine only. Without an export you lose the apikey/dinons."
-  read -e -r -p "Are you really sure? (y/n): " ans
+  _bvk_yn ans "Are you really sure?" -d n
   if [[ "$ans" != y && "$ans" != Y ]]; then echo "🚫 Removal cancelled"; return 1; fi
   for id in "$@"; do
     rm -f "$_BVK_AUTH_DIR/profiles/$id" "$_BVK_AUTH_DIR/profiles/$id.prev"

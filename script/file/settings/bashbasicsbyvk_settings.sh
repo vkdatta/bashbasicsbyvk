@@ -36,6 +36,13 @@ DEFAULT_SNAPSHOT_ENABLED="on"             # background snapshots while o runs:  
 DEFAULT_SNAPSHOT_INTERVAL_SECONDS=3600    # how often (1 hour). 1 minute .. 30 days
 DEFAULT_SNAPSHOT_KEEP_SECONDS=604800      # how long each snapshot is kept (7 days). 60 s .. 30 days
 
+# Buffers (c- m- k- b- s-): what to do when  c-1,3 as set1  names a set that is already in that buffer:  add | replace | deny | ask
+DEFAULT_BUFFER_CONFLICT_CP="ask"
+DEFAULT_BUFFER_CONFLICT_MV="ask"
+DEFAULT_BUFFER_CONFLICT_SC="ask"
+DEFAULT_BUFFER_CONFLICT_BM="ask"
+DEFAULT_BUFFER_CONFLICT_SL="ask"
+
 # Find & replace (f): see bashbasicsbyvk_findsettings.sh
 DEFAULT_FIND_CASE_MODE="ask"
 DEFAULT_FIND_REGEX_MODE="off"
@@ -81,6 +88,11 @@ unset saved_nuke_time_seconds
 unset snapshot_enabled
 unset snapshot_interval_seconds
 unset snapshot_keep_seconds
+unset buffer_conflict_cp
+unset buffer_conflict_mv
+unset buffer_conflict_sc
+unset buffer_conflict_bm
+unset buffer_conflict_sl
 unset find_case_mode
 unset find_regex_mode
 unset find_depth_mode
@@ -128,6 +140,16 @@ _bvk_settings_read() {
 [[ "$upload_hidden_mode" =~ ^(follow|always|never|ask)$ ]] || upload_hidden_mode=$DEFAULT_UPLOAD_HIDDEN_MODE
 [[ "$zip_hidden_mode" =~ ^(follow|always|never|ask)$ ]] || zip_hidden_mode=$DEFAULT_ZIP_HIDDEN_MODE
 [[ "$ux_hidden_mode" =~ ^(follow|always|never|ask)$ ]] || ux_hidden_mode=$DEFAULT_UX_HIDDEN_MODE
+: "${buffer_conflict_cp:=$DEFAULT_BUFFER_CONFLICT_CP}"
+: "${buffer_conflict_mv:=$DEFAULT_BUFFER_CONFLICT_MV}"
+: "${buffer_conflict_sc:=$DEFAULT_BUFFER_CONFLICT_SC}"
+: "${buffer_conflict_bm:=$DEFAULT_BUFFER_CONFLICT_BM}"
+: "${buffer_conflict_sl:=$DEFAULT_BUFFER_CONFLICT_SL}"
+for _bc in cp mv sc bm sl; do
+  _bcv="buffer_conflict_$_bc"; _bcd="DEFAULT_BUFFER_CONFLICT_${_bc^^}"
+  [[ "${!_bcv}" =~ ^(add|replace|deny|ask)$ ]] || printf -v "$_bcv" '%s' "${!_bcd}"
+done
+unset _bc _bcv _bcd
 : "${filter_mode:=$DEFAULT_FILTER_MODE}"
 : "${filter_hidden_mode:=$DEFAULT_FILTER_HIDDEN_MODE}"
 : "${filter_recursive:=$DEFAULT_FILTER_RECURSIVE}"
@@ -284,6 +306,11 @@ save_settings() {
     echo "upload_hidden_mode=$upload_hidden_mode"
     echo "zip_hidden_mode=$zip_hidden_mode"
     echo "ux_hidden_mode=$ux_hidden_mode"
+    echo "buffer_conflict_cp=$buffer_conflict_cp"
+    echo "buffer_conflict_mv=$buffer_conflict_mv"
+    echo "buffer_conflict_sc=$buffer_conflict_sc"
+    echo "buffer_conflict_bm=$buffer_conflict_bm"
+    echo "buffer_conflict_sl=$buffer_conflict_sl"
     echo "filter_mode=$filter_mode"
     echo "filter_hidden_mode=$filter_hidden_mode"
     echo "filter_recursive=$filter_recursive"
@@ -564,6 +591,11 @@ _st_reset_act() {
   upload_hidden_mode=$DEFAULT_UPLOAD_HIDDEN_MODE
   zip_hidden_mode=$DEFAULT_ZIP_HIDDEN_MODE
   ux_hidden_mode=$DEFAULT_UX_HIDDEN_MODE
+  buffer_conflict_cp=$DEFAULT_BUFFER_CONFLICT_CP
+  buffer_conflict_mv=$DEFAULT_BUFFER_CONFLICT_MV
+  buffer_conflict_sc=$DEFAULT_BUFFER_CONFLICT_SC
+  buffer_conflict_bm=$DEFAULT_BUFFER_CONFLICT_BM
+  buffer_conflict_sl=$DEFAULT_BUFFER_CONFLICT_SL
   filter_mode=$DEFAULT_FILTER_MODE
   filter_hidden_mode=$DEFAULT_FILTER_HIDDEN_MODE
   filter_recursive=$DEFAULT_FILTER_RECURSIVE

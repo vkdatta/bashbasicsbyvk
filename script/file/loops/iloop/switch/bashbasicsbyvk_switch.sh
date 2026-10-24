@@ -253,7 +253,7 @@ _sw_remove_paths() {
   fi
   n=${#selected_items[@]}
   [ "$n" -eq 0 ] && { echo "📜  Nothing selected"; return 0; }
-  read -e -r -p "Remove $n bookmark(s)? Only the bookmark goes — what it points to is NOT touched. (y/n): " ans || return 0
+  _bvk_yn ans "Remove $n bookmark(s)? Only the bookmark goes — what it points to is NOT touched." -d n || return 0
   case "${ans,,}" in y|yes) ;; *) echo "Cancelled."; return 0 ;; esac
   local it removed=0
   for it in "${selected_items[@]}"; do
@@ -614,9 +614,8 @@ switch_menu() {
 
  clr|CLR)
         if [ "$_sw_tab" = "recents" ]; then
-          printf 'Clear all recents? This only clears the list, not your files. [y/N] '
           local _clr_ans
-          IFS= read -e -r _clr_ans
+          _bvk_yn _clr_ans "Clear all recents? This only clears the list, not your files." -d n
           if [[ "${_clr_ans,,}" == "y" ]]; then
             : > "$_SW_RECENTS_LIST"
             echo "💫 Recents list cleared."
@@ -721,10 +720,10 @@ switch_menu() {
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_refresh
         ;;
 
-      d-)           handle_staging_dispatch ;;
+      d-|d-\ *)     handle_staging_dispatch "${_sw_choice:2}" ;;
       v-)           handle_staging_view ;;
 
-      c-*|m-*|s-*)
+      c-*|m-*|k-*|s-*)
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_staging_stage "$_sw_choice"
         ;;
 

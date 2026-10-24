@@ -49,7 +49,7 @@ It has two parts:
 
 - **Navigate:** directories, breadcrumb jumps, bookmarks, recents, per-folder favourites, name filter, index mode for very large folders.
 - **Act:** run, view, edit (nano), copy contents to clipboard, delete, erase, overwrite from clipboard, rename, share.
-- **Stage:** `c-` copy, `m-` move, `s-` shortcut, `b-` bookmark, applied with `d-` at the destination. Persistent buffers (`c--`, `m--`) for repeated use.
+- **Stage:** `c-` copy, `m-` move, `k-` shortcut, `b-` bookmark, applied with `d-` at the destination. Persistent buffers (`c--`, `m--`, `k--`, `b--`) for repeated use. Name a group with `as`: `m-a as set1`, `c-1,2 as set2`; then `d- set1` applies only that set. `s-` / `s--` keep named selections for `fx → <action>.selected.items`. `v-` shows every buffer by set; Settings → Buffers decides what happens when a name is used twice (add / replace / deny / ask).
 - **Select with expressions:** by extension, size, date, name, duplicates, empty items, CSV lists. Combine with `&`, `|`, `!` and grouping.
 - **Display rules:** show only what you care about in a given folder (`.d.ext py`), saved as presets.
 - **Batch:** create or delete many files and folders, find and replace in names, in contents or in both (plain text or regex, flat or recursive), CSV-driven rename, delete by date or extension.

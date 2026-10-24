@@ -105,7 +105,7 @@ tmx_do $S d Enter; k "cc" Enter; tmx_wait $S 8 "Cheat codes"; s="$(scr)"
 tmx_do $S u Enter; tmx_do $S u Enter        # (same two steps as before: close the report, then back out of the screen)
 
 tmx_do $S c Enter; k 1 Enter; tmx_wait $S 8 "Enter folder names"; k "cc" Enter; tmx_wait $S 8 "Cheat codes"; k "=dis" Enter; tmx_wait $S 8 "1) disk"; k 1 Enter
-want_sel "📂 Enter folder names (separated by ,): disk" && ok "e2e: a text prompt gets the pick too" || { bad "text prompt pick"; lastsel "$(scr)"; }
+want_sel "Enter folder names (separated by ,): disk" && ok "e2e: a text prompt gets the pick too" || { bad "text prompt pick"; lastsel "$(scr)"; }
 echo "  tmux part: $(t_since)s"
 
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"

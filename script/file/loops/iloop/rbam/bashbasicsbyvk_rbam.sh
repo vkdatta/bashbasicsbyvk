@@ -135,7 +135,7 @@ _rb_export() {
   echo "   $P_MAIL $d3"
   echo
   local ans f
-  read -e -r -p "   Save it to a file in this folder too? (y/N): " ans
+  _bvk_yn ans "Save it to a file in this folder too?" -d n
   case "$ans" in [yY]*)
     f="$PWD/rbam-card.txt"
     [ -e "$f" ] && f="$PWD/rbam-card-$(date +%s).txt"

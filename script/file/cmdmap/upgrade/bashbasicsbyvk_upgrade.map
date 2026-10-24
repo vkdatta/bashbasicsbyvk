@@ -50,6 +50,7 @@ uz-        .mapto()  block()
 c-         .mapto()  block()
 m-         .mapto()  m-         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
 s-         .mapto()  block()
+k-         .mapto()  block()
 b-         .mapto()  block()
 d-         .mapto()  block()
 v-         .mapto()  block()

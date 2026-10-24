@@ -299,7 +299,7 @@ _csv_resolve_report() {
 _csv_append_batch() {
     local file="$1"; shift
     local -a existing=() fresh=()
-    _sp_load existing "$file"
+    _sp_load_set existing "$file" ""     # the flat items (a named set may hold the same path)
     local -A _ab_seen=()
     local p
     for p in "${existing[@]}"; do _ab_seen["k:$p"]=1; done

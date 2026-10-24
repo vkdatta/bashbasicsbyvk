@@ -1,5 +1,5 @@
 create_files() {
-  read -e -p "📄 Enter filenames (separated by ,): " filelist
+  read -e -p "Enter filenames (separated by ,): " filelist
   IFS=',' read -ra files <<< "$filelist"
   local skipped=0
   for file in "${files[@]}"; do
@@ -31,7 +31,7 @@ create_files() {
 }
 
 create_dirs() {
-  read -e -p "📂 Enter folder names (separated by ,): " dirlist
+  read -e -p "Enter folder names (separated by ,): " dirlist
   IFS=',' read -ra dirs <<< "$dirlist"
   local skipped=0
   for dir in "${dirs[@]}"; do
