@@ -76,7 +76,7 @@ _SL_MSG=""            # file the animator reads its label from
 _SL_LABEL=""
 _SL_NEWLABEL=""
 _SL_SIGT=0            # µs: when the animator's clock was last (re)started
-_SL_GRACE=2000000     # µs a wait must last before the bar shows (2 s)
+_SL_GRACE=200000      # µs a wait must last before the bar shows (.2s)
 _SL_PULSE_US=50000    # µs between two "A" letters during a burst of output
 
 # where to draw: the controlling terminal
