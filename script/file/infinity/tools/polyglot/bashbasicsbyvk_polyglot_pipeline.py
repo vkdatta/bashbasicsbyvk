@@ -88,7 +88,7 @@ def run(cfg: Config, ui, paths=None) -> Result:
             files[rel] = FileInfo(rel, lang, prefix[-1], prefix)
             blocks, used = extract_file(rel, text, LANGUAGES[lang], ts, cfg.use_names)
             if cfg.parser == "treesitter" and used != "tree-sitter":
-                raise AnalysisError(f"tree-sitter grammar for '{lang}' is not installed (auto-install failed or --no-install; pip install {LANGUAGES[lang].ts_module.replace('_', '-')})")
+                raise AnalysisError(f"tree-sitter grammar for '{lang}' is not installed (declined, the install failed or --no-install; install it with: bashbasicsbyvk_deps.sh {LANGUAGES[lang].ts_module})")
             usage[lang] = used
             extracted += len(blocks)
             for b in blocks:

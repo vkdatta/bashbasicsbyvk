@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+External dependencies were handled by many separate, private bootstrappers (pipboot, polyglot_bootstrap, the daemon's pip call, gitpush's gh installer, timezone's package table, archive tool tables) and by "X not found, install it with ..." messages that exited. A missing tool should instead open one Installer menu (list, yes/no) driven by one central registry of dependencies and of which menu needs what.
+
+HOW DID YOU DEBUG
+Read the owner's audit CSV (C and Go rows ignored: compiled before distribution) and grepped script/ for command -v / pkg install / apt install / pip install / npm install / npx --yes / "not found". Checked each CSV claim against the code: smartload.sh (rclone), settings_desc.sh (7z), cmd/sast and select_expr (Node.js: a python variable named node / a python tool) and polyglot's "__future__" are false positives of the static scan; github screens only read gh's config file, so gh is optional there. Ran tests/deps/deps_test.sh (fake package manager, no real install) and the new polyglot unit tests. The full suite (tests/run.sh all) and the interactive _bvk_yn menu path were NOT run here (no tmux / terminal); that path is verified by reading only.
+
+CAUSE
+No single place knew what the app depends on, so every file grew its own detection, message and install recipe; they drifted (different pip flags, retry rules, prompts, one silent npx download).
+
+FIX
+Added script/file/engine/bashbasicsbyvk_deps.list (registry + menu-to-dependency map), bashbasicsbyvk_deps.sh (engine: parallel probe, Installer menu via _bvk_yn or a plain yes/no, system packages in one call, pip and npm lanes in parallel, recipes for gh, quiet mode for the daemon, optional-decline memory), bashbasicsbyvk_deps.py (python door). Deleted bashbasicsbyvk_pipboot.py and bashbasicsbyvk_polyglot_bootstrap.py. Rewired archive_formats, bundle_io, staging svc/ux/upload, fileapi crypto check, cmd/copy, gitpush, py_audit, localhost, timezone, recents daemon, polyglot, js_audit, xtract, gen_sql, recover wrangler (the silent npx fallback is gone), github engine, gdrive, transfer, ai, auth, run, upgrade/pending/snapshot/github menu entries, and a startup check of python3 in o. Added AGENTS.md rule 12, tests/deps. Lesson: a new dependency is a line in the registry, never a private check.

@@ -144,9 +144,8 @@ if command -v python3 >/dev/null 2>&1; then
 elif command -v python >/dev/null 2>&1; then
     PYTHON="python"
 else
-    echo
-    echo "Python is not installed."
-    exit 1
+    bashbasicsbyvk_deps.sh -c "Local web server" python3 || exit 1
+    PYTHON="python3"
 fi
 
 start_server() {

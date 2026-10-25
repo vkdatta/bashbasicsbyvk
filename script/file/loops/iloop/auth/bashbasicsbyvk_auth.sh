@@ -182,7 +182,7 @@ TXT
   [ -z "$mail" ] && { echo "↩️  Cancelled."; return; }
   _bvk_auth_mail_ok "$mail" || { echo "❌ Invalid input (max 256 chars; no spaces, quotes, < > \` \$ \\ ; | & ( ) { })."; return; }
   [ -r "$_BVK_TELEMETRY_DIR/uuid" ] || { echo "❌ No telemetry id found (is BVK_TELEMETRY=off?). Creating a user needs it for abuse protection. Restart 'o' once with telemetry on."; return; }
-  command -v node >/dev/null 2>&1 || { echo "❌ node is required."; return; }
+  _dep_need -c "Creating a user" nodejs || return
 
   P_MAIL="$mail"; P_DISEPS=$(_bvk_auth_gen_codes $_BVK_DISEPS_N); P_DINONS=$(_bvk_auth_gen_codes $_BVK_DINONS_N)
   P_APIKEY=$(_bvk_auth_gen_apikey); local fek wrapped hash

@@ -2,6 +2,13 @@
 import re
 import time
 import os
+import sys
+try:        # requests, bs4, pandas, numpy and openpyxl: the central Installer menu offers what is missing (bashbasicsbyvk_deps.list, feature data.xtract)
+    import bashbasicsbyvk_deps as _deps
+    if not _deps.ensure("data.xtract", context="xtract"):
+        sys.exit(1)
+except ImportError:
+    pass
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -10,25 +17,6 @@ import sys
 import subprocess
 import math
 import numpy as np
-
-def check_dependencies():
-    """Ensure required packages are installed"""
-    try:
-        import openpyxl
-        return True
-    except ImportError:
-        print("\n❌ Missing required package: openpyxl")
-        print("This package is needed for Excel export functionality")
-        choice = input("Install it now? (y/n): ").lower()
-        if choice == 'y':
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl"])
-                print("💫 openpyxl installed successfully!")
-                return True
-            except:
-                print("🚨 Installation failed. CSV export will still work")
-                return False
-        return False
 
 def clean_sheet_name(name):
     """Clean invalid characters from Excel sheet names"""
@@ -467,7 +455,7 @@ def save_content(content, content_type, output_path, source_url=None,
                 import openpyxl
             except ImportError:
                 print("❌ Excel support requires openpyxl package")
-                print("Run: pip install openpyxl")
+                print("Run: bashbasicsbyvk_deps.sh openpyxl")
                 print("Saving as CSV instead")
                 csv_path = os.path.splitext(output_path)[0] + '.csv'
                 return save_content(content, content_type, csv_path, source_url, source_text, recursion_depth)
@@ -557,7 +545,7 @@ def main():
     print("🌐 XTRACT - WEB CONTENT EXTRACTOR".center(50))
     print("="*50)
     
-    excel_support = check_dependencies()
+    excel_support = True      # openpyxl is part of the data.xtract dependencies checked at start-up
     
     content_type = input("\nExtract tables or links? (t/l): ").strip().lower()
     if content_type not in ['t', 'l']:

@@ -864,19 +864,13 @@ transfer_menu() {
       fi
       ;;
     3)
-      if ! command -v rclone >/dev/null 2>&1; then
-        echo "❌ rclone not found in PATH."
-        return
-      fi
+      _dep_need -c "Transfer to Google Drive" rclone || return
       final_dest="gdrive:/rclone"
       echo "📍 Destination: Google Drive ($final_dest)"
       dest_ok=true
       ;;
     4)
-      if ! command -v gcloud >/dev/null 2>&1; then
-        echo "❌ gcloud not found in PATH."
-        return
-      fi
+      _dep_need -c "Transfer to Google Cloud Storage" gcloud || return
       gcloud_navigator "dest"
       if [ $? -eq 0 ]; then
         final_dest="$gcloud_nav_result_path"

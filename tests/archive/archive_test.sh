@@ -4,7 +4,7 @@
 # A format whose tool is not installed is reported as SKIP (not verified), never as a pass.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; source "$ROOT/tests/wait_lib.sh"
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }; skip() { echo "  SKIP $* (not verified)"; }
-source "$(bvk_need bashbasicsbyvk_archive_formats.sh)"; source "$(bvk_need bashbasicsbyvk_hidefiles.sh)" 2>/dev/null
+source "$(bvk_need bashbasicsbyvk_deps.sh)"; source "$(bvk_need bashbasicsbyvk_archive_formats.sh)"; source "$(bvk_need bashbasicsbyvk_hidefiles.sh)" 2>/dev/null
 source "$(bvk_need bashbasicsbyvk_staging_archive.sh)"
 source "$(bvk_need bashbasicsbyvk_viewport.sh)" 2>/dev/null
 declare -F _bvk_name_too_long >/dev/null || { _bvk_name_too_long() { return 1; }; }

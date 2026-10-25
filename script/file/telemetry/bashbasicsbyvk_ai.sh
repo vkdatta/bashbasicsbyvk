@@ -87,7 +87,7 @@ if fmt:
             wb.save(base + ".xlsx")
             print(f"📗 Saved {len(rows)} rows -> {base}.xlsx"); sys.exit(0)
         except ImportError:
-            print("🔴  openpyxl not installed (pip install openpyxl); saving CSV instead.")
+            print("🔴  openpyxl is not installed (bashbasicsbyvk_deps.sh openpyxl); saving CSV instead.")
     with open(base + ".csv", "w", newline="") as f:
         w = csv.writer(f); w.writerow(cols); w.writerows(matrix)
     print(f"📄 Saved {len(rows)} rows -> {base}.csv"); sys.exit(0)
@@ -153,7 +153,7 @@ _bvk_ai_ext_summary() {  # extension -> count for the current dir (lets the mode
 handle_ai_cmd() {
   local q="${1#.ai}"
   q="${q#"${q%%[![:space:]]*}"}"; q="${q%"${q##*[![:space:]]}"}"
-  command -v python3 >/dev/null 2>&1 || { echo "❌ python3 is required for .ai"; return 1; }
+  _dep_need -c ".ai" ai || return 1
 
   local mode="query" from="" to="" fmt="" payload_args=()
   case "$q" in
@@ -190,6 +190,7 @@ handle_ai_cmd() {
   local body resp hdr rc
   body=$(mktemp) && resp=$(mktemp) && hdr=$(mktemp) || return 1
   chmod 600 "$body" "$resp" "$hdr" 2>/dev/null
+  case "${q,,}" in *excel*|*xlsx*|*spreadsheet*) _dep_need -c ".ai Excel report (without it a CSV is saved instead)" openpyxl || true ;; esac
   python3 - "$mode" "$q" "$from" "$to" "$fmt" "$(date +%F)" "$(_bvk_ai_ext_summary)" > "$body" <<'PY'
 import json, sys
 m, q, f, t, fmt, today, exts = sys.argv[1:8]

@@ -23,9 +23,15 @@ def read_file(filepath, ext):
             return None, None
         return [h.strip() for h in rows[0]], rows[1:]
     else:
-        if not HAS_PANDAS:
-            print("\n  ERROR: pandas + openpyxl required.  pip install pandas openpyxl\n")
-            return None, None
+        if not HAS_PANDAS:        # Excel input needs pandas + openpyxl: the central Installer menu offers them
+            try:
+                import bashbasicsbyvk_deps as _deps
+                _deps.ensure("pandas", "openpyxl", context="Excel input for gen_sql")
+                import pandas as pd
+                globals()["pd"] = pd
+            except ImportError:
+                print("\n  ERROR: pandas + openpyxl required (not installed, or declined).  Run: bashbasicsbyvk_deps.sh data.gen_sql -o\n")
+                return None, None
         df = pd.read_excel(filepath, dtype=str, keep_default_na=False, na_values=[])
         return list(df.columns), df.values.tolist()
 

@@ -91,8 +91,7 @@ elif [ "$COPY_CMD" == "osc52-direct" ]; then
 
 else
 
-    if ! command -v node &> /dev/null; then
-        echo "❌ Error: 'node' is required to encrypt before uploading, but wasn't found in PATH."
+    if ! _dep_need -c "Copying a large file through the cloud bridge" cmd.copy; then
         [ "$TEMP_MODE" = true ] && rm -f "$FILE"
         exit 1
     fi

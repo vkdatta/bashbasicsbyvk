@@ -1,0 +1,145 @@
+# bashbasicsbyvk_deps.list - THE central registry of external dependencies (data, never sourced).
+#
+# ONE place that says: which outside tools / packages the app can need, how to detect each, how to install each on each package
+# manager, and which menu / command / tool needs which of them.  The engine is bashbasicsbyvk_deps.sh (bash) with the thin
+# python wrapper bashbasicsbyvk_deps.py.  AGENTS.md rule 12: every NEW external dependency is added HERE and asked for through the engine
+# (`_dep_need <id|feature>...`, `bashbasicsbyvk_deps.sh <id|feature>...`, `deps.ensure(...)`), never with a private `command -v`/`pip install`/"please install X".
+# Build-time toolchains (C compiler, make, Go) are NOT listed: those binaries are compiled before distribution.
+#
+# Line types ('|' separates fields, '#' starts a comment, a blank line is ignored):
+#
+#   D|id|kind|probe|packages|label|purpose|needs|flags|note
+#       id        lower-case name other code uses ("7z", "numpy").  A feature may not reuse a dependency id.
+#       kind      cmd    a program on PATH                      probe = command names, comma separated; ONE of them is enough (7zz,7z,7za,7zr)
+#                 pymod  a Python module (system package)       probe = module name
+#                 pip    a Python package installed with pip    probe = module[:distribution:minimum.version]
+#                 npm    a global npm package                   probe = the command it provides
+#                 file   a data file installed by a package     probe = paths, comma separated, ONE existing is enough ($PREFIX is expanded)
+#       packages  `manager=name;manager=name`, manager = termux apt dnf yum pacman apk zypper brew (system) | pip | npm | * (any system manager).
+#                 `a,b` = alternatives: the first one the manager knows is used (7zip,p7zip-full).
+#                 `sys:name` (value for a pip dep) = install it with the SYSTEM manager on that platform instead of pip (Termux: python-numpy).
+#                 `@recipe` or `@recipe+dep+dep` = a multi-step install the engine knows (needs those deps first).
+#                 A manager that is missing from the list = "not installable here": the dependency is skipped on that platform (termux-api on Linux).
+#       label     what the person sees          purpose   one line: what it is needed for (shown in the Installer menu)
+#       needs     other dependency ids that must be installed first, space separated
+#       flags     auto = the background daemon may install it silently (user-space pip only, retried at most once a day)
+#       note      extra line shown in the menu (e.g. an Android app that cannot be installed from the shell)
+#
+#   G|prefix|pip-name-prefix|version-suffix|needs|label|purpose
+#       a family of pip packages: id `tree_sitter_python` -> pip `tree-sitter-python>=0.23`, module `tree_sitter_python`.
+#
+#   F|feature|title|required|optional
+#       a menu / command / tool and what it needs.  `required` and `optional` are dependency ids, space separated;
+#       `a/b` = either one is enough (the first is what gets installed).  `optional` ones are only asked for when the caller passes -o.
+#       A feature id contains a dot or is not a dependency id.
+#
+# Order matters only inside the file for readability.
+
+# ── system programs ──────────────────────────────────────────────────────────
+D|python3|cmd|python3|termux=python;apt=python3;dnf=python3;yum=python3;pacman=python;apk=python3;zypper=python3;brew=python|Python 3|runs the menus, the file viewport, search, the file index and most tools|||
+D|pip|pymod|pip|termux=python-pip;apt=python3-pip;dnf=python3-pip;yum=python3-pip;pacman=python-pip;apk=py3-pip;zypper=python3-pip;brew=python|pip|installs the Python libraries listed below|python3||
+D|nodejs|cmd|node|termux=nodejs;apt=nodejs;dnf=nodejs;yum=nodejs;pacman=nodejs;apk=nodejs;zypper=nodejs;brew=node|Node.js|file transfer keys, encryption helpers and the code scanner|||
+D|curl|cmd|curl|*=curl|curl|talks to the web (sign-in, uploads, updates, telemetry)|||
+D|git|cmd|git|*=git|git|reads and writes repositories (GitHub screens, upgrade, push)|||
+D|gh|cmd|gh|termux=gh;apt=@gh-apt+curl;dnf=@gh-dnf;yum=@gh-dnf;pacman=github-cli;apk=github-cli;zypper=gh;brew=gh|GitHub CLI (gh)|signs in to GitHub and creates / pushes repositories|git||
+D|rclone|cmd|rclone|*=rclone|rclone|talks to Google Drive and other clouds|||
+D|sqlite3|cmd|sqlite3|termux=sqlite;apt=sqlite3;dnf=sqlite;yum=sqlite;pacman=sqlite;apk=sqlite;zypper=sqlite3;brew=sqlite|SQLite|reads the browser / app databases for the load-time report|||
+D|tzdata|file|$TZDIR/Asia/Kolkata,/usr/share/zoneinfo/Asia/Kolkata,/usr/lib/zoneinfo/Asia/Kolkata,/usr/share/lib/zoneinfo/Asia/Kolkata,/etc/zoneinfo/Asia/Kolkata,$PREFIX/share/zoneinfo/Asia/Kolkata,/system/usr/share/zoneinfo/tzdata|termux=tzdata;apt=tzdata;dnf=tzdata;yum=tzdata;pacman=tzdata;apk=tzdata;zypper=timezone|Timezone database|lists every timezone and converts times correctly, including daylight saving|||
+
+# ── archive tools ────────────────────────────────────────────────────────────
+D|7z|cmd|7zz,7z,7za,7zr|termux=7zip;apt=7zip,p7zip-full;dnf=p7zip,p7zip-plugins;yum=p7zip;pacman=p7zip;apk=7zip;zypper=7zip,p7zip;brew=sevenzip,p7zip|7-Zip|makes and opens .7z archives (and opens .zip when unzip is missing)|||
+D|zip|cmd|zip|*=zip|zip|makes .zip and .skill archives|||
+D|unzip|cmd|unzip|*=unzip|unzip|opens .zip and .skill archives|||
+D|tar|cmd|tar|*=tar|tar|makes and opens .tar archives (and the compressed tar variants)|||
+D|gzip|cmd|gzip|*=gzip|gzip|compresses .tar.gz|||
+D|xz|cmd|xz|termux=xz-utils;apt=xz-utils;dnf=xz;yum=xz;pacman=xz;apk=xz;zypper=xz;brew=xz|xz|compresses .tar.xz|||
+D|bzip2|cmd|bzip2|*=bzip2|bzip2|compresses .tar.bz2|||
+D|zstd|cmd|zstd|*=zstd|zstd|compresses .tar.zst|||
+D|lz4|cmd|lz4|*=lz4|lz4|compresses .tar.lz4|||
+
+# ── interpreters for "run this file" (r) that are not part of the base system ──
+D|zsh|cmd|zsh|*=zsh|zsh|runs .zsh files|||
+D|php|cmd|php|termux=php;apt=php-cli;dnf=php-cli;yum=php-cli;pacman=php;apk=php;zypper=php;brew=php|PHP|runs .php files|||
+D|perl|cmd|perl|*=perl|Perl|runs .pl files|||
+D|ruby|cmd|ruby|*=ruby|Ruby|runs .rb files|||
+D|gcloud|cmd|gcloud||Google Cloud CLI (gcloud)|copies to and from Google Cloud Storage|||Not in the system package lists: install it from https://cloud.google.com/sdk/docs/install
+
+# ── Termux only (not installable elsewhere: skipped on a normal Linux / macOS) ──
+D|termux-tools|cmd|termux-open-url|termux=termux-tools|Termux tools (termux-open, termux-open-url, termux-share)|opens links and files and shares them with other Android apps|||
+D|termux-api|cmd|termux-clipboard-set|termux=termux-api|Termux:API (clipboard)|reads and writes the Android clipboard|||Also install the Termux:API app (F-Droid / GitHub); the command alone does nothing without it.
+
+# ── npm ──────────────────────────────────────────────────────────────────────
+D|wrangler|npm|wrangler|npm=wrangler|Cloudflare Wrangler CLI|reads a Cloudflare Worker's real configuration (recover)|nodejs||
+
+# ── Python packages (pip) ────────────────────────────────────────────────────
+D|numpy|pip|numpy|termux=sys:python-numpy;pip=numpy|numpy|number crunching for polyglot and the data tools|pip||
+D|pandas|pip|pandas|termux=sys:python-pandas;pip=pandas|pandas|reads and writes spreadsheets / tables for the data tools|pip numpy||
+D|openpyxl|pip|openpyxl|pip=openpyxl|openpyxl|reads and writes .xlsx files|pip||
+D|rich|pip|rich|pip=rich|rich|coloured console tables and progress bars|pip||
+D|esprima|pip|esprima|pip=esprima|esprima|parses JavaScript for the JS audit (otherwise a rougher regex scan is used)|pip||
+D|watchdog|pip|watchdog|pip=watchdog|watchdog|watches folders so Recents stays up to date|pip|auto|
+D|pyright|pip|pyright|pip=pyright|pyright|type-checks Python for the Python audit|pip||
+D|requests|pip|requests|pip=requests|requests|downloads web pages for xtract|pip||
+D|bs4|pip|bs4|pip=beautifulsoup4|beautifulsoup4|reads web pages for xtract|pip||
+D|tree_sitter|pip|tree_sitter:tree-sitter:0.22|pip=tree-sitter>=0.23|tree-sitter|exact code parsing for polyglot (otherwise the regex parser is used)|pip||
+G|tree_sitter_|tree-sitter-|>=0.23|tree_sitter|tree-sitter grammar|exact parsing of one more language for polyglot
+
+# ── menus / commands / tools  ->  what they need  (this IS the dependency map) ──
+# The app and its engines
+F|app.core|The app (menus, viewport, search)|python3|
+F|select|Select / filter / daemon commands|python3|
+F|select.expr|Select by expression|python3|
+F|timezone|Timezone picker (Settings)|tzdata|python3
+F|recents.daemon|Recents background watcher|python3|watchdog
+F|help|Help screens|python3|termux-tools
+F|run|Run files (r)|7z|termux-tools zsh php perl ruby
+F|debug.health|Health check|python3|git curl nodejs
+F|debug.loadtime|Load-time report|python3|curl git nodejs rclone sqlite3 pip
+# Archives (z-, uz-): one feature per format and direction
+F|archive.create.zip|Make a .zip|zip|
+F|archive.create.skill|Make a .skill|zip|
+F|archive.create.tar|Make a .tar|tar|
+F|archive.create.targz|Make a .tar.gz|tar gzip|
+F|archive.create.tarxz|Make a .tar.xz|tar xz|
+F|archive.create.tarbz2|Make a .tar.bz2|tar bzip2|
+F|archive.create.7z|Make a .7z|7z|
+F|archive.create.tarzst|Make a .tar.zst|tar zstd|
+F|archive.create.tarlz4|Make a .tar.lz4|tar lz4|
+F|archive.extract.zip|Open a .zip|unzip/7z|
+F|archive.extract.skill|Open a .skill|unzip/7z|
+F|archive.extract.tar|Open a .tar|tar|
+F|archive.extract.targz|Open a .tar.gz|tar gzip|
+F|archive.extract.tarxz|Open a .tar.xz|tar xz|
+F|archive.extract.tarbz2|Open a .tar.bz2|tar bzip2|
+F|archive.extract.7z|Open a .7z|7z|
+F|archive.extract.tarzst|Open a .tar.zst|tar zstd|
+F|archive.extract.tarlz4|Open a .tar.lz4|tar lz4|
+F|bundle.export|Export everything to a zip (ux)|zip|
+F|bundle.import|Import everything from a zip (ui)|unzip|
+# FileAPI: staging, upload, pending, snapshot, link manager, auth
+F|fileapi|FileAPI transfers|curl nodejs|termux-tools
+F|fileapi.pack|FileAPI pack and send|tar gzip|
+F|fileapi.upload|FileAPI upload (up-)|curl nodejs tar gzip|termux-tools
+F|fileapi.ux|FileAPI encrypt (ux-)|curl tar gzip|
+F|fileapi.pending|Pending uploads (pn)|nodejs|
+F|fileapi.snapshot|Snapshots (sn)|nodejs|
+F|auth|Sign in / link manager|curl nodejs|termux-tools termux-api
+F|api|API links (api)|python3|termux-api
+F|cmd.copy|Copy to the cloud clipboard (bashbasicsbyvk_copy)|curl nodejs|termux-tools termux-api
+F|cmd.overwrite|Overwrite from the clipboard (bashbasicsbyvk_overwrite)||termux-api
+F|cmd.sast|Static code scan (bashbasicsbyvk_sast)|python3|
+F|telemetry|Usage ping|curl|
+F|ai|AI helper (.ai)|curl python3|openpyxl
+# GitHub, upgrade and Google Drive
+F|upgrade|Upgrade loop (-u)|curl git|
+F|github|GitHub screens (fx > github)|python3|git gh
+F|gitpush|Push a folder to GitHub (bashbasicsbyvk_gitpush)|git gh|nodejs
+F|gdrive|Google Drive (fx > google drive)|python3 rclone|
+F|transfer|Transfers (rclone based)|rclone|gcloud
+F|cloudflare.recover|Cloudflare recover|python3|wrangler
+# Tools under infinity/
+F|polyglot|Polyglot duplicate finder|python3 numpy|rich openpyxl tree_sitter
+F|js_audit|JavaScript audit|python3 openpyxl|esprima
+F|py_audit|Python audit|python3 pip pyright openpyxl|
+F|data.xtract|Web / spreadsheet extractor (xtract)|python3 pip requests bs4 pandas numpy openpyxl|
+F|data.gen_sql|CSV / Excel to SQL (gen_sql)|python3|pandas openpyxl

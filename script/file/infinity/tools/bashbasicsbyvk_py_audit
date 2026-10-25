@@ -2,21 +2,9 @@
 
 set -euo pipefail
 
-echo "This script uses the external packages 'pyright' and 'openpyxl'."
-read -e -r -p "Do you want to proceed? (Y/N): " REPLY
-
-case "$REPLY" in
-    [Yy]) ;;
-    *)
-        echo "Cancelled."
-        exit 0
-        ;;
-esac
-
-command -v python3 >/dev/null 2>&1 || {
-    echo "❌ python3 not found."
-    exit 1
-}
+# pyright, openpyxl, pip and python3 come from the central dependency registry (feature py_audit): missing ones get the Installer menu.
+bashbasicsbyvk_deps.sh -c "Python audit" py_audit || exit 1
+PATH="$PATH:$HOME/.local/bin"       # a fresh user-space install puts pyright here
 
 TARGET="${1:-$(pwd)}"
 
@@ -26,32 +14,6 @@ cd "$TARGET" || {
 }
 
 echo "Working directory: $TARGET"
-
-pip_install() {
-    python3 -m pip install --break-system-packages "$@"
-}
-
-if ! command -v pyright >/dev/null 2>&1; then
-    echo "📦 Installing pyright..."
-    pip_install pyright
-fi
-
-python3 - <<'PY'
-import importlib.util
-import subprocess
-import sys
-
-if importlib.util.find_spec("openpyxl") is None:
-    print("Installing openpyxl...")
-    subprocess.check_call([
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--break-system-packages",
-        "openpyxl",
-    ])
-PY
 
 TMP_JSON="$(mktemp)"
 trap 'rm -f "$TMP_JSON"' EXIT

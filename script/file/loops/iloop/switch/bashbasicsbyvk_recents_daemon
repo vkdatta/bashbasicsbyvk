@@ -9,9 +9,9 @@ Watcher backends:
   • polling fallback   — used when watchdog isn't available
 
 Self-install:
-  On first run, if watchdog is missing, the daemon attempts a one-shot
-  `pip install --user watchdog` in the background. Success is logged and
-  picked up on the next restart. Failures are logged and the daemon stays
+  If watchdog is missing, the daemon asks the central dependency installer
+  (bashbasicsbyvk_deps, quiet mode: no menu, user-space pip only, once a day)
+  in the background. Success is logged and picked up on the next restart. Failures are logged and the daemon stays
   on the polling backend.
 
 Output:
@@ -45,7 +45,6 @@ BVK_DIR      = HOME / ".bashbasicsbyvk"
 LIST_FILE    = BVK_DIR / "recents.list"
 PID_FILE     = BVK_DIR / "recents.pid"
 LOG_FILE     = BVK_DIR / "recents.log"
-SENTINEL     = BVK_DIR / ".watchdog_install_attempted"
 EXCLUDE_FILE = BVK_DIR / "recents_exclude.conf"
 THIS_FILE    = Path(os.path.abspath(__file__))
 
@@ -57,8 +56,6 @@ MAX_RECENT     = 100
 FLUSH_DELAY    = 2.0     # seconds — debounce rapid edits
 POLL_INTERVAL  = 3.0     # seconds — polling fallback cadence
 POLL_MAX_DEPTH = 6       # max directory depth for polling fallback
-INSTALL_RETRY  = 86400   # seconds — don't retry pip install before this
-PIP_TIMEOUT    = 120     # seconds
 
 # ── Environment detection ──────────────────────────────────────────────────────
 
@@ -476,21 +473,20 @@ def _cleanup(signum=None, frame=None):
 
 # ── watchdog import / self-install ─────────────────────────────────────────────
 
-def _pipboot():
-    """The shared self-install helper (bashbasicsbyvk_pipboot, installed next to this script). None if it cannot be
-    imported, so the daemon still runs - on the polling backend."""
+def _deps():
+    """The python door to the central dependency installer (bashbasicsbyvk_deps, installed next to this script). None if it cannot
+    be imported, so the daemon still runs - on the polling backend."""
     try:
-        import bashbasicsbyvk_pipboot
-        return bashbasicsbyvk_pipboot
+        import bashbasicsbyvk_deps
+        return bashbasicsbyvk_deps
     except ImportError:
         return None
 
 def _refresh_import_paths():
-    """Make sure user site-packages is on sys.path and Python's import
-    caches are invalidated. Needed after a fresh `pip install --user`."""
-    pb = _pipboot()
-    if pb is not None:
-        pb.refresh_import_paths()
+    """Make sure user site-packages is on sys.path and Python's import caches are invalidated. Needed after a fresh user-space install."""
+    d = _deps()
+    if d is not None:
+        d.refresh_import_paths()
 
 def _try_import_watchdog():
     _refresh_import_paths()
@@ -503,15 +499,14 @@ def _try_import_watchdog():
         return None, None
 
 def _should_attempt_install():
-    pb = _pipboot()
-    return pb is not None and pb.retry_due(SENTINEL, INSTALL_RETRY)
+    return _deps() is not None
 
 def _try_install_watchdog():
-    """One-shot pip install (the shared bashbasicsbyvk_pipboot recipe: --user, then --break-system-packages for
-    PEP 668-managed environments). Records a sentinel so we don't hammer pip on every daemon start."""
-    _log("watchdog missing — attempting one-shot pip install")
+    """Ask the central installer for watchdog in QUIET mode: no menu (the daemon has no terminal); the registry marks watchdog `auto`
+    (user-space pip only), and the engine keeps the once-a-day retry rule. Never blocks the watcher; picked up on the next restart."""
+    _log("watchdog missing — asking the central dependency installer (quiet)")
     _apply_app_timezone()
-    _pipboot().install("watchdog", SENTINEL, _log, PIP_TIMEOUT)
+    _deps().ensure("watchdog", quiet=True)
 
     # Verify the install by re-importing in this process
     _refresh_import_paths()

@@ -458,6 +458,7 @@ _ghr_cmd() {
 
 # ── the button ──────────────────────────────────────────────────────────────
 _fx_adf_github() {
+  _dep_need -c "GitHub" github || return 1
   _GHX_NAV="${_fx_outer_path:-$path}"                       # the navigation path, NOT $PWD
   if ! _gh_locate; then echo "❌ GitHub needs Python 3 and bashbasicsbyvk_github (the engine) — not found."; return 1; fi
   _GHX_NONE=()

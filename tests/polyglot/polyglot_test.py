@@ -25,8 +25,7 @@ SCRIPT = HERE.parents[1] / "script" / "file"
 TOOL = SCRIPT / "infinity" / "tools" / "polyglot"
 sys.path[:0] = [str(TOOL), str(SCRIPT / "engine"), str(SCRIPT / "infinity" / "tools" / "js_audit")]
 
-import bashbasicsbyvk_pipboot as pipboot                                                            # noqa: E402
-import bashbasicsbyvk_polyglot_bootstrap as bootstrap                                               # noqa: E402
+import bashbasicsbyvk_deps as deps                                                                  # noqa: E402
 import bashbasicsbyvk_polyglot_extractor as ex                                                      # noqa: E402
 from bashbasicsbyvk_polyglot_constants import REPORT_NAME, WARNING                                  # noqa: E402
 from bashbasicsbyvk_polyglot_crawler import crawl                                                   # noqa: E402
@@ -525,80 +524,48 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("No supported source files", out.getvalue())
 
 
-class BootstrapTests(unittest.TestCase):
-    """The pip calls are faked: nothing is ever installed by the tests."""
+class DependencyIdTests(unittest.TestCase):
+    """What polyglot asks the central installer for (nothing is installed by the tests)."""
 
-    def setUp(self):
-        d = Path(tempfile.mkdtemp(dir=_TMP))
-        self._saved = (bootstrap.HOME_DIR, bootstrap.SENTINEL_DIR, bootstrap.LOG_FILE, pipboot.have, pipboot.run_pip)
-        bootstrap.HOME_DIR, bootstrap.SENTINEL_DIR, bootstrap.LOG_FILE = d, d / "s", d / "log"
-        self.pip_calls, self.installed, self.failing = [], set(), set()
-        pipboot.have = lambda module, dist=None, min_version=None: module in self.installed
-        pipboot.run_pip = self._fake_pip
+    def ids(self, langs, parser="auto", xlsx=True):
+        return launcher._dependency_ids(langs, parser, xlsx)
 
-    def tearDown(self):
-        bootstrap.HOME_DIR, bootstrap.SENTINEL_DIR, bootstrap.LOG_FILE, pipboot.have, pipboot.run_pip = self._saved
+    def test_numpy_feature_is_required_everything_else_optional(self):
+        ids = self.ids(["python"])
+        self.assertEqual(ids[0], "polyglot")
+        self.assertTrue(all(i.startswith("?") for i in ids[1:]))
 
-    def _fake_pip(self, args, log, timeout):
-        spec = args[-1]
-        self.pip_calls.append(spec)
-        if spec in self.failing:
-            return 1
-        self.installed.add(spec.split(">=")[0].replace("-", "_"))
-        return 0
+    def test_only_the_grammars_of_languages_found(self):
+        ids = self.ids(["python", "typescript", "tsx"])
+        self.assertIn("?tree_sitter", ids)
+        self.assertIn("?" + LANGUAGES["python"].ts_module, ids)
+        self.assertEqual(len([i for i in ids if i.startswith("?tree_sitter_")]), len({LANGUAGES[l].ts_module for l in ["python", "typescript", "tsx"]}))
 
-    def test_grammar_spec_is_the_module_name_with_dashes(self):
-        self.assertEqual(bootstrap.grammar_spec("tree_sitter_c_sharp"), "tree-sitter-c-sharp>=0.23")
+    def test_regex_parser_asks_for_no_tree_sitter(self):
+        self.assertFalse([i for i in self.ids(["python"], "regex") if "tree_sitter" in i])
 
-    def test_installs_core_then_only_the_grammars_of_languages_found(self):
-        self.installed = {"numpy", "rich", "openpyxl"}
-        missing = bootstrap.bootstrap(["python", "typescript", "tsx"], "auto", lambda m: None)
-        self.assertEqual(missing, [])
-        self.assertEqual(self.pip_calls, ["tree-sitter>=0.23", "tree-sitter-python>=0.23", "tree-sitter-typescript>=0.23"])
+    def test_no_xlsx_asks_for_no_openpyxl(self):
+        self.assertNotIn("?openpyxl", self.ids(["python"], xlsx=False))
 
-    def test_failed_core_skips_grammars_and_is_not_retried_within_a_day(self):
-        self.installed = {"numpy", "rich", "openpyxl"}
-        self.failing = {"tree-sitter>=0.23"}
-        bootstrap.bootstrap(["python", "go"], "auto", lambda m: None)
-        self.assertEqual(self.pip_calls.count("tree-sitter>=0.23"), 2)         # --user, then --user --break-system-packages: one attempt
-        self.pip_calls.clear()
-        bootstrap.bootstrap(["python", "go"], "auto", lambda m: None)
-        self.assertEqual(self.pip_calls, [])                                    # the sentinel says "failed < 24h ago"
-        old = time.time() - 2 * bootstrap.RETRY
-        for s in bootstrap.SENTINEL_DIR.iterdir():
-            os.utime(s, (old, old))
-        bootstrap.bootstrap(["python", "go"], "auto", lambda m: None)
-        self.assertIn("tree-sitter>=0.23", self.pip_calls)                      # the window has passed: tried again
-
-    def test_regex_parser_never_installs_tree_sitter(self):
-        self.installed = {"numpy", "rich", "openpyxl"}
-        bootstrap.bootstrap(["python"], "regex", lambda m: None)
-        self.assertEqual(self.pip_calls, [])
-
-    def test_missing_numpy_is_reported_as_required(self):
-        self.failing = {"numpy"}
-        self.assertEqual(bootstrap.bootstrap(["python"], "regex", lambda m: None), ["numpy"])
-
-    def test_installed_everything_means_no_pip_call(self):
-        self.installed = {"numpy", "rich", "openpyxl", "tree_sitter", "tree_sitter_python"}
-        bootstrap.bootstrap(["python"], "auto", lambda m: None)
-        self.assertEqual(self.pip_calls, [])
+    def test_every_id_is_in_the_registry(self):
+        reg = (SCRIPT / "engine" / "bashbasicsbyvk_deps.list").read_text()
+        for i in self.ids(sorted(LANGUAGES)):
+            name = i.lstrip("?")
+            self.assertTrue(f"|{name}|" in reg or name.startswith("tree_sitter_"), name)
 
 
-class PipbootTests(unittest.TestCase):
+class DepsShimTests(unittest.TestCase):
     def test_have_checks_module_and_minimum_version(self):
-        self.assertTrue(pipboot.have("numpy"))
-        self.assertTrue(pipboot.have("numpy", "numpy", (0, 1)))
-        self.assertFalse(pipboot.have("numpy", "numpy", (999,)))
-        self.assertFalse(pipboot.have("no_such_module_xyz"))
+        self.assertTrue(deps.have("numpy"))
+        self.assertTrue(deps.have("numpy", "numpy", (0, 1)))
+        self.assertFalse(deps.have("numpy", "numpy", (999,)))
+        self.assertFalse(deps.have("no_such_module_xyz"))
 
-    def test_retry_due(self):
-        s = Path(tempfile.mkdtemp(dir=_TMP)) / "sentinel"
-        self.assertTrue(pipboot.retry_due(s, 60))
-        s.write_text("x")
-        self.assertFalse(pipboot.retry_due(s, 60))
-        os.utime(s, (time.time() - 120, time.time() - 120))
-        self.assertTrue(pipboot.retry_due(s, 60))
+    def test_ensure_of_something_installed_is_true_without_a_menu(self):
+        self.assertTrue(deps.ensure("python3", yes=False, quiet=False))
+
+    def test_ensure_unknown_id_is_false(self):
+        self.assertFalse(deps.ensure("no_such_dependency_xyz", check_only=True))
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ Runs like the JavaScript / Python audits: pick it in the Infinity Stones menu (`
 
 <br/>
 
-**Self-bootstrapping.** Each run installs what is missing: `numpy` (required), `rich`, `openpyxl`, `tree-sitter` and the grammar of every language found in the folder. One attempt per package; a failed install is not retried for a day (`~/.bashbasicsbyvk/polyglot_install/`, log: `polyglot_install.log`). Without a grammar a language falls back to the standard-library `ast` (Python) or a regex extractor. On Termux, if numpy cannot be built: `pkg install python-numpy`.
+**Dependencies.** Each run checks `numpy` (required), `rich`, `openpyxl`, `tree-sitter` and the grammar of every language found in the folder, and when something is missing the central Installer menu lists it and asks yes/no (`--yes` answers yes for scripts, `--no-install` never asks; an optional package you decline is not offered again for a week). Everything is installed in one go, and the registry knows the Termux route (`python-numpy`). Log: `~/.bashbasicsbyvk/deps_install.log`. Without a grammar a language falls back to the standard-library `ast` (Python) or a regex extractor.
 
 | Option | Meaning |
 |---|---|

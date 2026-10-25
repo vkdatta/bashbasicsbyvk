@@ -29,44 +29,14 @@ _TZ_LOADED=0
 # the names still come from the tz database files, just without the extra column.
 # ── is a tz database installed?  If not: offer to install it, else fall back to fixed offsets ──────────
 _tz_db_present() {
-  local d
-  for d in "${_TZ_DIRS[@]}"; do
-    [ -n "$d" ] && [ -f "$d/Asia/Kolkata" ] && return 0
-  done
-  [ -f /system/usr/share/zoneinfo/tzdata ] && return 0        # Android keeps one blob
-  return 1
+  declare -F _dep_have >/dev/null 2>&1 && _dep_have tzdata       # what "installed" means (the zoneinfo folders) lives in the central registry
 }
 
-# _tz_pkg_cmd → _TZ_PKG_NAME + _TZ_PKG_CMD (array) for this computer's package manager; 1 = none known
-_tz_pkg_cmd() {
-  local sudo=()
-  _TZ_PKG_CMD=(); _TZ_PKG_NAME="tzdata"
-  if [ "$(id -u 2>/dev/null)" != 0 ] && [[ "${PREFIX:-}" != *com.termux* ]] && command -v sudo >/dev/null 2>&1; then sudo=(sudo); fi
-  if [[ "${PREFIX:-}" == *com.termux* ]] && command -v pkg >/dev/null 2>&1; then _TZ_PKG_CMD=(pkg install -y tzdata)
-  elif command -v apt-get >/dev/null 2>&1; then _TZ_PKG_CMD=("${sudo[@]}" apt-get install -y tzdata)
-  elif command -v apk >/dev/null 2>&1;     then _TZ_PKG_CMD=("${sudo[@]}" apk add tzdata)
-  elif command -v dnf >/dev/null 2>&1;     then _TZ_PKG_CMD=("${sudo[@]}" dnf install -y tzdata)
-  elif command -v yum >/dev/null 2>&1;     then _TZ_PKG_CMD=("${sudo[@]}" yum install -y tzdata)
-  elif command -v pacman >/dev/null 2>&1;  then _TZ_PKG_CMD=("${sudo[@]}" pacman -S --noconfirm tzdata)
-  elif command -v zypper >/dev/null 2>&1;  then _TZ_PKG_CMD=("${sudo[@]}" zypper install -y timezone); _TZ_PKG_NAME="timezone"
-  else return 1; fi
-}
-
-# Ask first, say exactly what will be downloaded and why. Returns 0 only when the database is present afterwards.
+# No tz database: the Installer menu of the central registry (it says exactly what is downloaded and why, and asks).
+# Returns 0 only when the database is present afterwards.
 _tz_bootstrap() {
-  local ans
-  if ! _tz_pkg_cmd; then
-    echo "  🔴  This computer has no timezone database and no supported package manager was found."
-    return 1
-  fi
-  echo "  📦 This computer has no timezone database (the tz data that knows every country's offset and daylight saving)."
-  echo "     Package to download : $_TZ_PKG_NAME"
-  echo "     Why                 : to list every timezone and convert times correctly, including daylight saving"
-  echo "     Command it will run : ${_TZ_PKG_CMD[*]}"
-  _bvk_yn ans "Download and install it now?" -d n
-  case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "  ↩️  Not installed — using the manual list of fixed offsets instead."; return 1 ;; esac
-  if "${_TZ_PKG_CMD[@]}" && _tz_db_present; then echo "  💫 $_TZ_PKG_NAME installed."; return 0; fi
-  echo "  🔴  The install did not finish — using the manual list of fixed offsets instead."
+  _dep_need -c "The timezone list" tzdata && _tz_db_present && return 0
+  echo "  ↩️  Not installed — using the manual list of fixed offsets instead."
   return 1
 }
 

@@ -40,11 +40,7 @@ declare -gA _ARC_NOTE=(
   [tarzst]="fast and compact, the modern gzip"
   [tarlz4]="fastest, compresses less"
   [skill]="a zip with a .skill ending (as AI assistants give them)")
-# the tools a format needs (space separated; "7z" = any 7-Zip build). Extraction of the zip family can use 7-Zip when unzip is missing.
-declare -gA _ARC_TOOLS_C=([zip]="zip" [skill]="zip" [tar]="tar" [targz]="tar gzip" [tarxz]="tar xz" [tarbz2]="tar bzip2" [7z]="7z" [tarzst]="tar zstd" [tarlz4]="tar lz4")
-declare -gA _ARC_TOOLS_X=([zip]="unzip" [skill]="unzip" [tar]="tar" [targz]="tar gzip" [tarxz]="tar xz" [tarbz2]="tar bzip2" [7z]="7z" [tarzst]="tar zstd" [tarlz4]="tar lz4")
-# Termux / apt package that provides a tool
-declare -gA _ARC_PKG=([zip]=zip [unzip]=unzip [tar]=tar [gzip]=gzip [xz]=xz-utils [bzip2]=bzip2 [zstd]=zstd [lz4]=lz4 [7z]=p7zip)
+# the tools each format needs live in the central registry (bashbasicsbyvk_deps.list: features archive.create.<fmt> / archive.extract.<fmt>); nothing is listed here.
 
 _ARC_NFMT="" _ARC_STEM="" _ARC_MAGIC="" _ARC_FMT="" _ARC_WHY="" _ARC_STRIPPED="" _ARC_MISSING="" _ARC_7Z=""
 
@@ -179,36 +175,25 @@ _arc_strip_ext() {
 # _arc_7z: the 7-Zip binary of this machine (7zz / 7z / 7za / 7zr) → _ARC_7Z ; 1 when none
 _arc_7z() {
   [ -n "$_ARC_7Z" ] && [ -x "$_ARC_7Z" ] && return 0
-  local b
-  for b in 7zz 7z 7za 7zr; do _ARC_7Z="$(command -v "$b" 2>/dev/null)" && [ -n "$_ARC_7Z" ] && return 0; done
+  declare -F _dep_path >/dev/null 2>&1 || { _ARC_7Z=""; return 1; }
+  _ARC_7Z="$(_dep_path 7z)" && [ -n "$_ARC_7Z" ] && return 0       # the command names (7zz 7z 7za 7zr) are in the registry
   _ARC_7Z=""; return 1
 }
 
-_arc_tool_ok() {
-  case "$1" in
-    7z)    _arc_7z ;;
-    *)     command -v "$1" >/dev/null 2>&1 ;;
-  esac
-}
-
-# _arc_have create|extract FMT   (silent)  — sets _ARC_MISSING to the first tool that is not there
+# _arc_have create|extract FMT   (silent)  — sets _ARC_MISSING to the first dependency that is not there (rc 1)
 _arc_have() {
-  local t list
   _ARC_MISSING=""
-  if [ "$1" = create ]; then list="${_ARC_TOOLS_C[$2]}"; else list="${_ARC_TOOLS_X[$2]}"; fi
-  for t in $list; do
-    _arc_tool_ok "$t" && continue
-    # a zip can also be opened by 7-Zip when unzip is not installed
-    if [ "$t" = unzip ] && _arc_7z; then continue; fi
-    _ARC_MISSING="$t"; return 1
-  done
-  return 0
+  if ! declare -F _dep_have >/dev/null 2>&1; then _ARC_MISSING="bashbasicsbyvk_deps.sh (not loaded)"; return 1; fi
+  _dep_have "archive.$1.$2" && return 0
+  _ARC_MISSING="${_DEP_MISSING%% *}"
+  return 1
 }
 
+# the Installer menu (central registry) when a tool is missing; rc 0 = everything is there afterwards
 _arc_need() {
   _arc_have "$1" "$2" && return 0
-  echo "❌ '$_ARC_MISSING' not found — install it first (e.g. pkg install ${_ARC_PKG[$_ARC_MISSING]:-$_ARC_MISSING})."
-  return 1
+  declare -F _dep_need >/dev/null 2>&1 || { echo "❌ '$_ARC_MISSING' not found."; return 1; }
+  _dep_need -c "${_ARC_LABEL[$2]:-$2} archive ($1)" "archive.$1.$2"
 }
 
 # ── making an archive ───────────────────────────────────────────────────────

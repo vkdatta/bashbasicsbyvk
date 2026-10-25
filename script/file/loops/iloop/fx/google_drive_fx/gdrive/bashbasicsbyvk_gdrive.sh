@@ -92,7 +92,7 @@ _gd_view_path() {
 _gd_locate() {
   [ -n "$_GD_PY" ] && [ -n "$_GD_MAIN" ] && [ -f "$_GD_MAIN" ] && return 0
   _GD_PY="$(command -v python3 || command -v python)"
-  [ -n "$_GD_PY" ] || { echo "❌ Google Drive needs Python 3."; return 1; }
+  if [ -z "$_GD_PY" ]; then _dep_need -c "Google Drive" python3 || return 1; _GD_PY="$(command -v python3)"; fi
   local d
   for d in "${SCRIPT_DIR:-}" "$_GD_SRC_DIR" "$_GD_SRC_DIR/../open_drive"; do
     [ -n "$d" ] && [ -f "$d/bashbasicsbyvk_gd" ] && { _GD_MAIN="$d/bashbasicsbyvk_gd"; return 0; }
@@ -102,8 +102,8 @@ _gd_locate() {
 
 _gd_need_rclone() {
   command -v rclone >/dev/null 2>&1 && return 0
-  echo "❌ rclone not found in PATH."
-  echo "   Install it (README → Rclone), then run  rclone config  and create a Google Drive remote."
+  _dep_need -c "Google Drive" rclone && return 0
+  echo "   After rclone is installed, run  rclone config  and create a Google Drive remote (README → Rclone)."
   return 1
 }
 

@@ -10,8 +10,9 @@ It reports POSSIBLE CANDIDATES for deduplication - it is NOT a 100% reliable mec
 Pipeline: crawl -> AST extraction (tree-sitter > stdlib ast > regex) -> token normalisation -> feature-hashing candidate search ->
 exact LCS verification -> clustering -> metrics.  No ML model, no GPU, no downloads.
 
-Self-bootstrapping: when numpy, rich, openpyxl, tree-sitter or the grammar of a language found in PATH is missing it is pip-installed
-(bashbasicsbyvk_polyglot_bootstrap); --no-install turns that off.  Whatever cannot be installed degrades gracefully (stdlib ast / regex).
+Dependencies: numpy (required), rich, openpyxl, tree-sitter and the grammar of every language found in PATH are asked for through the central
+installer (bashbasicsbyvk_deps: the Installer menu lists what is missing and asks yes/no; --yes answers yes, --no-install never asks).
+Whatever is not installed degrades gracefully (stdlib ast / regex parser, plain console, JSON only).
 Exit code: 0 ok, 1 duplication above --fail-above, 2 error.
 """
 import argparse
@@ -54,7 +55,8 @@ def build_parser():
     p.add_argument("--top-files", type=int, default=10)
     p.add_argument("--fail-above", type=float, default=None, metavar="PCT",
                    help="exit with status 1 if overall duplication exceeds PCT (CI gate)")
-    p.add_argument("--no-install", action="store_true", help="do not pip-install missing packages / grammars")
+    p.add_argument("--no-install", action="store_true", help="do not offer to install missing packages / grammars")
+    p.add_argument("--yes", action="store_true", help="answer yes to the Installer menu (scripts / CI)")
     p.add_argument("--no-xlsx", action="store_true", help="write only the JSON report")
     p.add_argument("--plain", action="store_true", help="disable rich output")
     p.add_argument("-q", "--quiet", action="store_true", help="no progress bars / console report")
@@ -62,10 +64,15 @@ def build_parser():
     return p
 
 
-def _numpy_hint():
-    if os.environ.get("TERMUX_VERSION") or "com.termux" in str(Path.home()):
-        return "Termux: pkg install python-numpy"
-    return "pip install numpy"
+def _dependency_ids(languages_found, parser, want_xlsx):
+    """What this run can use, for the central installer: numpy is required, the rest is optional (?id).  One call = one menu."""
+    ids = ["polyglot", "?rich"]
+    if want_xlsx:
+        ids.append("?openpyxl")
+    if parser != "regex" and languages_found:
+        ids.append("?tree_sitter")
+        ids += ["?" + m for m in sorted({LANGUAGES[l].ts_module for l in languages_found})]
+    return ids
 
 
 def main(argv=None):
@@ -85,20 +92,19 @@ def main(argv=None):
 
     if not a.no_install:
         try:
-            from bashbasicsbyvk_polyglot_bootstrap import bootstrap
-        except ImportError as exc:       # not installed flat: bashbasicsbyvk_pipboot (script/file/engine) is not beside the tool
+            import bashbasicsbyvk_deps as deps
+        except ImportError as exc:       # not installed flat: bashbasicsbyvk_deps (script/file/engine) is not beside the tool
             print(f"❌ {exc.name} not found next to the tool - reinstall bashbasicsbyvk, or from the repo: PYTHONPATH=script/file/engine")
             return 2
-        missing = bootstrap(sorted({lang for _, lang in paths}), a.parser, print, want_xlsx=not a.no_xlsx)
-        if missing:
-            print(f"❌ Required package(s) missing and could not be installed: {', '.join(missing)}  ({_numpy_hint()})")
+        if not deps.ensure(*_dependency_ids(sorted({lang for _, lang in paths}), a.parser, not a.no_xlsx), context="Polyglot", yes=a.yes):
+            print("❌ numpy is required and is not installed (declined, or the install failed).")
             return 2
     try:        # imported only now: they need numpy, and rich is detected at import time
         from bashbasicsbyvk_polyglot_pipeline import AnalysisError, Config, run
         from bashbasicsbyvk_polyglot_report import build_report, print_report, write_json
         from bashbasicsbyvk_polyglot_ui import ProgressUI
     except ImportError as exc:
-        print(f"❌ Missing Python package '{exc.name}' - run without --no-install, or: {_numpy_hint()}")
+        print(f"❌ Missing Python package '{exc.name}' - run without --no-install (the Installer offers it), or: bashbasicsbyvk_deps.sh polyglot")
         return 2
 
     cfg = Config(root=str(target), threshold=a.threshold, min_lines=a.min_lines, min_tokens=a.min_tokens, parser=a.parser,

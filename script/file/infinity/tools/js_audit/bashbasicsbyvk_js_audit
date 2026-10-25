@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 
+import sys
 from pathlib import Path
+try:        # openpyxl (required) and esprima (optional): the central Installer menu offers what is missing (feature js_audit)
+    import bashbasicsbyvk_deps as _deps
+    if not _deps.ensure("js_audit", "?esprima", context="JavaScript audit"):
+        sys.exit(1)
+except ImportError:
+    pass
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter

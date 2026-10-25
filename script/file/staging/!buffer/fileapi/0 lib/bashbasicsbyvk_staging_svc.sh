@@ -35,8 +35,9 @@ _svc_upload() {
   _SVC_ID=""; _SVC_KEY=""; _SVC_EXPIRES=""; _SVC_BYTES=""; _SVC_DEDUCTED=""; _SVC_BALANCE=""
   _crypto_check || return 1             # the vault keys (FEK, kdk) are still made by node
   local use_go=0; _bvk_xfer_bin && use_go=1
-  if [ $use_go = 0 ] && { ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; }; then
-    echo "❌ 'tar' and 'gzip' are required (pkg install tar gzip)."; return 1
+  if [ $use_go = 0 ] && ! _dep_have fileapi.pack; then
+    if [ "$_SVC_QUIET" = 1 ]; then echo "❌ ${_DEP_MISSING} missing: a background upload never opens a menu (start an upload from the menu once to install it)."; return 1; fi
+    _dep_need -c "Packing files for upload" fileapi.pack || return 1
   fi
   _bb_get_credentials || return 1
   # backup / saved / snapshot are client-side encrypted: open the FEK (dinons) BEFORE packing, so a missing key chain fails fast

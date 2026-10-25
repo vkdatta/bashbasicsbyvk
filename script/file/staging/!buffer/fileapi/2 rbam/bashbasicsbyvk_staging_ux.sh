@@ -292,10 +292,7 @@ _ux_do_share() {
   local K kdk
   K=$(_ux_core newkey) && kdk=$(printf '' | BB_FEK="$_UX_FEK" BB_K="$K" _ux_core dk-wrap) || { echo "❌ Key generation failed."; return 1; }
 
-  if ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; then
-    echo "❌ 'tar' and 'gzip' are required for ux- (pkg install tar gzip)."
-    return 1
-  fi
+  _dep_need -c "Encrypting for ux-" fileapi.pack || return 1
   local -a gz; local lvl; _bb_gzip_setup
 
   echo "🔎 Scanning selection..."

@@ -197,6 +197,7 @@ _pn_top_act() {
 }
 
 pending_menu() {
+  _dep_need -c "Pending uploads" fileapi.pending || return
   local _icon_keep="${_st_icon:-}" _st_crumb="Pending"
   _st_icon="⏸"
   _pn_gc

@@ -497,6 +497,7 @@ _snap_extend() {             # _snap_extend <id> <taken-ms> <expires-ms> [spec] 
 }
 
 snapshot_menu() {
+  _dep_need -c "Snapshots" fileapi.snapshot || return
   local _MS_CTX=snap_devices            # s → Display → Sort order is this list's own
   _crypto_check || return 1
   _bb_get_credentials || return 1

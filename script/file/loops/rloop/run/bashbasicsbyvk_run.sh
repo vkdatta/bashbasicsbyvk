@@ -172,13 +172,13 @@ run_file() {
     ext="${file##*.}"
     case "$ext" in
         py)
-            if command -v python3 >/dev/null 2>&1; then python3 -u "$file"; elif command -v python >/dev/null 2>&1; then python -u "$file"; else echo "❌ python not found"; fi
+            if command -v python3 >/dev/null 2>&1; then python3 -u "$file"; elif command -v python >/dev/null 2>&1; then python -u "$file"; elif _dep_need -c "Running a .py file" python3; then python3 -u "$file"; fi
             ;;
         pyc)
             echo "❌ Cannot run .pyc directly in Termux without proper interpreter setup"
             ;;
         js|mjs)
-            if command -v node >/dev/null 2>&1; then node "$file"; elif command -v deno >/dev/null 2>&1; then deno run "$file"; else echo "❌ node/deno not found"; fi
+            if command -v node >/dev/null 2>&1; then node "$file"; elif command -v deno >/dev/null 2>&1; then deno run "$file"; elif _dep_need -c "Running a JavaScript file" nodejs; then node "$file"; fi
             ;;
         ts)
             if command -v deno >/dev/null 2>&1; then deno run "$file"; elif command -v ts-node >/dev/null 2>&1; then ts-node "$file"; else echo "❌ ts-node/deno not found"; fi
@@ -187,16 +187,16 @@ run_file() {
             if command -v bash >/dev/null 2>&1; then bash "$file"; else sh "$file"; fi
             ;;
         zsh)
-            if command -v zsh >/dev/null 2>&1; then zsh "$file"; else echo "❌ zsh not found"; fi
+            if command -v zsh >/dev/null 2>&1 || _dep_need -c "Running a .zsh file" zsh; then zsh "$file"; fi
             ;;
         php)
-            if command -v php >/dev/null 2>&1; then php "$file"; else echo "❌ php not found"; fi
+            if command -v php >/dev/null 2>&1 || _dep_need -c "Running a .php file" php; then php "$file"; fi
             ;;
         pl)
-            if command -v perl >/dev/null 2>&1; then perl "$file"; else echo "❌ perl not found"; fi
+            if command -v perl >/dev/null 2>&1 || _dep_need -c "Running a .pl file" perl; then perl "$file"; fi
             ;;
         rb)
-            if command -v ruby >/dev/null 2>&1; then ruby "$file"; else echo "❌ ruby not found"; fi
+            if command -v ruby >/dev/null 2>&1 || _dep_need -c "Running a .rb file" ruby; then ruby "$file"; fi
             ;;
         jar)
             if command -v java >/dev/null 2>&1; then java -jar "$file"; else echo "❌ java not found"; fi

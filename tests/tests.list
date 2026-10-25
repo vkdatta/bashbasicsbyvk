@@ -38,3 +38,5 @@ github_upgrade_shared|fast|30|bash tests/github/upgrade_shared.sh|python3
 github_ui|slow|180|python3 tests/github/ui_test.py|python3
 cc_truth|slow|240|python3 tests/cc_truth/cc_truth_test.py|python3
 archive|fast|60|bash tests/archive/archive_test.sh|
+deps|fast|60|bash tests/deps/deps_test.sh|
+deps_menu|fast|60|python3 tests/deps/standalone_test.py|python3

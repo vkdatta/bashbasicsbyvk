@@ -298,6 +298,7 @@ HLP
 
 # ── the loop ──────────────────────────────────────────────────────────────────
 upgrade_menu() {
+  _dep_need -c "Upgrade" upgrade || return
   local _up_saved_prefix="$group_prefix" _up_saved_force="$force_show"
   local _up_saved_all=("${_all_items[@]}")
   _upg_tab="stable"

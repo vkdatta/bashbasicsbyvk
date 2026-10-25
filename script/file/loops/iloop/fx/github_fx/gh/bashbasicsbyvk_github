@@ -1012,6 +1012,12 @@ def cmd_clone(args):
     if not tags:
         bad("nothing to download"); return 3
     if shutil.which("git") is None:
+        try:
+            import bashbasicsbyvk_deps as _deps
+            _deps.ensure("git", context="GitHub download")
+        except ImportError:
+            pass
+    if shutil.which("git") is None:
         bad("git is not installed"); return 1
     os.makedirs(dest, exist_ok=True)
     rels = releases_by_tag(repo) if with_rel else {}

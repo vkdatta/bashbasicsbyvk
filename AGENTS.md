@@ -174,6 +174,19 @@ So before you create anything, work in this order:
     - The map of a loop the generator cannot read is `block()`, never "keep or block": a map line is a claim about the loop. A list screen that reads keys itself (`_st_run`) lets a typed word through `_st_cm_gate`, so the hint row, `cc` and Enter agree (`tests/cc_truth`).
     - Tests: `tests/github/` (mock GitHub server, no network), `tests/cc_truth`. The upgrade loop's output must stay byte-identical to `tests/github/fixtures/upgrade_golden.txt`.
 
+12. **Every external dependency goes through ONE registry and ONE installer.** (`script/file/engine/bashbasicsbyvk_deps.list`, `bashbasicsbyvk_deps.sh`, `bashbasicsbyvk_deps.py`.)
+    - An outside program or package (curl, node, 7z, rclone, gh, a pip / npm package, a tz database ...) is declared ONCE, as a `D` line in `bashbasicsbyvk_deps.list`: how to detect it, its package name per package manager
+      (termux apt dnf yum pacman apk zypper brew, pip, npm), what it is for. A menu / command / tool that needs it gets an `F` line (feature -> required / optional dependencies): that file IS the dependency map.
+      Build-time toolchains (C compiler, make, Go) are not listed: they are compiled before distribution.
+    - **Ask the engine, never roll your own.** In the app and in import-file tools: `_dep_need -c "what the person is doing" <feature|id>... || return` (menu: lists what is missing, yes/no, installs, re-checks);
+      `_dep_have <feature|id>...` for a silent check (never installs; `_DEP_MISSING` says what). Stand-alone bash tools: `bashbasicsbyvk_deps.sh -c "..." <feature|id> || exit 1`.
+      Python: `import bashbasicsbyvk_deps as deps; deps.ensure("feature", "?optional_id", context="...")`. A background job with no terminal never opens a menu: it uses `_dep_have`, or quiet mode (`-q` / `quiet=True`, only `auto` user-space pip packages).
+    - **Forbidden:** a private `command -v X || echo "please install X"` that exits, a private `pkg install` / `apt install` / `pip install` / `npm install` / `npx --yes` recipe, a package-name table, a sentinel / retry file for installs, a hand-made "install now? y/n" prompt for a dependency.
+      The old ones (pipboot, polyglot_bootstrap, gitpush's gh installer, the daemon's pip call, timezone's package table, the archive tool tables) are gone; do not bring one back.
+      A tool may still PROBE with `command -v` to choose between alternatives it can work without (clipboard tools, `xdg-open` / `termux-open`), but a dependency it cannot work without is asked for through the engine.
+    - A new dependency = one `D` line (+ one `F` line for the menu that needs it) + `bash tests/deps/deps_test.sh`. A pip family (`tree_sitter_<lang>`) is a `G` line. A multi-step install is a `@recipe` in the engine, never a copy in the caller.
+    - Scripted runs (CI, agents, e.g. the polyglot check above): `BVK_DEPS_ASSUME=yes` answers the menu, `BVK_DEPS_ASSUME=no` refuses, `--dry-run` prints the commands. The engine installs system packages in one call and pip / npm in parallel lanes.
+
 ## Tests: seconds, not half an hour (the rules the owner and the agents framed)
 
 A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes because they slept for guessed times, started the app dozens of times with a blind
@@ -241,7 +254,7 @@ grep -rnE '(^|[;&|({]|[[:space:]])(source|\.)[[:space:]]+["$]' script | grep -vE
 find script -type f -printf '%f\n' | sort | uniq -d
 grep -rnI '_3bvk_' script tests setup.py MANIFEST.in README.md | grep -v '_3bvk_import_'
 # 5. ONLY when the prompt asks to dedupe / find duplicates (never as part of an ordinary fix or feature): duplicate-function candidates (polyglot: parses the code, finds renamed and cross-language copies too) — prints clusters, writes nothing into the repo
-PYTHONPATH=script/file/engine python3 script/file/infinity/tools/polyglot/bashbasicsbyvk_polyglot . --no-xlsx --plain --exclude sample_project -o /tmp/polyglot_report.json
+PYTHONPATH=script/file/engine BVK_DEPS_ASSUME=yes python3 script/file/infinity/tools/polyglot/bashbasicsbyvk_polyglot . --no-xlsx --plain --exclude sample_project -o /tmp/polyglot_report.json
 # 6. corpus index: valid JSON lines, unique ids, every line's note exists, every note has a line, note sits in its YYYY/MM/DD folder
 python3 - <<'EOF'
 import glob, json, os
@@ -257,7 +270,7 @@ EOF
 Checks 1-4 and 6 are cheap: run them whenever you add, rename or delete a file or a note. Checks 1-4 must print nothing; check 6 must print `[] [] [] []`. **Check 5 (polyglot) is NOT part of the routine run**: it scans the whole repo (and installs numpy / tree-sitter on first run), so on an ordinary job it costs minutes for nothing. Run it ONLY when the prompt asks to dedupe, find duplicates or clean up copies; an ordinary job covers rule 1-4 of the principle with `grep -rn <keyword> script tests` instead (search before you write). When it IS asked for: Check 5 lists CANDIDATES, not proven copies: polyglot is NOT a 100% reliable
 mechanism (it can miss real copies and flag look-alikes). Run it before and after your dedupe change, read every cluster your change touches or adds, and say
 in HOW DID YOU DEBUG how you judged each; your change must not add a cluster that is a real copy (the clusters already there are not yours to fix
-unless the task says so). It installs numpy / tree-sitter itself on first run (`--no-install` to forbid). If it finds a real copy, do NOT edit the copies in step: move the code into ONE helper
+unless the task says so). It asks the central installer for numpy / tree-sitter on first run (`BVK_DEPS_ASSUME=yes` answers the menu in scripted runs, `--no-install` to forbid). If it finds a real copy, do NOT edit the copies in step: move the code into ONE helper
 that every place calls (a function in a lib that `o` / an import file loads earlier; for node tools `bashbasicsbyvk_staging_jslib.js`, found
 through `_bb_jslib`; for tests `tests/e2e_common.sh`, `tests/wait_lib.sh`, `tests/paste_input/ptyapp.py`). Before you write a block that looks like one you have
 seen elsewhere, grep for the helper first.

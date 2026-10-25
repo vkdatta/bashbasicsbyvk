@@ -5,20 +5,20 @@ triggers, custom domains, migrations ... `wrangler init --from-dash` knows how t
 
 What it costs, and how that is avoided
   `wrangler init` is a project scaffolder: next to the wrangler file it also writes package.json / tsconfig / .git and
-  RUNS `npm install` (wrangler + ~hundreds of MB of dependencies = the "node_modules" that doubled network + storage).
+  RUNS the package installer (wrangler + ~hundreds of MB of dependencies = the "node_modules" that doubled network + storage).
   So here:
     * it runs in a THROWAWAY temp folder that is deleted afterwards - only the wrangler config file is read back;
     * npm / pnpm / yarn / bun are replaced by no-op stubs on that one process's PATH, so nothing is ever installed
       (the install step "succeeds" instantly and downloads nothing);
-    * wrangler itself is located once (an installed `wrangler`, else `npx`) and warmed up once per run under a lock,
-      so parallel workers never download it N times or race on the npx cache.
+    * wrangler itself is located once (an installed `wrangler`, else the central Installer menu offers to install it) and checked once
+      per run under a lock, so parallel workers never race on an install.
   Nothing from the scaffold (src/, package.json, package-lock.json, node_modules, .git) ever reaches the recovered folder.
 
 Secrets: the API token / account id go to wrangler through its ENVIRONMENT only (never on a command line, never in a file).
 Any failure raises WranglerError; the caller then falls back to the (lossy) config rebuilt from the REST API.
 
     BVK_RECOVER_WRANGLER=0     disable this step completely (always rebuild from the REST API)
-    BVK_WRANGLER="cmd args"    use this wrangler command instead of `wrangler` / `npx wrangler`
+    BVK_WRANGLER="cmd args"    use this wrangler command instead of `wrangler`
     BVK_WRANGLER_TIMEOUT=SEC   per-worker timeout (default 240)
 """
 import json, os, re, shlex, shutil, stat, subprocess, tempfile, threading
@@ -26,7 +26,7 @@ from pathlib import Path
 from bashbasicsbyvk_recover_project import WRANGLER_FILES, read_wrangler
 
 TIMEOUT = max(30, int(os.environ.get("BVK_WRANGLER_TIMEOUT", "240") or 240))
-WARMUP_TIMEOUT = 900                                   # first npx run has to download wrangler once
+WARMUP_TIMEOUT = 900                                   # a cold first start of wrangler can be slow
 STUBBED = ("npm", "pnpm", "yarn", "bun")   # package managers that must never install anything here
 _STUB = """#!/bin/sh
 # bashbasicsbyvk: no-op package manager - `wrangler init` must not install anything.
@@ -59,6 +59,15 @@ def _base_env():
     return env
 
 
+def _install_wrangler():
+    """wrangler (and Node.js under it) come from the central dependency installer: the Installer menu asks first, nothing is downloaded silently."""
+    try:
+        import bashbasicsbyvk_deps as deps
+    except ImportError:
+        return False
+    return deps.ensure("wrangler", context="Cloudflare recover") and bool(shutil.which("wrangler"))
+
+
 def _wrangler_command():
     """The command (list) that runs wrangler; resolved + warmed up ONCE per process, thread-safe."""
     with _lock:
@@ -70,14 +79,11 @@ def _wrangler_command():
             custom = os.environ.get("BVK_WRANGLER", "").strip()
             if custom:
                 cmd = shlex.split(custom)
-            elif shutil.which("wrangler"):
+            elif shutil.which("wrangler") or _install_wrangler():
                 cmd = [shutil.which("wrangler")]
-            elif shutil.which("npx"):
-                cmd = [shutil.which("npx"), "--yes", "--prefer-offline", "wrangler"]
             else:
-                raise WranglerError("neither `wrangler` nor `npx` (Node.js) is installed")
-            # warm-up: proves the command works and, for npx, downloads wrangler ONCE (not once per worker)
-            warm = [c for c in cmd if c != "--prefer-offline"] + ["--version"]
+                raise WranglerError("wrangler is not installed (the Installer was declined or could not install it)")
+            warm = cmd + ["--version"]
             try:
                 r = _run(warm, _base_env(), tempfile.gettempdir(), WARMUP_TIMEOUT)
             except (OSError, subprocess.TimeoutExpired) as e:

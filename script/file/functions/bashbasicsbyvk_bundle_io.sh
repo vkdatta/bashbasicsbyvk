@@ -18,10 +18,10 @@
 #  Uses: open_zip_menu → _file_picker (bashbasicsbyvk_csv.sh), _bvk_quit
 # ════════════════════════════════════════════════════════════════════════════
 
-_bz_need() {                       # _bz_need <command>
+_bz_need() {                       # _bz_need <dependency id: zip | unzip>: the Installer menu (central registry) when it is missing
   command -v "$1" >/dev/null 2>&1 && return 0
-  echo "❌ '$1' not found — install it first (e.g. pkg install $1)."
-  return 1
+  declare -F _dep_need >/dev/null 2>&1 || { echo "❌ '$1' not found."; return 1; }
+  _dep_need -c "Zip export / import" "$1"
 }
 
 # _bz_dest <preferred-folder> [guard-folder…]  → prints where the zip should be written:

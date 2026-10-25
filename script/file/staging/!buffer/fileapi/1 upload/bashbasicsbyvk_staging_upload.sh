@@ -77,11 +77,9 @@ _bb_authed_put() {
 # so a hostile server cannot swap, replay or substitute pieces undetected.
 
 _crypto_check() {
-  if ! command -v node &>/dev/null; then
-    echo "❌ 'node' is required for encryption (up-/c2c-/do-) but wasn't found in PATH."
-    return 1
-  fi
-  return 0
+  _dep_have fileapi && return 0
+  if [ "${_SVC_QUIET:-0}" = 1 ]; then echo "❌ ${_DEP_MISSING} missing: a background upload never opens a menu (start an upload from the menu once to install it)."; return 1; fi
+  _dep_need -c "Encryption and upload (up- / c2c- / do-)" fileapi
 }
 
 _crypto_new_key() {
@@ -578,10 +576,7 @@ _up_do_multipart_upload() {
   if [ $use_go = 0 ]; then
     _bb_xfer_note node-engine "${_BVK_XFER_WHY:-engine unavailable}"
     _crypto_check || return 1
-    if ! command -v tar &>/dev/null || ! command -v gzip &>/dev/null; then
-      echo "❌ 'tar' and 'gzip' are required for up- (pkg install tar gzip)."
-      return 1
-    fi
+    _dep_need -c "Uploading with up-" fileapi.pack || return 1
   fi
   local -a gz; local lvl; _bb_gzip_setup
 

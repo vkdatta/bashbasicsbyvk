@@ -1,3 +1,4 @@
+_lt_b "load deps"; source "bashbasicsbyvk_deps.sh"; _lt_e   # the central dependency registry + JIT installer (AGENTS.md rule 12)
 _lt_b "load smartload"; source "bashbasicsbyvk_smartload.sh"; _lt_e
 _lt_b "load print"; source "bashbasicsbyvk_print.sh"; _lt_e
 _lt_b "load smartmenu"; source "bashbasicsbyvk_smartmenu.sh"; _lt_e
