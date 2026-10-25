@@ -1,10 +1,12 @@
-# name|tier|timeout seconds|command (run from the repo root)|needs
+# name|tier|timeout seconds|command (run from the repo root)|needs|serial
+# serial (optional 6th field): the test needs sequential order (shared port / file / state): run.sh runs it alone, after all parallel tests. Everything else runs in parallel; none is marked serial today.
 # tier fast = seconds, run on every change that touches the area; slow = run when you touched what it covers (tests/covers.map) and before release.
 # findrep_full = 2700+ operations on the C engine and the Python twin (about 3 min); findrep = the quick version
 # needs: node | python3 | fileapi (the ../fileapi repo) - when missing the test is reported as SKIP (never as a pass).
 lint_waits|fast|20|bash tests/lint_waits.sh|
 regex_portability|fast|30|bash tests/regex_portability.sh|
 cmd_drift|fast|90|bash tests/cmd_drift.sh|
+settings_keys|fast|30|bash tests/settings_keys.sh|
 group_view|fast|40|bash tests/group_view.sh|
 width|fast|20|bash tests/width/width_consistency.sh|
 choose_plain|fast|20|bash tests/choose/plain_test.sh|
@@ -25,6 +27,13 @@ e2e_pending|slow|300|bash tests/e2e_pending.sh|fileapi
 e2e_services|slow|300|bash tests/e2e_services.sh|fileapi
 findrep_full|slow|600|bash tests/findrep/findrep_run.sh full|python3
 buffer_sets|fast|40|bash tests/buffer_sets.sh|
+adf_registry|fast|20|bash tests/adf_registry.sh|
+cmd_docs|fast|30|bash tests/cmd_docs.sh|
+engine_target|fast|20|bash tests/engine_target.sh|
+smartload|fast|90|bash tests/smartload.sh|python3
+settings_desc|fast|40|bash tests/settings_desc.sh|python3
+delete_confirm|fast|30|bash tests/delete_confirm.sh|
 github_engine|fast|120|python3 tests/github/github_test.py|python3
 github_upgrade_shared|fast|30|bash tests/github/upgrade_shared.sh|python3
 github_ui|slow|180|python3 tests/github/ui_test.py|python3
+cc_truth|slow|240|python3 tests/cc_truth/cc_truth_test.py|python3

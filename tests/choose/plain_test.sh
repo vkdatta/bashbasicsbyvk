@@ -12,4 +12,6 @@ t 'a=[c] rc=0' 'u\n'   _bvk_yn a "Q?" -c
 t 'a=[n] rc=0' 'zzz\n' _bvk_yn a "Q?" -c
 t 'a=[g] rc=0' 'g\n'   _bvk_menu a -t T "c:Copy" "g:Regenerate"
 t 'a=[] rc=1'  '\n'    _bvk_menu a -t T "c:Copy" "g:Regenerate"
+t 'a=[3] rc=0' '3\n'    _bvk_menu a -t T "1:filename — a" "2:foldername — b" "3:filepath — c" "4:dirpath — d"   # the Exclude rules type picker (switch.sh _sw_excl_add)
+t 'a=[] rc=1'  'u\n'    _bvk_menu a -t T "1:filename — a" "2:foldername — b" "3:filepath — c" "4:dirpath — d"
 exit $fail

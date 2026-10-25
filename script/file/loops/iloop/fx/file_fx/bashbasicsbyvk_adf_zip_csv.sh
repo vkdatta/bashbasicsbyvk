@@ -13,4 +13,4 @@ _fx_adf_zip_select_csv() {
   _csv_resolve_report "Compressing" || return
   _compress_paths "${selected_items[@]}"
 }
-_fx_adf_register "zip.select.items.csv" "_fx_adf_zip_select_csv" "file_fx/zip/zip.select.items.csv"
+_fx_adf_register_fx "zip.select.items.csv" "_fx_adf_zip_select_csv"

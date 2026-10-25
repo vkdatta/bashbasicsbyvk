@@ -17,7 +17,7 @@
 #    _mc_header  "Title" ["Sub line" ...]      title block
 #    _mc_options START "Label" "Label" ...     "START) Label", "START+1) …"
 #    _mc_keyed   "c:Copy" "m:Move" ...         lettered options, one per row
-#    _mc_footer  "u:Up" "q:Quit" "h:Home"      key hints  ->  "u) Up   q) Quit   h) Home"
+#    _mc_footer  "u.up" "q" "h:Home"      key hints  ->  "u) Up   q) Quit   h) Home"
 #    _mc_footer  @name                         a footer registered below
 #    _mc_footer_register name item ...         register one (underscores in a label = spaces)
 #
@@ -43,6 +43,12 @@
 
 declare -gA _MC_FOOTERS=()
 _MC_RULE="   ─────────────────────────────"
+
+# ONE label per generic key. A footer item written as the bare key ("u", "q", "z", "rf") takes its label from here, so
+# the wording cannot drift between menus. A generic key that really means something else gets a NAMED variant in this table
+# ("u.up" = u) Up, go up a folder); the part after the dot is only a name, the key shown is the part before it.
+# A generic key is NEVER written "key:Label" (tests/cmd_drift.sh fails on it, whatever the spelling): add a variant here instead.
+declare -gA _MC_KEYLABEL=([u]=Back [u.up]=Up [u.prefix]="Remove last prefix" [q]=Quit [z]=Cancel [rf]=Refresh)
 
 _mc_footer_register() {
   local name="$1"; shift
@@ -92,7 +98,9 @@ _mc_footer() {
       [ -n "$line" ] && out+=("$line"); line=""
       out+=("${it#\#}"); continue
     fi
-    cell="${it%%:*}) ${it#*:}"
+    if [[ "$it" == *:* ]]; then cell="${it%%:*}) ${it#*:}"
+    elif [ -n "${_MC_KEYLABEL[$it]-}" ]; then cell="${it%%.*}) ${_MC_KEYLABEL[$it]}"
+    else cell="${it}) ${it}"; fi
     (( unders )) && cell="${cell//_/ }"
     if [ -z "$line" ]; then
       line="$cell"
@@ -151,9 +159,9 @@ _bvk_invalid() {
 }
 
 # ---- registered footers -------------------------------------------------
-_mc_footer_register file_menu    u:Up q:Quit h:Home
-_mc_footer_register browse_main  u:Up cd:Change_directory q:Quit '|' h:Home s:Settings -h:Help -u:Upgrade
-_mc_footer_register back_quit    u:Back q:Quit
-_mc_footer_register back_only    u:Back
-_mc_footer_register cancel_back  z:Cancel u:Back
-_mc_footer_register infinity     u:Up q:Quit
+_mc_footer_register file_menu    u.up q h:Home
+_mc_footer_register browse_main  u.up cd:Change_directory q '|' h:Home s:Settings -h:Help -u:Upgrade
+_mc_footer_register back_quit    u q
+_mc_footer_register back_only    u
+_mc_footer_register cancel_back  z u
+_mc_footer_register infinity     u.up q

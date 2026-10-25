@@ -21,3 +21,5 @@ _lt_b "load auth_usermenucommands"; source "bashbasicsbyvk_auth_usermenucommands
 _lt_b "load xui_rbmenucommands"; source "bashbasicsbyvk_xui_rbmenucommands.sh"; _lt_e
 _lt_b "load xui_csmenucommands"; source "bashbasicsbyvk_xui_csmenucommands.sh"; _lt_e
 _lt_b "load xui_nfmenucommands"; source "bashbasicsbyvk_xui_nfmenucommands.sh"; _lt_e
+_lt_b "load xui_ghpmenucommands"; source "bashbasicsbyvk_xui_ghpmenucommands.sh"; _lt_e
+_lt_b "load xui_ghrmenucommands"; source "bashbasicsbyvk_xui_ghrmenucommands.sh"; _lt_e

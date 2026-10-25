@@ -1,3 +1,4 @@
+_lt_b "load settings_desc"; source "bashbasicsbyvk_settings_desc.sh"; _lt_e
 _lt_b "load settings_ui"; source "bashbasicsbyvk_settings_ui.sh"; _lt_e
 _lt_b "load choose"; source "bashbasicsbyvk_choose.sh"; _lt_e
 _lt_b "load settings"; source "bashbasicsbyvk_settings.sh"; _lt_e

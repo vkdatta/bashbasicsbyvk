@@ -448,7 +448,7 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
         if ! [[ "$n" =~ ^[0-9]+$ ]] || [ "$n" -lt 1 ] || [ "$n" -gt ${#S_ID[@]} ]; then echo "🔴  Pick a number from the list."; continue; fi
         i=$((n-1))
         if [ "$verb" = x ]; then
-          _bvk_yn a "Nuke $(_snap_name "${S_AT[$i]}") now?" -d n
+          _bvk_yn a "Nuke $(_snap_name "${S_AT[$i]}") now?" -d none
           case "${a,,}" in y|yes)
             _BB_CALL_HDRS=(); _bb_call DELETE "/links/${S_ID[$i]}" || true
             [ "$_BB_STATUS" = 200 ] && echo "💫 Nuked." || echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;;

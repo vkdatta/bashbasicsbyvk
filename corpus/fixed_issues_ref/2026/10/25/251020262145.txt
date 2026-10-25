@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+Loading bars were wired by hand around a few slow calls (api, upgrade, workers, drive profiles, pending, recursive filter), so most waits (replace in files, infinity actions, navigating pn / nf, deleting many items) showed nothing. A bar had to appear for every wait without any call site asking for it.
+
+1. HOW DID YOU DEBUG
+Read bashbasicsbyvk_loadingbar.sh and every _lb_run / _lb_start caller, the smartmenu shims and the loadtime _lt_enter / _lt_ready events (they already mark "Enter pressed" and "next prompt ready" at every prompt type). Wrote a pty harness with a small VT screen to check what is left on the screen. Verified: bash read -t is NOT woken by a trapped signal (the trap ran only after the timeout), a byte written to a FIFO wakes it at once. Unit scenarios (short wait, long wait, output in the middle, 400 printed lines, bottom row, kept column, hold, shutdown), a mutation check (removing the wipe makes six of them fail) and the real app with a slow rm in PATH: bar shown during the delete, no ghost row afterwards. Mouse clicks on the settings screen could NOT be exercised in the pty (the same click test also does nothing on the original code); the click arithmetic was checked by reading only. tests/run.sh was not in the archive, so no repo test was run.
+
+1. CAUSE
+The bar was an explicit wrapper (_lb_run) that every feature had to call; a wait nobody wrapped had no bar, and a library tool (gd) drew its own second bar.
+
+1. FIX
+New bashbasicsbyvk_smartload.sh replaces bashbasicsbyvk_loadingbar.sh: one background animator (sleeps on a FIFO, no forks) told B / A / D / P by the foreground. _lt_enter arms it, _lt_ready, the read shim (when the terminal is read) and the draw entry of the engines (_st_draw, _vp_render_fresh, _cm_text_read) disarm it, the echo / printf / clear shims pulse it (wipe before writing, restart the 0.2 s clock). The bar is drawn under the cursor with save / restore cursor, so column and text are untouched. Every _lb_* call in api, upgrade, cfwp, gdrive, pending and filter was removed (filter also lost _filter_keep_hidden); _gd_py sets BVK_GD_BAR=0 while smartload runs; _lt_cleanup shuts the animator down before exec / exit; browse now calls _lt_enter whenever smartload is on (it used to call it only when loadtime recorded). Lesson: code that writes with builtin printf during a wait must call _sl_pulse first, own-progress code uses _sl_hold. Not covered: an external program that writes straight to the terminal during a wait can leave one ghost bar row.
+
+2. ISSUE IN BRIEF
+Settings rows only showed a short label and value, so a person who does not know what a buffer, a nuke time or regex is could pick an option that is wrong for their use. Every setting needed a long plain-words explanation above the suggestion row.
+
+2. HOW DID YOU DEBUG
+Walked the whole Settings tree headlessly (a stub _st_run that lists every row and opens every action row) in a throw-away copy of the repo: 67 screens, 260 distinct rows plus the timezone lists. Checked that every screen and row has a text, then drove the real app in a pty at several terminal sizes (24x40, 20x36, 40x80, 14x50) and pressed ? on a row.
+
+2. CAUSE
+_st_run knew only label and value of a row; there was nowhere to keep or show an explanation.
+
+2. FIX
+New bashbasicsbyvk_settings_desc.sh (381 texts, lazy-loaded table keyed by screen title and row tag, parent-qualified keys where two screens share a title). _st_draw shows the highlighted row's text (or the screen's) between the footer and the suggestion row, limited to a third of the screen and cut with "(? = all)"; ? shows the full text. The block height and _st_click row arithmetic now include the description rows (_ST_DESC_N). Screens shorter than 18 rows show no description. A row with no line shows its screen's text.
+
+3. ISSUE IN BRIEF
+Delete-type confirmations had "No" as the default answer, so a bare Enter silently answered them. They should have no default: the person must answer.
+
+3. HOW DID YOU DEBUG
+Read _bvk_yn / _bvk_menu (-d "" already meant nothing highlighted) and listed every _bvk_yn that deletes or removes: confirm delete (lock), delete without backup and "back up before deleting" (backup), remove bookmarks, clear recents, clear last-used rules, delete incomplete blobs, nuke a link and nuke a snapshot. Drove the real delete flow in a pty: Enter on the box left it open and the file in place, y deleted it.
+
+3. CAUSE
+_bvk_yn defaulted to n and every delete question relied on it (AGENTS rule 6 said "n unless harmless").
+
+3. FIX
+_bvk_yn -d none (empty default); the plain-text fallback asks again on an empty line (EOF still backs out). The thirteen delete-type questions use -d none; AGENTS rule 6 documents it.

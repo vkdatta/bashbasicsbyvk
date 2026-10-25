@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+After tests ran the agent could use up the whole usage budget inside the test loop, so the owner received no output until the limit reset. The test tiers were also not tied to the size of the change, the runner capped parallelism at 4 jobs and started slow tests last, and tests/github/ui_test.py failed whenever the machine had GH_TOKEN set.
+
+HOW DID YOU DEBUG
+Follow-up of BB-251020261310-1. Read run.sh and ui_test.py; the app reads GH_TOKEN / GITHUB_PAT before GITHUB_TOKEN (gh/bashbasicsbyvk lines 7 and 46), and the earlier slow-tier run showed the "environment GH_TOKEN" message in the failing screen. Verification of the changes themselves is listed in the delivery message of the task (fast tier plus github_ui and an unknown-name run); the AGENTS.md workflow text was reviewed by reading only, no agent was run against it.
+
+CAUSE
+AGENTS.md had no deliver-before-test step and no size-based tier choice; run.sh used JOBS capped at 4 and started tests in tests.list order (findrep_full last); ui_test.py did not remove GH_TOKEN / GITHUB_PAT from the app's environment.
+
+FIX
+AGENTS.md: section "Workflow and tests" (deliver first with the status line "<task name> (tests: x/y/n)", test, fix on the base, deliver again; minor = none, logic up to 5 script files = fast tier, more = all; maximum parallel; never rerun a whole tier). tests/run.sh: JOBS defaults to one per CPU, slowest tests start first, a `serial` marker (tests.list field 6) runs a test alone afterwards, and a STATUS: x/y/n line is printed. tests/github/ui_test.py: GH_TOKEN and GITHUB_PAT removed from the app environment. Bridge files point to the new section name.

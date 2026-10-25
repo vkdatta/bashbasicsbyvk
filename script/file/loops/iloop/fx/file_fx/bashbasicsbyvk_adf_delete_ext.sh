@@ -62,4 +62,4 @@ _fx_adf_delete_by_ext() {
   echo "Selected extension(s): $(printf '.%s ' "${!chosen[@]}")"
   _fxdel_run_selected
 }
-_fx_adf_register "delete.by.extension" "_fx_adf_delete_by_ext" "file_fx/delete/delete.by.extension"
+_fx_adf_register_fx "delete.by.extension" "_fx_adf_delete_by_ext"

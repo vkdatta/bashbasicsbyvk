@@ -49,14 +49,8 @@ _bvk_xfer_bin() {
       _BVK_XFER_WHY="BVK_NO_XFER=1 is set — the Go engine is switched off on purpose"
     else
       local _m _os _o _d _b _out
-      case "$(uname -m)" in
-        aarch64|arm64) _m=arm64 ;; x86_64|amd64) _m=amd64 ;; armv7*|armv8l) _m=arm ;;
-        *) _m=""; _BVK_XFER_WHY="no bvk-xfer build for CPU '$(uname -m)'" ;;
-      esac
-      case "$OSTYPE" in
-        *android*) _os=android ;;
-        *) case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac ;;
-      esac
+      _bvk_engine_target; _m="$_bet_m"; _os="$_bet_os"
+      [ -n "$_m" ] || _BVK_XFER_WHY="no bvk-xfer build for CPU '$(uname -m)'"
       if [ -n "$_m" ]; then
         _BVK_XFER_WHY="no bvk-xfer-$_os-$_m binary found (looked next to 'o' and on PATH)"
         _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"

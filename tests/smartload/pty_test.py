@@ -1,0 +1,88 @@
+"""smartload: the loading bar that appears by itself (AGENTS rule 7).   python3 tests/smartload/pty_test.py <repo root>
+Each scenario is a bash snippet run in a real pty (or in pipes); what the app wrote to the terminal is checked as raw bytes:
+the bar is the glyph '░', a wipe is  ESC D ESC [ 2 K ESC M  (save the cursor, down one row, erase it, restore: the column and the text stay).
+The sleeps inside the snippets ARE the behaviour under test (the grace timer), so they carry  # lint-wait-ok."""
+import os, pty, sys, select, time, subprocess, signal
+ROOT = sys.argv[1]
+SL = f'{ROOT}/script/file/engine/bashbasicsbyvk_smartload.sh'
+F = float(os.environ.get('TEST_TIME_FACTOR', '1') or 1)
+GRACE_MS = 400
+WIPE = '\x1b7\x1b[1B\r\x1b[2K\x1b8'
+PRE = f'_lt_b(){{ :; }}; _lt_e(){{ :; }}; _lt_enter(){{ :; }}; _lt_ready(){{ :; }}; source "{SL}"; '
+fail = 0
+def ok(m):  print('  ok  ', m)
+def bad(m):
+    global fail; fail = 1; print('  FAIL', m)
+
+def run_pty(snippet, env=None, deadline=40):
+    e = dict(os.environ, VK_SMARTLOAD_GRACE_MS=str(GRACE_MS), TERM='xterm-256color'); e.update(env or {})
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execvpe('bash', ['bash', '-c', PRE + snippet], e)
+    out = b''; end = time.time() + deadline * F
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.05)
+        if r:
+            try: d = os.read(fd, 65536)
+            except OSError: break
+            if not d: break
+            out += d
+        else:
+            done, _ = os.waitpid(pid, os.WNOHANG)
+            if done: break
+    else:
+        os.kill(pid, signal.SIGKILL)
+    try: os.waitpid(pid, 0)
+    except ChildProcessError: pass
+    return out.decode('utf-8', 'replace')
+
+def check(cond, good, why):
+    ok(good) if cond else bad(why)
+def has_bar(s): return '░' in s
+
+# 1) a long wait gets a bar by itself, and it is wiped before the next prompt
+o = run_pty('_sl_ready; _sl_enter "" "" "Testing bar"; sleep 1.6; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+i, w, e = o.find('░'), o.find(WIPE), o.find('MARK_END')
+if i >= 0 and 'Testing bar' in o and '█' in o: ok('a wait longer than the grace period shows the bar with its label')
+else: bad(f'no bar for a long wait: {o[-200:]!r}')
+if i >= 0 and w > i and e > w: ok('the bar is wiped (save, down, erase the row, restore) before the next output')
+else: bad(f'no wipe between the bar and the next output (bar@{i} wipe@{w} end@{e})')
+if '\x1b7' in o and '\x1b8' in o: ok('it is drawn with save / restore cursor: the typed text and the column are untouched')
+else: bad('the bar does not use save / restore cursor')
+
+o2 = run_pty('_sl_ready; _sl_enter "" "" "Scroll"; sleep 1.6; _sl_pulse; echo MARK; _sl_ready')   # lint-wait-ok: the wait is the behaviour under test
+check(('\x1bD' not in o2 and '\n\x1b[1A' not in o2 and '\x1bM' not in o2), 'drawing and wiping the bar never scrolls the screen (no ESC D / ESC M / newline)', f'a scrolling sequence is used: {o2[:200]!r}')
+
+# 2) a short wait never flashes a bar
+o = run_pty('_sl_ready; _sl_enter "" "" "Quick"; sleep 0.05; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+check((not has_bar(o) and 'MARK_END' in o), 'a short wait shows no bar', f'a short wait flashed a bar: {o[-160:]!r}')
+
+# 3) the wait before the very first screen shows "Starting"
+o = run_pty('sleep 1.6; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+check(('Starting' in o and has_bar(o)), 'the wait before the first screen is a "Starting" bar', f'no start-up bar: {o[-160:]!r}')
+
+# 4) output keeps the clock fresh: a burst of output with short gaps never shows a bar
+o = run_pty('_sl_ready; _sl_enter "" "" "Burst"; for i in 1 2 3 4 5 6 7 8; do sleep 0.1; _sl_pulse; done; _sl_ready; echo MARK_END')   # lint-wait-ok: the gaps are the behaviour under test
+check((not has_bar(o) and 'MARK_END' in o), 'a burst of output (gaps shorter than the grace) shows no bar', f'a bar appeared during a burst: {o[-160:]!r}')
+
+# 5) a write after a long silent stretch wipes the bar first
+o = run_pty('_sl_ready; _sl_enter "" "" "Slow"; sleep 1.6; _sl_pulse; echo MARK_WRITE; _sl_ready')   # lint-wait-ok: the wait is the behaviour under test
+i, w, e = o.find('░'), o.find(WIPE), o.find('MARK_WRITE')
+check((i >= 0 and w > i and e > w), '_sl_pulse wipes a showing bar before the foreground writes', f'write not preceded by a wipe (bar@{i} wipe@{w} write@{e})')
+
+# 6) code that draws its own progress holds the bar back; releasing brings it back
+o = run_pty('_sl_ready; _sl_hold; _sl_enter "" "" "Held"; sleep 1.6; echo MARK_MID; _sl_release; sleep 1.6; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+m, i = o.find('MARK_MID'), o.find('░')
+check((m >= 0 and i > m), '_sl_hold keeps the bar out of the way; _sl_release brings it back', f'hold/release wrong (mid@{m} bar@{i})')
+
+# 7) VK_SMARTLOAD=0 and "no terminal" are no-ops
+o = run_pty('_sl_ready; _sl_enter "" "" "Off"; sleep 1.2; _sl_ready; echo "ON=[${_SL_ON}]"', env={'VK_SMARTLOAD': '0'})   # lint-wait-ok: the wait is the behaviour under test
+check((not has_bar(o) and 'ON=[]' in o), 'VK_SMARTLOAD=0 turns it off', f'VK_SMARTLOAD=0 still draws: {o[-160:]!r}')
+p = subprocess.run(['bash', '-c', PRE + '_sl_enter x; _sl_ready; echo "ON=[${_SL_ON}] done"'], capture_output=True, text=True, env=dict(os.environ, VK_SMARTLOAD_GRACE_MS='50'), stdin=subprocess.DEVNULL, timeout=30 * F)
+check((p.returncode == 0 and 'ON=[] done' in p.stdout and not has_bar(p.stdout)), 'no terminal (pipes, tests, cron): every call is a no-op', f'pipes: rc={p.returncode} {p.stdout!r} {p.stderr[-120:]!r}')
+
+# 8) shutdown ends the animator and removes its pipes
+o = run_pty('_sl_ready; p=$_SL_PID; b=$_SL_BASE; _sl_enter x; _sl_shutdown; for i in $(seq 1 80); do kill -0 $p 2>/dev/null || break; sleep 0.05; done; kill -0 $p 2>/dev/null && echo ANIM=ALIVE || echo ANIM=GONE; ls "$b".* >/dev/null 2>&1 && echo FILES=LEFT || echo FILES=GONE')   # lint-wait-ok: waiting for the process to exit
+check(('ANIM=GONE' in o and 'FILES=GONE' in o), '_sl_shutdown ends the animator and removes its pipes', f'shutdown left something: {o[-160:]!r}')
+
+sys.exit(fail)

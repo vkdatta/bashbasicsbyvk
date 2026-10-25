@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+Two branches of the repo diverged from one base: v1a added the GitHub screens (fx -> github_fx -> open github), a shared GitHub helper file and the command-gate / block() map change; v1b replaced the hand-wired loading bar with smartload, added Settings descriptions, no-default delete questions and several generated-list tests. They had to become one tree where the GitHub feature obeys the engine rules of v1b.
+
+1. HOW DID YOU DEBUG
+Diffed both branches against the base (v1a: 16 changed files, 14 new; v1b: about 85 changed files, 11 new, 2 deleted) and listed the files both changed (README, upgrade loop, settings_ui, tests.list, covers.map, the corpus index). Trial 3-way merges: README, upgrade.sh and settings_ui.sh merged without conflicts, the three append-only files were unioned. Searched the v1a GitHub code for what v1b removed or forbids (_lb_run, typed generic footer labels, -d n on a delete question, typed ADF path). Ran tests/run.sh fast (22 tests), then github_ui, cc_truth and nav_back. Mouse and real-terminal behaviour of the combined screens was checked only through those pty tests, not by hand.
+
+1. CAUSE
+v1a was written against the old engine: its GitHub screens called _lb_run (deleted in v1b), wrote footer keys as "rf:Reload" / "u:Back" (rejected by cmd_drift since v1b) and answered the delete question with a default of n (v1b: no default).
+
+1. FIX
+v1b is the base. From v1a: github_fx/, bashbasicsbyvk_ghlib.sh, cmdmap/xui_ghp and xui_ghr, the regenerated cmdmaps and mapgen (block()), the import hooks, tests/github and tests/cc_truth; upgrade.sh and settings_ui.sh (_st_cm_gate) merged by 3-way merge. Ported the GitHub screen: removed the five _lb_run wrappers, bare rf / u footer keys, -d none on the delete question, _sl_hold / _sl_release around the job runner (git prints its own progress), removed the _lb_run stub from tests/github/upgrade_shared.sh. Regenerated the command table (bash tests/cmd_docs.sh --write). Added AGENTS rule 11. Lesson: a feature written on an old engine must be checked against every rule the new engine added, and the tests that enforce those rules (smartload, cmd_drift, delete_confirm, adf_registry) catch it.

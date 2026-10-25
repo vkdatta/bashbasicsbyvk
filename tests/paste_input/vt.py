@@ -28,6 +28,10 @@ class Screen:
         while i < n:
             ch = s[i]
             if ch == '\x1b':
+                if s[i + 1:i + 2] in ('7', '8'):                 # DECSC / DECRC: save / restore the cursor (the smart loading bar draws with them)
+                    if s[i + 1] == '7': self.saved = (self.r, self.c)
+                    else: self.r, self.c = self.saved; self.wrap = False
+                    i += 2; continue
                 m = re.match(r'\x1b\[([0-9;?]*)([A-Za-z])', s[i:])
                 if not m:
                     if re.match(r'\x1b(\[[0-9;?]*)?$', s[i:]): break

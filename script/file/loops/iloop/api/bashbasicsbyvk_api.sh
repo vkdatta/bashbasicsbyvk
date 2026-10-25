@@ -476,12 +476,12 @@ _api_menu_header() {
 _api_menu_footer() {
   case "$_API_SVC" in
     backup) _mc_footer "#[Backup]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
-      "N:Open" "r-N:Restore here" "c-N:Copy link" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf:Refresh" "u:Exit" "bk:Close" ;;
+      "N:Open" "r-N:Restore here" "c-N:Copy link" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf" "u" "bk:Close" ;;
     saved)  _mc_footer "#[Saved]  ${#items[@]} saved   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
-      "N:Open" "r-N:Restore here" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf:Refresh" "u:Exit" "sv:Close" ;;
+      "N:Open" "r-N:Restore here" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf" "u" "sv:Close" ;;
     *)      _mc_footer "#[Links]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
       "N:Open" "c-N:Copy link (c-1,3-5)" "g-N:New address" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" \
-      "rf:Refresh" "u:Exit" "api:Close" ;;
+      "rf" "u" "api:Close" ;;
   esac
 }
 
@@ -502,8 +502,7 @@ _api_build_items() {
   items=()
   _hl_index=0
   if [ "$_API_LOADED" -eq 0 ]; then
-    if declare -F _lb_run >/dev/null 2>&1; then _lb_run "Fetching your links" _api_load || true
-    else echo "⏳ Fetching your links…"; _api_load; fi
+    _api_load || true
   fi
   _api_sort
   items=("${_API_ID[@]}")
@@ -663,7 +662,7 @@ _api_do_nuke() {         # _api_do_nuke <idx>...
     total=$((total + ${_API_RFND[$k]}))
   done
   echo "   Refund is in whole days only; time already used rounds up to a full day."
-  _bvk_yn ans "Nuke now and refund about $total credit(s)?" -d n
+  _bvk_yn ans "Nuke now and refund about $total credit(s)?" -d none
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   local ok=0 bal="" rf rd
   for k in "${ks[@]}"; do

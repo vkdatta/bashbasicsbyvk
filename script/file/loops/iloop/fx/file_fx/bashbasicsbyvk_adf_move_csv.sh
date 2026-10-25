@@ -11,4 +11,4 @@ _fx_adf_move_select_csv() {
   [ -z "$csv_file" ] && return
   _csv_stage_selected "$_SP_MV_ONCE_FILE" "move"
 }
-_fx_adf_register "move.select.items.csv" "_fx_adf_move_select_csv" "file_fx/move/move.select.items.csv"
+_fx_adf_register_fx "move.select.items.csv" "_fx_adf_move_select_csv"

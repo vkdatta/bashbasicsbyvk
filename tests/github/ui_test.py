@@ -19,9 +19,15 @@ def check(name, cond, a=None):
 def L(a, text, t=1.2, until=None):
     a.line(text, t=t, until=until); a.settle()
 
+def on_tab(a, label):
+    """is the NEWEST repo header on screen showing [label]?  (older screens stay visible above it)"""
+    hdr = [l for l in a.lines() if "\U0001F419 o/r" in l]
+    return bool(hdr) and ("[" + label + "]") in hdr[-1]
+
 def start(E, key=True, extra=None):
-    env = {"BVK_GH_API": E.api, "GITHUB_TOKEN": mg.GOOD if key else None}; env.update(extra or {})
-    return PtyApp(ROOT, 110, 45, lambda h, w: None, env=env)
+    # the app reads GH_TOKEN / GITHUB_PAT before GITHUB_TOKEN: a machine that has one set (CI, agent sandbox) must not leak into the test (None removes the variable)
+    env = {"BVK_GH_API": E.api, "GH_TOKEN": None, "GITHUB_PAT": None, "GITHUB_TOKEN": mg.GOOD if key else None}; env.update(extra or {})
+    return PtyApp(ROOT, 110, 45, lambda h, w: None, env=env, answer_dsr=True)    # a real terminal answers the cursor-position query the mouse code asks
 
 def to_github(a, wait_for):
     L(a, "fx"); L(a, "3"); L(a, "1", t=4, until=lambda: wait_for in a.text())
@@ -68,6 +74,21 @@ def run_screens():
         a.settle()
         d = os.path.join(dest, "r-v1.2")
         check("download: depth 1 clone of v1.2 is in the chosen place, at that tag, one commit", os.path.isdir(d) and gt.git("rev-list", "--count", "HEAD", cwd=d) == "1" and open(os.path.join(d, "f")).read() == "2", a)
+
+        # every key the footer prints must be a command the app accepts HERE (command map, hint, cheat code, loop: one truth)
+        for k, word in (("c", "Create"), ("e", "Edit"), ("r", "Rename"), ("d", "Delete"), ("g", "Download"), ("rf", "Reload"),
+                        ("e-", "Edit"), ("r-", "Rename"), ("d-", "Delete"), ("g-", "Download"), ("i-", "Info")):
+            a.send(k); a.settle(); t = a.text()
+            hint = [l for l in t.splitlines() if l.strip().startswith(k + "  \u2192")]
+            check("footer key %-2s is accepted here: the hint names it, never 'not available'" % k, "not available" not in t and bool(hint) and word in hint[-1], a)
+            a.send("\x7f" * len(k)); a.settle()
+        L(a, "cc", until=lambda: "Delete" in a.text()); t = a.text()
+        check("cheat codes (cc) list the screen's own commands", all(w in t for w in ("Create", "Edit", "Rename", "Delete", "Download", "Reload")) and "not available" not in t, a)
+        L(a, "u"); a.settle()
+        # arrows and touch right after an invalid command (the cancel / redraw path) must not be typed into the prompt as text
+        L(a, "zzz"); a.send("\x1b[C"); a.settle(); a.send("\x1b[<0;20;12M\x1b[<0;20;12m\x1b[<64;20;12M"); a.settle(); t = a.text()
+        check("after an invalid command: arrow, tap and wheel do not appear as text", "[C" not in t and "[<" not in t, a)
+        a.send("\x1b[D"); a.wait(lambda: on_tab(a, "\U0001F4E6 Stable")); a.settle()      # the probe's right arrow switched to Tags, as it should
 
         # rename: conflict first -> refused, nothing changes
         before = dict(R.tags)

@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Agents ran the fast tier, then the full suite, then reruns after every edit, even when only a comment, description, header, footer or command code changed. The tests cost minutes and tokens and cannot fail on such an edit. AGENTS.md only said "run the tests that cover what you touched" with no minor-change exemption, and agents other than those reading AGENTS.md never saw it.
+
+HOW DID YOU DEBUG
+Read AGENTS.md, tests/run.sh, tests.list, covers.map. Ran the fast tier (22 tests, 55 s on 2 cores) and the slow tier (about 5 min; github_ui failed because the environment had GH_TOKEN, which the app prefers over the GITHUB_TOKEN the test sets; e2e_pending and e2e_services skipped, no ../fileapi). Edited docs only; no test was run after the edit because the edit is itself a minor change. Not run: the bridge files were not tried in CLAUDE.md / Gemini CLI / Copilot themselves.
+
+CAUSE
+No definition of a minor change and no rule that it runs nothing; the "no regressions" rule and the rule-1 text both told agents to run covering tests after every change; covers.map sends any unmatched file to the whole fast tier. CLAUDE.md (read by Claude Code instead of AGENTS.md) and GEMINI.md did not exist.
+
+FIX
+AGENTS.md: new top section "Tests: DO NOT RUN THEM for a minor change" (minor = no tests, syntax check only; logic = one targeted run; full suite only on explicit request; never rerun a whole tier); principle 2 and 5 and the Tests section now point to it; rule 1 allows the agent-instruction files at the root. New 3-line bridge files CLAUDE.md, GEMINI.md, .github/copilot-instructions.md that only point to AGENTS.md. Open follow-up: tests/github/ui_test.py should unset GH_TOKEN so it is not red in a sandbox that has one.

@@ -189,7 +189,7 @@ _rule_save_as() {
   fi
   local dir; dir="$(_rl_dir "$scope" "$name")"
   if [ -e "$dir" ]; then
-    _bvk_yn ans "Rule '$name' exists in $scope — overwrite the expression?" -d n
+    _bvk_yn ans "Rule '$name' exists in $scope — overwrite the expression?" -d none
     [[ "$ans" == [yY] ]] || { echo "🚫 Cancelled"; return 1; }
     printf '%s\n' "$expr" > "$dir/$name.rule"
     echo "💾 Updated $scope rule '$name'"; return 0
@@ -286,11 +286,11 @@ _rl_menu_header() {
 
 _rl_menu_footer() {
   if [ "$_rl_tab" = last ]; then
-    _mc_footer "#[Last used]  ${#items[@]} unsaved expression(s)" "N:Save as rule" "clr:Clear list" "u:Exit" ".r:Close"
+    _mc_footer "#[Last used]  ${#items[@]} unsaved expression(s)" "N:Save as rule" "clr:Clear list" "u" ".r:Close"
   elif [ -z "$_rl_cur" ]; then
-    _mc_footer "#[Rules]  select = .s rules · display = .d rules  (built in — cannot be deleted)" "N:Open folder" "ux:Export all" "ui:Import all" "u:Exit" ".r:Close"
+    _mc_footer "#[Rules]  select = .s rules · display = .d rules  (built in — cannot be deleted)" "N:Open folder" "ux:Export all" "ui:Import all" "u" ".r:Close"
   else
-    _mc_footer "#[$_rl_cur rules]  ${#items[@]} here" "N:Run" "c:Create" "d:Delete" "r:Rename" "u:Up" "|" \
+    _mc_footer "#[$_rl_cur rules]  ${#items[@]} here" "N:Run" "c:Create" "d:Delete" "r:Rename" "u.up" "|" \
       "e-N:Edit rule" "em-N:Edit description" "i-N:Info" ".r:Close" "|" "ux:Export all" "ui:Import all"
   fi
 }
@@ -609,7 +609,7 @@ rules_menu() {
 
       clr)
         if [ "$_rl_tab" = last ]; then
-          local _a; _bvk_yn _a "Clear the last-used list? Your saved rules are not touched." -d n
+          local _a; _bvk_yn _a "Clear the last-used list? Your saved rules are not touched." -d none
           if [[ "$_a" == [yY] ]]; then : > "$(_rl_hist_file)"; echo "💫 Last-used list cleared"; else echo "🚫 Cancelled"; _rl_fresh=false; fi
         else echo "🔴  clr works in the Last used tab"; _rl_fresh=false; fi ;;
 

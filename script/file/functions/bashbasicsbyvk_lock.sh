@@ -189,7 +189,7 @@ _lk_confirm_delete() {
   done
 
   if [ "${#prot[@]}" -eq 0 ]; then
-    _bvk_yn ans "${prompt% (y/n): }" -d n -t "Confirm delete" -i "🗑️"
+    _bvk_yn ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑️"
     [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
     return 0
   fi
@@ -197,7 +197,7 @@ _lk_confirm_delete() {
   # ── exactly one item selected, and it is locked ──
   if [ "${#selected_items[@]}" -eq 1 ]; then
     it="${selected_items[0]}"
-    _bvk_yn ans "${prompt% (y/n): }" -d n -t "Confirm delete" -i "🗑️"
+    _bvk_yn ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑️"
     [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
     local -a detail=()
     if _lk_is_locked "$it"; then
@@ -218,7 +218,7 @@ _lk_confirm_delete() {
     if _lk_is_locked "$it"; then echo "   🔒 ${it##*/}"
     else _lk_count_inside "$it"; echo "   🔒 ${it##*/}  (contains $_lk_inside locked item(s))"; fi
   done
-  _bvk_yn ans "${prompt% (y/n): }" -d n -t "Confirm delete" -i "🗑️"
+  _bvk_yn ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑️"
   [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
 
   echo
@@ -234,10 +234,10 @@ _lk_confirm_delete() {
   if [ "$choice" = skip ]; then
     final=("${free[@]}")
     if [ "${#final[@]}" -eq 0 ]; then echo "📜  Everything selected is locked — nothing to delete"; return 1; fi
-    _bvk_yn ans "Delete ${#final[@]} unlocked item(s), keeping ${#prot[@]} locked?" -d n
+    _bvk_yn ans "Delete ${#final[@]} unlocked item(s), keeping ${#prot[@]} locked?" -d none
   else
     final=("${selected_items[@]}")
-    _bvk_yn ans "Delete ALL ${#final[@]} item(s), including ${#prot[@]} locked?" -d n
+    _bvk_yn ans "Delete ALL ${#final[@]} item(s), including ${#prot[@]} locked?" -d none
   fi
   [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
 

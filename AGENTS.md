@@ -3,6 +3,55 @@
 Every AI agent working in this repo must read this file first and follow it exactly.
 If a task seems to need breaking a rule, stop and ask the owner. Do not improvise.
 
+## Workflow and tests (owner's rule: overrides every other mention of tests, tokens or "run" in this file)
+
+**Why:** an agent can finish the work with 60% of its budget and then spend the rest on tests. If the budget runs out inside the tests, the owner gets NOTHING and waits for the
+usage limit to reset. So: **deliver first, test after, deliver again after every fix. Tests must never be the reason the owner has no output.**
+
+### The loop (every task, no exceptions)
+1. **Do ALL the tasks.** Do not start any test yet.
+2. **DELIVER NOW, before the first test.** The delivery is the finished work, complete and usable as it stands:
+   - **In chat** (a chat window, or no shell on the owner's machine): put the result in the reply: send every changed file (or one archive) with the file-sending tool when you have one,
+     otherwise paste each changed file in full (a diff only when the file is huge). A summary alone is not a delivery.
+   - **In a terminal** (a CLI agent working in the repo): the files are already on disk in the working tree; leave them there (no commit, no push unless asked) and PRINT the summary to the terminal.
+   - Either way, the first line is the **status line**: `<task name> (tests: x/y/n)`, then 3-6 lines: what changed, which files, which test tier runs next.
+     `<task name>` = the name of the owner's original task / PR (or, if it had none, a 3-6 word name you pick); it stays the SAME on every later delivery.
+     `x/y/n` = **x passed / y completed / n total** tests of the tier you chose. Before any test it is `0/0/<n>` (add "not started"). A skipped test is NOT completed and NEVER passed.
+     Example: `Footer rename (tests: 0/0/22 not started)` ... later `Footer rename (tests: 21/22/22, github_ui failed)` ... finally `Footer rename (tests: 22/22/22)`.
+     `bash tests/run.sh ...` prints this as its `STATUS:` line: copy it, do not retype it.
+   - A MINOR change has no tests (see below): deliver with `<task name> (tests: none needed, minor change)` and you are done; the loop stops here.
+3. **Run the tests** of the tier below, once, through `tests/run.sh` (parallel, see below).
+4. **Red? Fix it on the BASE.** There is ONE working copy (the base). Fix the failing code THERE. Never patch the copy you already delivered, never stack a patch on a patch, never
+   hand over a diff against an earlier delivery. Read the failing test's log first. Then rerun only the failed tests by name, plus `bash tests/run.sh for <files the fix touched>`;
+   never the whole tier again. The status line counts the latest result of each test.
+5. **DELIVER AGAIN**: the whole current base (every changed file, not only the fix), the same `<task name>`, the new `x/y/n`, one line on what the fix was.
+6. Repeat 4-5 until `x = y = n`. **Stop the loop and deliver as it stands** (with the honest status line and the names of the red tests) when you notice your budget or context
+   running low, when a red test survives 3 fix rounds, or when the cause is outside your change (then say so). A delivered copy with a true label is always better than a perfect copy that never arrives.
+
+### What to test: decide by what you changed, before the first delivery
+- **MINOR change: NO test. Not the fast tier, not `run.sh for`, not a baseline run.** Minor = nothing the app *does* changes, only what it *says* or how it *looks*: comments, docstrings,
+  descriptions, hint / help / prompt / message wording, Settings descriptions, headers, footers, banners, labels, icons, spacing, colours, menu titles, command codes / aliases / cheat-code *names*
+  or a command-map line that only renames or re-points a key (no new code behind it), README / llms*.txt / SECURITY.md / corpus notes, renames, moves, reformatting, and ANY group of these.
+  Do only the free checks: `bash -n <file>` (`python3 -m py_compile`, `node --check`) on every edited file, in parallel; `bash tests/cmd_docs.sh --write` (0.4 s, a generator, not a test) if a
+  command was added / renamed / re-described; checks 1-4 and 6 at the bottom if a file or note was added, renamed or deleted. Never call a minor change "tested" or "verified".
+- **LOGIC change in up to 5 files under `script/`: the fast tier is enough: `bash tests/run.sh fast`.** Logic = behaviour can differ (function bodies, conditions, parsing, key / input / paste /
+  mouse handling, file operations, transfers, GitHub / network code, the C engine, a bug fix). Files that only got minor edits do not count towards the 5.
+- **REVAMP: more than 5 files under `script/` changed with logic: `bash tests/run.sh all`** (fast + slow). A mixed task is judged by its logic files.
+- The owner's prompt wins: if it names tests, says "full suite" or says "no tests", do exactly that. An agent never widens the tier on its own, never "to be safe".
+- Unsure whether a change is minor or logic? Ask the owner in one line. Do not run tests to find out.
+
+### Run in maximum parallel
+- Tests run ONLY through `bash tests/run.sh`: it runs one job per CPU, slowest tests first, each with a hard timeout. Never write `for t in ...; do bash $t; done`, never run tests one
+  command after another, never lower `JOBS`. Do not run two `run.sh` at once either (they would fight for the same CPUs).
+- The only exception is a test that really needs a sequential order (shared port, file or state): mark it `serial` in field 6 of `tests/tests.list` with the reason; `run.sh` then runs it
+  alone after the parallel ones. Mark a test serial only when you have seen it fail in parallel, never "just in case".
+- Other independent commands (`bash -n` on many files, greps) also go in ONE command, in parallel (`xargs -P`, or `&` and `wait`), not as a series of calls.
+
+### Never
+- run tests before AND after a change, or again after a green result; run them "to double-check", or because another rule says "run the tests that cover it" (that means a LOGIC change, once);
+- rerun a whole tier after a red; add a `sleep`, a retry loop or a polyglot scan on your own;
+- print whole test logs into the conversation: `run.sh` already prints only the failures with their last lines (tokens are the owner's money).
+
 ## The principle: dedupe. reuse. share. integrate
 
 Every task starts from what already exists. Copied code drifts: one copy gets fixed, the others are forgotten, and regressions follow.
@@ -12,14 +61,13 @@ So before you create anything, work in this order:
    the same (`grep -rn <keyword> script tests`: function names, distinctive commands, messages). When the task is a bug, also read the corpus
    index first (rule 5): `corpus/fixed_issues_index.jsonl`.
 2. **Reuse as is; otherwise extend.** If an existing function does the job, call it. If it almost does, modify that function so every current
-   caller behaves exactly as before (read all callers, run the tests that cover them) instead of writing a lookalike next to it.
+   caller behaves exactly as before (read all callers; for a logic change run the tests that cover them once, see "Workflow and tests" at the top) instead of writing a lookalike next to it.
 3. **Share, never copy.** Logic needed in two places lives in ONE helper that both call (where helpers go: see check 5 below). Never paste a block
    and edit it.
 4. **Dedupe whatever you meet.** If you find a duplicate, a near-duplicate (same logic, other names), drift (copies that now behave differently) or a
    regression, do not walk past it: merge it into one helper, prove old and new behave the same (run both and compare), and record it per rule 5.
    Less code, fewer places to forget.
-5. **No regressions.** A reuse or dedupe change must not change behaviour. Run the tests that cover the code you touched (`bash tests/run.sh for <files>`,
-   see "Tests" below) before and after; say in HOW DID YOU DEBUG what you could not run.
+5. **No regressions.** A reuse or dedupe change must not change behaviour. For a LOGIC change run the tests of the tier chosen in "Workflow and tests" ONCE, after the change and after delivering; a MINOR change runs none (see "Workflow and tests" at the top). Say in HOW DID YOU DEBUG what you ran and what you did not.
 
 ## The rules
 
@@ -27,6 +75,8 @@ So before you create anything, work in this order:
    `bashbasicsbyvk_` (py, c, h, txt, md, map, list, Makefile, extension-less python/node/bash tools, everything),
    with exactly two exceptions: the entry point `script/o`, and import files (rule 2).
    Directories are not prefixed. Do not create files anywhere else (no new files in the repo root).
+   The only other exception is the agent-instruction files at the repo root: `AGENTS.md` (the one real copy of these rules) and the 3-line bridges that only point to it
+   (`CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`). A bridge never holds a rule of its own: change the rule in `AGENTS.md`, nowhere else.
    The only exception is `corpus/` (rule 5): it sits at the repo root, is not installed, and its
    notes are named by timestamp (inside year/month/day folders), not `bashbasicsbyvk_`.
 2. **`_3bvk_` is reserved for import files.** An import file is a `.sh` whose only job is to `source` other files,
@@ -65,7 +115,7 @@ So before you create anything, work in this order:
      `issue_category`; `issue_type`; `issue` = the same text as ISSUE IN BRIEF; `path` = repo-relative path of the note.
      Pick category and type from these lists; add a new value only when none fits, and add it here in the same change.
      - Categories: Input & Paste · Menus & Navigation · Command Map & Drift · File Transfer & Pending · Cloud Backend · Google Drive ·
-       Platform Compatibility · Code Health · Repo Process & Docs
+       Platform Compatibility · Code Health · Repo Process & Docs · Data Safety
      - Types: Bug · Regression · Platform Bug · Data Safety · Performance · Resilience · Scalability · UX Change · Enhancement · Refactor · Not Reproduced
    - Old notes are history: do not rename or rewrite them (a new note that points to the old `issue_id` is how you follow up).
    - The naming checks below only scan `script/`, so they do not apply to `corpus/`; check 6 covers the corpus.
@@ -77,7 +127,7 @@ So before you create anything, work in this order:
    - **A question with fixed answers is never a one-line `read -p "... (y/N): "` and never a hand-made key row (`c) copy   x) nuke   Enter) back:`).**
      Use `script/file/settings/bashbasicsbyvk_choose.sh` (it is the Settings screen engine in a small box: same look, arrows, touch/click, `u`/`q`):
      `_bvk_yn VAR "Question" [-d y|n] [-c]` gives `y`/`n`/`c` (`-c` adds the Cancel row; `c` and `x` both cancel; `-d` is what a bare Enter answers, `n` unless the
-     question is harmless); `_bvk_menu VAR [-t Title] [-i Icon] [-q Question] [-d key] [-k] [-m] key:Label ...` for one-of-many, many-of-many (`-m`) and actions.
+     question is harmless; **`-d none` = no default at all**: nothing is highlighted and a bare Enter does nothing, the person must answer. Every question that deletes or removes something uses `-d none`, and `_bvk_yn` enforces it itself: a question whose text names a destructive action (delete, remove, nuke, clear, wipe, erase, discard, purge, overwrite, revoke, "for good", "can't be undone") gets no default whatever `-d` says (`_bvk_destructive`, checked by `tests/delete_confirm.sh`); `_bvk_menu VAR [-t Title] [-i Icon] [-q Question] [-d key] [-k] [-m] key:Label ...` for one-of-many, many-of-many (`-m`) and actions.
      Both return 1 and leave VAR empty when the user backs out (`u`/`q`): stop the flow, as for every prompt. Keep the old `case` on the answer; the keys are `y n c`.
    - **The shape** (do not invent another): `{emoji} Title`, a rule, numbered rows, a rule, `u) Back   q) Close`, an optional second line with the answer keys
      (`y) Yes   n) No   c/x) Cancel`), then `Select:`. Rows are `N) [ ] Label`; the answer is a number, a tap or click, the arrows + Enter, or the printed key + Enter.
@@ -85,12 +135,45 @@ So before you create anything, work in this order:
      Settings rows use the same marks (`_st_add r` radio, `_st_add t` checkbox). Never use `[x]` for a radio or `[o]` for a checkbox.
    - A stand-alone tool (rule 3) cannot load the menu; its plain prompt still has no emoji. New code in the app uses the menu, and a new test goes in `tests/choose`.
 
+7. **Never wire a loading bar by hand: smartload draws it.** (`script/file/engine/bashbasicsbyvk_smartload.sh`; same idea as smartmenu.)
+   - Wait time > loading bar. A wait starts at the person's Enter / tap (`_lt_enter`) and ends when the next prompt is up (`_lt_ready`, the `read` shim, or an engine about to
+     draw a screen: `_st_draw`, `_vp_render_fresh`, `_cm_text_read`). If it lasts more than ~0.2 s and the screen is quiet, the bar appears by itself on the row under the cursor;
+     `echo` / `printf` / `clear` wipe it before they write and restart its clock. So a new command, menu or function that waits gets its bar with **no line of code**.
+   - Do NOT add a `_lb_run`-style wrapper, a spinner, `\r` progress text or a bar of your own around a call that may be slow. (The old `bashbasicsbyvk_loadingbar.sh` and every `_lb_*` call are gone.)
+   - Engine code that writes the terminal with `builtin printf` during a wait (moving the cursor, redrawing) calls `[ "${_SL_WANT:-0}" = 1 ] && _sl_pulse` first. Code that draws its OWN progress
+     (a transfer bar, a tool with its own bar) wraps it in `_sl_hold` / `_sl_release` (or runs with `BVK_GD_BAR=0`-style switches when it is a separate process).
+   - `VK_SMARTLOAD=0` turns it off, `VK_SMARTLOAD_GRACE_MS=200` sets the delay. No terminal (pipes, tests) = every call is a no-op.
+
+8. **Every Settings screen and row explains itself.** `script/file/settings/bashbasicsbyvk_settings_desc.sh` holds one plain-words text per screen and per row
+   (key `<screen title>|<row tag>`, `<screen title>|*` for the screen; `<parent>›<title>|<tag>` when two screens share a title). `_st_draw` shows the text of the highlighted row
+   above the suggestion row, `?` shows all of it. A new Settings row or screen adds its line there, written for a person who has never heard of the feature.
+
+9. **A list that exists twice is generated from one source, and a test fails when a copy goes stale.** What is generated today (add to this list, do not hand-copy):
+   - **Footer keys.** A generic key (`u` `q` `z` `rf`) is passed to `_mc_footer` / `_mc_footer_register` as the BARE key and takes its label from `_MC_KEYLABEL`
+     (`script/file/engine/bashbasicsbyvk_menuchrome.sh`). It is never written `key:Label`, in any spelling. A key that really means something else gets a NAMED variant in the same
+     table (`u.up` = `u) Up`, `u.prefix`); the part after the dot is only a name. Menu-specific keys (`bk:Close`, `n:New profile`) stay `key:Label`. `tests/cmd_drift.sh` fails on a retyped
+     generic label, on an undefined variant, and on a footer key no command map wires. There is no exceptions list: a new meaning is a new table entry.
+   - **ADF actions.** A `file_fx` action registers with `_fx_adf_register_fx LABEL FN` (the tree path comes from the label), never with a typed `file_fx/...` path. `tests/adf_registry.sh`.
+   - **The command reference.** `o --map-doc` prints it from `cmd_def`; `llms-full.txt` section 9 holds the pasted copy between `cmd-ref:start` / `cmd-ref:end`.
+     After adding or changing a command run `bash tests/cmd_docs.sh --write`. `tests/cmd_docs.sh`.
+   - **The CPU-to-binary mapping** (`uname -m`, android / linux) lives only in `_bvk_engine_target` (`engine/bashbasicsbyvk_engine_target.sh`). `tests/engine_target.sh`.
+
+10. **No dead files.** A file that nothing loads is deleted, not left "untouched" or listed as legacy: `tests/adf_registry.sh` has no allowlist, and a test with an exceptions list is where drift hides.
+    A file that another file depends on loads that dependency itself or degrades without it (`settings_ui.sh` works without `settings_desc.sh`: stand-alone callers and tests source it alone).
+
+11. **GitHub talks through ONE engine and ONE helper file.** (`fx → github_fx → open github`, and the `-u` upgrade loop.)
+    - All GitHub API / git work lives in `script/file/loops/iloop/fx/github_fx/gh/bashbasicsbyvk_github` (python); the screens in `.../open_github/bashbasicsbyvk_adf_github.sh` only ask and show.
+      Parsing releases / tags / commits, tag order and body printing live in `script/file/functions/bashbasicsbyvk_ghlib.sh`, shared by the GitHub screens and `bashbasicsbyvk_upgrade.sh`: never parse the GitHub JSON a second time.
+    - The GitHub screens follow rules 6-9 like every other screen: no hand-wired loading bar (a `git clone` that prints its own progress is wrapped in `_sl_hold` / `_sl_release`), bare generic footer keys (`rf`, `u`), `-d none` on every delete question.
+    - The map of a loop the generator cannot read is `block()`, never "keep or block": a map line is a claim about the loop. A list screen that reads keys itself (`_st_run`) lets a typed word through `_st_cm_gate`, so the hint row, `cc` and Enter agree (`tests/cc_truth`).
+    - Tests: `tests/github/` (mock GitHub server, no network), `tests/cc_truth`. The upgrade loop's output must stay byte-identical to `tests/github/fixtures/upgrade_golden.txt`.
+
 ## Tests: seconds, not half an hour (the rules the owner and the agents framed)
 
 A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes because they slept for guessed times, started the app dozens of times with a blind
 4 s start-up wait, and an agent then added its own `sleep 600` on top. **A test waits for the thing it needs and fails the moment that thing is clearly not coming.**
 
-**Running tests (agents follow this, do not improvise):**
+**Running tests (agents follow this, do not improvise). First read "Workflow and tests" at the top of this file: it decides IF and WHICH tier runs; this section only describes the tools.**
 - `bash tests/run.sh for <the files you changed>` runs only the tests that cover them (`tests/covers.map`), in parallel, each with a hard timeout, and prints a failure *the moment
   it happens* with the last lines of its output. `bash tests/run.sh fast` = the quick tier. `bash tests/run.sh all` = everything: only before a release or when the prompt asks
   for the full suite. `bash tests/run.sh list` shows every test, its tier and timeout.

@@ -276,10 +276,14 @@ case('Item numbers picker: status-row taps are ignored inside a flow', t_picker_
 import unicodedata
 def dispw(t):                                    # display cells, as the app counts them: wide / emoji = 2, variation selector = 0
     return sum(0 if c == '\ufe0f' else (2 if unicodedata.east_asian_width(c) in 'WF' else 1) for c in t)
-def tab_click(a, label):                         # tap the middle of a tab label on the tab bar row
-    r = a.row_of(r'tabs|switch tab|SWITCH|FUNCTIONS|UPGRADE|RULE BOOK')
+TABROW = r'tabs|switch tab|SWITCH|FUNCTIONS|UPGRADE|RULE BOOK'
+def tab_click(a, label):                         # tap the middle of a tab label on the tab bar row, then WAIT until that tab is the current one
+    a.wait(lambda: a.row_of(TABROW) and label in a.lines()[a.row_of(TABROW) - 1], 8)     # the tab bar is up (a screen that fetches takes a moment; the app prints nothing meanwhile)
+    r = a.row_of(TABROW)
     L = a.lines()[r - 1]; i = L.index(label)
-    a.click(r, col=dispw(L[:i]) + max(1, dispw(label) // 2) + 1, t=1.5)
+    a.click(r, col=dispw(L[:i]) + max(1, dispw(label) // 2) + 1, t=0.35)
+    a.wait(lambda: cur_tab(a) == label, 6)       # a condition, not a guessed time: the app is silent while it loads the tab (no bar output to wait on)
+    a.settle(0.3)                                # ...and the rest of the screen is painted: the next tap must see the final layout
 def cur_tab(a):
     m = re.search(r'\[([^\]]+)\]', ''.join(l for l in a.lines() if 'tabs' in l or 'switch tab' in l))
     return m.group(1) if m else None

@@ -393,7 +393,7 @@ _au_list_header() {
   _vp_filter_header_line
 }
 _au_list_footer() {
-  _mc_footer "c:Create user" "r:Remove user" "l:Link old account" "|" "ux:Export users" "ui:Import users" "=:Filter" "|" "u:Back" "q:Close"
+  _mc_footer "c:Create user" "r:Remove user" "l:Link old account" "|" "ux:Export users" "ui:Import users" "=:Filter" "|" "u" "q"
 }
 _au_list_build() {
   _bvk_auth_list
@@ -448,7 +448,7 @@ _au_sub_header() {
   esac
   _vp_filter_header_line
 }
-_au_sub_footer() { _mc_footer "=:Filter" "|" "u:Back" "q:Close"; }
+_au_sub_footer() { _mc_footer "=:Filter" "|" "u" "q"; }
 
 _au_billing_build() {
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
@@ -607,7 +607,7 @@ _au_user_header() {
   _vp_filter_header_line
 }
 _au_user_footer() {
-  _mc_footer "ux:Export" "ui:Import" "=:Filter" "|" "u:Back" "q:Close"
+  _mc_footer "ux:Export" "ui:Import" "=:Filter" "|" "u" "q"
 }
 _au_user_build() {                       # returns 1 if the profile vanished
   _bvk_auth_list
@@ -710,7 +710,7 @@ _au_export_ids() {  # profile ids...
 _au_remove_ids() {  # profile ids...
   local ans id
   echo "🔴  Removes $# user(s) from THIS machine only. Without an export you lose the apikey/dinons."
-  _bvk_yn ans "Are you really sure?" -d n
+  _bvk_yn ans "Are you really sure?" -d none
   if [[ "$ans" != y && "$ans" != Y ]]; then echo "🚫 Removal cancelled"; return 1; fi
   for id in "$@"; do
     rm -f "$_BVK_AUTH_DIR/profiles/$id" "$_BVK_AUTH_DIR/profiles/$id.prev"

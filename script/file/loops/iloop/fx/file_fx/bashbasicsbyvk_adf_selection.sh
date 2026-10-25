@@ -106,7 +106,7 @@ _fx_sel_browse() {
     done
     _mc_header "🎯 $title (${#its[@]}):"
     if [ ${#its[@]} -eq 0 ]; then echo "  (empty)"; else _mc_options 1 "${rows[@]}"; fi
-    _mc_footer "u:Back" "v:Review chosen" "c:Take chosen" "z:Cancel" "q:Quit" "#tip: use prefix 'w' to select a folder (w1,3 · 2-4 · wa)"
+    _mc_footer "u" "v:Review chosen" "c:Take chosen" "z" "q" "#tip: use prefix 'w' to select a folder (w1,3 · 2-4 · wa)"
     read -e -p "Pick: " ch
     case "$ch" in
       u|U|"") return 0 ;;
@@ -153,7 +153,7 @@ _fx_sel_pick() {
     done
     _mc_header "🎯 Selected items — pick what this action works on:"
     _mc_options 1 "${rows[@]}"
-    _mc_footer "v:Review chosen" "c:Take chosen" "z:Cancel" "q:Quit" "#tip: N opens a set · use prefix 'w' to take a whole set (w1,2 · wa)"
+    _mc_footer "v:Review chosen" "c:Take chosen" "z" "q" "#tip: N opens a set · use prefix 'w' to take a whole set (w1,2 · wa)"
     read -e -p "Selected items: " ch
     case "$ch" in
       z|Z|u|U|"") echo "🚫 Cancelled"; return 1 ;;
@@ -226,4 +226,4 @@ _fx_adf_sel_view() {
   done
 }
 
-_fx_adf_register "selection.view" "_fx_adf_sel_view" "file_fx/selection/selection.view"
+_fx_adf_register_fx "selection.view" "_fx_adf_sel_view"

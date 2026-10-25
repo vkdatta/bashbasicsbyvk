@@ -4,10 +4,10 @@
 #   bash tests/run.sh for [files...]       only the tests that cover those files (tests/covers.map); no files = `git diff --name-only`
 #   bash tests/run.sh all                  everything (before release / when asked for the full suite)
 #   bash tests/run.sh <name> [name...]     named tests (see `list`)         bash tests/run.sh list
-# env: JOBS=<n> parallel jobs (default: number of CPUs, 2..4)  TEST_TIME_FACTOR=<n> stretch every wait (default: jobs / cpus)   KEEP=1 keep the logs   Exit 0 = nothing unexpected failed.  SKIP is never a pass: it is listed at the end.
+# env: JOBS=<n> parallel jobs (default: one per CPU, at least 2; longest tests start first; a test marked `serial` in tests.list field 6 runs alone afterwards)  TEST_TIME_FACTOR=<n> stretch every wait (default: jobs / cpus)   KEEP=1 keep the logs   Exit 0 = nothing unexpected failed.  SKIP is never a pass: it is listed at the end.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT" || exit 2
 source tests/wait_lib.sh
-CPUS="$(nproc 2>/dev/null || echo 1)"; JOBS="${JOBS:-$(( CPUS < 2 ? 2 : (CPUS > 4 ? 4 : CPUS) ))}"
+CPUS="$(nproc 2>/dev/null || echo 1)"; JOBS="${JOBS:-$(( CPUS < 2 ? 2 : CPUS ))}"    # max parallel: one job per CPU (never lower it; a test that needs order is marked `serial` in tests.list field 6)
 # more jobs than cores = every app is slower: stretch all waits by that ratio (a timeout costs nothing when the app answers, and it keeps load from causing false failures)
 export TEST_TIME_FACTOR="${TEST_TIME_FACTOR:-$(( (JOBS + CPUS - 1) / CPUS ))}"
 OUT="$(mktemp -d /tmp/bvk_run.XXXXXX)"; [ "${KEEP:-0}" = 1 ] || trap 'rm -rf "$OUT"' EXIT
@@ -54,8 +54,10 @@ report() {   # print one finished test the moment it ends
             { grep -a 'FAIL\|TIMEOUT' "$OUT/$n.log" | cut -c1-200 | head -12; echo '  ...'; grep -avE '^[[:space:]]*(ok|PASS)[[:space:]]' "$OUT/$n.log" | tail -14; } | sed 's/^/          | /'; fi ;;
   esac
 }
+PAR=(); SER=()   # longest first (the slowest tests start first, so they are not the tail of the run); `serial` tests (field 6) run alone, after the parallel ones
+while read -r _ n; do [ -z "$n" ] && continue; [ "$(field "$(row_of "$n")" 6)" = serial ] && SER+=("$n") || PAR+=("$n"); done < <(for n in "${SEL[@]}"; do t="$(field "$(row_of "$n")" 3)"; echo "${t:-0} $n"; done | sort -rn)
 t_start; declare -A PID REPORTED; running=0
-for n in "${SEL[@]}"; do
+for n in "${PAR[@]}"; do
   run_one "$n" & PID[$n]=$!; running=$((running+1))
   while [ "$running" -ge "$JOBS" ]; do
     wait -n; running=$((running-1))
@@ -66,9 +68,11 @@ while [ "$running" -gt 0 ]; do
   wait -n; running=$((running-1))
   for m in "${!PID[@]}"; do [ -s "$OUT/$m.rc" ] && [ -z "${REPORTED[$m]:-}" ] && { REPORTED[$m]=1; report "$m"; }; done
 done
+for n in "${SER[@]}"; do run_one "$n"; PID[$n]=0; REPORTED[$n]=1; report "$n"; done
 for m in "${!PID[@]}"; do [ -z "${REPORTED[$m]:-}" ] && report "$m"; done
-bad=0; skipped=(); for n in "${SEL[@]}"; do st="$(<"$OUT/$n.rc")"
-  case "$st" in PASS) ;; SKIP) skipped+=("$n") ;; *) [ -z "${KNOWN[$n]:-}" ] && bad=$((bad+1)) ;; esac; done
+bad=0; npass=0; ndone=0; skipped=(); for n in "${SEL[@]}"; do st="$(<"$OUT/$n.rc")"
+  case "$st" in PASS) npass=$((npass+1)); ndone=$((ndone+1)) ;; SKIP) skipped+=("$n") ;; *) ndone=$((ndone+1)); [ -z "${KNOWN[$n]:-}" ] && bad=$((bad+1)) ;; esac; done
 echo "  ----"; echo "  ${#SEL[@]} test(s) in $(t_since)s wall time (JOBS=$JOBS, waits x$TEST_TIME_FACTOR)"
+echo "  STATUS: $npass/$ndone/${#SEL[@]}  (passed/completed/total; a skip is not completed)  <- copy this into the delivery line: <task name> (tests: $npass/$ndone/${#SEL[@]})"
 [ ${#skipped[@]} -gt 0 ] && echo "  NOT RUN (skipped, so NOT verified): ${skipped[*]}"
 if [ $bad = 0 ]; then echo "  RESULT: OK${skipped:+ - but ${#skipped[@]} skipped}"; exit 0; else echo "  RESULT: $bad FAILED"; [ "${KEEP:-0}" = 1 ] && echo "  logs: $OUT"; exit 1; fi

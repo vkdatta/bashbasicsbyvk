@@ -13,4 +13,4 @@ _fx_adf_unzip_select_csv() {
   _csv_resolve_report "Extracting" || return
   _decompress_paths "${selected_items[@]}"
 }
-_fx_adf_register "unzip.select.items.csv" "_fx_adf_unzip_select_csv" "file_fx/unzip/unzip.select.items.csv"
+_fx_adf_register_fx "unzip.select.items.csv" "_fx_adf_unzip_select_csv"

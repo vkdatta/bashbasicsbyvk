@@ -91,5 +91,34 @@ n=$(grep -c 'read -e -r -p "Name this backup' "$BK"); m=$(grep 'read -e -r -p "N
 [ "$n" = "$m" ] && [ "$n" -ge 1 ] && ok "backup: every 'Name this backup' prompt returns when cancelled" || bad "backup: a name prompt ignores a cancel ($m of $n)"
 grep -A2 'Name this backup' "$BK" | grep -q '_CM_ABORT' && ok "backup: checks _CM_ABORT after the name prompt" || bad "backup: no _CM_ABORT check"
 
+# ---- (6) footers are derived, not retyped ---------------------------------------------------
+# every footer key must be a key some map wires (loop-local keys of pickers are listed in LOCAL, with why);
+# the generic keys take their label from _MC_KEYLABEL (menuchrome), so "u:Back" typed by hand is drift
+unset -f read _bvk_yn   # section (4) stubs read; _cm_table_build reads the map files with it
+declare -A known=(); for m in "${_CM_MAP_NAMES[@]}"; do _CM_TBL_MAP=""; _cm_table_build "$m"; for k in "${_ct_key[@]}"; do known[$k]=1; done; done
+LOCAL=" n "          # n = New folder / Rename set / New profile: handled inside the destination picker, buffer view and Drive list loops, not in a map
+unk=""
+while builtin read -r k; do
+  [[ "$k" == *[0-9,\ ]* || "$k" == N || "$k" == Enter ]] && continue
+  b="${k%-N}"; b="${b%-}"
+  [ -n "${known[$k]:-}" ] || [ -n "${known[$b]:-}" ] || [ -n "${known[$b-]:-}" ] || [[ "$LOCAL" == *" $k "* ]] || unk+="$k "
+done < <(grep -rhoE '_mc_footer[^#]*' --include='*.sh' "$F" | grep -oE '"[^" ]+:[^"]*"' | sed -E 's/^"([^:"]+):.*/\1/' | sort -u)
+[ -z "$unk" ] && ok "every footer key is wired in some map (or listed as loop-local)" || bad "footer advertises keys no map wires: $unk"
+# a generic key (u q z rf) is NEVER written "key:Label", in any spelling, quoted or in a registered footer: a bare key (or a named variant
+# such as u.up) takes its label from _MC_KEYLABEL.  No exceptions list: a different meaning gets a variant in the table.
+hand=$(grep -rniE '"(u|q|z|rf)(\.[a-z]+)?:|_mc_footer_register .*[ ](u|q|z|rf)(\.[a-z]+)?:[A-Za-z]' --include='*.sh' "$F" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | head -3)
+[ -z "$hand" ] && ok "no footer retypes a generic label (u q z rf come from _MC_KEYLABEL)" || bad "hand-typed generic footer label: $hand"
+# every named variant a footer uses (u.up ...) exists in the table
+vars=""; while builtin read -r v; do
+  ( source "$F/engine/bashbasicsbyvk_menuchrome.sh" 2>/dev/null; [ -n "${_MC_KEYLABEL[$v]-}" ] ) || vars+="$v "
+done < <(grep -rhoE '(^|[ "])(u|q|z|rf)\.[a-z]+([ "]|$)' --include='*.sh' "$F" | grep -oE '(u|q|z|rf)\.[a-z]+' | sort -u)
+[ -z "$vars" ] && ok "every named footer variant (u.up ...) is defined in _MC_KEYLABEL" || bad "footer uses variants _MC_KEYLABEL does not define: $vars"
+( declare -F _lt_b >/dev/null || { _lt_b(){ :; }; _lt_e(){ :; }; }
+  _vp_usable() { _vp_usable_w=80; }; _vp_cells() { _vp_w=${#1}; }; _sm_on=0
+  source "$F/engine/bashbasicsbyvk_menuchrome.sh"
+  out="$(_mc_footer u u.up q z rf "x:Nuke")"
+  [[ "$out" == *"u) Back   u) Up   q) Quit   z) Cancel   rf) Refresh   x) Nuke"* ]] ) \
+  && ok "bare footer keys render their canonical label next to a custom one" || bad "bare footer keys do not render u) Back q) Quit z) Cancel rf) Refresh"
+
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"
 exit "$fail"

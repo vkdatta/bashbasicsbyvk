@@ -49,15 +49,15 @@ gdp_header() {
 }
 
 gdp_footer() {
-  _mc_footer "#Select a number to open that Google Drive" "n:New profile (rclone config)" "rf:Reload" "u:Back"
+  _mc_footer "#Select a number to open that Google Drive" "n:New profile (rclone config)" "rf" "u"
 }
 
 _gdp_cmd() {
   case "$1" in
-    rf) _lb_run "Reading rclone profiles" _gdp_fetch || echo "❌ Reload failed."; return 0 ;;
+    rf) _gdp_fetch || echo "❌ Reload failed."; return 0 ;;
     n)  echo; echo "📜  rclone config → n (new remote) → name → Google Drive → scope 1 → auto config y"
         command rclone config
-        _lb_run "Reading rclone profiles" _gdp_fetch; return 0 ;;
+        _gdp_fetch; return 0 ;;
     [0-9]*)
       _xui_row "$1" || { _bvk_invalid; return 1; }
       if _gd_enter "${_GDP_NAME[$_XUI_SLOT]}"; then return 2; fi
@@ -72,7 +72,7 @@ _gdp_cmd() {
 _fx_adf_gdrive() {
   _gd_locate || return 1
   _gd_need_rclone || return 1
-  if ! _lb_run "Reading rclone profiles" _gdp_fetch; then
+  if ! _gdp_fetch; then
     echo "❌ Could not read the rclone profiles (see message above)."; return 1
   fi
   if [ "${#_GDP_NAME[@]}" -eq 0 ]; then
@@ -80,7 +80,7 @@ _fx_adf_gdrive() {
     echo "   Create one:  rclone config → n (new remote) → name → Google Drive → scope 1 (full access) → auto config y"
     _xui_yes "Run 'rclone config' now?" || return 1
     command rclone config
-    _lb_run "Reading rclone profiles" _gdp_fetch
+    _gdp_fetch
     [ "${#_GDP_NAME[@]}" -gt 0 ] || { echo "❌ Still no Google Drive profile."; return 1; }
   fi
   _xui_enter

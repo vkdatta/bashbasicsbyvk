@@ -1,0 +1,8 @@
+# bashbasicsbyvk_xui_ghp.map — wiring for the GitHub repo list (fx → github_fx → open github)
+# Chosen by _cm_ctx_find when _XUI_PFX=ghp (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_ghp
+@kind   menu
+@back   u
+@parent xui
+
+rf         .mapto()  rf         from bashbasicsbyvk_xui_ghpmenucommands.sh

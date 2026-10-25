@@ -67,13 +67,13 @@ _fx_adf_sel_delete() {
   _sel_prune
 }
 
-_fx_adf_register "copy.selected.items"        "_fx_adf_sel_copy"        "file_fx/copy/copy.selected.items"
-_fx_adf_register "move.selected.items"        "_fx_adf_sel_move"        "file_fx/move/move.selected.items"
-_fx_adf_register "shortcut.selected.items"    "_fx_adf_sel_shortcut"    "file_fx/shortcut/shortcut.selected.items"
-_fx_adf_register "bookmark.selected.items"    "_fx_adf_sel_bookmark"    "file_fx/bookmark/bookmark.selected.items"
-_fx_adf_register "upload.selected.items"      "_fx_adf_sel_upload"      "file_fx/upload/upload.selected.items"
-_fx_adf_register "upload.text.selected.items" "_fx_adf_sel_upload_text" "file_fx/upload/upload.text.selected.items"
-_fx_adf_register "map.selected.items"         "_fx_adf_sel_map"         "file_fx/map/map.selected.items"
-_fx_adf_register "zip.selected.items"         "_fx_adf_sel_zip"         "file_fx/zip/zip.selected.items"
-_fx_adf_register "unzip.selected.items"       "_fx_adf_sel_unzip"       "file_fx/unzip/unzip.selected.items"
-_fx_adf_register "delete.selected.items"      "_fx_adf_sel_delete"      "file_fx/delete/delete.selected.items"
+_fx_adf_register_fx "copy.selected.items" "_fx_adf_sel_copy"
+_fx_adf_register_fx "move.selected.items" "_fx_adf_sel_move"
+_fx_adf_register_fx "shortcut.selected.items" "_fx_adf_sel_shortcut"
+_fx_adf_register_fx "bookmark.selected.items" "_fx_adf_sel_bookmark"
+_fx_adf_register_fx "upload.selected.items" "_fx_adf_sel_upload"
+_fx_adf_register_fx "upload.text.selected.items" "_fx_adf_sel_upload_text"
+_fx_adf_register_fx "map.selected.items" "_fx_adf_sel_map"
+_fx_adf_register_fx "zip.selected.items" "_fx_adf_sel_zip"
+_fx_adf_register_fx "unzip.selected.items" "_fx_adf_sel_unzip"
+_fx_adf_register_fx "delete.selected.items" "_fx_adf_sel_delete"

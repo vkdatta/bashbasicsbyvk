@@ -11,4 +11,4 @@ _fx_adf_bookmark_select_csv() {
   [ -z "$csv_file" ] && return
   _csv_stage_selected "$_SP_BM_ONCE_FILE" "bookmark"
 }
-_fx_adf_register "bookmark.select.items.csv" "_fx_adf_bookmark_select_csv" "file_fx/bookmark/bookmark.select.items.csv"
+_fx_adf_register_fx "bookmark.select.items.csv" "_fx_adf_bookmark_select_csv"

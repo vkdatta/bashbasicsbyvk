@@ -19,5 +19,12 @@ functions/bashbasicsbyvk_find(run\.sh|rep|\.sh)	findrep
 settings/bashbasicsbyvk_findsettings	findrep hints
 functions/	choose_plain
 staging/buffer!/|select/|loops/iloop/fx/file_fx/bashbasicsbyvk_adf_selection|functions/bashbasicsbyvk_transfer	buffer_sets
+loops/iloop/fx/	adf_registry
+engine/bashbasicsbyvk_cmdmap|cmdmap/|llms-full	cmd_docs
+engine/bashbasicsbyvk_(displayer|engine_target)|debug/health/|fileapi/0 lib/|_3bvk_import_cmd_	engine_target
+script/file/	smartload settings_desc delete_confirm
 fx/github_fx/	github_engine github_ui github_upgrade_shared choose_plain
 functions/bashbasicsbyvk_ghlib|loops/iloop/upgrade/	github_engine github_upgrade_shared
+cmdmap/xui_ghp|cmdmap/xui_ghr	github_ui cmd_drift
+settings/bashbasicsbyvk_settings_ui	cc_truth cmd_drift nav_back hints settings_keys
+cmdmap/(settings|home)	cc_truth cmd_drift

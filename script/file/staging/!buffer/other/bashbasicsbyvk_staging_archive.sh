@@ -105,7 +105,7 @@ _compress_paths() {
   # ── Overwrite check ──────────────────────────────────────────────────────
   if [ -e "$arc_path" ]; then
     local ext; ext="${arc_path##*/}"
-    _bvk_yn ow "'${ext}' already exists. Overwrite?" -d n
+    _bvk_yn ow "'${ext}' already exists. Overwrite?" -d none
     ow="${ow%$'\r'}"
     [[ "$ow" =~ ^[Yy]$ ]] || { echo "🚫 Cancelled."; return; }
     rm -f "$arc_path"

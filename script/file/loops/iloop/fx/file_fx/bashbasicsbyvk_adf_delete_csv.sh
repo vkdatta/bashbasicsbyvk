@@ -15,4 +15,4 @@ _fx_adf_delete_select_csv() {
   _sel_preview selected_items
   _fxdel_run_selected
 }
-_fx_adf_register "delete.select.items.csv" "_fx_adf_delete_select_csv" "file_fx/delete/delete.select.items.csv"
+_fx_adf_register_fx "delete.select.items.csv" "_fx_adf_delete_select_csv"

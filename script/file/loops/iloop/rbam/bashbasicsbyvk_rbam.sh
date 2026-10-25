@@ -77,8 +77,8 @@ rb_header() {
   _vp_filter_header_line
 }
 rb_footer() {
-  if [ "$_RB_TAB" = 0 ]; then _mc_footer "ui:import user" "ux:export my card" "r-N:remove" "sd:send dinons" "N:open" "u:back"
-  else                        _mc_footer "ui:import user" "ux:export my card" "r-N:remove" "N:open" "u:back"; fi
+  if [ "$_RB_TAB" = 0 ]; then _mc_footer "ui:import user" "ux:export my card" "r-N:remove" "sd:send dinons" "N:open" "u"
+  else                        _mc_footer "ui:import user" "ux:export my card" "r-N:remove" "N:open" "u"; fi
 }
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -250,8 +250,8 @@ ru_header() {
   _vp_filter_header_line
 }
 ru_footer() {
-  if [ "$_RB_TAB" = 0 ]; then _mc_footer "N:files" "r-N:revoke this person from a share" "u:back"
-  else                        _mc_footer "N:files" "r-N:drop a share from my Cloud Surf" "u:back"; fi
+  if [ "$_RB_TAB" = 0 ]; then _mc_footer "N:files" "r-N:revoke this person from a share" "u"
+  else                        _mc_footer "N:files" "r-N:drop a share from my Cloud Surf" "u"; fi
 }
 
 _ru_remove() {

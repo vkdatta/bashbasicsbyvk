@@ -988,7 +988,7 @@ _read_choice_raw() {
   elif $_can_nav && [ "$_hl_index" -ge 1 ]; then choice="$_hl_index"
   fi
   # loadtime: Enter was pressed — a screen change starts here (numbers get the item's name as a label)
-  if [ -n "${_LT_ON:-}" ] && [ "$_LT_ON" = 1 ]; then
+  if [ "${_LT_ON:-0}" = 1 ] || [ -n "${_SL_ON:-}" ]; then
     local _ltl=""
     [[ "$choice" =~ ^[0-9]+$ ]] && [ "${#items[@]}" -ge "$choice" ] && [ "$choice" -ge 1 ] && _ltl="${items[$((choice-1))]##*/}"
     _lt_enter "$choice" "$_ltl"

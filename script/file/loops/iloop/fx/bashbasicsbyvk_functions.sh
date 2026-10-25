@@ -70,6 +70,10 @@ _fx_adf_register() {
   _fx_adf_names+=("$leaf")
 }
 
+# _fx_adf_register_fx "verb.what.ever" function_name — a file_fx/ action: its place in the tree is
+# file_fx/<first word of the label>/<label>, so the path can never disagree with the label.
+_fx_adf_register_fx() { _fx_adf_register "$1" "$2" "file_fx/${1%%.*}/$1"; }
+
 # ── ADF tree helpers ──────────────────────────────────────────────────────────
 
 # Print unique immediate sub-folder names at _fx_adf_cur_staging
@@ -195,15 +199,15 @@ _fx_menu_footer_adf() {
   local total="${#_fx_adf_labels[@]}"
   local here="${#items[@]}"
   if [ -n "$_fx_adf_cur_staging" ]; then
-    _mc_footer "#[ADF — Admin Defined]  $here item(s) here  ($total total)" "#Select to open folder or run function" "u:Up" "fx:Exit"
+    _mc_footer "#[ADF — Admin Defined]  $here item(s) here  ($total total)" "#Select to open folder or run function" "u.up" "fx:Exit"
   else
     _mc_footer "#[ADF — Admin Defined]  $here item(s) here  ($total total)" "#Select to open folder or run function" "fx:Exit"
   fi
 }
 
 _fx_menu_footer_udf() {
-  local -a _f=("#[UDF — User Defined]  Scripts in execute dir — run from current path" "u:Up" "s:Settings" "fx:Exit" "|" "e-N:Edit item" "ux:Export all" "ui:Import all")
-  [ -n "$group_prefix" ] && _f+=("|" "u:Remove last prefix (${group_prefix^^}*)")
+  local -a _f=("#[UDF — User Defined]  Scripts in execute dir — run from current path" "u.up" "s:Settings" "fx:Exit" "|" "e-N:Edit item" "ux:Export all" "ui:Import all")
+  [ -n "$group_prefix" ] && _f+=("|" "u.prefix" "#Group prefix now: ${group_prefix^^}*")
   _mc_footer "${_f[@]}"
 }
 

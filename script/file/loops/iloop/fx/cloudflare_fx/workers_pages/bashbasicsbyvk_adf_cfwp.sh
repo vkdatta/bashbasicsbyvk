@@ -14,7 +14,7 @@
 #         export    → e (all rows shown) · e-1,3-5 (picked rows)  → csv / json / both in <nav>/
 #
 #  Secrets never go on a command line or into a file: they are passed to python through its environment only.
-#  This file replaces the old single "recover" button in functions.sh; bashbasicsbyvk_adf_recover.sh is untouched.
+#  This file replaces the old single "recover" button in functions.sh.
 # ════════════════════════════════════════════════════════════════════════════
 
 _bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
@@ -63,7 +63,7 @@ _cfw_load() {
   local creds
   creds="$("$_CFW_PY" "$_CFW_MAIN" "$_CFW_NAV" --print-credentials)" || { echo "❌ No usable Cloudflare credentials."; return 1; }
   _CFW_TOK="${creds%%$'\n'*}"; _CFW_ACC="${creds#*$'\n'}"; creds=""
-  _lb_run "Loading workers and pages from Cloudflare" _cfw_fetch || { echo "❌ No workers or pages could be listed (see message above)."; _cfw_forget; return 1; }
+  _cfw_fetch || { echo "❌ No workers or pages could be listed (see message above)."; _cfw_forget; return 1; }
 }
 
 # ── drawer screen (xui) ─────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ cfw_header() {
 }
 
 cfw_footer() {
-  _mc_footer "#Select:  N · 1,3-5 · a (all) · a-2 (all except 2)" "r:live picker" "rf:refresh" "u:back" \
+  _mc_footer "#Select:  N · 1,3-5 · a (all) · a-2 (all except 2)" "r:live picker" "rf" "u" \
     "#Recover  → $_CFW_NAV/<name>-recovered  (worker) · <name>-pages-recovered  (pages)" \
     "#Export   → e (all shown) · e-1,3-5 (picked)  as csv / json / both into the same folder"
 }
@@ -136,7 +136,7 @@ _cfw_export() {
 
 _cfw_cmd() {
   case "$1" in
-    rf) _lb_run "Refreshing workers and pages" _cfw_fetch || echo "❌ Refresh failed."; return 0 ;;
+    rf) _cfw_fetch || echo "❌ Refresh failed."; return 0 ;;
     e|e-*) _cfw_export "$1"; return 0 ;;
     r|r-*)
       _xui_select_rows "RECOVER" "☁️  Recover which workers / pages?" "$1" || return 1

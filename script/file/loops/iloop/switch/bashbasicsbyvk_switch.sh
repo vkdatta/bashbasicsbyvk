@@ -72,18 +72,13 @@ _sw_excl_list() {
 # Add one rule interactively
 _sw_excl_add() {
   _sw_excl_ensure
-  echo "━━━ Add exclude rule ━━━"
-  echo "  1) filename   — hide a filename everywhere"
-  echo "  2) foldername — hide a folder name everywhere (universal)"
-  echo "  3) filepath   — hide one exact file"
-  echo "  4) dirpath    — hide an entire directory tree"
-  printf "Type (1-4) or Enter to cancel: "
-  local t_choice
-  IFS= read -e -r t_choice
-  local kind
+  local t_choice kind
+  _bvk_menu t_choice -t "Add exclude rule" -i "🚫" \
+    "1:filename — hide a filename everywhere" \
+    "2:foldername — hide a folder name everywhere (universal)" \
+    "3:filepath — hide one exact file" \
+    "4:dirpath — hide an entire directory tree" || { echo "↩️  Back"; return 0; }      # u / q = back out (AGENTS rule 6: a fixed-answer question is a _bvk_menu)
   case "$t_choice" in
-    u|U) echo "↩️  Back"; return 0 ;;
-    q|Q) _bvk_quit; return 1 ;;
     1) kind="filename"   ;;
     2) kind="foldername" ;;
     3) kind="filepath"   ;;
@@ -253,7 +248,7 @@ _sw_remove_paths() {
   fi
   n=${#selected_items[@]}
   [ "$n" -eq 0 ] && { echo "📜  Nothing selected"; return 0; }
-  _bvk_yn ans "Remove $n bookmark(s)? Only the bookmark goes — what it points to is NOT touched." -d n || return 0
+  _bvk_yn ans "Remove $n bookmark(s)? Only the bookmark goes — what it points to is NOT touched." -d none || return 0
   case "${ans,,}" in y|yes) ;; *) echo "Cancelled."; return 0 ;; esac
   local it removed=0
   for it in "${selected_items[@]}"; do
@@ -328,8 +323,8 @@ _sw_menu_header_imaginary() {
 }
 
 _sw_menu_footer_bookmarks() {
-  local -a _f=("a:Add current path" "b:Remove (b-1,3)" "sw:Exit" "|" "u:Up" "s:Settings" "|" "e-N:File actions on item N")
-  [ -n "$group_prefix" ] && _f+=("|" "u:Remove last prefix (${group_prefix^^}*)")
+  local -a _f=("a:Add current path" "b:Remove (b-1,3)" "sw:Exit" "|" "u.up" "s:Settings" "|" "e-N:File actions on item N")
+  [ -n "$group_prefix" ] && _f+=("|" "u.prefix" "#Group prefix now: ${group_prefix^^}*")
   _mc_footer "${_f[@]}"
 }
 
@@ -615,7 +610,7 @@ switch_menu() {
  clr|CLR)
         if [ "$_sw_tab" = "recents" ]; then
           local _clr_ans
-          _bvk_yn _clr_ans "Clear all recents? This only clears the list, not your files." -d n
+          _bvk_yn _clr_ans "Clear all recents? This only clears the list, not your files." -d none
           if [[ "${_clr_ans,,}" == "y" ]]; then
             : > "$_SW_RECENTS_LIST"
             echo "💫 Recents list cleared."

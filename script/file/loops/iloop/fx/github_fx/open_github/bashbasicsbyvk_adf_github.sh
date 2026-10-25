@@ -89,7 +89,7 @@ _ghx_load_repo() {               # releases (stable) + tags of $_GHX_REPO
 }
 
 _ghx_reload() {
-  _lb_run "Reloading from GitHub" _ghx_load_repo || echo "❌ ${_GHX_MSG:-reload failed}"
+  _ghx_load_repo || echo "❌ ${_GHX_MSG:-reload failed}"
 }
 
 # ── repos screen ────────────────────────────────────────────────────────────
@@ -114,15 +114,15 @@ ghp_header() {
   _vp_filter_header_line
 }
 
-ghp_footer() { _mc_footer "#Select a number to open that repo" "=:filter" "rf:Reload" "u:Back"; }
+ghp_footer() { _mc_footer "#Select a number to open that repo" "=:filter" "rf" "u"; }
 
 _ghp_cmd() {
   case "$1" in
-    rf) _lb_run "Reading your repos" _ghx_fetch_repos || echo "❌ Reload failed."; return 0 ;;
+    rf) _ghx_fetch_repos || echo "❌ Reload failed."; return 0 ;;
     [0-9]*)
       _xui_row "$1" || { _bvk_invalid; return 1; }
       _GHX_REPO="${_GHX_R_NAME[$_XUI_SLOT]}"; _GHX_TAB="stable"
-      if ! _lb_run "Loading releases and tags of $_GHX_REPO" _ghx_load_repo; then echo "❌ $_GHX_MSG"; return 1; fi
+      if ! _ghx_load_repo; then echo "❌ $_GHX_MSG"; return 1; fi
       _xui_enter
       _xui_screen ghr
       _xui_loop _ghr_cmd
@@ -175,7 +175,7 @@ ghr_header() {
 
 ghr_footer() {
   local what="release(s)"; [ "$_GHX_TAB" = tags ] && what="tag(s)"
-  _mc_footer "#${#items[@]} $what — select: N · 1,3-5 · a (all) · a-2 (all except 2)" "c:Create" "e:Edit" "r:Rename" "d:Delete" "g:Download" "|" "i-N:Info" "rf:Reload" "u:Back"
+  _mc_footer "#${#items[@]} $what — select: N · 1,3-5 · a (all) · a-2 (all except 2)" "c:Create" "e:Edit" "r:Rename" "d:Delete" "g:Download" "|" "i-N:Info" "rf" "u"
 }
 
 # the picked display rows (_XUI_SEL) → tag names in _GHX_PICK
@@ -203,7 +203,10 @@ _ghx_job_new() {
 _ghx_job_tags() { local t; : > "$_GHX_JOB/tags"; for t in "${_GHX_PICK[@]}"; do printf '%s\n' "$t" >> "$_GHX_JOB/tags"; done; }
 _ghx_job_run() {                 # _ghx_job_run <engine command> [extra]
   local cmd="$1"; shift
-  echo; _gh_run "$cmd" --job "$_GHX_JOB" "$@"; local rc=$?
+  echo
+  declare -F _sl_hold >/dev/null 2>&1 && _sl_hold            # git prints its own progress: smartload stays out of the way
+  _gh_run "$cmd" --job "$_GHX_JOB" "$@"; local rc=$?
+  declare -F _sl_release >/dev/null 2>&1 && _sl_release
   rm -rf "$_GHX_JOB"; _GHX_JOB=""
   echo
   return $rc
@@ -341,7 +344,7 @@ _ghx_delete() {
   fi
   echo; echo "🗑️  Delete from $_GHX_REPO  (cannot be undone from here):"; _ghx_show_picked
   case "$what" in r) echo "   → release only" ;; t) echo "   → tag only" ;; b) echo "   → release and tag" ;; esac
-  _bvk_yn ans "Delete ${#_GHX_PICK[@]} item(s)?" -d n
+  _bvk_yn ans "Delete ${#_GHX_PICK[@]} item(s)?" -d none
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   _ghx_job_new || return 1; _ghx_job_tags
   case "$what" in r) printf 1 > "$_GHX_JOB/release" ;; t) printf 1 > "$_GHX_JOB/tag" ;; b) printf 1 > "$_GHX_JOB/release"; printf 1 > "$_GHX_JOB/tag" ;; esac
@@ -458,11 +461,11 @@ _fx_adf_github() {
   _GHX_NAV="${_fx_outer_path:-$path}"                       # the navigation path, NOT $PWD
   if ! _gh_locate; then echo "❌ GitHub needs Python 3 and bashbasicsbyvk_github (the engine) — not found."; return 1; fi
   _GHX_NONE=()
-  if ! _lb_run "Looking for your GitHub key" _ghx_sign_in; then
+  if ! _ghx_sign_in; then
     if [ "$_GHX_MSG" = none ]; then _ghx_no_key_help "${_GHX_NONE[@]}"; else echo "❌ $_GHX_MSG"; fi
     return 1
   fi
-  if ! _lb_run "Reading your repos" _ghx_fetch_repos; then echo "❌ Could not read your repos from GitHub (offline, or API rate limit)."; return 1; fi
+  if ! _ghx_fetch_repos; then echo "❌ Could not read your repos from GitHub (offline, or API rate limit)."; return 1; fi
   if [ "${#_GHX_R_NAME[@]}" -eq 0 ]; then echo "📜  GitHub shows no repo for $_GHX_LOGIN."; return 1; fi
   _xui_enter
   _xui_screen ghp

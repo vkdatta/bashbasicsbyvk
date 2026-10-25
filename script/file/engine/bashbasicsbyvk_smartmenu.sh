@@ -84,6 +84,7 @@ echo() {
   # worth capturing, so hand straight to the builtin. This keeps
   # bulk output (item listings, subshells, redirects) at native cost.
   [[ ${_CM_MUTE:-0} == 1 && -t 1 ]] && return 0      # a cancelled flow says nothing more
+  [[ ${_SL_WANT:-0} == 1 && -t 1 ]] && _sl_pulse     # smartload: a loading bar on screen is wiped before text appears
   [[ $_sm_on == 1 && -t 1 ]] || { builtin echo "$@"; return $?; }
   local __n=0 __e=0 __s
   while [ "$#" -gt 0 ]; do
@@ -106,6 +107,7 @@ echo() {
 printf() {
   if [ "$1" = "-v" ]; then builtin printf "$@"; return $?; fi
   [[ ${_CM_MUTE:-0} == 1 && -t 1 ]] && return 0      # a cancelled flow says nothing more
+  [[ ${_SL_WANT:-0} == 1 && -t 1 ]] && _sl_pulse     # smartload (see echo)
   if [[ $_sm_on != 1 || ! -t 1 ]]; then
     builtin printf "$@"
     return $?
@@ -119,6 +121,7 @@ printf() {
 }
 
 clear() {
+  [[ ${_SL_WANT:-0} == 1 ]] && _sl_pulse
   command clear "$@"
   local __rc=$?
   _sm_reset
@@ -938,6 +941,9 @@ read() {
     builtin printf -v "${__v:-REPLY}" '%s' ""
     return 1
   fi
+
+  # smartload: the terminal is about to be read, so the wait is over (before anything is drawn)
+  [[ ${_SL_WANT:-0} == 1 && -t 0 ]] && _sl_ready
 
   # fast path: anything without -p is never a menu prompt
   case "$*" in

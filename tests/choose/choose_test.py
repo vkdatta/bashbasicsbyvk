@@ -7,7 +7,8 @@ sys.path.insert(0, os.path.join(root, 'tests', 'paste_input')); from ptyapp impo
 
 BODY = r'''
 echo READY
-_bvk_yn a1 "Delete these?" -d n;                       builtin echo "R1 [$a1] rc=$?"
+_bvk_yn a1 "Keep these?" -d n;                         builtin echo "R1 [$a1] rc=$?"
+_bvk_yn a7 "Delete these?" -d n;                       builtin echo "R7 [$a7] rc=$?"
 _bvk_yn a2 "Back up first?" -d y -c;                   builtin echo "R2 [$a2] rc=$?"
 _bvk_yn a3 "Sure?" -d n;                               builtin echo "R3 [$a3] rc=$?"
 _bvk_menu m1 -t "Pick" "a:Apple" "b:Banana" "c:Cherry"; builtin echo "R4 [$m1] rc=$?"
@@ -31,12 +32,19 @@ open(drv, 'w', encoding='utf-8').write(head + '\n' + BODY)
 a = None
 try:
     a = App(root, 80, 30, lambda home, work: open(os.path.join(work, 'a.txt'), 'w').write('x'), env={'BVK_BROWSER_TERM': '0'})
-    a.wait_text('Delete these?', 8)
+    a.wait_text('Keep these?', 8)
     s = screen(a)
     check('yes/no: header, rules, rows', '1) [o] No' not in s and '2) [o] No' in s and '1) [ ] Yes' in s, s[-300:])
     check('yes/no: footer lists u/q and the answer keys', 'u) Back   q) Close' in s and 'y) Yes   n) No' in s, s[-300:])
     a.send('\r', until=lambda: 'R1 [' in a.text())
     check('Enter takes the default (n)', 'R1 [n] rc=0' in a.text(), a.text()[-200:])
+    # a question that names a destructive action has NO default whatever -d says: nothing is highlighted, a bare Enter does not answer it
+    a.wait_text('Delete these?', 8); a.wait(lambda: '2) [ ] No' in screen(a) or '2) [o] No' in screen(a), 8); s = screen(a)    # the rows are drawn after the title
+    check('a destructive question highlights nothing', '[o]' not in s and '1) [ ] Yes' in s and '2) [ ] No' in s, s[-300:])
+    a.send('\r'); a.settle()
+    check('a bare Enter does not answer a destructive question', 'R7 [' not in a.text(), a.text()[-200:])
+    a.send('n'); a.send('\r', until=lambda: 'R7 [' in a.text())
+    check('the person must answer it (n)', 'R7 [n] rc=0' in a.text(), a.text()[-200:])
     a.wait_text('Back up first?', 8); a.wait_text('c/x) Cancel', 8); s = screen(a)
     check('yes/no/cancel: three rows and the c/x key', '3) [ ] Cancel' in s and 'c/x) Cancel' in s and '1) [o] Yes' in s, s[-300:])
     a.send('x'); a.send('\r', until=lambda: 'R2 [' in a.text())

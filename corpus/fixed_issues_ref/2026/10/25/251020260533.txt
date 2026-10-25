@@ -1,0 +1,107 @@
+1. ISSUE IN BRIEF
+Merging the v1a and v1b branches (BB-251020262145-1..3 and BB-241020261928-1, BB-241020262040-1..4) broke Settings screens that are sourced on their own: settings_ui.sh called _st_desc_prepare, which lives in settings_desc.sh that only the import file loads, so the harness of tests/stale_size and the main-header check of tests/hints failed with an arithmetic error and a missing header.
+
+1. HOW DID YOU DEBUG
+Ran tests/run.sh fast on the merged tree: stale_size and hints failed. Ran both on base, v1a and v1b: they pass on base and v1b and fail on v1a alone, so v1a introduced it and its session had no tests/run.sh. Read tests/stale_size/harness.sh (sources only viewport.sh and settings_ui.sh) and found _ST_DESC_N empty, so `rows - 12 - _ST_DESC_N` is a syntax error. e2e_pending and e2e_services source settings_ui.sh the same way but are skipped here (../fileapi repo not found), so they are NOT verified.
+
+1. CAUSE
+A hidden load-order dependency: settings_ui.sh needs settings_desc.sh but does not load it or degrade without it, and three callers (stale_size harness, e2e_pending, e2e_services) source settings_ui.sh alone.
+
+1. FIX
+settings/bashbasicsbyvk_settings_ui.sh: _st_draw calls _st_desc_prepare only when it is defined, otherwise sets the three description variables to "no description"; the two `?` handlers call _st_desc_show only when it is defined. tests/settings_desc.sh (4) draws a screen with no description file loaded. Lesson: a file that another file depends on loads it or degrades without it (AGENTS rule 10).
+
+2. ISSUE IN BRIEF
+The Settings description block (BB-251020262145-2) changed height with the highlighted row (a long text, a short text, none), so each redraw moved the prompt up or down a row and left a blank row under it; the mouse wheel on the last screen row was then handed back to the terminal (tests/mouse "wheel on the prompt row stays with the menu" failed).
+
+2. HOW DID YOU DEBUG
+Ran tests/mouse alone on base (pass, twice), v1b (pass) and v1a (fail): the failure comes from v1a. Replayed the test steps in a pty and printed the screen with row numbers: the Settings prompt is on row 30 after opening, and on row 29 with a blank row 30 after the highlight moves to a row whose text is one line shorter. Confirmed it is not the loading bar by running with VK_SMARTLOAD=0 (same failure).
+
+2. CAUSE
+_st_desc_prepare gave the block exactly the lines of the highlighted row's text. The Settings block is erased and redrawn by row count, so a block whose height changes with the row cannot keep the prompt on one screen row.
+
+2. FIX
+settings/bashbasicsbyvk_settings_desc.sh: new _st_desc_height computes, once per screen and size, the tallest text (rows and screen text, capped at a third of the screen); _st_desc_prepare pads every row's block to that height. tests/settings_desc.sh: the block has one height on every row, a shorter text is padded; made red by removing the padding, restored.
+
+3. ISSUE IN BRIEF
+The loading bar of BB-251020262145-1 scrolled the whole screen up by one line whenever it appeared while the cursor was on the last screen row (for example the "Starting" bar on a slow start): the top header row was pushed off the screen and stayed lost.
+
+3. HOW DID YOU DEBUG
+tests/hints failed on the merged tree only with smartload on (VK_SMARTLOAD=0 passed, base passed). Forced the bar with VK_SMARTLOAD_GRACE_MS=50 and read the screen: the first header row was gone and "Starting…87" lines were on the screen. The "87" is ESC 7 / ESC 8 printed as text: tests/paste_input/vt.py (the shared test terminal) did not implement DECSC / DECRC. The scroll itself was read from the code: the first frame sent ESC D then ESC [ 1 A, and ESC D scrolls on the last row.
+
+3. CAUSE
+Two causes. The product: the bar made sure a row existed below the cursor with ESC D, which scrolls the screen when the cursor is on the last row, and the wipe did not scroll it back. The test terminal: it ignored ESC 7 / ESC 8, so any frame of the bar garbled the screen under load.
+
+3. FIX
+engine/bashbasicsbyvk_smartload.sh: no ESC D / ESC M any more. The bar goes one row down with ESC [ 1 B (it stops at the last row, where the bar takes the cursor's own row), drawn and wiped between save / restore cursor; nothing scrolls. tests/paste_input/vt.py: ESC 7 / ESC 8. tests/smartload/pty_test.py checks that no scrolling sequence is ever sent; made red by putting ESC D back. Not covered: an external program writing straight to the terminal during a wait can still leave one ghost bar row (as in the original note).
+
+4. ISSUE IN BRIEF
+Tests relied on the old loading bar's output as a side effect: tests/mouse tab_click returned as soon as the harness saw 0.2 s of silence, and the -u screen is silent for about half a second while it fetches tags, so the tap on the second tab was read from a half-painted screen; tests/choose read the screen right after the title appeared, before the rows were drawn.
+
+4. HOW DID YOU DEBUG
+Bisected: base plus only v1a's upgrade.sh (the removed _lb_run wrapper) failed the -u tab case. A probe showed the tags list arriving about 1 s after the tap while the old bar had kept the harness waiting. Then ran the whole suite with VK_SMARTLOAD_GRACE_MS=50 so the bar shows on every wait: only the second tab tap failed, because the helper checked the tab name before the rest of the screen was painted.
+
+4. CAUSE
+Waits by silence instead of by condition (AGENTS tests rule 1): the animated bar had been keeping the harness waiting.
+
+4. FIX
+tests/mouse/mouse_test.py tab_click waits for the tab bar, taps, waits until that tab is the current one and the screen is quiet. tests/choose/choose_test.py waits for the rows. Both pass in normal mode and with the bar forced on every wait.
+
+5. ISSUE IN BRIEF
+Generic footer keys (u q z rf) were still hand-typed at about 20 call sites with labels that drift (u:Exit, q:Close, rf:Reload, u:cancel, u:up/back, u:Up parent, u:Remove last prefix) and in registered footers (u:Up, q:Quit, rf:Refresh_Drive), and the guard of BB-241020262040-1 only matched the exact canonical spelling in quoted items.
+
+5. HOW DID YOU DEBUG
+Listed every literal with grep (quoted items and _mc_footer_register tokens), split them into generic keys with a different meaning and plain copies. Ran tests/cmd_drift.sh after each step. Made the guard red four ways: a hand-typed "u:Back" in transfer.sh, "u:Back" in a registered footer, an undefined variant "u.nosuch", and a footer key no map wires; restored each file byte for byte.
+
+5. CAUSE
+The bare-key mechanism had no way to say "this u means Up", so call sites kept typing the label, and the guard had an exceptions mindset (it skipped menuchrome.sh and registered footers).
+
+5. FIX
+engine/bashbasicsbyvk_menuchrome.sh: _MC_KEYLABEL gets named variants (u.up = Up, u.prefix = Remove last prefix); the cell shows the part before the dot. All hand-typed generic labels in auth, csurf, switch, functions, csv, api, upgrade, rules, transfer, adf_gdrive, gdrive and staging_ux became bare keys or variants (wording standardised: u is Back, q is Quit, rf is Refresh; a menu-specific close key such as bk:Close stays). tests/cmd_drift.sh: no `key:Label` for a generic key in any spelling, no exceptions list, every variant defined, variants render. AGENTS rule 9.
+
+6. ISSUE IN BRIEF
+bashbasicsbyvk_adf_recover.sh registered an ADF action but no import file loads it (BB-241020262040-2 found it and listed it as "known legacy" in tests/adf_registry.sh), and switch.sh _sw_excl_add still printed a hand-made 1-4 list.
+
+6. HOW DID YOU DEBUG
+Grepped every function and variable the file defines (12 functions) across script/ and tests/: none is used elsewhere. For _sw_excl_add read _bvk_menu and the plain-mode test.
+
+6. CAUSE
+Dead code kept "untouched" after cfwp replaced it, and a flow written before _bvk_menu existed.
+
+6. FIX
+Deleted bashbasicsbyvk_adf_recover.sh (the python helpers beside it are used by cfwp and stay); tests/adf_registry.sh has no allowlist now (made red by putting the file back). _sw_excl_add asks the rule type with _bvk_menu (keys 1-4, u / q back out); tests/choose/plain_test.sh covers the picker's shape. AGENTS rule 10. Not run: the interactive flow itself in a real terminal.
+
+7. ISSUE IN BRIEF
+Delete-type confirmations: BB-251020262145-3 fixed 13 call sites by hand, but about ten more destructive questions still defaulted to "No" (clear buffer x4, free downloaded Drive content, remove stale registry entries, overwrite x2, "Are you really sure?" when removing users, and the shared _xui_yes used for Nuke / Remove / Revoke), and any new one would again.
+
+7. HOW DID YOU DEBUG
+Listed every _bvk_yn call (58) and read each question. Ran tests/choose: its "Enter takes the default" case used a question worded "Delete these?" and failed with the new rule, which is the intended behaviour change (the test now uses a harmless question for the default and has new cases for a destructive one). Made tests/delete_confirm.sh red two ways: a literal destructive question with -d n, and the central rule removed.
+
+7. CAUSE
+The no-default rule lived in each caller instead of in _bvk_yn.
+
+7. FIX
+settings/bashbasicsbyvk_choose.sh: _bvk_destructive; _bvk_yn gives a question that names delete / remove / nuke / clear / wipe / erase / discard / purge / overwrite / revoke / "for good" / "undone" / "really sure" no default whatever -d says. -d none written at the literal call sites. tests/delete_confirm.sh (behaviour, source, _xui_yes). AGENTS rule 6 and the categories list (Data Safety).
+
+8. ISSUE IN BRIEF
+The Home screen (15 rows) and the Pending FileAPI actions screen (8 rows) had no description although AGENTS rule 8 and BB-251020262145-2 say every Settings screen and row has one, and nothing checked it.
+
+8. HOW DID YOU DEBUG
+Wrote a static check that reads every literal _st_run "Title" builder and every literal _st_add tag and looks for the key in the table: it found exactly those two screens. Made it red by adding a row with no text.
+
+8. CAUSE
+The headless walk behind BB-251020262145-2 missed screens opened from Home and pn.
+
+8. FIX
+settings/bashbasicsbyvk_settings_desc.sh: 24 texts. tests/settings_desc.sh and tests/settings_desc/coverage.py: table shape, lookup, coverage of 40 screens and 95 literal rows. Not covered: titles and tags built at run time (a $ in them).
+
+9. ISSUE IN BRIEF
+v1a (smart loading bar, Settings descriptions) shipped no tests, and v1b added tests only for its own changes, so the merge had no guard for either feature.
+
+9. HOW DID YOU DEBUG
+Ran tests/run.sh all on base, v1a, v1b and the merge to attribute every failure (choose, stale_size, hints, mouse: all caused by v1a, none by v1b) before writing tests.
+
+9. CAUSE
+v1a's session had no tests/run.sh in its archive, so it ran no repo test.
+
+9. FIX
+tests/smartload.sh and tests/smartload/pty_test.py (static: no _lb_*, load order, every engine ends the wait before drawing; pty: bar after the grace, wipe, short wait, burst, hold / release, off switch, no terminal, shutdown, never scrolls), tests/settings_desc.sh, tests/delete_confirm.sh, registered in tests.list and covers.map (script/file/ runs all three). The merged tree was also run with VK_SMARTLOAD_GRACE_MS=50 so the bar shows on every wait. Verified for the whole task: bash -n on every .sh; AGENTS checks 1-4 and 6 (same output as the upload); tests/run.sh all. NOT verified: e2e_pending and e2e_services (SKIP, ../fileapi repo not found); polyglot (check 5) not run; the bar and the Settings screen were not looked at on a real phone terminal.

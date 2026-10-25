@@ -197,7 +197,7 @@ _find_replace_single() {
     echo "📋 Preview — $(_find_preview_summary):"
     _fr_show
     _fr_notes
-    _mc_footer "a:Apply to ALL" "#Enter a number to apply to just that item" "u:Back" "q:Quit"
+    _mc_footer "a:Apply to ALL" "#Enter a number to apply to just that item" "u" "q"
     read -e -r -p "Action: " act || return 0
     case "$act" in
       u|U) return 3 ;;

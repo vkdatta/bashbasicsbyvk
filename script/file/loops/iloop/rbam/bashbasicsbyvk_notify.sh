@@ -92,7 +92,7 @@ nf_header() {
   [ "${#items[@]}" -eq 0 ] && echo "   Nothing new."
   _vp_filter_header_line
 }
-nf_footer() { _mc_footer "N:open / answer" "r-N:dismiss" "rf:refresh" "u:back"; }
+nf_footer() { _mc_footer "N:open / answer" "r-N:dismiss" "rf" "u"; }
 
 # ── answers ──────────────────────────────────────────────────────────────────
 _nf_rbam_respond() {                         # rid true|false   (also used by the rbam list)

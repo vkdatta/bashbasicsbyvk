@@ -134,7 +134,7 @@ _bz_import() {
   if [ "$clash" -gt 0 ]; then
     _mc_options 1 "Keep existing   (skip the ${clash} file(s) that already exist)" \
                   "Overwrite       (replace the ${clash} file(s) that already exist)"
-    _mc_footer "z:Cancel" "u:Back"
+    _mc_footer "z" "u"
     read -e -r -p "Select: " ans
     ans="${ans%$'\r'}"
     case "$ans" in

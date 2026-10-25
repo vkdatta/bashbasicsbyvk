@@ -7,4 +7,4 @@
 # ════════════════════════════════════════════════════════════════════════════
 
 _fx_adf_import_link() { handle_do_import; }
-_fx_adf_register "import.from.link" "_fx_adf_import_link" "file_fx/import/import.from.link"
+_fx_adf_register_fx "import.from.link" "_fx_adf_import_link"

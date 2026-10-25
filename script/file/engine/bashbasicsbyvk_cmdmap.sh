@@ -847,6 +847,7 @@ _cm_text_read_done() {   # put back the keys that were known before this prompt 
 # Entry used by the read shim. Returns the exit status the shim should give the caller.
 # Sets _CM_RESULT to the value for the variable.
 _cm_text_read() {   # prompt initial var can_complete
+  [ "${_SL_WANT:-0}" = 1 ] && _sl_ready          # smartload: the wait is over
   local prompt="$1" init="$2" var="$3" cc="$4" st
   local start="$init"        # what the editor starts with; $init stays "what was already there" for the gate
   _cm_on || return 99
@@ -887,6 +888,19 @@ _cm_show() {
     esac
     printf '%-10s %-7s %-8s %-7s %s%s\n' "${_ct_key[i]}" "${_ct_kind[i]}" "$act" "$from" "$desc" "$([ "${_ct_impl[i]}" = 1 ] && printf '   [inherited – not wired here]')"
   done
+}
+
+# o --map-doc   the main-command reference as a markdown table, straight from cmd_def (the docs paste it; tests/cmd_docs.sh
+#               fails when the pasted copy is out of date, so a new command can never be missing from the docs)
+_cm_doc() {
+  _cm_boot
+  local k id d kind handler class desc ex
+  printf '| Command | Class | What it does | Example |\n|---|---|---|---|\n'
+  while IFS= read -r id; do
+    d="${_CM_DEF[bashbasicsbyvk_maincommands.sh:$id]}"
+    kind="${d%%|*}"; d="${d#*|}"; handler="${d%%|*}"; d="${d#*|}"; class="${d%%|*}"; d="${d#*|}"; desc="${d%%|*}"; ex="${d#*|}"
+    printf '| `%s` | %s | %s | %s |\n' "$id" "$class" "$desc" "${ex:+\`$ex\`}"
+  done < <(for k in "${!_CM_DEF[@]}"; do [[ "$k" == bashbasicsbyvk_maincommands.sh:* ]] && echo "${k#bashbasicsbyvk_maincommands.sh:}"; done | LC_ALL=C sort)
 }
 
 # o --map-lint   every gap in the wiring

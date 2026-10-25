@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+In fx -> github_fx -> open github, typing a command the footer shows (d, e, r, c, g, rf, d-1 ...) answered "not available here - Enter will cancel" / "Invalid command: d - not available in xui". Footer, command map, hint and cheat code disagreed. A user also reported stray text ("[C", "[<0;44;37M") on the repo screen after the right key / a tap.
+
+HOW DID YOU DEBUG
+Typed the commands in the real app through a pty: "Invalid command: d - not available in xui" reproduced at once. Read the command-map guide, _cm_ctx_find (a screen shares _xui_loop and gets its own map only when a map named xui_<prefix> exists) and the existing xui_cs / xui_rb / xui_nf maps: my two screens (prefixes ghp, ghr) had none, so the generic xui map, which blocks c d r rf d- e- g- i-, applied. The stray-text report could NOT be reproduced: arrows, taps and wheel were probed on the repo list, an empty Stable tab, a 115-tag-sized list, 44/58/100 columns, after an invalid command, after reload / info / menus / prompts, with instant and slow (0.6 s per call) API answers, with a terminal that does and does not answer the cursor-position query, and the upgrade screen for comparison: no stray text anywhere.
+
+CAUSE
+Per-screen command maps were never written for the two GitHub screens (tests/cmd_drift.sh only knows the menus listed in menus.list, so it could not catch it). The screens (Cloudflare workers_pages, Recover, Google Drive) that were my pattern have no xui_<prefix> map either, so they very likely have the same problem; they were not changed (their logins are not available here).
+
+FIX
+cmdmap/xui_ghp and cmdmap/xui_ghr (map + menucommands each, loaded in _3bvk_import_cmdmap.sh): c e r d g rf and e- r- d- g- i- are now real commands with a description (the live hint and the cc list read it). tests/github/ui_test.py types every footer key and checks the hint names it and never says "not available", checks cc lists them, and checks arrow / tap / wheel after an invalid command; with the maps removed 11 of those checks go red. Still open: the stray "[C" / "[<..M" text could not be reproduced here (needs the terminal app, its width, and the keys pressed before it).

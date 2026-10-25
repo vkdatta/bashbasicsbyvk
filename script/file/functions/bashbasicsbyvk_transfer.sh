@@ -116,7 +116,7 @@ _view_selections_menu() {
         i=$((i+1))
       done
     fi
-    _mc_footer "c:Confirm" "x:Remove" "u:Back" "q:Quit"
+    _mc_footer "c:Confirm" "x:Remove" "u" "q"
     read -e -p "Selection view: " sv_choice
 
     case "$sv_choice" in
@@ -272,9 +272,9 @@ local_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer "u:Up" "v:View selections" "z:Cancel" "q:Quit" "#tip: use prefix 'w' to select a folder"
+      _mc_footer "u.up" "v:View selections" "z" "q" "#tip: use prefix 'w' to select a folder"
     else
-      _mc_footer "u:Up" "n:New folder" "c:Confirm destination" "z:Cancel" "q:Quit"
+      _mc_footer "u.up" "n:New folder" "c:Confirm destination" "z" "q"
     fi
 
     read -e -p "Nav: " nav_choice
@@ -437,9 +437,9 @@ gcloud_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer "u:Up" "v:View selections" "z:Cancel" "q:Quit" "#tip: use prefix 'w' to select a folder"
+      _mc_footer "u.up" "v:View selections" "z" "q" "#tip: use prefix 'w' to select a folder"
     else
-      _mc_footer "u:Up" "n:New folder" "c:Confirm destination" "z:Cancel" "q:Quit"
+      _mc_footer "u.up" "n:New folder" "c:Confirm destination" "z" "q"
     fi
 
     read -e -p "GCloud Nav: " gnav_choice
@@ -903,7 +903,7 @@ transfer_menu() {
   else
     _mc_keyed "c:Copy" "m:Move"
   fi
-  _mc_footer "u:Back" "q:Quit"
+  _mc_footer "u" "q"
   read -e -p "Select: " t_action
 
   local t_op

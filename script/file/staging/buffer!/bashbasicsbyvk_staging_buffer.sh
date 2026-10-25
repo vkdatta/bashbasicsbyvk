@@ -118,11 +118,11 @@ _sp_view_set() {
     fi
 
     if [ -n "$name" ]; then
-      _mc_footer "x:Remove item(s)" "n:Rename set" "clr:Clear set $name" "u:Back" "q:Quit"
+      _mc_footer "x:Remove item(s)" "n:Rename set" "clr:Clear set $name" "u" "q"
     elif [ "$grouped" = 1 ]; then
-      _mc_footer "x:Remove item(s)" "n:Name these items" "clr:Clear the flat items" "u:Back" "q:Quit"
+      _mc_footer "x:Remove item(s)" "n:Name these items" "clr:Clear the flat items" "u" "q"
     else
-      _mc_footer "x:Remove item(s)" "clr:Clear entire $label buffer" "u:Back" "q:Quit"
+      _mc_footer "x:Remove item(s)" "clr:Clear entire $label buffer" "u" "q"
     fi
     read -e -p "$label buffer${where}: " bv_choice
 
@@ -148,13 +148,13 @@ _sp_view_set() {
         ;;
       clr|CLR)
         if [ -n "$name" ]; then
-          _bvk_yn confirm "Clear set '$name' from the $label buffer?" -d n -i "🗑️" || confirm=n
+          _bvk_yn confirm "Clear set '$name' from the $label buffer?" -d none -i "🗑️" || confirm=n
           if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then _sp_drop "$file" "$name"; echo "🗑️  Set '$name' cleared"; return 0
           else echo "🚫 Cancelled"; fi
         else
           local what="the $label buffer"
           [ "$grouped" = 1 ] && what="the flat items of the $label buffer"
-          _bvk_yn confirm "Clear $what?" -d n -i "🗑️" || confirm=n
+          _bvk_yn confirm "Clear $what?" -d none -i "🗑️" || confirm=n
           if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
             _sp_drop_unnamed "$file"
             echo "🗑️  $label buffer cleared"
@@ -220,7 +220,7 @@ _sp_view_one_buffer() {
 
     _mc_header "📋 $label buffer ($(_sp_count "$file")):"
     _mc_options 1 "${rows[@]}"
-    _mc_footer "x:Remove item(s)" "n:Rename set" "clr:Clear entire $label buffer" "u:Back" "q:Quit"
+    _mc_footer "x:Remove item(s)" "n:Rename set" "clr:Clear entire $label buffer" "u" "q"
     read -e -p "$label buffer: " bv_choice
 
     case "$bv_choice" in
@@ -255,7 +255,7 @@ _sp_view_one_buffer() {
         fi
         ;;
       clr|CLR)
-        _bvk_yn confirm "Clear the entire $label buffer?" -d n
+        _bvk_yn confirm "Clear the entire $label buffer?" -d none
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
           : > "$file"
           echo "🗑️  $label buffer cleared"
@@ -299,7 +299,7 @@ handle_staging_view() {
 
     _mc_header "🗂️  Shortpath buffers"
     _mc_options 1 "${rows[@]}"
-    _mc_footer "clr:Clear ALL buffers" "u:Back" "q:Quit"
+    _mc_footer "clr:Clear ALL buffers" "u" "q"
     read -e -p "View buffer: " v_choice
 
     case "$v_choice" in
@@ -312,7 +312,7 @@ handle_staging_view() {
         fi
         ;;
       clr|CLR)
-        _bvk_yn confirm "Clear ALL ten buffers? This can't be undone." -d n
+        _bvk_yn confirm "Clear ALL ten buffers? This can't be undone." -d none
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
           for r in "${_SP_VIEW_ROWS[@]}"; do : > "$(_sp_file_for "${r% *}" "${r#* }")"; done
           echo "🗑️  All buffers cleared"

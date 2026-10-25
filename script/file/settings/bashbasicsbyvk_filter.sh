@@ -177,13 +177,7 @@ PYEOF
 _filter_rec_fill() {
   local f _tmp
   _tmp="$(_bvk_tmp)"
-  # back-and-forth loading bar on the row under the prompt; _filter_commit keeps the cursor
-  # hidden until the screen is redrawn (_filter_keep_hidden), so no stray cursor box appears
-  declare -F _lb_start >/dev/null 2>&1 && _lb_start --below "Searching sub-folders"
-  _filter_rec_scan "$1" >"$_tmp" 2>/dev/null
-  if declare -F _lb_stop >/dev/null 2>&1; then
-    if [ "${_filter_keep_hidden:-0}" = 1 ]; then _lb_stop --keep-hidden; else _lb_stop; fi
-  fi
+  _filter_rec_scan "$1" >"$_tmp" 2>/dev/null        # a long search gets its loading bar from smartload by itself
   mapfile -t items <"$_tmp"
   rm -f "$_tmp"
   _REC_LABEL=()
@@ -599,8 +593,8 @@ _filter_commit() {
     # cursor hidden FIRST (no white box on the "S" of Select while searching), then back up to
     # the prompt row — _read_choice left the cursor one row below the input line.  It is shown
     # again once the screen has been redrawn.
+    [ "${_SL_WANT:-0}" = 1 ] && _sl_pulse          # smartload: this moves the cursor by hand
     builtin printf '\033[?25l\033[1A\r'
-    _filter_keep_hidden=1
     if ${imaginary_mode:-false} || ${_imag_filter_committed:-false}; then
       _imag_filter_query="$q"
       _imag_filter_apply             # redraws by itself
@@ -614,7 +608,6 @@ _filter_commit() {
       _vp_prime_rows
       _vp_redraw_in_place
     fi
-    _filter_keep_hidden=0
     builtin printf '\033[?25h'
     return 0
   fi

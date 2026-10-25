@@ -1,0 +1,49 @@
+1. ISSUE IN BRIEF
+Footer labels for the generic keys were still hand-typed in some menus after BB-241020261928-1: case-only variants (u:back, rf:refresh) in the Cloud Surf, notification, RBAM and Cloudflare screens, and the guard that forbids retyping them was case-sensitive.
+
+1. HOW DID YOU DEBUG
+Listed every remaining "u:..", "q:..", "rf:.." literal with grep. Split them into case-only copies and wording that means something else on purpose. Ran tests/cmd_drift.sh after the change (ALL OK).
+
+1. CAUSE
+The bare-key mechanism existed but five files had not been moved to it, and the guard only matched the exact canonical spelling.
+
+1. FIX
+rbam/bashbasicsbyvk_csurf.sh, _notify.sh, _rbam.sh and fx/cloudflare_fx/.../bashbasicsbyvk_adf_cfwp.sh, bashbasicsbyvk_adf_recover.sh now pass "u" and "rf" bare. tests/cmd_drift.sh check "no footer retypes a generic label" is case-insensitive. Kept on purpose, not drift: u:Exit beside a named close key (api bk/sv/api, upgrade -u, rules .r), q:Close in auth, u:cancel in the send picker, rf:Reload (Drive), u:up/back (Cloud Surf list), u:Up (parent folder). Not done: making the menu loops dispatch on _cm_resolve. A stricter check (each footer key must resolve in ITS OWN menu's map) was tried and dropped: auth.sh holds three menus and transfer.sh / find.sh hold several screens, so file-level matching reports sub-screen keys (auth_sub c/l/r/ux/ui, transfer n/v/x, find a) as false alarms; it needs maps per sub-screen first.
+
+2. ISSUE IN BRIEF
+Every file_fx ADF action repeated its label, its function and a typed tree path (file_fx/<verb>/<label>), and nothing checked that registering files were loaded or that registered functions existed.
+
+2. HOW DID YOU DEBUG
+Dumped the registry (label|function|folder|leaf) from the original and the changed tree with a small script that evals the register lines: 28 entries, identical before and after. Checked the rule on the original first: all 25 file_fx entries follow file_fx/<first word of label>/<label>, 0 exceptions. New tests/adf_registry.sh made to fail three ways on purpose (typed file_fx path, import line removed, registered name undefined), restored each file and compared byte for byte.
+
+2. CAUSE
+The tree path was a second copy of the label, so a rename of one could leave the other behind.
+
+2. FIX
+loops/iloop/fx/bashbasicsbyvk_functions.sh: new _fx_adf_register_fx LABEL FN derives the path; 25 calls in file_fx/*.sh use it. tests/adf_registry.sh (registered in tests/tests.list and tests/covers.map): every file that registers is loaded by an import file, every adf file an import loads exists, no typed file_fx/ path, every registered function is defined. Finding, not changed: bashbasicsbyvk_adf_recover.sh registers "recover" but no import file loads it (cfwp replaced it and says the file is "untouched"); the test lists it as known legacy. Delete it or load it is the owner's call.
+
+3. ISSUE IN BRIEF
+The main-command reference lived only in cmd_def lines; 12 commands (.us bk clear fa forceshow gd gdx ns sast scr-sync sn sv) were not named in README, llms*.txt or help.txt.
+
+3. HOW DID YOU DEBUG
+Matched every cmd_def id against the docs with grep -w (hyphenated ids can give false hits). Wrote the generator, compared its 68 rows with the 68 cmd_def lines, then appended a fake cmd_def to prove tests/cmd_docs.sh fails on a command missing from the docs, and restored the file.
+
+3. CAUSE
+Docs and code were two hand-kept lists.
+
+3. FIX
+engine/bashbasicsbyvk_cmdmap.sh: new _cm_doc, reachable as  o --map-doc  (script/o). llms-full.txt gets section 9 with a generated table between cmd-ref:start / cmd-ref:end. tests/cmd_docs.sh fails when the table is stale or a command is missing; bash tests/cmd_docs.sh --write refreshes it. README.md and help.txt are not generated; they still only mention some commands.
+
+4. ISSUE IN BRIEF
+The CPU-to-binary mapping (uname -m to arm64 / amd64 / arm, and android / linux) existed in _bvk_engine_target and was copied three more times (_bvk_xfer_bin in fileapi_lib, two places in health.sh); the bvk-ls section of health ignored $OSTYPE when detecting Android, unlike the real code.
+
+4. HOW DID YOU DEBUG
+Read all four copies. Found that script/cmd/bashbasicsbyvk_copy and _delete load fileapi_lib without displayer.sh, so fileapi_lib could not simply call a helper that lives in displayer.sh. Probed _bvk_xfer_bin the way those commands load it (flat install dir, faked uname -m / uname -o / OSTYPE) for aarch64, x86_64, armv7l, i686 on linux and android before and after: all 8 results identical for both commands. Removing the new source line from the delete import makes aarch64 report no build, so the probe does detect the break.
+
+4. CAUSE
+The helper sat in a file the stand-alone commands cannot load, so each caller kept its own copy, and the copies drifted.
+
+4. FIX
+New engine/bashbasicsbyvk_engine_target.sh holds _bvk_engine_target (moved unchanged out of displayer.sh). It is loaded by _3bvk_import_engine.sh before displayer and by the two stand-alone cmd import files before fileapi_lib. fileapi_lib (_bvk_xfer_bin) and both health.sh spots call it. Small behaviour change: health section 3 now detects Android through $OSTYPE as well, as the app does. tests/engine_target.sh: ten uname/OSTYPE rows, no other file may hold the CPU case, both cmd imports must load the file; made red two ways. Not changed: the build.sh scripts and the ELF-machine table in health.sh (different tables, not this mapping). Also not changed: switch.sh _sw_excl_add still prints a hand-made 1-4 list (AGENTS rule 6 would want _bvk_menu); no test covers that flow, so it was left for the owner.
+
+Verified for the whole task: bash -n on every changed .sh; AGENTS checks 1-4 show only entries that were already in the upload; corpus validator. tests/run.sh for <changed files>: 20 PASS, 1 FAIL (mouse, see below), 2 SKIP (adf_registry, buffer_sets, cheatcode, choose_plain, cmd_docs, cmd_drift, engine_target, findrep, group_view, hints, lint_waits, loadtime_print, nav_back, polyglot_unit, regex_portability, resume_inflight, stale_size, width, wrap_input, xfer_ux passed). NOT verified: e2e_pending and e2e_services (SKIP, ../fileapi repo missing). The mouse test FAILED in the full run, failed again alone with a different case each time, and the untouched original upload also fails it on this machine (one FAIL plus a TypeError crash in the harness), so it is unreliable here; it is not counted as passed for this round (it did pass once earlier, before the changes in items 2-4). Polyglot (check 5) was not run.

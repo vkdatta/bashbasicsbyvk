@@ -373,8 +373,7 @@ _hl_xfer_report() {
     _hl_bad "BVK_NO_XFER=1 — the Go engine is disabled by an environment variable"
     _hl_xf "BVK_NO_XFER=1 is set in the environment" "unset BVK_NO_XFER (check ~/.bashrc / ~/.profile)"
   fi
-  case "$(uname -m)" in aarch64|arm64) _m=arm64 ;; x86_64|amd64) _m=amd64 ;; armv7*|armv8l) _m=arm ;; *) _m="" ;; esac
-  case "${OSTYPE:-}" in *android*) _os=android ;; *) case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac ;; esac
+  _bvk_engine_target; _m="$_bet_m"; _os="$_bet_os"
   if [ -z "$_m" ]; then
     _hl_bad "CPU '$(uname -m)' has no bvk-xfer build (supported: arm64, amd64, arm)"
     _hl_xf "unsupported CPU '$(uname -m)'" "add it to _bvk_xfer_bin and engine/bvk-xfer/bashbasicsbyvk_build.sh"
@@ -502,13 +501,7 @@ _hl_report() {
        _hl_find "\$HOME ($HOME) is not a readable directory" "fix HOME, or change the probe folder in _bvk_go_bin"; fi
 
   _hl_h "3  expected binary"
-  case "$(uname -m)" in
-    aarch64|arm64) _m=arm64 ;;
-    x86_64|amd64)  _m=amd64 ;;
-    armv7*|armv8l) _m=arm ;;
-    *)             _m="" ;;
-  esac
-  case "$(uname -o 2>/dev/null)" in Android) _os=android ;; *) _os=linux ;; esac
+  _bvk_engine_target; _m="$_bet_m"; _os="$_bet_os"
   if [ -z "$_m" ]; then
     _hl_bad "CPU '$(uname -m)' has no prebuilt bvk-ls (supported: aarch64/arm64, x86_64/amd64, armv7*/armv8l)"
     _hl_find "unsupported CPU '$(uname -m)'" "add it to the arch case in _bvk_go_bin and to bashbasicsbyvk_build.sh / build.yml"

@@ -121,7 +121,7 @@ def drive_name(local_name):
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-#  loading bar  (same look as bashbasicsbyvk_loadingbar.sh:  [░░░████░░░░░] message  3s)
+#  loading bar  (same look as the smartload bar:  [░░░████░░░░░] message  3s; off when BVK_GD_BAR=0, which the app sets while smartload runs)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 class Bar:
     def __init__(self, msg):

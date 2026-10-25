@@ -8,7 +8,7 @@ UP="$(need bashbasicsbyvk_upgrade.sh)"; LIB="$(need bashbasicsbyvk_ghlib.sh)"; T
 [ -n "$UP" ] && [ -n "$LIB" ] && [ -n "$TOOL" ] || { echo "FAIL files not found"; exit 1; }
 out="$(SCRIPT_DIR="$(dirname "$TOOL")" bash -c '
 FIX="$1"; UP="$2"; LIB="$3"
-_bvk_tabs_register(){ :; }; _vp_filter_header_line(){ :; }; _mc_footer(){ :; }; _lb_run(){ shift; "$@"; }; _bvk_yn(){ :; }
+_bvk_tabs_register(){ :; }; _vp_filter_header_line(){ :; }; _mc_footer(){ :; }; _bvk_yn(){ :; }
 source "$LIB"; source "$UP"
 _upg_http_get() { case "$1" in */releases*) cat "$FIX/fx_releases.json" ;; */commits/*) cat "$FIX/fx_commit.json" ;; *) return 1 ;; esac; }
 _upg_ls_remote_tags() { cat "$FIX/fx_ls.txt"; }

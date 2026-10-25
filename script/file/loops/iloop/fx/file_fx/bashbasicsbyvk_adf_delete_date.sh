@@ -62,4 +62,4 @@ _fx_adf_delete_by_date() {
   echo "Selected: $(printf '%s\n' "${!chosen[@]}" | sort | tr '\n' ' ')"
   _fxdel_run_selected
 }
-_fx_adf_register "delete.by.date" "_fx_adf_delete_by_date" "file_fx/delete/delete.by.date"
+_fx_adf_register_fx "delete.by.date" "_fx_adf_delete_by_date"

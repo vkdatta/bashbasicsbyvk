@@ -89,6 +89,19 @@ def file_footer_labels(lines):
 SUBJ = re.compile(r'^case\s+"?\$\{?([A-Za-z_0-9]+)(?:,,|\^\^|:-)?\}?"?\s+in')
 ARM = re.compile(r'^\s*([^\s()#;][^()]*?)\)\s*(?:[^)]|$)')
 
+def has_arm(body_text, key):
+    """True when the loop has a real `case` arm for a dash key (s-*)  s-[0-9]*)  c-*|C-*) ...).
+    A bare s / d / do in a printf format or a shell keyword (do ... done) is NOT a mention of s- / d- / do-."""
+    k = key.lower()
+    for l in body_text.split("\n"):
+        m = ARM.match(l)
+        if not m:
+            continue
+        for tok in re.split(r'\|', m.group(1)):
+            if tok.strip().strip("\"'").lower().startswith(k):
+                return True
+    return False
+
 def harvest(lines):
     """-> list of (key, kind) from `case "$…choice…" in` arms of this function"""
     found = []
@@ -230,7 +243,9 @@ for raw in open(os.path.join(OUT, "bashbasicsbyvk_menus.list"), encoding="utf-8"
                 lines_out.append(f"{id_:<10} .mapto()  back()\n")
                 continue
             if kind == "menu" and not local and not body_text and cls not in ("nav", "util", "tool", "filter"):
-                lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh   # AUTO: loop not analysed — decide: keep or block()\n")
+                # The loop could not be read (a wrapper such as _st_run, or no case arms): a map line is a claim about that
+                # loop, so an unverified act / danger key is BLOCKED.  Wire it by hand once the loop really has an arm.
+                lines_out.append(f"{id_:<10} .mapto()  block()   # loop not analysed — wire it by hand when the loop has an arm\n")
                 continue
             if cls in ("nav", "util", "tool"):
                 lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh\n")
@@ -238,8 +253,11 @@ for raw in open(os.path.join(OUT, "bashbasicsbyvk_menus.list"), encoding="utf-8"
                 if uses_filter: lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh\n")
                 else:           lines_out.append(f"{id_:<10} .mapto()  block()\n")
             else:
-                key_rx = re.escape(id_.rstrip("-")) if id_.endswith("-") else re.escape(id_)
-                mentioned = bool(re.search(r'(?<![\w.-])' + key_rx + r'(?![\w])', body_text)) if body_text else False
+                if id_.endswith("-"):
+                    # a dash key (s- d- do- snap-) counts only with a real case arm: its bare letters also sit in every printf '%s' and every `do`
+                    mentioned = has_arm(body_text, id_) if body_text else False
+                else:
+                    mentioned = bool(re.search(r'(?<![\w.-])' + re.escape(id_) + r'(?![\w])', body_text)) if body_text else False
                 if mentioned and id_ not in ("u", "c", "d", "r", "t", "f", "z", "s", "i", "h", "q"):
                     lines_out.append(f"{id_:<10} .mapto()  {id_:<10} from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before\n")
                 else:

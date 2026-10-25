@@ -1,0 +1,107 @@
+1. ISSUE IN BRIEF
+When the input of a list screen (Settings, Home, choose menus) was gone (tty closed, SSH link dropped, tmux pane killed), the screen never left: a failed read was turned into the typed character q, over and over, so the prompt filled with q and the shell burned CPU. Follow-up of BB-201020260021-1 (same symptom, other cause).
+
+1. HOW DID YOU DEBUG
+Read _st_readkey: on a failed read it set _st_k=char and _st_d=q. Wrote tests/settings_keys.sh, a harness that sources the real _st_run with a stub _st_draw and feeds keys through a pipe: with the old code an empty input never ends (killed by the 5 s timeout), with the fix it returns at once.
+
+1. CAUSE
+A read error was reported as a typed key instead of as "no input".
+
+1. FIX
+settings/bashbasicsbyvk_settings_ui.sh: _st_readkey returns _st_k=eof on a failed read; _st_run sets _st_quit=1 on it, exactly like q. Lesson: a key reader must tell "no more input" apart from a key; never invent a key for it.
+
+2. ISSUE IN BRIEF
+On a list screen the arrows, the wheel and a row tap put the row number on the Select line. The next typed character was appended to it: Down then 5 gave 15, Down then h gave 3h (which Enter then cleared without doing anything).
+
+2. HOW DID YOU DEBUG
+Read the up / down / pgup / pgdn / home / end branches of _st_run, _st_click and _st_wheel: all copy _st_num[cur] into buf, and the char / paste branches append to buf. Confirmed with the stub harness (old code: 1h and 15).
+
+2. CAUSE
+The number an arrow leaves on the line is only an echo of the highlight, but nothing remembered that, so typing treated it as text already typed.
+
+2. FIX
+settings_ui.sh: new helper _st_navbuf (one place for the eight copies of "put the highlighted row's number on the line"); it sets the local navbuf=1. The char and paste branches start from an empty line when navbuf is set (a ? keeps it, it only reads the row's explanation), and bksp / space / enter / a footer tap clear the flag. Enter on the echoed number still opens the row.
+
+3. ISSUE IN BRIEF
+Typing a row number that does not exist (15 of 12 rows) left the highlight on the row of the first digit, and Space then toggled that row; erasing the typed number with Backspace left its row highlighted and Enter on the empty line opened it. Same family as BB-211020260830-3 and BB-211020260830-4, which fixed only the main menu and the smart menus.
+
+3. HOW DID YOU DEBUG
+Read _st_follow: it returned at once unless the line was digits, and moved cur only for a valid number, so nothing ever cleared a highlight. Read _hl_typed_clear (viewport.sh) for the rule the main menu already follows. Stub harness: old code toggled row 1 on 15 + Space; fixed code does nothing.
+
+3. CAUSE
+_st_follow could only set a highlight, never drop one, so a highlight put there by typing outlived the typed number.
+
+3. FIX
+settings_ui.sh _st_follow: a number that names no row sets cur=-1 (Space and Enter cannot act on a stale row); an emptied line drops the highlight only if typing put it there (local typed), a row moved with the arrows stays, as in the main menu. Numbers longer than 9 digits count as no row (bash arithmetic would wrap a longer run around to a valid row). Backspace on an empty line no longer drops a default row (choose menus).
+
+4. ISSUE IN BRIEF
+A text + Enter that arrived in one piece was refused when it was too large or came out empty, but its Enter was still queued, so whatever had been typed before it (a row number) was opened.
+
+4. HOW DID YOU DEBUG
+Read the paste / pasteenter branch of _st_run: the refusal empties _st_d, the empty case does nothing, and the line after it queues _ST_PEND_ENTER for pasteenter. Stub harness with a 900 character burst: old code opened row 3, fixed code opens nothing.
+
+4. CAUSE
+The queued Enter belonged to the text, but it was queued whether or not the text was taken.
+
+4. FIX
+settings_ui.sh: when the pasted text is refused or empty, _st_k becomes paste, so no Enter is queued. An accepted text + Enter works as before (tested).
+
+5. ISSUE IN BRIEF
+bashbasicsbyvk_mapgen wired the dash keys s- do- snap- (and c- m- on some menus) as usable on menus whose loop has no arm for them, only because the loop body contains a bare s (a printf %s) or the word do (every while ... do). Follow-up of BB-251020260246-1, which left the "loop mentions it" branch open.
+
+5. HOW DID YOU DEBUG
+Copied script/ to /tmp, deleted the snapshot, transfer, organise and pending maps and ran mapgen --dry: s- do- snap- c- m- came out wired. The real, hand-made maps of the same menus block all of them, and their loops have no arm for them (read each loop).
+
+5. CAUSE
+For a key like s- the check searched the loop text for the bare letters s, so any format specifier or shell keyword counted as the loop mentioning the key.
+
+5. FIX
+cmdmap/bashbasicsbyvk_mapgen: new has_arm(); a key ending in - counts as mentioned only when a case arm of the loop starts with it (s-*) c-[0-9]*) ...). Verified in the /tmp copy: every dash key is block() for those menus, and a loop with a real s-*) arm is still recognised. Not covered by a test (the generator is run by hand); said here so nobody takes it as tested. Other keys (rf, sn) keep the old rule.
+
+6. ISSUE IN BRIEF
+_st_readkey skipped a mouse release by calling itself, one nested call per ignored report.
+
+6. HOW DID YOU DEBUG
+Read the mouse branch of _st_readkey and _bvk_mouse_decode: only ignored reports recurse, and mouse mode is 1000 + 1006 (no motion reports), so in practice one or two levels. A terminal that sends many ignorable reports would still nest without limit. Harness with FUNCNEST=60 and 120 releases: old code fails, fixed code passes.
+
+6. CAUSE
+Recursion used as a loop.
+
+6. FIX
+settings_ui.sh _st_readkey: an outer while loop and continue; no recursion.
+
+7. ISSUE IN BRIEF
+Review claim: pasted text on a list screen is not sanitized, so a CR, tab or ESC byte reaches the line and garbles the row.
+
+7. HOW DID YOU DEBUG
+Read _bvk_paste_clean (viewport.sh): both paths that fill _st_d (_bvk_paste_bracketed and _bvk_paste_burst) end in it; it drops CR, turns tab into space and deletes the other control bytes including ESC and DEL; _st_run turns the kept line breaks into spaces. Read by code only, not run on a real paste.
+
+7. CAUSE
+None: the paste was already cleaned.
+
+7. FIX
+None.
+
+8. ISSUE IN BRIEF
+Review claim: _CM_ACT is not cleared before _cm_resolve in _st_cm_gate, so a stale run could fire on unknown text.
+
+8. HOW DID YOU DEBUG
+Read _cm_resolve (cmdmap.sh): its first line sets _CM_ACT=none (and key, desc, class, handler) before every return, including the "longer than 255" and "no match" returns; _st_cm_gate reads _CM_ACT right after the call.
+
+8. CAUSE
+None: the resolver resets it itself.
+
+8. FIX
+None.
+
+9. ISSUE IN BRIEF
+Review claims: a footer tap or row click leaves the =filter on, so u clears the filter instead of going back; s on Settings and h on Home open a second copy of the screen.
+
+9. HOW DID YOU DEBUG
+Read the u arm of _st_run (it clears an active filter first, as the header comment says: "= + Enter (or u) clears it") and the tap code (a tap keeps the filter, like =text + Enter). The second copy is the known side effect written in BB-251020260246-2.
+
+9. CAUSE
+Both are the documented behaviour.
+
+9. FIX
+None.

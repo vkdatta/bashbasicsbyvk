@@ -110,6 +110,7 @@ _lt_screen_id() {
 
 # ENTER was pressed at a prompt.  $1 = what was typed (or chosen)   $2 = a friendlier label (optional)
 _lt_enter() {
+  [ -n "${_SL_ON:-}" ] && _sl_enter "$@"            # smartload: Enter was pressed, a wait begins (works with VK_LOADTIME=0 too)
   [ "$_LT_ON" = 1 ] && [ -z "$_LT_MUTE" ] || return 0
   _LT_PEND=1
   _lt_w T "${EPOCHREALTIME/[.,]/}" 0 "$1" "${_LT_SCREEN}|${2:-}"
@@ -124,6 +125,7 @@ _lt_enter() {
 
 # a prompt is drawn and is now waiting for a key.   $1 = kind (menu | smart | settings | text)   $2 = screen name
 _lt_ready() {
+  [ "${_SL_WANT:-0}" = 1 ] && _sl_ready              # smartload: the next prompt is up, the wait is over
   [ "$_LT_ON" = 1 ] && [ -n "$_LT_PEND" ] && [ -z "$_LT_MUTE" ] || return 0
   local t="${EPOCHREALTIME/[.,]/}"
   _LT_PEND=""
@@ -261,7 +263,7 @@ _lt_init() {
   _lt_install_externals
   return 0
 }
-_lt_cleanup() { [ -n "$_LT_LOG" ] && [ "$$" = "$_LT_MAIN_PID" ] && rm -f "$_LT_LOG" "$_LT_LOG".c.* 2>/dev/null; return 0; }
+_lt_cleanup() { [ -n "${_SL_ON:-}" ] && _sl_shutdown; [ -n "$_LT_LOG" ] && [ "$$" = "$_LT_MAIN_PID" ] && rm -f "$_LT_LOG" "$_LT_LOG".c.* 2>/dev/null; return 0; }
 
 # ── the command: loadtime [N | all] ───────────────────────────────────────────────────────
 bvk_loadtime_cmd() {

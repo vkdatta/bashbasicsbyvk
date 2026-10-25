@@ -28,8 +28,10 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  API
 #     _bvk_yn   VAR "Question" [-d y|n] [-c] [-t Title] [-i Icon]
 #                  VAR = y | n | c        rc 0 answered · 1 backed out (u / q / a cancelled flow: VAR is "")
-#                  -d  the answer a bare Enter gives (highlighted at start).  Default n: a destructive question never
-#                      says yes by accident.   -c  add the Cancel row (c or x)
+#                  -d  the answer a bare Enter gives (highlighted at start).  Default n.   -d none: NO default: nothing is
+#                      highlighted and a bare Enter does nothing, the person has to answer y / n (or pick a row).  Every
+#                      question that deletes or removes something uses  -d none  (a stray Enter never answers it either way).
+#                      -c  add the Cancel row (c or x)
 #     _bvk_menu VAR [-t Title] [-i Icon] [-q Question] [-d key] [-k] [-m] [-n] item...
 #                  item = key:Label  or  key|alt|alt:Label     (the first key is the answer; Label is shown)
 #                  VAR = the key (-m: the keys, space separated, in row order)     rc 0 chosen · 1 backed out
@@ -141,9 +143,13 @@ _bc_plain() {
     _bc_h=""; for _bc_j in "${!_bc_key[@]}"; do _bc_k="${_bc_key[$_bc_j]}"; _bc_h+="${_bc_h:+/}$_bc_k"; done
   fi
   _bc_p="${_bc_question:-$_bc_title} [$_bc_h]: "
-  read -e -r -p "$_bc_p" _bc_a || return 1
-  [ "${_CM_ABORT:-0}" = 1 ] && return 1
-  _bc_a="${_bc_a,,}"
+  while :; do
+    read -e -r -p "$_bc_p" _bc_a || return 1
+    [ "${_CM_ABORT:-0}" = 1 ] && return 1
+    _bc_a="${_bc_a,,}"
+    [ -z "$_bc_a" ] && [ -z "$_bc_def" ] && continue      # no default: a bare Enter is not an answer, ask again
+    break
+  done
   [ -z "$_bc_a" ] && _bc_a="$_bc_def"
   if _bc_index "$_bc_a"; then _bc_pick="${_bc_key[$_bc_ix]}"; return 0; fi
   # not one of the answers: a yes/no question takes the safe answer (u / back = cancel when there is a Cancel), a menu backs out
@@ -244,18 +250,29 @@ _bvk_menu() {
 }
 
 # _bvk_yn VAR "Question" [-d y|n] [-c] [-t Title] [-i Icon]    → VAR = y | n | c
+# A question that names a destructive action (delete, remove, nuke, clear, overwrite, revoke ...) has NO default answer: a bare Enter
+# must never answer it.  Enforced here, in the one place every yes/no question goes through, so no caller can forget `-d none`
+# (callers still write `-d none` so the source says it too; tests/delete_confirm.sh checks both).
+_bvk_destructive() {
+  case "${1,,}" in
+    *delet*|*remov*|*nuke*|*clear*|*wipe*|*erase*|*discard*|*purge*|*overwrit*|*revoke*|*"free the"*|*"for good"*|*undone*|*"really sure"*) return 0 ;;
+  esac
+  return 1
+}
+
 _bvk_yn() {
   local _by_var="$1" _by_q="$2"; shift 2
   local _by_def=n _by_c=0 _by_t="" _by_i="❓"
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      -d) _by_def="${2,,}"; shift 2 ;;
+      -d) _by_def="${2,,}"; [ "$_by_def" = none ] && _by_def=""; shift 2 ;;
       -c) _by_c=1; shift ;;
       -t) _by_t="$2"; shift 2 ;;
       -i) _by_i="$2"; shift 2 ;;
       *)  shift ;;
     esac
   done
+  [ -n "$_by_def" ] && _bvk_destructive "$_by_q $_by_t" && _by_def=""
   local -a _by_items=("y|yes:Yes" "n|no:No")
   (( _by_c )) && _by_items+=("c|x|cancel:Cancel")
   local -a _by_flags=(-q "$_by_q" -i "$_by_i" -d "$_by_def" -k --yn)

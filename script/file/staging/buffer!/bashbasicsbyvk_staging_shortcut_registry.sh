@@ -250,7 +250,7 @@ _scr_validate() {
     echo "   • $sf"
   done
 
-  _bvk_yn confirm "Remove stale entries from registry?" -d n
+  _bvk_yn confirm "Remove stale entries from registry?" -d none
   if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
     _scr_save kept
     echo "🗑️  Removed ${#stale[@]} stale entry/entries. Registry now holds ${#kept[@]}."

@@ -75,10 +75,11 @@ trap '_gd_on_exit 2>/dev/null; _lt_cleanup; _bvk_paste_off 2>/dev/null; _bvk_mou
 
 _orig_stty=$(stty -g 2>/dev/null)
 
-# command map tooling:  o --map-show [menu] · o --map-lint · o --map-gen
+# command map tooling:  o --map-show [menu] · o --map-lint · o --map-doc · o --map-gen
 case "${1:-}" in
   --map-show) _cm_show "${2:-main}"; exit $? ;;
   --map-lint) _cm_lint; exit $? ;;
+  --map-doc)  _cm_doc; exit $? ;;
   --map-gen)  _mg=$(_cm_find bashbasicsbyvk_mapgen) && exec python3 "$_mg" "${@:2}"; echo "mapgen not found"; exit 1 ;;
 esac
 

@@ -12,4 +12,4 @@ _fx_adf_map_select_csv() {
   _csv_resolve_report "Mapping" || return
   _map_deliver "$(_map_generate_for_paths "${selected_items[@]}")"
 }
-_fx_adf_register "map.select.items.csv" "_fx_adf_map_select_csv" "file_fx/map/map.select.items.csv"
+_fx_adf_register_fx "map.select.items.csv" "_fx_adf_map_select_csv"

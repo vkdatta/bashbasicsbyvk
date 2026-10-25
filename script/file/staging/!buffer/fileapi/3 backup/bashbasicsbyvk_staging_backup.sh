@@ -37,7 +37,7 @@ _bk_before_delete() {
   if [ "$mode" = ask ]; then
     # A menu that was cancelled (u = go back, or a command that is not allowed here) returns 1 and
     # raises _CM_ABORT: the whole flow stops RIGHT HERE — nothing is packed, uploaded or deleted.
-    _bvk_yn a "Back up ${#real[@]} item(s) to the cloud before deleting?" -d y -c -t "Back up before deleting" -i "🗄️" || return 1
+    _bvk_yn a "Back up ${#real[@]} item(s) to the cloud before deleting?" -d none -c -t "Back up before deleting" -i "🗄️" || return 1
     [ "${_CM_ABORT:-0}" = 1 ] && return 1
     case "$a" in
       c) echo "🚫 Nothing deleted."; return 1 ;;
@@ -63,7 +63,7 @@ _bk_before_delete() {
     4) echo "⏸  The backup was interrupted. It is KEPT — finish it from Pending (pn). Nothing is deleted yet." ;;
     *) echo "🔴  The backup FAILED — nothing was saved to the cloud." ;;
   esac
-  _bvk_yn a "Delete anyway, without a backup?" -d n || { echo "🚫 Nothing deleted."; return 1; }
+  _bvk_yn a "Delete anyway, without a backup?" -d none || { echo "🚫 Nothing deleted."; return 1; }
   case "${a,,}" in
     y|yes) return 0 ;;
     *)     echo "🚫 Nothing deleted."; return 1 ;;

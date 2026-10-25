@@ -26,7 +26,7 @@
 #      or re-uploaded, and nothing is converted on upload either
 #    • a docx/xlsx/pptx is only made when the person asks: gd.export, or copying/moving OUT of the Drive
 #
-#  Uses: bashbasicsbyvk_loadingbar.sh (_lb_run), bashbasicsbyvk_gd (python), rclone
+#  Uses: bashbasicsbyvk_gd (python), rclone
 # ════════════════════════════════════════════════════════════════════════════
 
 _bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
@@ -61,7 +61,7 @@ _GD_SET_VARS=(show_hidden_files index_mode_threshold terminal_bg_color terminal_
 # state kept GLOBAL on purpose (not swapped per profile): upgrades, UDF scripts, the recents daemon, logs
 _GD_GLOBAL_TOPS="gdrive upgrade execute recents.list recents.pid recents.log recents_exclude.conf daemon.version daemon.status lastdir health.log index_roots.conf .watchdog_install_attempted"
 
-_mc_footer_register browse_gd u:Up gd:Drive_menu gdx:Leave_Drive rf:Refresh_Drive q:Quit '|' h:Home s:Settings -h:Help -u:Upgrade 2>/dev/null
+_mc_footer_register browse_gd u.up gd:Drive_menu gdx:Leave_Drive rf q '|' h:Home s:Settings -h:Help -u:Upgrade 2>/dev/null
 
 # ── small helpers ────────────────────────────────────────────────────────────
 _gd_safe_name() {
@@ -108,7 +108,8 @@ _gd_need_rclone() {
 }
 
 # the python engine for the OPEN profile
-_gd_py() { BVK_GD_PROFILE_DIR="$_GD_HOME" BVK_GD_REMOTE="$_GD_REMOTE" "$_GD_PY" "$_GD_MAIN" "$@"; }
+# BVK_GD_BAR=0 while smartload runs: it draws the one loading bar, so the tool must not draw a second one on top
+_gd_py() { BVK_GD_BAR="${_SL_ON:+0}" BVK_GD_PROFILE_DIR="$_GD_HOME" BVK_GD_REMOTE="$_GD_REMOTE" "$_GD_PY" "$_GD_MAIN" "$@"; }
 
 _gd_now() { printf '%(%s)T' -1; }
 
@@ -586,7 +587,7 @@ handle_gd_cmd() {
       _gd_py sync "$path" --force --recursive && echo "💫 Listed everything below $(_gd_view_path "$path"; echo "$_gd_vp")" ;;
     gd.clean)
       echo "📜  Downloaded files you did not change turn back into placeholders (they download again when needed)."
-      _bvk_yn a "Free the downloaded content of this whole Drive?" -d n
+      _bvk_yn a "Free the downloaded content of this whole Drive?" -d none
       case "$a" in [yY]|[yY][eE][sS]) _gd_push; local r; r="$(_gd_py clean)"; echo "💫 ${r%%$'\t'*} file(s) freed (≈ ${r#*$'\t'} bytes of disk)." ;; *) echo "🚫 Cancelled" ;; esac ;;
     gd.push) _gd_push && echo "💫 Nothing pending." ;;
     gd.export|gd.ex) _gd_export_cmd "$1" ;;

@@ -6,7 +6,7 @@ It speaks only what bashbasicsbyvk_github uses, and is deliberately STRICT where
   - a download redirected to another host must arrive WITHOUT the Authorization header (the second server records it)
 Failure injection:  state.fail["patch_release"] = {"tag_name_to_fail"}  makes PATCH of that release answer 500 (rollback tests).
 """
-import hashlib, json, re, threading
+import hashlib, json, re, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
@@ -42,6 +42,7 @@ class Repo:
 class State:
     def __init__(self):
         self.repos, self.fail, self.blob_seen, self.log = {}, {}, [], []
+        self.delay = 0.0                        # seconds each API call takes (a real network is slow: the loading bar must survive that)
         self.blob_port = 0
 
     def add(self, full, **kw):
@@ -81,6 +82,8 @@ def make_handler(state):
         def _route(self, method):
             u = urlparse(self.path); qs = parse_qs(u.query); p = unquote(u.path)
             state.log.append((method, p))
+            if state.delay:
+                time.sleep(state.delay)
             if self.headers.get("Authorization") != "Bearer " + GOOD:
                 return self._send(401, {"message": "Bad credentials"})
             if p == "/user":

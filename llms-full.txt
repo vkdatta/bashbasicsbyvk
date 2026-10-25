@@ -183,3 +183,81 @@ Do not: claim it is risk-free or unbreakable, call experimental Infinity Stones 
 - Short index for AI tools: llms.txt
 - Security policy: SECURITY.md
 - Contact: vkd.codes@gmail.com
+
+## 9. Command reference (generated)
+
+Every main command, typed at any prompt (`cc` lists the ones the current prompt accepts). Generated from the `cmd_def` lines by `o --map-doc`; do not edit by hand.
+`bash tests/cmd_docs.sh --write` refreshes it, and `tests/cmd_docs.sh` fails when it is out of date.
+
+<!-- cmd-ref:start -->
+| Command | Class | What it does | Example |
+|---|---|---|---|
+| `-auth` | nav | Account, billing, credits |  |
+| `-h` | nav | Help |  |
+| `-u` | act | Upgrade loop |  |
+| `.ai` | act | Ask the AI for a command | `.ai delete all pyc` |
+| `.d` | act | Display only what matches | `.d.ext py` |
+| `.dm` | act | Background daemon |  |
+| `.r` | act | Rule book |  |
+| `.s` | act | Select by expression | `.s.ext png` |
+| `.us` | act | Un-select by expression | `.us.ext png` |
+| `=` | filter | Filter the list live (== searches sub-folders) | `=png` |
+| `api` | act | Links manager (FileAPI) |  |
+| `b-` | act | Stage BOOKMARK | `b-1,3` |
+| `bk` | act | Backups |  |
+| `c` | act | Create files / folders |  |
+| `c-` | act | Stage COPY | `c-1,3` |
+| `c2c-` | act | Cloud-to-cloud upload | `c2c-1` |
+| `cc` | tool | Cheat codes — pick a command, it lands in the prompt |  |
+| `cd` | act | Open a shell in this folder |  |
+| `clear` | util | Forget the command cache (hash -r) |  |
+| `cs` | act | Cloud surf |  |
+| `d` | act | Delete items |  |
+| `d-` | act | Apply staged items HERE   (d- set1 = only that set) | `d- set1` |
+| `disk` | util | Disk usage |  |
+| `do-` | act | Download from a link |  |
+| `f` | act | Find |  |
+| `fa` | act | Favourite — add an alias | `fa 3` |
+| `forceshow` | act | Force-show every item (big folder) |  |
+| `fs` | act | Force-show every item (big folder) |  |
+| `fx` | act | Functions (fx) — CSV-driven actions |  |
+| `gd` | act | Google Drive |  |
+| `gdx` | act | Leave Google Drive |  |
+| `h` | nav | Home — recents, bookmarks, favourites |  |
+| `health` | util | What is active on this machine |  |
+| `i` | nav | Infinity stones — extra tools |  |
+| `k-` | act | Stage SHORTCUT | `k-1,3` |
+| `kl` | danger | Kill every process of this user (kill -9 -1) |  |
+| `l-` | act | Lock items | `l-1,3` |
+| `lang` | util | Which engines run: Drill (C or Python) · FileAPI (Go or Node) |  |
+| `loadtime` | tool | Load time: what each screen change cost (loadtime 2 · loadtime all) |  |
+| `m-` | act | Stage MOVE | `m-1,3` |
+| `nf` | act | Notifications |  |
+| `ns` | act | Back to the normal listing |  |
+| `p-` | act | Project map of a path | `p-1` |
+| `pn` | act | Pending uploads — continue, pause, resume, stop |  |
+| `print` | tool | Print what is on screen — copy it or save as txt |  |
+| `q` | nav | Close the app |  |
+| `r` | act | Rename items |  |
+| `ram` | util | Memory usage |  |
+| `rbam` | act | Roles & access |  |
+| `rf` | act | Refresh the list |  |
+| `s` | nav | Settings |  |
+| `s-` | act | Stage SELECT (a set for fx → <action>.selected.items) | `s-1,3 as set1` |
+| `sast` | util | Static security scan |  |
+| `save-` | act | Save upload | `save-1` |
+| `scr-sync` | act | Sync the shortcut registry |  |
+| `sn` | act | Snapshots |  |
+| `snap-` | act | Add to snapshots | `snap-1` |
+| `sv` | act | Saved surf |  |
+| `sw` | act | Switch — recents & tabs |  |
+| `t` | act | Transfer — copy / move, Google Drive |  |
+| `u` | act | Up one folder / back |  |
+| `ul-` | act | Unlock items | `ul-1,3` |
+| `up-` | act | Upload — expiring link | `up-1` |
+| `ux-` | act | Share with a user | `ux-1` |
+| `uz-` | act | Unzip items | `uz-2` |
+| `v-` | act | View staged items and sets |  |
+| `z` | act | Organise by year, month, extension… |  |
+| `z-` | act | Zip items | `z-1,3` |
+<!-- cmd-ref:end -->

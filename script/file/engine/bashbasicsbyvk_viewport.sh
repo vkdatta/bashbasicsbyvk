@@ -716,6 +716,7 @@ _vp_rerender() {
 }
 
 _vp_render_fresh() {
+  [ "${_SL_WANT:-0}" = 1 ] && _sl_ready          # smartload: the wait is over; wipe its bar before this screen is drawn
   declare -F _cm_abort_report >/dev/null 2>&1 && _cm_abort_report   # a cancelled flow: say why, once, above the menu
   _hint_cur="?"          # a fresh screen: whatever sits under the prompt is unknown, repaint the hint row
   _lt_b "draw: header + footer layout"

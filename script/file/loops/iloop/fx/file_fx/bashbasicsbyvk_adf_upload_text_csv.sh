@@ -13,4 +13,4 @@ _fx_adf_upload_text_select_csv() {
   _csv_resolve_report "Uploading (text)" || return
   _c2c_paths "${selected_items[@]}"
 }
-_fx_adf_register "upload.text.select.items.csv" "_fx_adf_upload_text_select_csv" "file_fx/upload/upload.text.select.items.csv"
+_fx_adf_register_fx "upload.text.select.items.csv" "_fx_adf_upload_text_select_csv"

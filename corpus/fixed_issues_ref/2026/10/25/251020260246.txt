@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+Six menu maps (find, home, organise, settings, snapshot, transfer) wired 50 main-list commands each (sw fx api bk cd c d r ... kl) as usable, tagged "AUTO: loop not analysed", so the hint row and cc advertised commands those screens have no case arm for. Follow-up of BB-201020260325-1 (same family: footer, map, hint, cc and real handling must agree).
+
+1. HOW DID YOU DEBUG
+Listed the cmdmap layer and read _cm_resolve: for class act / filter / danger in a menu it returns "local" ("its loop decides") without ever checking the loop. Read mapgen: it only analyses the function named in menus.list, so wrappers (settings_menu, home_menu = _st_run) are never seen and every command falls back to usable + AUTO. Read the real input code of each of the six menus (find_menu, transfer_menu, organise_menu: only u q and digits; snapshot_menu: u sn "" q rf and digits; _st_run: arrows, u, q, digits, =filter, print, loadtime, cc). Applied the decisions, then ran tests/cmd_drift.sh (35 ok) and tests/cheatcode.sh (47 ok) before and after.
+
+1. CAUSE
+The engine trusts a menu loop to handle any act-class key the map does not block, and the generator defaults to "usable" when it cannot read the loop. Nothing compares a map's usable keys with the loop's real arms (cmd_drift only checks that Enter does not reject a suggestion, and local counts as accepted).
+
+1. FIX
+All 300 AUTO lines resolved by reading each loop: find, transfer, organise, home, settings: all 50 -> block(); snapshot: rf kept (real arm), sn -> back() (the loop returns on sn), the other 48 -> block(). No AUTO tags are left. Lesson: a map line is a claim about the screen's loop; when the loop cannot be read the safe default is block(), not usable. Also changed script/file/cmdmap/bashbasicsbyvk_mapgen: when a menu's loop cannot be read it now writes block() for act / danger keys (no more AUTO + usable); nav / util / tool keys are still wired because the engine runs them itself after checking the handler exists. Verified in a temp copy with a stub loop and a fake new act command: every new line came out block(), existing lines untouched, no AUTO tag written. Not covered: the "loop mentions it - kept as before" branch still trusts a plain text mention of the key in the loop body, which is weaker than a real case arm.
+
+2. ISSUE IN BRIEF
+On the Settings and Home screens (and every other _st_run list screen called without a cmd_fn) a typed main command did nothing: h s i -h -auth disk ram health lang sast were cleared silently, although the hint row, cc and the map listed them as available. Blocked keys were also cleared without any note.
+
+2. HOW DID YOU DEBUG
+Read _st_run: its Enter branch handles only print, loadtime, cc, u, q, digits and =text, then clears anything else; only a screen-specific cmd_fn could handle more, and Settings / Home pass none. Confirmed by running, not only by reading: a pty script (PtyApp of tests/paste_input) opened Settings and Home, typed each key and compared the screen before and after: all eleven keys changed nothing, while cc (control) did. After the fix the same script showed the screens opening / output printing for every key; clear prints nothing by design. Swapped the original _st_run back in to prove the new test fails without the fix (it does), then restored the fix. tests/run.sh for the two changed files: 9 tests OK (lint_waits width choose_plain choose stale_size hints cheatcode cmd_drift nav_back). -h and sast report a missing help file / permission error in the test harness's flat bin folder; that is the harness (same code path as the main menu), not the fix.
+
+2. CAUSE
+_st_run reads its keys itself and never went through the command-map gate (_cm_gate_choice / _cm_gate_dispatch) that every other prompt uses; only its hint row called _cm_hint. So the row said "h -> Home" while Enter dropped it.
+
+2. FIX
+settings/bashbasicsbyvk_settings_ui.sh: new _st_cm_gate, called from _st_run after cmd_fn and before the u/q/number case. It asks _cm_resolve menu (the resolver of the hint row): run -> the main command runs (screen wiped, output printed, screen redrawn below it, q from the opened screen closes up to the main loop); block -> a one-line "not available here" note; back -> leave the screen; none / local -> unchanged. Skipped for digits, u, q, =filter and while the cc list itself is open. New test tests/cc_truth/cc_truth_test.py (tests.list: cc_truth, covers.map lines for settings_ui and cmdmap/settings|home): 8 run keys and 5 blocked keys on each of Settings and Home. Side effect to know: h on Home and s on Settings open a second copy of the screen (u comes back), the same as typing them on any other menu.

@@ -25,6 +25,8 @@ ONE TRUTH PER KEY  (footer · cc · suggestion · what Enter does must never dis
       text when there is none.
     * "could become: ..." lists only keys Enter would accept in THAT prompt (_cm_usable — the same judge).
     * A footer key must be wired in the menu's .map AND handled by its loop.  tests/cmd_drift.sh guards this.
+    * List screens that read keys themselves (Settings, Home: _st_run) take a typed word through _st_cm_gate: a command the map
+      wires runs there, a blocked one answers "not available here".  tests/cc_truth guards this in a real pty.
 
 Forgot a command?  Type  cc  (cheat codes) at any prompt: it lists exactly the commands THAT prompt
 accepts (the effective table of its map, filtered by what the prompt kind can run). =lo filters, a
