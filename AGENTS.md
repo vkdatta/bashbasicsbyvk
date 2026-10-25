@@ -133,7 +133,7 @@ So before you create anything, work in this order:
      (`y) Yes   n) No   c/x) Cancel`), then `Select:`. Rows are `N) [ ] Label`; the answer is a number, a tap or click, the arrows + Enter, or the printed key + Enter.
    - **Marks: `[o]` radio = exactly one is on (one-of-many, the mark follows the highlight); `[x]` checkbox = any number can be on (many-of-many); `[ ]` off.**
      Settings rows use the same marks (`_st_add r` radio, `_st_add t` checkbox). Never use `[x]` for a radio or `[o]` for a checkbox.
-   - A stand-alone tool (rule 3) cannot load the menu; its plain prompt still has no emoji. New code in the app uses the menu, and a new test goes in `tests/choose`.
+   - A stand-alone tool (rule 3) cannot source the menu itself; a dependency question goes through `bashbasicsbyvk_deps.sh`, which loads the menu through its own import file (rule 12). Any other plain prompt of such a tool has no emoji. New code in the app uses the menu, and a new test goes in `tests/choose`.
 
 7. **Never wire a loading bar by hand: smartload draws it.** (`script/file/engine/bashbasicsbyvk_smartload.sh`; same idea as smartmenu.)
    - Wait time > loading bar. A wait starts at the person's Enter / tap (`_lt_enter`) and ends when the next prompt is up (`_lt_ready`, the `read` shim, or an engine about to

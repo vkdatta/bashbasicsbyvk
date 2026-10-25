@@ -112,7 +112,7 @@ _arc_scan() {
   while :; do
     prev="$s"
     s="${s%"${s##*[![:space:]._-]}"}"
-    if   [[ "${s,,}" =~ ^(.*[^[:space:]_-]|)[[:space:]_-]*\([0-9]+\)$ ]]; then s="${s:0:${#BASH_REMATCH[1]}}"
+    if   [[ "${s,,}" =~ ^((.*[^[:space:]_-])?)[[:space:]_-]*\([0-9]+\)$ ]]; then s="${s:0:${#BASH_REMATCH[1]}}"
     elif [[ "${s,,}" =~ ^(.*[^[:space:]_-])[[:space:]_-]*\(copy([[:space:]]*[0-9]+)?\)$ ]]; then s="${s:0:${#BASH_REMATCH[1]}}"
     elif [[ "${s,,}" =~ ^(.*[^[:space:]_-])[[:space:]_-]+copy([[:space:]]*[0-9]+)?$ ]]; then s="${s:0:${#BASH_REMATCH[1]}}"
     fi

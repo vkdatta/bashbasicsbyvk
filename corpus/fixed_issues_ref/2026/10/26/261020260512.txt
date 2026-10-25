@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+On Termux, extracting an archive printed "[[: invalid regular expression ... empty (sub)expression" from bashbasicsbyvk_archive_formats.sh (the copy-marker stripping of the archive stem). The regex used an empty alternative, (x|), which glibc accepts and Termux's regcomp rejects; extraction still finished but the stem logic did not run.
+
+HOW DID YOU DEBUG
+Read the reported line: the first `=~` of the stem loop. Confirmed with diff that the identical regex is in the original archive (not caused by the dependency work). Rewrote it as ((x)?) and ran tests/archive/archive_test.sh (78 ok, name cases for "hello- (2).zip", "x_copy (2).7z" included). Added a lint to tests/regex_portability.sh and proved it goes red by putting the old regex back, then restored. Not run on a real Termux device.
+
+CAUSE
+Empty (sub)expression, i.e. an alternation with an empty branch, is not portable ERE; the existing portability lint only knew repeat counts above 255 and backslash classes.
+
+FIX
+bashbasicsbyvk_archive_formats.sh _arc_scan: ^(.*[^[:space:]_-]|)... became ^((.*[^[:space:]_-])?)..., group 1 still holds the stem so BASH_REMATCH[1] is unchanged. tests/regex_portability.sh now rejects (x|) and (|x) inside =~ lines. Lesson: write an optional group as (x)?, never an empty branch.
