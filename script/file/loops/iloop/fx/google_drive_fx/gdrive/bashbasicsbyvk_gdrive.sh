@@ -108,8 +108,8 @@ _gd_need_rclone() {
 }
 
 # the python engine for the OPEN profile
-# BVK_GD_BAR=0 while smartload runs: it draws the one loading bar, so the tool must not draw a second one on top
-_gd_py() { BVK_GD_BAR="${_SL_ON:+0}" BVK_GD_PROFILE_DIR="$_GD_HOME" BVK_GD_REMOTE="$_GD_REMOTE" "$_GD_PY" "$_GD_MAIN" "$@"; }
+# the tool draws its own progress bar; smartload stays out of its way by itself (_sl_owned)
+_gd_py() { BVK_GD_PROFILE_DIR="$_GD_HOME" BVK_GD_REMOTE="$_GD_REMOTE" "$_GD_PY" "$_GD_MAIN" "$@"; }
 
 _gd_now() { printf '%(%s)T' -1; }
 

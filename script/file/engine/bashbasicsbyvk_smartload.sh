@@ -58,6 +58,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  Safe everywhere: with no terminal (pipes, tests, cron) or  VK_SMARTLOAD=0  every
 #  call is a no-op.  If the app dies, the animator notices and ends itself.
 #  VK_SMARTLOAD_GRACE_MS=200 changes how long a wait must last before the bar shows.
+#  A child program that has the terminal (its own prompt or progress bar) is not a wait either: no bar while it runs (_sl_owned; VK_SMARTLOAD_AUTOHOLD=0 turns that off).
 # ============================================================
 
 _SL_ON=""             # 1 = running (needs a terminal, bash 5, mkfifo)
@@ -81,6 +82,28 @@ _sl_target() {
   _SL_TTY=""; return 1
 }
 
+# is a child program of the app using the terminal?  (a tool with its own prompts / progress bar: gitpush, bvk-xfer, rclone, git ...)
+# Then it is NOT a wait: no bar is drawn while it runs.  A child counts when it was exec'd (its command line differs from the app's: a subshell
+# of the app is not one), has the terminal on fd 0, 1 or 2, and is not a plain silent utility.  Needs /proc; without it: always 1 (old behaviour).
+_SL_PTS=""; _SL_PCMD=""
+_sl_owned() {
+  [ -n "$_SL_PTS" ] || return 1
+  local parent="$1" me="$2" kids c f comm; local -a cmd
+  kids=""; builtin read -r kids <"/proc/$parent/task/$parent/children" 2>/dev/null   # the file has no trailing newline: read returns 1 but fills kids
+  [ -n "$kids" ] || return 1
+  for c in $kids; do
+    [ "$c" = "$me" ] && continue
+    builtin read -r comm <"/proc/$c/comm" 2>/dev/null || continue
+    case "$comm" in rm|cp|mv|find|zip|unzip|tar|sleep|sed|awk|grep|sort|cat|ls|du|df|stat|touch|mkdir|chmod|chown|head|tail|tr|cut|wc|tee|mkfifo|stty|tput|date|basename|dirname|readlink|realpath|xargs|diff|cmp|file|md5sum|sha256sum|ps|kill|true|false|test) continue ;; esac
+    cmd=(); builtin mapfile -d '' -t cmd <"/proc/$c/cmdline" 2>/dev/null
+    [ "${#cmd[@]}" -gt 0 ] && [ "${cmd[*]}" = "$_SL_PCMD" ] && continue      # same command line = a subshell of the app, not a tool
+    for f in 0 1 2; do
+      [[ "/proc/$c/fd/$f" -ef "$_SL_PTS" ]] && return 0
+    done
+  done
+  return 1
+}
+
 # the animator (a background copy of the shell; it only ever draws)
 #   $1 tty  $2 parent pid  $3 grace µs  $4 label file  $5 command fd  $6 answer fd
 _sl_anim() {
@@ -88,7 +111,7 @@ _sl_anim() {
   exec </dev/null >/dev/null 2>&1           # holds no pipe, no file and no terminal of the foreground
   trap '' INT QUIT                          # Ctrl-C belongs to the foreground
   declare -F _lt_off >/dev/null 2>&1 && _lt_off     # the animator's own work is not work
-  local armed=0 paused=0 drawn=0 t_arm=0 t_last=0 now tick cmd="" st
+  local armed=0 paused=0 drawn=0 owned=0 t_arm=0 t_last=0 now tick cmd="" st
   local W=22 BW=5 pos=0 dir=1 n=0 cols room maxmsg msg="" track blk left right line el t
   while :; do
     if (( armed && ! paused )); then tick=0.05; else tick=5; fi
@@ -103,6 +126,10 @@ _sl_anim() {
     kill -0 "$parent" 2>/dev/null || break  # the app is gone: end too
     (( armed && ! paused )) || continue
     now=${EPOCHREALTIME/[.,]/}
+    if _sl_owned "$parent" "${BASHPID:-0}"; then      # a tool owns the terminal: wipe a bar that is showing, draw nothing
+      (( drawn )) && { builtin printf '\0337\033[K\033[?25h\0338' >"$tty" 2>/dev/null; drawn=0; }
+      owned=1; continue
+    elif (( owned )); then owned=0; t_last=$now; continue; fi    # the tool is gone: the grace clock starts again
     (( now - t_last >= grace )) || continue
     if (( ! drawn )); then
       # first frame: size the bar to the screen and read the label.  The bar is drawn on the cursor's OWN row (never a row below it), so it
@@ -260,9 +287,13 @@ _sl_init() {
   _SL_BASE="$d/bvk-sl.${UID:-0}.$$"
   command mkfifo "$_SL_BASE.ctl" "$_SL_BASE.ack" 2>/dev/null || return 0
   _SL_MSG="$_SL_BASE.msg"
-  exec {_SL_CTLFD}<>"$_SL_BASE.ctl" 2>/dev/null || { command rm -f "$_SL_BASE".ctl "$_SL_BASE".ack; return 0; }
-  exec {_SL_ACKFD}<>"$_SL_BASE.ack" 2>/dev/null || { exec {_SL_CTLFD}>&-; command rm -f "$_SL_BASE".ctl "$_SL_BASE".ack; return 0; }
+  { exec {_SL_CTLFD}<>"$_SL_BASE.ctl"; } 2>/dev/null || { command rm -f "$_SL_BASE".ctl "$_SL_BASE".ack; return 0; }
+  { exec {_SL_ACKFD}<>"$_SL_BASE.ack"; } 2>/dev/null || { exec {_SL_CTLFD}>&-; command rm -f "$_SL_BASE".ctl "$_SL_BASE".ack; return 0; }
   _SL_MAIN=$$
+  if [ "${VK_SMARTLOAD_AUTOHOLD:-1}" != 0 ] && [ -r "/proc/$$/task/$$/children" ]; then
+    _SL_PTS="$(command readlink "/proc/$$/fd/1" 2>/dev/null)"; [ -e "$_SL_PTS" ] || _SL_PTS=""
+    local -a _pc=(); builtin mapfile -d '' -t _pc <"/proc/$$/cmdline" 2>/dev/null; _SL_PCMD="${_pc[*]}"
+  fi
   _SL_ON=1
   _sl_spawn || { _SL_ON=""; return 0; }
   _sl_enter "" "" "Starting"                               # the wait before the very first screen

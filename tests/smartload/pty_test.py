@@ -107,7 +107,17 @@ d, b = o.find('NANO_DONE'), o.find('░')
 check((d >= 0 and (b < 0 or b > d)), 'no bar is drawn while nano is open (it is not a wait)', f'a bar was drawn over nano (done@{d} bar@{b})')
 check(('ARGS=a b c' in o and 'RC=7' in o), 'nano gets its arguments and its exit code comes back unchanged', f'args / exit code lost: {o[-200:]!r}')
 check((d >= 0 and b > d), 'after nano exits a real wait gets its bar again', f'no bar after nano (done@{d} bar@{b})')
-o = run_pty('_sl_ready; _sl_enter "" "" "Edit"; command nano a; _sl_ready; echo MARK_END', env=penv)   # lint-wait-ok: the control: without the guard the bar draws over the program
+o = run_pty('_sl_ready; _sl_enter "" "" "Edit"; command nano a; _sl_ready; echo MARK_END', env=dict(penv, VK_SMARTLOAD_AUTOHOLD='0'))   # lint-wait-ok: the control: without the guard the bar draws over the program
 check(('░' in o and o.find('░') < o.find('NANO_DONE')), 'control: without the guard the bar would draw over the program', f'the control run drew no bar: {o[-200:]!r}')
+
+# 9) smartload must never touch the app's stderr (exec ... 2>/dev/null once sent it to /dev/null for good: no prompts, no tool progress, a dead shell after cd)
+o = run_pty('echo ERR_FD:$(readlink /proc/$$/fd/2)')
+check('ERR_FD:/dev/pts' in o, 'stderr is still the terminal after smartload starts', f'stderr was redirected: {o[-120:]!r}')
+
+# 10) a child program with its own prompt (gitpush ...) is not a wait: no bar over its prompt, and what the person types still reaches it
+o = run_pty('_sl_ready; _sl_enter "" "" "Go"; bash -c \'printf "Commit message: "; read x; echo GOT:$x\' <<< hello; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+check(('GOT:hello' in o and not has_bar(o)), 'a child tool that owns the terminal gets no bar', f'bar over a child tool: {o[-200:]!r}')
+o = run_pty('_sl_ready; _sl_enter "" "" "Go"; bash -c \'sleep 1.6\' >/dev/null 2>&1; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+check(has_bar(o), 'a child whose output is captured is still a wait: the bar shows', f'no bar for a silent child: {o[-200:]!r}')
 
 sys.exit(fail)

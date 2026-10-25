@@ -143,6 +143,7 @@ So before you create anything, work in this order:
    - Engine code that writes the terminal with `builtin printf` during a wait (moving the cursor, redrawing) calls `[ "${_SL_WANT:-0}" = 1 ] && _sl_pulse` first. Code that draws its OWN progress
      (a transfer bar, a tool with its own bar) wraps it in `_sl_hold` / `_sl_release` (or runs with `BVK_GD_BAR=0`-style switches when it is a separate process).
    - Full-screen programs (nano, vim, less, htop ...) are not a wait: smartload wraps those names (end of `bashbasicsbyvk_smartload.sh`) so no bar is drawn while they run; a new full-screen tool adds its name to that list, never a hand-made `_sl_hold`.
+   - A child program that has the terminal (its own prompt or progress bar: gitpush, bvk-xfer, rclone, git ...) is not a wait: smartload sees it by itself (`_sl_owned`, via /proc) and draws no bar while it runs. Never put `exec ... 2>/dev/null` in app code: with no command, `exec` makes the redirect permanent (stderr = prompts and tool progress bars).
    - `VK_SMARTLOAD=0` turns it off, `VK_SMARTLOAD_GRACE_MS=200` sets the delay. No terminal (pipes, tests) = every call is a no-op.
 
 8. **Every Settings screen and row explains itself.** `script/file/settings/bashbasicsbyvk_settings_desc.sh` holds one plain-words text per screen and per row

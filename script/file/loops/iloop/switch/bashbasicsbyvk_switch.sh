@@ -705,7 +705,7 @@ switch_menu() {
       s)            settings_menu ;;
 
       cd)
-        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || { cd "$path" && exec "$SHELL"; }
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || { _lt_cleanup; cd "$path" && exec "$SHELL"; }
         ;;
 
       disk)         df -h ;;

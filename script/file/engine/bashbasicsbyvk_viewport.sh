@@ -1114,7 +1114,7 @@ _BVK_TO_MAIN=0
 _bvk_exit() {
   _bvk_paste_off
   declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
-  if ${_sw_did_switch:-false}; then declare -F _gd_before_exec >/dev/null && _gd_before_exec; cd "$path" && exec "$SHELL"; else exit 0; fi
+  if ${_sw_did_switch:-false}; then declare -F _gd_before_exec >/dev/null && _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi
 }
 _bvk_quit() {
   _fx_in_mode=0; _sw_in_mode=0
