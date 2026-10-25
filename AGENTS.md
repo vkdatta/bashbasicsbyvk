@@ -137,11 +137,12 @@ So before you create anything, work in this order:
 
 7. **Never wire a loading bar by hand: smartload draws it.** (`script/file/engine/bashbasicsbyvk_smartload.sh`; same idea as smartmenu.)
    - Wait time > loading bar. A wait starts at the person's Enter / tap (`_lt_enter`) and ends when the next prompt is up (`_lt_ready`, the `read` shim, or an engine about to
-     draw a screen: `_st_draw`, `_vp_render_fresh`, `_cm_text_read`). If it lasts more than ~0.2 s and the screen is quiet, the bar appears by itself on the row under the cursor;
+     draw a screen: `_st_draw`, `_vp_render_fresh`, `_cm_text_read`). If it lasts more than ~0.2 s and the screen is quiet, the bar appears by itself ON the cursor's own row, in the cursor's place (the cursor is hidden while it shows; never a row below it);
      `echo` / `printf` / `clear` wipe it before they write and restart its clock. So a new command, menu or function that waits gets its bar with **no line of code**.
    - Do NOT add a `_lb_run`-style wrapper, a spinner, `\r` progress text or a bar of your own around a call that may be slow. (The old `bashbasicsbyvk_loadingbar.sh` and every `_lb_*` call are gone.)
    - Engine code that writes the terminal with `builtin printf` during a wait (moving the cursor, redrawing) calls `[ "${_SL_WANT:-0}" = 1 ] && _sl_pulse` first. Code that draws its OWN progress
      (a transfer bar, a tool with its own bar) wraps it in `_sl_hold` / `_sl_release` (or runs with `BVK_GD_BAR=0`-style switches when it is a separate process).
+   - Full-screen programs (nano, vim, less, htop ...) are not a wait: smartload wraps those names (end of `bashbasicsbyvk_smartload.sh`) so no bar is drawn while they run; a new full-screen tool adds its name to that list, never a hand-made `_sl_hold`.
    - `VK_SMARTLOAD=0` turns it off, `VK_SMARTLOAD_GRACE_MS=200` sets the delay. No terminal (pipes, tests) = every call is a no-op.
 
 8. **Every Settings screen and row explains itself.** `script/file/settings/bashbasicsbyvk_settings_desc.sh` holds one plain-words text per screen and per row

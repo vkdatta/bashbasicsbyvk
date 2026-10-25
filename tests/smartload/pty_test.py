@@ -1,13 +1,15 @@
 """smartload: the loading bar that appears by itself (AGENTS rule 7).   python3 tests/smartload/pty_test.py <repo root>
 Each scenario is a bash snippet run in a real pty (or in pipes); what the app wrote to the terminal is checked as raw bytes:
-the bar is the glyph '░', a wipe is  ESC D ESC [ 2 K ESC M  (save the cursor, down one row, erase it, restore: the column and the text stay).
+the bar is the glyph '░', drawn ON the cursor's own row (the cursor is hidden while it shows); a wipe is  ESC [ K ESC [ ? 25 h  (erase to the end of the row, show the cursor).
 The sleeps inside the snippets ARE the behaviour under test (the grace timer), so they carry  # lint-wait-ok."""
-import os, pty, sys, select, time, subprocess, signal
+import os, pty, sys, select, time, subprocess, signal, tempfile
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'paste_input'))
+from vt import Screen          # the shared VT emulator (tests/paste_input/vt.py): where on the screen did the bar land?
 ROOT = sys.argv[1]
 SL = f'{ROOT}/script/file/engine/bashbasicsbyvk_smartload.sh'
 F = float(os.environ.get('TEST_TIME_FACTOR', '1') or 1)
 GRACE_MS = 400
-WIPE = '\x1b7\x1b[1B\r\x1b[2K\x1b8'
+WIPE = '\x1b[K\x1b[?25h'
 PRE = f'_lt_b(){{ :; }}; _lt_e(){{ :; }}; _lt_enter(){{ :; }}; _lt_ready(){{ :; }}; source "{SL}"; '
 fail = 0
 def ok(m):  print('  ok  ', m)
@@ -45,10 +47,20 @@ o = run_pty('_sl_ready; _sl_enter "" "" "Testing bar"; sleep 1.6; _sl_ready; ech
 i, w, e = o.find('░'), o.find(WIPE), o.find('MARK_END')
 if i >= 0 and 'Testing bar' in o and '█' in o: ok('a wait longer than the grace period shows the bar with its label')
 else: bad(f'no bar for a long wait: {o[-200:]!r}')
-if i >= 0 and w > i and e > w: ok('the bar is wiped (save, down, erase the row, restore) before the next output')
+if i >= 0 and w > i and e > w: ok('the bar is wiped (erase to the end of the row, cursor shown again) before the next output')
 else: bad(f'no wipe between the bar and the next output (bar@{i} wipe@{w} end@{e})')
 if '\x1b7' in o and '\x1b8' in o: ok('it is drawn with save / restore cursor: the typed text and the column are untouched')
 else: bad('the bar does not use save / restore cursor')
+
+# 1b) the bar takes the CURSOR's place: it is drawn on the cursor's own row, never on the row below it
+o = run_pty("printf 'Select: 12\\n'; _sl_ready; _sl_enter '' '' 'Row check'; sleep 1.6; printf 'MARK'")   # lint-wait-ok: the wait is the behaviour under test
+pre = o.split('MARK')[0]
+scr = Screen(60, 10); scr.feed(pre.encode('utf-8')); rows = [i for i, l in enumerate(scr.lines()) if '░' in l]
+check((rows == [scr.r] and scr.lines()[scr.r - 1].startswith('Select: 12')), 'the bar is on the cursor row (the row the person would type on), not below it', f'bar rows {rows}, cursor row {scr.r}: {scr.lines()[:5]!r}')
+check(('\x1b[?25l' in pre and '\x1b[1B' not in pre and '\x1b[?7l' in pre), 'the cursor is hidden while the bar shows, the row below is never used, auto-wrap is off', f'wrong draw sequence: {pre[-160:]!r}')
+o = run_pty("printf 'Select: 12\\n'; _sl_ready; _sl_enter '' '' 'Row check'; sleep 1.6; _sl_ready; printf 'MARK'")   # lint-wait-ok: the wait is the behaviour under test
+scr = Screen(60, 10); scr.feed(o.split('MARK')[0].encode('utf-8'))
+check(('░' not in ''.join(scr.lines()) and o.rfind('\x1b[?25h') > o.rfind('\x1b[?25l') >= 0), 'after the wait no bar is left on the screen and the cursor is shown again', f'bar or hidden cursor left behind: {scr.lines()[:4]!r}')
 
 o2 = run_pty('_sl_ready; _sl_enter "" "" "Scroll"; sleep 1.6; _sl_pulse; echo MARK; _sl_ready')   # lint-wait-ok: the wait is the behaviour under test
 check(('\x1bD' not in o2 and '\n\x1b[1A' not in o2 and '\x1bM' not in o2), 'drawing and wiping the bar never scrolls the screen (no ESC D / ESC M / newline)', f'a scrolling sequence is used: {o2[:200]!r}')
@@ -84,5 +96,18 @@ check((p.returncode == 0 and 'ON=[] done' in p.stdout and not has_bar(p.stdout))
 # 8) shutdown ends the animator and removes its pipes
 o = run_pty('_sl_ready; p=$_SL_PID; b=$_SL_BASE; _sl_enter x; _sl_shutdown; for i in $(seq 1 80); do kill -0 $p 2>/dev/null || break; sleep 0.05; done; kill -0 $p 2>/dev/null && echo ANIM=ALIVE || echo ANIM=GONE; ls "$b".* >/dev/null 2>&1 && echo FILES=LEFT || echo FILES=GONE')   # lint-wait-ok: waiting for the process to exit
 check(('ANIM=GONE' in o and 'FILES=GONE' in o), '_sl_shutdown ends the animator and removes its pipes', f'shutdown left something: {o[-160:]!r}')
+
+# 9) a full-screen program (nano) is not a wait: no bar while it runs, the arguments and the exit code pass through, the bar comes back after it
+fd_ = tempfile.mkdtemp(); fake = os.path.join(fd_, 'nano')
+with open(fake, 'w') as f_: f_.write('#!/bin/sh\necho ARGS=$*\nsleep 1.6\necho NANO_DONE\nexit 7\n')   # lint-wait-ok: the fake editor keeps the terminal for a while
+os.chmod(fake, 0o755)
+penv = {'PATH': fd_ + os.pathsep + os.environ['PATH']}
+o = run_pty('_sl_ready; _sl_enter "" "" "Edit"; nano a "b c"; echo RC=$?; sleep 1.6; _sl_ready; echo MARK_END', env=penv)   # lint-wait-ok: the wait is the behaviour under test
+d, b = o.find('NANO_DONE'), o.find('░')
+check((d >= 0 and (b < 0 or b > d)), 'no bar is drawn while nano is open (it is not a wait)', f'a bar was drawn over nano (done@{d} bar@{b})')
+check(('ARGS=a b c' in o and 'RC=7' in o), 'nano gets its arguments and its exit code comes back unchanged', f'args / exit code lost: {o[-200:]!r}')
+check((d >= 0 and b > d), 'after nano exits a real wait gets its bar again', f'no bar after nano (done@{d} bar@{b})')
+o = run_pty('_sl_ready; _sl_enter "" "" "Edit"; command nano a; _sl_ready; echo MARK_END', env=penv)   # lint-wait-ok: the control: without the guard the bar draws over the program
+check(('░' in o and o.find('░') < o.find('NANO_DONE')), 'control: without the guard the bar would draw over the program', f'the control run drew no bar: {o[-200:]!r}')
 
 sys.exit(fail)

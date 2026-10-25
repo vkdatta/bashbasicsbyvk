@@ -34,12 +34,18 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  shims below:
 #      B  a wait begins            A  something was printed: restart the 0.2 s clock
 #      D  the wait is over         P  stop drawing and tell me if a bar is on screen
-#  The bar is drawn on the row BELOW the cursor with save / restore cursor, so the
-#  cursor, the typed text and the screen above it are never touched.  Nothing ever
-#  scrolls: on the last screen row the bar takes the cursor's own row (cursor-down stops there).  Before the
-#  foreground writes, or draws a screen, it asks the animator "is a bar showing?"
-#  (P) and wipes that row first.  Nothing is run in a subshell: shell functions
-#  that fill global variables run exactly as before.
+#  The bar is drawn ON the cursor's own row, starting at the cursor's column: it takes the
+#  cursor's place (the cursor is hidden while the bar shows).  After Enter the cursor sits at
+#  the start of a fresh row, so the bar is simply "where you would type next".  Save / restore
+#  cursor and auto-wrap off mean the typed text above and left of it is never touched and
+#  nothing ever scrolls, on any row.  Before the foreground writes, or draws a screen, it asks
+#  the animator "is a bar showing?" (P) and wipes it (erase to the end of the row, cursor
+#  shown again).  Nothing is run in a subshell: shell functions that fill global variables run
+#  exactly as before.
+#
+#  Full-screen programs (nano, vim, less, htop ...) are NOT a wait: they own the whole terminal
+#  and the person is working in them.  They are wrapped (see the end of this file) with
+#  _sl_hold / _sl_release, so no bar is ever drawn over them.
 #
 #  Who has to do what
 #  ------------------
@@ -99,9 +105,9 @@ _sl_anim() {
     now=${EPOCHREALTIME/[.,]/}
     (( now - t_last >= grace )) || continue
     if (( ! drawn )); then
-      # first frame: size the bar to the screen and read the label.  The screen is NEVER scrolled: a scroll pushed the top row (the header) off
-      # the screen for good when the cursor sat on the last row.  The bar goes one row down with ESC [ 1 B, which stops at the last row: there
-      # the bar is drawn on the cursor's own row (the row the app writes to next) instead of a new one.
+      # first frame: size the bar to the screen and read the label.  The bar is drawn on the cursor's OWN row (never a row below it), so it
+      # can never scroll the screen, not even on the last row; auto-wrap is switched off while it is drawn, so a long label is clipped
+      # at the right edge instead of wrapping.
       cols="$(command stty size <"$tty" 2>/dev/null)"; cols="${cols##* }"
       [[ "$cols" =~ ^[0-9]+$ ]] && (( cols > 0 )) || cols=60
       W=22; BW=5
@@ -125,12 +131,13 @@ _sl_anim() {
       el=$(( (now - t_arm) / 1000000 )); t=""
       (( el >= 2 )) && t="  ${el}s"
       line=$'\033[36m['"$left$blk$right"$']\033[0m '"$msg$t"
-      builtin printf '\0337\033[1B\r\033[2K%s\0338' "$line" >"$tty" 2>/dev/null || break
+      builtin printf '\0337\033[?25l\033[?7l%s\033[K\033[?7h\0338' "$line" >"$tty" 2>/dev/null || break   # save, hide the cursor, no wrap, bar + erase the rest of the row, wrap on, restore
       pos=$(( pos + dir ))
       if (( pos >= W - BW )); then pos=$(( W - BW )); dir=-1
       elif (( pos <= 0 )); then pos=0; dir=1; fi
     fi
   done
+  (( drawn )) && builtin printf '\033[K\033[?25h' >"$tty" 2>/dev/null     # the app died with a bar showing: leave a visible cursor and no bar behind
   exit 0
 }
 
@@ -147,14 +154,15 @@ _sl_spawn() {
 }
 
 # is a bar on the screen right now?  If so, wipe its row.  (The animator stops drawing first and says what it had drawn.)
-# Wipe = save the cursor, down one row (it stops at the last row, nothing scrolls), erase the whole row, restore the cursor: the column and the text stay.
+# Wipe = erase from the cursor to the end of its row and show the cursor again.  The cursor has not moved since the bar was drawn (save / restore), so this removes
+# exactly the bar and nothing else.
 _sl_wipe() {
   local st=""
   kill -0 "$_SL_PID" 2>/dev/null || return 0
   while builtin read -r -t 0 -u "$_SL_ACKFD" st 2>/dev/null; do builtin read -r -t 0.01 -u "$_SL_ACKFD" st 2>/dev/null || break; done
   _sl_send P
   builtin read -r -t 0.3 -u "$_SL_ACKFD" st 2>/dev/null || return 0
-  [ "$st" = 1 ] && builtin printf '\0337\033[1B\r\033[2K\0338' >"$_SL_TTY" 2>/dev/null
+  [ "$st" = 1 ] && builtin printf '\033[K\033[?25h' >"$_SL_TTY" 2>/dev/null
   return 0
 }
 
@@ -261,3 +269,20 @@ _sl_init() {
   return 0
 }
 _sl_init
+
+# ── full-screen programs are not a wait ──────────────────────────────────────────────────────
+# An editor / pager / monitor takes over the whole terminal for as long as the person works in it.  A bar drawn while it runs lands in the middle
+# of ITS screen (it showed up in nano's title row).  Each of these names is a function that holds the bar back for the time the program runs and
+# brings it back when it exits (the wait of the code after it, if any, is a real wait).  `command` skips the function, so the real program runs.
+# Nobody calls these helpers: a call site just writes  nano "$file"  as before.  With smartload off every call is a plain pass-through.
+_sl_fs() {
+  local _c="$1" _rc; shift
+  _sl_hold
+  command "$_c" "$@"; _rc=$?
+  _sl_release
+  return "$_rc"
+}
+for _sl_n in nano pico micro vi vim nvim view emacs hx kak joe less man top htop btop mc ranger; do
+  eval "$_sl_n() { _sl_fs $_sl_n \"\$@\"; }"
+done
+unset _sl_n

@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+The smart loading bar was drawn on the row below the cursor. After Enter the cursor already sits at the start of a fresh row, so the bar showed one row lower with an empty row between it and the typed command. The bar should take the cursor's own place.
+
+1. HOW DID YOU DEBUG
+Read bashbasicsbyvk_smartload.sh (the animator drew with save cursor, ESC [ 1 B, erase row, restore cursor) and the screen recording the owner sent (frames: "~ $ o", the cursor on row 2, "Starting..." bar on row 3). Confirmed the cursor position after Enter in bashbasicsbyvk_browse.sh (the `echo` after the key loop moves it to column 0 of the next row, then _lt_enter starts the wait). Changed the draw, ran tests/smartload/pty_test.py, and checked with the shared VT emulator (tests/paste_input/vt.py) that the bar row equals the cursor row. Broke the fix on purpose (old draw sequence back): the new row test, the sequence test and the wipe test went red; restored it. Not run on a real phone.
+
+1. CAUSE
+Design choice from BB-251020262145-1 and BB-251020260533-3: the bar always used "one row down" so it would never touch the typed text, and the last-row scroll bug was solved by letting ESC [ 1 B stop at the last row. Both are unnecessary once the bar is drawn on the cursor's own row.
+
+1. FIX
+bashbasicsbyvk_smartload.sh: _sl_anim draws on the cursor row, from the cursor column: save cursor, hide the cursor (so the bar replaces it), auto-wrap off, bar and label, erase to the end of the row, wrap on, restore. _sl_wipe now erases from the cursor to the end of the row and shows the cursor (ESC [ K, ESC [ ? 25 h); the animator also shows the cursor if the app dies while a bar is on screen. Auto-wrap off means a long label is clipped, never wrapped, so nothing scrolls on any row (same trick as the transfer bars). tests/smartload/pty_test.py: WIPE constant and wording updated, new row / cursor-hidden / no-leftover checks. AGENTS.md rule 7 wording.
+
+2. ISSUE IN BRIEF
+The loading bar kept animating after nano was opened (a "Working" bar in nano's title row). A full-screen editor is not a wait.
+
+2. HOW DID YOU DEBUG
+Watched the recording: after choosing Edit on a file, nano opens and the bar sits in its top row for the rest of the video. Grepped for editor launches (run.sh `nano "$file"`, rules.sh and switch.sh `"$ed" file`). The wait starts at Enter (_lt_enter) and only ends at the next prompt, so the whole time inside nano counted as a wait and the animator drew relative to nano's cursor. Tested with a fake nano on PATH in tests/smartload/pty_test.py: no bar while it runs, arguments and exit code pass through, a real wait after it gets its bar again, and a control run without the guard draws the bar over the program (so the test can fail). Not run with the real nano.
+
+2. CAUSE
+smartload cannot see that a child process took over the terminal: the app runs as a plain script (no job control), so the foreground process group does not tell nano from grep.
+
+2. FIX
+bashbasicsbyvk_smartload.sh: _sl_fs wraps the names nano pico micro vi vim nvim view emacs hx kak joe less man top htop btop mc ranger as functions that call _sl_hold, run the real program with `command`, then _sl_release. No call site changes; every caller (handle_file, rules, switch, a user's $EDITOR when it is one of these names) is covered. Lesson: a new full-screen tool adds its name to that list. An $EDITOR given as an absolute path is not covered.
+
+3. ISSUE IN BRIEF
+Typing `cd /data/data/com.termux/files/home/storage/dcim/Camera` at the main Select prompt did nothing visible: no folder change, no bar, no clear error, while the same cd in a plain terminal works.
+
+3. HOW DID YOU DEBUG
+Read the main loop in script/o and the command map (bashbasicsbyvk_maincommands.sh): `cd` is an `exact` command, "Open a shell in this folder", with no argument. Ran the app in a pty (tests/paste_input/ptyapp.py) with ~/storage/dcim as a symlink to a Camera folder: typing the full cd line gives "Invalid selection" and a redraw; browsing storage > dcim > Camera by numbers works with 5 and with 3000 files, and pressing cd then opens a shell in that folder (pwd printed the right path). The invalid message is printed and the screen is redrawn at once, which is quick (no wait, so no bar) and easy to miss on a phone. A hang on the real device (native listing engine, Android storage) could not be reproduced here.
+
+3. CAUSE
+Not a bug in the symlink or the path: `cd <path>` is not a command of the app, so the typed line falls through to handle_selection and is refused as an invalid number. Whether the owner's case was exactly this was not confirmed.
+
+3. FIX
+No code change. The owner is asked whether `cd <path>` should become a navigation command (cmd_def cd as `word`, case arm in script/o), which would also need `bash tests/cmd_docs.sh --write`.
