@@ -320,6 +320,7 @@ _ux_do_share() {
   # 3) pack tar.gz → encrypt, streamed (plaintext archive never touches the disk) — exactly like up-
   echo "📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)"
   local packout
+  _bb_progress_begin      # the pack bar owns the screen
   packout=$(
     cd "$stage" || exit 1
     _hid_find0 "$hid_inc" 1 "${rel_items[@]}" 2>> "$errfile" \
@@ -327,6 +328,7 @@ _ux_do_share() {
       | "${gz[@]}" "-$lvl" -c \
       | BB_K="$K" BB_KDK="$kdk" _ux_core pack "$tmpdir" "$arcname"
   )
+  _bb_progress_end
 
   local total_size nitems nblobs tar_rc
   total_size=$(printf '%s' "$packout" | sed -n '1p'); nitems=$(printf '%s' "$packout" | sed -n '2p')

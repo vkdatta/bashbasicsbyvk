@@ -18,6 +18,7 @@ def bad(m):
 
 def run_pty(snippet, env=None, deadline=40):
     e = dict(os.environ, VK_SMARTLOAD_GRACE_MS=str(GRACE_MS), TERM='xterm-256color'); e.update(env or {})
+    e = {k: v for k, v in e.items() if v is not None}      # an env value of None = leave that variable out
     pid, fd = pty.fork()
     if pid == 0:
         os.execvpe('bash', ['bash', '-c', PRE + snippet], e)
@@ -119,5 +120,40 @@ o = run_pty('_sl_ready; _sl_enter "" "" "Go"; bash -c \'printf "Commit message: 
 check(('GOT:hello' in o and not has_bar(o)), 'a child tool that owns the terminal gets no bar', f'bar over a child tool: {o[-200:]!r}')
 o = run_pty('_sl_ready; _sl_enter "" "" "Go"; bash -c \'sleep 1.6\' >/dev/null 2>&1; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
 check(has_bar(o), 'a child whose output is captured is still a wait: the bar shows', f'no bar for a silent child: {o[-200:]!r}')
+
+# 11) the delay is 2 s by default (no VK_SMARTLOAD_GRACE_MS): a wait of about 1 s shows nothing, a longer one shows the bar
+o = run_pty('_sl_ready; _sl_enter "" "" "Short"; sleep 1.2; _sl_ready; echo MARK_END', env={'VK_SMARTLOAD_GRACE_MS': None})   # lint-wait-ok: the wait is the behaviour under test
+check((not has_bar(o) and 'MARK_END' in o), 'default delay: a wait shorter than 2 s never shows a bar', f'a bar for a 1.2 s wait: {o[-160:]!r}')
+o = run_pty('_sl_ready; _sl_enter "" "" "Long"; sleep 3.2; _sl_ready; echo MARK_END', env={'VK_SMARTLOAD_GRACE_MS': None})   # lint-wait-ok: the wait is the behaviour under test
+check(has_bar(o), 'default delay: a wait longer than 2 s shows the bar', f'no bar after 3.2 s: {o[-160:]!r}')
+
+# 12) a transfer's PROGRESS bar always wins over the LOADING bar: begin wipes a bar that is already showing and keeps it away, end lets it come back.
+#     The pair is taken from the real fileapi lib (never a copy of it in the test).
+LIB = f'{ROOT}/script/file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_fileapi_lib.sh'
+GET = f'eval "$(grep -E \'^_bb_progress_(begin|end)\\(\\)\' "{LIB}")"; '
+o = run_pty(GET + '_sl_ready; _sl_enter "" "" "Prep"; sleep 1.0; _bb_progress_begin; echo MARK_P1; sleep 1.2; echo MARK_P2; _bb_progress_end; sleep 1.2; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+b1, w1, p1, p2 = o.find('░'), o.find(WIPE), o.find('MARK_P1'), o.find('MARK_P2')
+check((b1 >= 0 and w1 > b1 and p1 > w1), 'progress begins: the loading bar that was showing is wiped before the progress bar draws', f'no wipe before the progress bar (bar@{b1} wipe@{w1} progress@{p1})')
+check((p1 >= 0 and p2 > p1 and '░' not in o[p1:p2]), 'while the progress bar owns the screen no loading bar is drawn', f'a loading bar over the progress bar: {o[p1:p2]!r}')
+check((p2 >= 0 and '░' in o[p2:]), 'after the progress bar has ended a real wait gets its loading bar again', f'no loading bar after the progress ended: {o[p2:][-160:]!r}')
+
+# 13) every call that lets a transfer tool draw its own bar sits between _bb_progress_begin and _bb_progress_end (a new call site that forgets it fails here)
+import re
+FA = f'{ROOT}/script/file/staging/!buffer/fileapi'
+DRAWS = re.compile(r'_BVK_XFER_BIN"\s+(send|pack)\b|_pn_xfer\s+"\$pipe"|_crypto_fetch_archive\s+"\$link"|_ux_core\s+pack\b|\|\s*_crypto_stream_pack\b')
+unwrapped = []
+for dp, _, fns in os.walk(FA):
+    for fn in fns:
+        if not fn.endswith('.sh'): continue
+        depth = 0
+        for n, line in enumerate(open(os.path.join(dp, fn), encoding='utf-8'), 1):
+            if line.lstrip().startswith('#'): continue
+            for tok in re.finditer(r'_bb_progress_begin\b|_bb_progress_end\b|' + DRAWS.pattern, line):
+                t = tok.group(0)
+                if t == '_bb_progress_begin': depth += 1
+                elif t == '_bb_progress_end': depth -= 1
+                elif depth <= 0: unwrapped.append(f'{fn}:{n}')
+        if depth != 0: unwrapped.append(f'{fn}: begin/end not balanced ({depth})')
+check(not unwrapped, 'every transfer-bar call is wrapped in _bb_progress_begin / _bb_progress_end', f'unwrapped transfer calls: {unwrapped}')
 
 sys.exit(fail)

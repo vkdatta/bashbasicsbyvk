@@ -62,6 +62,7 @@ _svc_upload() {
 
   _svc_say "📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)"
   local packout r
+  _bb_progress_begin      # the pack bar owns the screen
   packout=$(
     cd "$stage" || exit 1
     for r in "${rel_items[@]}"; do
@@ -80,6 +81,7 @@ _svc_upload() {
             | _crypto_stream_pack "$tmpdir" "$arcname"
         fi
   )
+  _bb_progress_end
   _tp1=${EPOCHREALTIME/./}; _tp1=${_tp1:-0}
   local key total_size nblobs tar_rc
   key=$(printf '%s' "$packout" | sed -n '1p'); total_size=$(printf '%s' "$packout" | sed -n '2p'); nblobs=$(printf '%s' "$packout" | sed -n '3p')
@@ -215,8 +217,10 @@ _svc_restore() {
   mkdir -p "$dest" 2>/dev/null
   local arc; arc=$(mktemp "$dest/.bbvk_dl.XXXXXX") || { echo "❌ Cannot write to $dest"; return 1; }
   local res
+  _bb_progress_begin      # the download bar owns the screen
   res=$(BB_FETCH_AUTH=$auth BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_DISEPS="$FILEAPI_BASHBASICS_DISEPS" BB_APIKEY="$FILEAPI_BASHBASICS_KEY" \
         _crypto_fetch_archive "$link" "$key" "$arc")
+  _bb_progress_end
   case "${res%%$'\t'*}" in
     OK) ;;
     EXPIRED) echo "❌ It expired or was nuked."; rm -f "$arc"; return 1 ;;

@@ -69,6 +69,14 @@ _bvk_xfer_bin() {
 }
 
 # one line per time the app had to use Node (or hand a Go upload to the resumable path), read by `health`:  <date> <event> <why>
+# PROGRESS BAR vs LOADING BAR.  Two different things, never on screen together:
+#   loading bar  = smartload's bouncing block "[░░██░░] Working…" for a wait of unknown length; it appears by itself after 2 s of silence.
+#   progress bar = a transfer's own bar "[███░░] 45%  12.3/27.4 MB  3.1 MB/s  ETA 5s  3/7" (pack, send, fetch, xfer, ux): real numbers, drawn by the tool.
+# The progress bar always wins: while a transfer tool draws its bar the loading bar is wiped and stays away, and it may come back only after the
+# transfer has ended.  EVERY call that lets a transfer tool draw on the terminal sits between this pair (no-ops when smartload is not loaded).
+_bb_progress_begin() { declare -F _sl_hold >/dev/null 2>&1 && _sl_hold; return 0; }
+_bb_progress_end()   { declare -F _sl_release >/dev/null 2>&1 && _sl_release; return 0; }
+
 _bb_xfer_note() {
   local f="${HOME}/.bashbasicsbyvk/xfer.log"
   mkdir -p "${f%/*}" 2>/dev/null

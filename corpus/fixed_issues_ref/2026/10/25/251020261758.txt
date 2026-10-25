@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+A transfer's own progress bar (percent, x of n MB, speed, ETA, pending count) stopped showing in every fileapi service (upload, backup, saved, snapshot, ux share, download): since smartload draws a loading bar for every wait, the loading bar replaced the progress bar, which was only visible in v115. The two bars were never kept apart; when both want the row, the progress bar must win.
+
+1. HOW DID YOU DEBUG
+Read corpus/fixed_issues_index.jsonl (BB-251020262145-1 introduced smartload, BB-251020262200-2 and the gitpush note added _sl_hold and _sl_owned for full-screen and child programs). Compared v0.0.115 and v0.0.117: bashbasicsbyvk_loadingbar.sh (_lb_run) was wired by hand around a few calls only, never around a transfer, so v115 never drew a loading bar over the transfer bar; v117 deleted it and smartload draws for every wait. The transfer bars are drawn by bvk-xfer (Go: xfer, send, fetch, pack; identical in both versions) and by the node fallbacks (bashbasicsbyvk_staging_pending_xfer, bashbasicsbyvk_staging_ux_crypto, _crypto_stream_pack, the node fetch) on stderr with  \\r ESC[K. Read _sl_owned in bashbasicsbyvk_smartload.sh and every call site of these tools. Verified by reading plus the new tests in tests/smartload/pty_test.py (see the status in the delivery); the real Go and node transfers were not run here (no server, no network).
+
+1. CAUSE
+Every transfer call site captures the verdict with  verdict=$(tool ... | tail -n 1) . smartload's automatic hand-off (_sl_owned) only looks at direct children of the app, and a command substitution is a subshell with the app's own command line, which _sl_owned skips on purpose, so the tool inside is never seen. smartload treated the transfer as a silent wait and drew its bouncing bar on the cursor row, erasing the tool's progress bar (and the progress file / pending screen numbers were unaffected, only the live bar vanished). Nothing had told smartload that a progress bar and a loading bar are different things.
+
+1. FIX
+bashbasicsbyvk_fileapi_lib.sh: one shared pair _bb_progress_begin / _bb_progress_end (thin wrappers over _sl_hold / _sl_release, no-ops without smartload). _sl_hold already wipes a loading bar that is showing and keeps it away until _sl_release, so the progress bar takes authority. Wrapped every call that lets a transfer tool draw: bashbasicsbyvk_staging_pending.sh (_pn_complete, around _pn_xfer: covers upload, backup, saved, snapshot and ux resumes), bashbasicsbyvk_staging_upload.sh (_bb_fast_send around the Go send, the pack block, the download caller of _crypto_fetch_archive), bashbasicsbyvk_staging_svc.sh (pack block, download caller), bashbasicsbyvk_staging_ux.sh (pack block). Not changed: _sl_owned (widening it to look inside subshells would also silence the loading bar for every captured curl / node / git call that merely inherits the terminal). Lesson: a new fileapi call that draws a bar goes between the pair; tests/smartload/pty_test.py scenario 13 fails on an unwrapped call. AGENTS.md rule 7 now says progress bar and loading bar are different and the progress bar wins. Follow-up of BB-251020262145-1.
+
+2. ISSUE IN BRIEF
+The loading bar appeared after 0.2 s of quiet, so it flashed up for ordinary short waits; it should appear only after 2 s.
+
+2. HOW DID YOU DEBUG
+Grepped the repo for the delay: _SL_GRACE in bashbasicsbyvk_smartload.sh (200000 us), its comments, and AGENTS.md rule 7 (~0.2 s, VK_SMARTLOAD_GRACE_MS=200). The existing tests all pin the delay with VK_SMARTLOAD_GRACE_MS=400, so they do not depend on the default.
+
+2. CAUSE
+The default grace was 0.2 s.
+
+2. FIX
+bashbasicsbyvk_smartload.sh: _SL_GRACE=2000000 and the comments; AGENTS.md rule 7: ~2 s and VK_SMARTLOAD_GRACE_MS=2000. The env override still accepts 50 to 5000 ms. tests/smartload/pty_test.py scenario 11 runs without the override: a 1.2 s wait shows nothing, a 3.2 s wait shows the bar.

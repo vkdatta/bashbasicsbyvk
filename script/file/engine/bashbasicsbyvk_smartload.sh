@@ -20,7 +20,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #
 #  When the bar shows
 #  ------------------
-#  Only if the wait is longer than ~0.2 s (a short wait never flashes a bar), and
+#  Only if the wait is longer than ~2 s (a short wait never flashes a bar), and
 #  only while the screen is quiet.  Output restarts that clock:
 #      echo / printf / clear  tell smartload "something is being written", so the
 #      bar is wiped BEFORE the text appears and comes back only if the next silent
@@ -32,7 +32,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  One tiny background animator is started once.  It sleeps on a pipe (no fork,
 #  no polling cost) and is told what is going on with ONE letter, written by the
 #  shims below:
-#      B  a wait begins            A  something was printed: restart the 0.2 s clock
+#      B  a wait begins            A  something was printed: restart the 2 s clock
 #      D  the wait is over         P  stop drawing and tell me if a bar is on screen
 #  The bar is drawn ON the cursor's own row, starting at the cursor's column: it takes the
 #  cursor's place (the cursor is hidden while the bar shows).  After Enter the cursor sits at
@@ -57,7 +57,10 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #
 #  Safe everywhere: with no terminal (pipes, tests, cron) or  VK_SMARTLOAD=0  every
 #  call is a no-op.  If the app dies, the animator notices and ends itself.
-#  VK_SMARTLOAD_GRACE_MS=200 changes how long a wait must last before the bar shows.
+#  VK_SMARTLOAD_GRACE_MS=2000 changes how long a wait must last before the bar shows (50 to 5000).
+#  A TRANSFER'S PROGRESS BAR (x/n MB, %, speed, ETA) is not this bar and always wins over it: code that lets a transfer tool draw its own bar calls
+#  _sl_hold / _sl_release around it (the fileapi services use _bb_progress_begin / _bb_progress_end, one shared pair in the fileapi lib).  _sl_hold wipes
+#  a loading bar that is already showing; the loading bar comes back only after _sl_release, once the 2 s of quiet have passed again.
 #  A child program that has the terminal (its own prompt or progress bar) is not a wait either: no bar while it runs (_sl_owned; VK_SMARTLOAD_AUTOHOLD=0 turns that off).
 # ============================================================
 
@@ -73,7 +76,7 @@ _SL_MSG=""            # file the animator reads its label from
 _SL_LABEL=""
 _SL_NEWLABEL=""
 _SL_SIGT=0            # µs: when the animator's clock was last (re)started
-_SL_GRACE=200000      # µs a wait must last before the bar shows
+_SL_GRACE=2000000     # µs a wait must last before the bar shows (2 s)
 _SL_PULSE_US=50000    # µs between two "A" letters during a burst of output
 
 # where to draw: the controlling terminal

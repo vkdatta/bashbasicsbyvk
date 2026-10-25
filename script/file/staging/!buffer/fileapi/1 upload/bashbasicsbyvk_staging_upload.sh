@@ -539,7 +539,9 @@ _bb_fast_send() {
            true; })
   [ -t 2 ] || [ "${_SVC_QUIET:-0}" = 1 ] || echo "☁️  Uploading $nb encrypted blob(s)..."
   local fout fverdict tline
+  _bb_progress_begin      # the send bar owns the screen: no loading bar until it is done
   fout=$("$_BVK_XFER_BIN" send --dir "$dir" --url "$WORKER_URL" --est "$est" --n "$nb" --conc "$fconc" --handover-over "$((fmax * 1048576))" <<<"$fcfg")
+  _bb_progress_end
   fverdict=$(printf '%s\n' "$fout" | sed -n '1p')
   tline=$(printf '%s\n' "$fout" | grep -m1 $'^TIME\t')
   _bb_xfer_note go-timing "pack=${pack_ms}ms ${tline#TIME$'\t'}"
@@ -609,6 +611,7 @@ _up_do_multipart_upload() {
   # find lists regular files + folders only (symlinks inside the tree are skipped, as before);
   # tar -h resolves the staging symlinks at the top level.  tar's exit status goes to $rcfile.
   local packout _tp0=${EPOCHREALTIME/./} _tp1; _tp0=${_tp0:-0}
+  _bb_progress_begin      # the pack bar owns the screen
   if [ $use_go = 1 ]; then
     packout=$(
       cd "$stage" || exit 1
@@ -624,6 +627,7 @@ _up_do_multipart_upload() {
         | _crypto_stream_pack "$tmpdir" "$arcname"
     )
   fi
+  _bb_progress_end
 
   _tp1=${EPOCHREALTIME/./}; _tp1=${_tp1:-0}
   local key total_size nblobs tar_rc
@@ -900,7 +904,7 @@ handle_do_import() {
   mkdir -p "$path"
   local arc; arc=$(mktemp "$path/.bbvk_dl.XXXXXX") || { echo "❌ Cannot write to $path"; return 1; }
 
-  local res; res=$(_crypto_fetch_archive "$link" "$key" "$arc")
+  local res; _bb_progress_begin; res=$(_crypto_fetch_archive "$link" "$key" "$arc"); _bb_progress_end      # the download bar owns the screen
   case "${res%%$'\t'*}" in
     OK) ;;
     EXPIRED) echo "❌ Link expired, invalid, or already nuked."; rm -f "$arc"; return 1 ;;

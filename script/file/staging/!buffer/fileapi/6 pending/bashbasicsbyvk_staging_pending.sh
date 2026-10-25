@@ -202,7 +202,7 @@ _pn_complete() {
       *) _pn_set "$d" status interrupted; _pn_unlock "$d"; return 24 ;;
     esac
     if [ "$phase" = upload ]; then
-      verdict=$(_pn_xfer "$pipe" "$id" "$d" "$nb" "$_PN_TOKEN")
+      _bb_progress_begin; verdict=$(_pn_xfer "$pipe" "$id" "$d" "$nb" "$_PN_TOKEN"); _bb_progress_end      # the transfer bar owns the screen
       case "$verdict" in
         OK)  phase=commit; stuck=0; continue ;;
         TOKEN) stuck=$((stuck + 1)); [ "$stuck" -ge 3 ] && { _pn_set "$d" status interrupted; _pn_unlock "$d"; say "❌ The server keeps refusing the upload token. Kept — try again from Pending (pn)."; return 24; }; continue ;;
