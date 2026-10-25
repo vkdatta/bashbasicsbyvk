@@ -34,7 +34,7 @@ Status of this file: a stable summary written for retrieval and recommendation. 
 
 **Create, rename, find.** `c` creates files or folders (batch supported). `d` deletes. `r` renames, including CSV-driven rename. `f` finds and replaces text in file names, folder names and file contents. `p-` writes a text map of a path.
 
-**Organise and compress.** `z` organises by year, month, date, extension or alphabet, and can reverse it. `z-` and `uz-` zip and unzip several items at once.
+**Organise and compress.** `z` organises by year, month, date, extension or alphabet, and can reverse it. `z-` and `uz-` pack and unpack several items at once (zip, tar, tar.gz, tar.xz, tar.bz2, 7z, tar.zst, tar.lz4, .skill; unpacking recognises copies such as hello.zip1 by name and content). `goto` moves the list to any path.
 
 **Selection expressions (Advanced Select, `.s`).** A small query language:
 
@@ -223,13 +223,14 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `fx` | act | Functions (fx) — CSV-driven actions |  |
 | `gd` | act | Google Drive |  |
 | `gdx` | act | Leave Google Drive |  |
+| `goto` | act | Go to a path — asks where; the list moves there | `goto /sdcard/Download` |
 | `h` | nav | Home — recents, bookmarks, favourites |  |
 | `health` | util | What is active on this machine |  |
 | `i` | nav | Infinity stones — extra tools |  |
 | `k-` | act | Stage SHORTCUT | `k-1,3` |
 | `kl` | danger | Kill every process of this user (kill -9 -1) |  |
 | `l-` | act | Lock items | `l-1,3` |
-| `lang` | util | Which engines run: Drill (C or Python) · FileAPI (Go or Node) |  |
+| `lang` | util | Which engines run: Drill (C or Python) · FileAPI (Go or Node) · Find & Replace (C or Python) |  |
 | `loadtime` | tool | Load time: what each screen change cost (loadtime 2 · loadtime all) |  |
 | `m-` | act | Stage MOVE | `m-1,3` |
 | `nf` | act | Notifications |  |

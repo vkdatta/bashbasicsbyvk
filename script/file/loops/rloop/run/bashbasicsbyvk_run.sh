@@ -7,14 +7,17 @@ copy_to_clipboard() {
 }
 
 handle_file() {
-    local file="$1"
+    local file="$1" lab_run lab_lock
 
     while true; do
+        lab_run="Run";       _arc_detect "$file" && lab_run="Extract"        # an archive is extracted, anything else is run
+        lab_lock="Lock File"; _lk_file_locked "$file" && lab_lock="Unlock File"   # one row: it does whichever applies
         _mc_header "📄 File selected: $(basename "$file")" \
                    "What would you like to do with the file?"
-        _mc_options 0 "Run" "View" "Edit" "Copy Content" "Delete File" \
+        _mc_options 0 "$lab_run" "View" "Edit" "Copy Content" "Delete File" \
                       "Erase Content" "Replace With Clipboard Content" \
-                      "Rename File" "Share" "Lock File" "Unlock File"
+                      "Rename File" "Share" "$lab_lock" "Copy Name" \
+                      "Copy File Path" "Go To Parent Folder"
         _mc_footer @file_menu
 
         read -e -p "Select: " action
@@ -29,8 +32,10 @@ handle_file() {
             6) bashbasicsbyvk_overwrite "$file"; return 1 ;;
             7) rename_item "$file"; return 1 ;;
             8) force_share "$file"; return 1 ;;
-            9) _lk_file_cmd lock   "$file"; return 1 ;;
-            10) _lk_file_cmd unlock "$file"; return 1 ;;
+            9) _lk_file_toggle "$file"; return 1 ;;
+            10) copy_to_clipboard "${file##*/}"; return 1 ;;
+            11) _file_abs_path "$file"; copy_to_clipboard "$_FILE_ABS"; return 1 ;;
+            12) _file_goto_parent "$file"; return 1 ;;
             u|U) return 1 ;;
             h|H) home_menu; return 1 ;;
             q|Q) _bvk_quit; return 1 ;;
@@ -39,6 +44,25 @@ handle_file() {
                 ;;
         esac
     done
+}
+
+# _file_abs_path <file> → _FILE_ABS  (absolute, no forks)
+_file_abs_path() {
+    _FILE_ABS="$1"
+    [[ "$_FILE_ABS" == /* ]] || _FILE_ABS="$PWD/$_FILE_ABS"
+}
+
+# "Go To Parent Folder": the list moves to the folder that holds the file. From an inner loop (find, switch, fx) it also
+# closes back to the main loop, which is where the list lives; `o <file>` carries on into the main loop instead of exiting.
+_file_goto_parent() {
+    local d
+    _file_abs_path "$1"
+    d="${_FILE_ABS%/*}"; [ -n "$d" ] || d="/"
+    if [ ! -d "$d" ]; then echo "❌ Folder not found: $d"; return 1; fi
+    path="$(get_abs_path "$d")" || return 1
+    group_prefix=""; force_show=false
+    _BVK_GO_PARENT=1
+    _bvk_quit
 }
 
 determine_shared_dir() {
@@ -118,6 +142,11 @@ run_file() {
     if [ ! -e "$file" ]; then
         echo "❌ File not found: $file"
         return 1
+    fi
+    if _arc_detect "$file"; then            # an archive is opened, never run: extracted next to itself
+        local _ab="${file%/*}"; [ "$_ab" = "$file" ] && _ab="$PWD"; [ -n "$_ab" ] || _ab="/"
+        _arc_dest_base="$_ab" _decompress_paths "$file"
+        return $?
     fi
     if [ -x "$file" ]; then
         _bvk_yn yn "File is executable. Run directly?" -d n
@@ -253,8 +282,8 @@ run_file() {
         txt|log|cfg|conf)
             ${PAGER:-less} "$file"
             ;;
-        zip|tar|gz|tgz|bz2|xz|7z)
-            echo "📦 Archive file. Use appropriate extraction command (unzip, tar -xvf, 7z x ...) in shell."
+        zip|tar|gz|tgz|bz2|xz|7z|zst|lz4|skill)
+            echo "📦 '${file##*/}' is not a readable archive ($_ARC_WHY) — nothing to extract."
             ;;
         pdf|epub|mobi|azw3)
             force_open "$file"

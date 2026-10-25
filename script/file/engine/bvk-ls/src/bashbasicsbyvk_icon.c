@@ -8,7 +8,7 @@ static const char *const archive_multi[] = {
     ".tar.lzma", ".tar.lz4", ".tar.z", ".tar.sz", ".tar.br", NULL};
 
 static const char *const archive_ext[] = {
-    ".zip", ".7z", ".rar", ".tar", ".tgz", ".tbz", ".tbz2", ".txz", ".tzst", ".gz", ".bz2",
+    ".zip", ".skill", ".7z", ".rar", ".tar", ".tgz", ".tbz", ".tbz2", ".txz", ".tzst", ".gz", ".bz2",
     ".xz", ".zst", ".lz", ".lzma", ".lz4", ".z", ".zz", ".br", ".sz", ".jar", ".war", ".ear",
     ".apk", ".aab", ".ipa", ".deb", ".rpm", ".pkg", ".snap", ".flatpak", ".dmg", ".iso",
     ".img", ".wim", ".cab", ".arj", ".lzh", ".lha", ".ace", ".arc", ".zoo", ".sit", ".sitx",

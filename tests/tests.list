@@ -37,3 +37,4 @@ github_engine|fast|120|python3 tests/github/github_test.py|python3
 github_upgrade_shared|fast|30|bash tests/github/upgrade_shared.sh|python3
 github_ui|slow|180|python3 tests/github/ui_test.py|python3
 cc_truth|slow|240|python3 tests/cc_truth/cc_truth_test.py|python3
+archive|fast|60|bash tests/archive/archive_test.sh|

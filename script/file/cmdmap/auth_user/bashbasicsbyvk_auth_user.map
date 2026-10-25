@@ -75,3 +75,4 @@ cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
 kl         .mapto()  block()
 pn         .mapto()  block()
 lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
+goto       .mapto()  block()

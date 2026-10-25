@@ -28,3 +28,4 @@ functions/bashbasicsbyvk_ghlib|loops/iloop/upgrade/	github_engine github_upgrade
 cmdmap/xui_ghp|cmdmap/xui_ghr	github_ui cmd_drift
 settings/bashbasicsbyvk_settings_ui	cc_truth cmd_drift nav_back hints settings_keys
 cmdmap/(settings|home)	cc_truth cmd_drift
+functions/bashbasicsbyvk_archive_formats|staging/!buffer/other/bashbasicsbyvk_staging_archive|loops/rloop/run/	archive

@@ -241,7 +241,7 @@ colors_group_settings() { _st_run "Colors" _st_grp_colors_build _st_grp_colors_a
 # ── Files & archives ─────────────────────────────────────────────────────────────────────────────────────
 _st_grp_files_build() {
   _st_reset
-  _st_add a "Compress format" 0 "$compress_format"                                  compress
+  _st_add a "Compress format" 0 "${_ARC_LABEL[$compress_format]:-ask}"                                  compress
   _st_add a "Zip hidden (z-)" 0 "$(_hidden_mode_label "$zip_hidden_mode")"          ziphidden
 }
 _st_grp_files_act() { case "${_st_tag[$1]}" in compress) compress_format_settings ;; ziphidden) zip_hidden_settings ;; esac; }

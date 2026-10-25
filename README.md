@@ -54,7 +54,7 @@ It has two parts:
 - **Display rules:** show only what you care about in a given folder (`.d.ext py`), saved as presets.
 - **Batch:** create or delete many files and folders, find and replace in names, in contents or in both (plain text or regex, flat or recursive), CSV-driven rename, delete by date or extension.
 - **Organise:** by year, month, date, extension or alphabet, and undo it.
-- **Compress:** `z-` and `uz-` for zip and unzip of multiple items.
+- **Compress:** `z-` and `uz-` pack and unpack several items: zip, tar, tar.gz, tar.xz, tar.bz2, 7z, tar.zst, tar.lz4 and .skill. Unpacking goes by name and content, so copies such as `hello.zip1`, `hello_tar.gz` or `hello- (2).zip` open too. The file menu says Extract for an archive. `goto` jumps to any path.
 - **Project maps:** `p-` generates a text map of any path.
 - **Debug helpers:** `print` captures the screen exactly as drawn (copy or save as txt) and works at every prompt. `loadtime` shows what consumed the time between the previous screen and this one, ranked, with network phases (DNS/TCP/TLS/wait/download); `loadtime N`, `loadtime all`, `loadtime full` for more. `VK_LOADTIME=0` turns the recorder off.
 - **Cheat codes (`cc`):** forget a command name? `cc` lists every command the *current* prompt accepts (a menu, the item picker, a Settings screen each get their own list), in the same style as Settings. Filter with `=lo`, pick a number, and the command is typed into the prompt you came from. It never runs by itself: `c-` stays in the prompt so you can finish it (`c-1-5`) and press Enter.

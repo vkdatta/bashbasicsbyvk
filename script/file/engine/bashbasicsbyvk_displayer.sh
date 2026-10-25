@@ -139,7 +139,7 @@ _is_archive() {
   local lower="${1##*/}"; lower="${lower,,}"
   case "$lower" in
     *.tar.gz|*.tar.bz2|*.tar.xz|*.tar.zst|*.tar.lz|*.tar.lzma|*.tar.lz4|*.tar.Z|*.tar.sz|*.tar.br) return 0 ;;
-    *.zip|*.7z|*.rar|*.tar|*.tgz|*.tbz|*.tbz2|*.txz|*.tzst) return 0 ;;
+    *.zip|*.skill|*.7z|*.rar|*.tar|*.tgz|*.tbz|*.tbz2|*.txz|*.tzst) return 0 ;;
     *.gz|*.bz2|*.xz|*.zst|*.lz|*.lzma|*.lz4|*.Z|*.zz|*.br|*.sz) return 0 ;;
     *.jar|*.war|*.ear|*.apk|*.aab|*.ipa) return 0 ;;
     *.deb|*.rpm|*.pkg|*.snap|*.flatpak) return 0 ;;
@@ -200,7 +200,7 @@ import multiprocessing as mp
 
 _ARCHIVE_MULTI = (".tar.gz",".tar.bz2",".tar.xz",".tar.zst",".tar.lz",
                   ".tar.lzma",".tar.lz4",".tar.z",".tar.sz",".tar.br")
-_ARCHIVE = frozenset((".zip",".7z",".rar",".tar",".tgz",".tbz",".tbz2",".txz",".tzst",
+_ARCHIVE = frozenset((".zip",".skill",".7z",".rar",".tar",".tgz",".tbz",".tbz2",".txz",".tzst",
     ".gz",".bz2",".xz",".zst",".lz",".lzma",".lz4",".z",".zz",".br",".sz",
     ".jar",".war",".ear",".apk",".aab",".ipa",".deb",".rpm",".pkg",".snap",".flatpak",
     ".dmg",".iso",".img",".wim",".cab",".arj",".lzh",".lha",".ace",".arc",".zoo",

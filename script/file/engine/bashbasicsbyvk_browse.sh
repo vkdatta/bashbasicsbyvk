@@ -13,6 +13,33 @@ get_abs_path() {
   fi
 }
 
+# goto [path] — move the list to a path. Asks when no path is typed. A file path opens the folder that holds it.
+# ~ and relative paths work; surrounding quotes (from a paste or a drag) are dropped.
+handle_goto() {
+  local arg="${1#goto}" dest target
+  if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁️  Google Drive is open — leave it with gdx first, then use goto"; return 0; fi
+  arg="${arg#"${arg%%[![:space:]]*}"}"
+  dest="$arg"
+  if [ -z "$dest" ]; then
+    read -e -r -p "Path to go to: " dest || return 0
+    [ "${_CM_ABORT:-0}" = 1 ] && return 0
+  fi
+  dest="${dest%$'\r'}"
+  dest="${dest#"${dest%%[![:space:]]*}"}"; dest="${dest%"${dest##*[![:space:]]}"}"
+  case "$dest" in \"*\"|\'*\') dest="${dest:1:${#dest}-2}" ;; esac
+  [ -n "$dest" ] || { echo "🚫 Cancelled — no path given."; return 0; }
+  case "$dest" in "~") dest="$HOME" ;; "~/"*) dest="$HOME/${dest#"~/"}" ;; esac
+  [[ "$dest" == /* ]] || dest="${path%/}/$dest"
+  if [ -d "$dest" ]; then target="$dest"
+  elif [ -e "$dest" ]; then target="${dest%/*}"; [ -n "$target" ] || target="/"; echo "📄 That is a file — opening the folder that holds it"
+  else echo "❌ Not found: $dest"; return 0; fi
+  if [ ! -r "$target" ] || [ ! -x "$target" ]; then echo "❌ No permission to open: $target"; return 0; fi
+  target="$(get_abs_path "$target")" || return 0
+  path="$target"; group_prefix=""; force_show=false
+  echo "📂 Now in: $path"
+  return 0
+}
+
 fast_count() {
   local pattern="$1"
   local arr=("$pattern")

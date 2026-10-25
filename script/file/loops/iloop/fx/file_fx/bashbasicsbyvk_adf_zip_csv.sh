@@ -4,7 +4,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — zip.select.items.csv
 #  CSV-driven compress (same as z-): col1 = filename or absolute path.
-#  Format follows the compress_format setting (zip | targz | ask).
+#  Format follows the compress_format setting (any archive format id, or ask).
 # ════════════════════════════════════════════════════════════════════════════
 
 _fx_adf_zip_select_csv() {

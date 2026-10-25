@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+Archive support covered only zip and tar.gz and recognised an archive by the last dot of its name, so copies such as hello.zip1, hello_tar.gz, hello.tar-1.gz or "hello- (2).zip" were refused. Nine formats are wanted: zip, tar, tar.gz/tgz, tar.xz/txz, tar.bz2/tbz2, 7z, tar.zst/tzst, tar.lz4 and .skill.
+
+2. ISSUE IN BRIEF
+The file menu (handle_file) always said Run for an archive, had separate Lock and Unlock rows, and lacked Copy Name, Copy File Path and Go To Parent Folder. The main-loop lang command ignored the find and replace engine, and there was no command to jump to a typed path.
+
+1. HOW DID YOU DEBUG
+Read staging_archive.sh, run.sh, the command map files, o and health.sh. Built real zstd, lz4 and 7-Zip from source in a scratch folder to test every format with the real tools. New tests/archive/archive_test.sh checks name parsing, content detection, a create/extract round trip of all nine formats (with and without hidden files, and from outside the folder through symlinks), fake and lying archives, and the z- name prompt. It first failed on 7z (hidden folders kept, then paths flattened), both fixed.
+
+1. CAUSE
+Recognition was a glob on the file name; creation and extraction were hard-wired to two formats.
+
+1. FIX
+New functions/bashbasicsbyvk_archive_formats.sh (loaded by _3bvk_import_functions.sh): format table, _arc_scan (name as words), _arc_magic (first bytes), _arc_detect (name hints, content decides), _arc_create, _arc_extract, _arc_need. staging_archive.sh (_compress_paths, _decompress_paths) now uses it; the Compress format setting lists all formats and has descriptions; .skill added to the three icon archive lists. 7-Zip lists files only because it recurses into every folder it is given.
+
+2. HOW DID YOU DEBUG
+Read the menu code and the command-map generator. mapgen was run to wire goto (blocked in every inner menu), cmd_docs --write regenerated the reference. The menu, lang and goto changes were checked by reading and by the suite run noted in the delivery, not by hand in a terminal.
+
+2. CAUSE
+Features were not there yet.
+
+2. FIX
+run.sh: handle_file rows 0-12 (Extract for archives, one Lock/Unlock row, Copy Name, Copy File Path, Go To Parent Folder via _file_goto_parent, which also closes inner loops; o <file> continues into the main loop); run_file extracts archives next to themselves (_arc_dest_base). lock.sh: _lk_file_locked, _lk_file_toggle. health.sh: bvk_lang prints the Find & Replace engine. maincommands.sh + o + browse.sh: goto [path] (handle_goto; a file path opens its folder; blocked while Google Drive is open).

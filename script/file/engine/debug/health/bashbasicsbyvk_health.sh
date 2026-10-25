@@ -268,10 +268,22 @@ _bvk_lang_resolve() {
   if _bvk_need_xfer && _bvk_xfer_bin; then _LANG_FA=Go; else _LANG_FA=Node; fi
 }
 
+# Find & replace: C (bvk-fr) or the Python twin → _LANG_FR (C | Python | none | unknown)
+_bvk_lang_fr_resolve() {
+  if ! declare -F _fr_engine >/dev/null 2>&1; then _LANG_FR=unknown; return; fi
+  if _fr_engine; then if [ "$_FR_KIND" = c ]; then _LANG_FR=C; else _LANG_FR=Python; fi; else _LANG_FR=none; fi
+}
+
 bvk_lang() {
   _bvk_lang_resolve
+  _bvk_lang_fr_resolve
   printf 'Drill Engine: %s\n' "$_LANG_DRILL"
   printf 'FileAPI Engine: %s\n' "$_LANG_FA"
+  case "$_LANG_FR" in
+    unknown) printf 'Find & Replace Engine: unknown (the find & replace files are not loaded in this shell)\n' ;;
+    none)    printf 'Find & Replace Engine: none\n' ;;
+    *)       printf 'Find & Replace Engine: %s\n' "$_LANG_FR" ;;
+  esac
   if [ "$_LANG_DRILL" = Python ]; then
     printf '   ↳ Drill is on Python: %s\n' "${_BVK_GO_WHY:-the C engine could not be used}"
   fi
@@ -279,7 +291,8 @@ bvk_lang() {
     if declare -F _bvk_xfer_bin >/dev/null 2>&1; then printf '   ↳ FileAPI is on Node: %s\n' "${_BVK_XFER_WHY:-the Go engine could not be used}"
     else printf '   ↳ FileAPI is on Node: the FileAPI files (bashbasicsbyvk_fileapi_lib.sh) are not installed/loadable\n'; fi
   fi
-  if [ "$_LANG_DRILL" = Python ] || [ "$_LANG_FA" = Node ]; then printf '   🔧 run  health  for the full reason and the fix\n'; fi
+  if [ "$_LANG_FR" = Python ] || [ "$_LANG_FR" = none ]; then printf '   ↳ Find & Replace is on %s: %s\n' "$_LANG_FR" "${_FR_WHY:-the C engine could not be used}"; fi
+  if [ "$_LANG_DRILL" = Python ] || [ "$_LANG_FA" = Node ] || [ "$_LANG_FR" = Python ] || [ "$_LANG_FR" = none ]; then printf '   🔧 run  health  for the full reason and the fix\n'; fi
 }
 
 # Check ONE bvk-xfer candidate.  0 = it runs and answers "bvk-xfer ok".  Sets _HL_WHY / _HL_FIX otherwise.

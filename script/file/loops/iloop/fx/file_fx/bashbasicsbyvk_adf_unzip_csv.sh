@@ -4,7 +4,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — unzip.select.items.csv
 #  CSV-driven extract (same as uz-): col1 = archive name or absolute path
-#  (.zip / .tar.gz / .tgz). Each archive gets its own folder in the current path.
+#  (.zip .tar .tar.gz .tar.xz .tar.bz2 .7z .tar.zst .tar.lz4 .skill, copies included). Each archive gets its own folder in the current path.
 # ════════════════════════════════════════════════════════════════════════════
 
 _fx_adf_unzip_select_csv() {

@@ -267,6 +267,12 @@ _lk_file_cmd() {             # _lk_file_cmd lock|unlock <path>
   fi
 }
 
+# the file menu's single "Lock / Unlock" row: _lk_file_locked <path> says which one it is, _lk_file_toggle does it
+_lk_file_locked() { _lk_load; _lk_is_locked "$1"; }
+_lk_file_toggle() {
+  if _lk_file_locked "$1"; then _lk_file_cmd unlock "$1"; else _lk_file_cmd lock "$1"; fi
+}
+
 # ── move / copy keep the lock (same rule as rename) ─────────────────────────
 # Callers run _lk_load once first.
 

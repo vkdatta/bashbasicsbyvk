@@ -4,12 +4,13 @@
 #
 # z-<list>   compress items by number  →  z-1,3,5   z-2-6
 # uz-<list>  decompress items by number → uz-2       uz-1,4,7
-#            uz- auto-detects format from extension (.zip / .tar.gz / .tgz)
+#            uz- recognises the format from the name AND the content (see bashbasicsbyvk_archive_formats.sh):
+#                .zip .tar .tar.gz/.tgz .tar.xz/.txz .tar.bz2/.tbz2 .7z .tar.zst/.tzst .tar.lz4 .skill — also copies such as hello.zip1, hello_tar.gz, hello- (2).zip
 
 # ---------------------------------------------------------------------------
 # handle_compress_items  z-<itemlist>
 # Compresses the selected items into one named archive inside $path.
-# Format is determined by the compress_format setting (zip | targz | ask).
+# Format is determined by the compress_format setting (an id from bashbasicsbyvk_archive_formats.sh, or ask).
 # Prompts for the archive name; strips known extensions if user types them.
 # Uses relative paths so the archive never embeds absolute filesystem paths.
 # ---------------------------------------------------------------------------
@@ -52,60 +53,41 @@ _compress_paths() {
 
   # ── Determine format ────────────────────────────────────────────────────
   local fmt="${compress_format:-ask}"
+  _arc_is_fmt "$fmt" || fmt="ask"
 
   if [ "$fmt" = "ask" ]; then
-    _mc_menu "📦 Compress as:" -- "zip" "tar.gz" -- @back_quit
-    read -e -r -p "Select: " fmt_choice
-    fmt_choice="${fmt_choice%$'\r'}"
-    case "$fmt_choice" in
-    u|U) return ;;
-    q|Q) _bvk_quit; return 1 ;;
-      1) fmt="zip" ;;
-      2) fmt="targz" ;;
-      *) echo "🚫 Cancelled — invalid choice." ; return ;;
-    esac
+    local -a _rows=() 
+    local _f _miss
+    for _f in "${_ARC_FORMATS[@]}"; do
+      _miss=""; _arc_have create "$_f" || _miss="   (needs ${_ARC_MISSING})"
+      _rows+=("$_f:${_ARC_LABEL[$_f]}  —  ${_ARC_NOTE[$_f]}${_miss}")
+    done
+    _bvk_menu fmt -t "Compress as" -i "📦" "${_rows[@]}" || return
+    [ -n "$fmt" ] || { echo "🚫 Cancelled — invalid choice."; return; }
   fi
 
   # ── Tool availability check ─────────────────────────────────────────────
-  if [ "$fmt" = "zip" ] && ! command -v zip &>/dev/null; then
-    echo "❌ 'zip' not found — install it first (e.g. pkg install zip)."
-    return 1
-  fi
-  if [ "$fmt" = "targz" ] && ! command -v tar &>/dev/null; then
-    echo "❌ 'tar' not found — install it first."
-    return 1
-  fi
+  _arc_need create "$fmt" || return 1
+  local ext="${_ARC_LABEL[$fmt]}"
 
   # ── Archive name prompt ─────────────────────────────────────────────────
   echo ""
-  if [ "$fmt" = "zip" ]; then
-    read -e -r -p "Name for the archive (without .zip): " arc_name
-  else
-    read -e -r -p "Name for the archive (without .tar.gz): " arc_name
-  fi
+  read -e -r -p "Name for the archive (without ${ext}): " arc_name
   arc_name="${arc_name%$'\r'}"
   [ -z "$arc_name" ] && echo "🚫 Cancelled — no name given." && return
 
-  # Strip known extensions if user typed them
-  arc_name="${arc_name%.tar.gz}"
-  arc_name="${arc_name%.tgz}"
-  arc_name="${arc_name%.zip}"
+  # Strip a known ending if user typed it
+  _arc_strip_ext "$arc_name"; arc_name="$_ARC_STRIPPED"
 
-  if [ "$fmt" = "zip" ]; then _arc_chk="${arc_name}.zip"; else _arc_chk="${arc_name}.tar.gz"; fi
-  if _bvk_name_too_long "$_arc_chk"; then _bvk_name_refuse "$arc_name" "Archive"; return; fi
+  if _bvk_name_too_long "${arc_name}${ext}"; then _bvk_name_refuse "$arc_name" "Archive"; return; fi
 
   # ── Build archive path ───────────────────────────────────────────────────
-  local arc_path
-  if [ "$fmt" = "zip" ]; then
-    arc_path="$path/${arc_name}.zip"
-  else
-    arc_path="$path/${arc_name}.tar.gz"
-  fi
+  local arc_path="$path/${arc_name}${ext}"
 
   # ── Overwrite check ──────────────────────────────────────────────────────
   if [ -e "$arc_path" ]; then
-    local ext; ext="${arc_path##*/}"
-    _bvk_yn ow "'${ext}' already exists. Overwrite?" -d none
+    local shown; shown="${arc_path##*/}"
+    _bvk_yn ow "'${shown}' already exists. Overwrite?" -d none
     ow="${ow%$'\r'}"
     [[ "$ow" =~ ^[Yy]$ ]] || { echo "🚫 Cancelled."; return; }
     rm -f "$arc_path"
@@ -140,36 +122,15 @@ _compress_paths() {
   echo ""
 
   # ── Compress ─────────────────────────────────────────────────────────────
-  local rc
-  if [ "$fmt" = "zip" ]; then
-    echo "🗜️  Zipping ${#paths[@]} item(s) → ${arc_name}.zip"
-    if [ "$hid_inc" = true ]; then
-      ( cd "$workdir" && zip -r "$arc_path" "${rel_items[@]}" )       # zip follows symlinks by default
-    else
-      # same list, minus hidden files/folders inside the chosen items
-      ( cd "$workdir" && _hid_find0 false 0 "${rel_items[@]/#/./}" | tr '\0' '\n' | zip "$arc_path" -@ )
-    fi
-    rc=$?
-    if [ $rc -eq 0 ]; then
-      echo "💫 Created: ${arc_name}.zip"
-    else
-      echo "❌ zip exited with code $rc."
-    fi
+  local rc follow=false
+  $outside && follow=true                                             # the staging symlinks must be followed, never stored
+  echo "🗜️  Creating ${ext#.} of ${#paths[@]} item(s) → ${arc_name}${ext}"
+  _arc_create "$fmt" "$arc_path" "$workdir" "$hid_inc" "$follow" "${rel_items[@]}"
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "💫 Created: ${arc_name}${ext}"
   else
-    local -a tar_opts=(-czf)
-    $outside && tar_opts=(-czhf)                                      # -h: follow the staging symlinks
-    echo "🗜️  Creating tar.gz of ${#paths[@]} item(s) → ${arc_name}.tar.gz"
-    if [ "$hid_inc" = true ]; then
-      ( cd "$workdir" && tar "${tar_opts[@]}" "$arc_path" "${rel_items[@]}" )
-    else
-      ( cd "$workdir" && _hid_find0 false 0 "${rel_items[@]/#/./}" | tar "${tar_opts[@]}" "$arc_path" --null --no-recursion -T - )
-    fi
-    rc=$?
-    if [ $rc -eq 0 ]; then
-      echo "💫 Created: ${arc_name}.tar.gz"
-    else
-      echo "❌ tar exited with code $rc."
-    fi
+    echo "❌ ${fmt} archiving exited with code $rc."
   fi
 
   [ -n "$stage_dir" ] && rm -rf "$stage_dir"     # removes only the symlinks, never their targets
@@ -179,11 +140,10 @@ _compress_paths() {
 # ---------------------------------------------------------------------------
 # handle_decompress_items  uz-<itemlist>
 # Decompresses each selected archive into its own named folder inside $path.
-# Format is auto-detected from the file extension — no prompt.
+# Format is detected from the name AND the content — no prompt (see bashbasicsbyvk_archive_formats.sh).
 #
-# Supported extensions:
-#   .zip          → unzip
-#   .tar.gz / .tgz → tar -xzf
+# Supported: .zip .tar .tar.gz/.tgz .tar.xz/.txz .tar.bz2/.tbz2 .7z .tar.zst/.tzst .tar.lz4 .skill
+# (and copies of them: hello.zip1, hello_tar.gz, hello.tar-1.gz, hello- (2).zip)
 #
 # uz-2       → creates  myarchive/  and extracts into it
 # uz-1,4,7   → creates  a/  b/  c/  for each respectively
@@ -209,11 +169,13 @@ handle_decompress_items() {
 
 # ---------------------------------------------------------------------------
 # _decompress_paths <archive...>
-# Core of uz-. Also used by the fx unzip.* functions (CSV / .s selection).
-# Each archive is extracted into its own folder inside $path.
+# Core of uz-. Also used by the fx unzip.* functions (CSV / .s selection) and the file menu's Extract.
+# Each archive is extracted into its own folder inside $_arc_dest_base (default: $path).
+# The format comes from the name AND the content (_arc_detect), so copies like hello.zip1 / hello_tar.gz open too.
 # ---------------------------------------------------------------------------
 _decompress_paths() {
   local -a paths=("$@")
+  local dest_base="${_arc_dest_base:-$path}"
   echo ""
 
   local p succeeded=0 skipped=0
@@ -224,40 +186,21 @@ _decompress_paths() {
       continue
     fi
     local bn="${p##*/}"
-    local bn_lower="${bn,,}"
 
-    # ── Detect format from extension ───────────────────────────────────────
-    local fmt=""
-    local folder_name=""
-
-    if [[ "$bn_lower" == *.tar.gz ]]; then
-      fmt="targz"
-      folder_name="${bn%.*}"        # strip .gz  → name.tar
-      folder_name="${folder_name%.*}"  # strip .tar → name
-    elif [[ "$bn_lower" == *.tgz ]]; then
-      fmt="targz"
-      folder_name="${bn%.*}"        # strip .tgz → name
-    elif [[ "$bn_lower" == *.zip ]]; then
-      fmt="zip"
-      folder_name="${bn%.*}"        # strip .zip → name
-    else
-      echo "  🔴  Skipping '$bn' — unrecognised extension (supported: .zip, .tar.gz, .tgz)"
+    # ── Detect format: name says "maybe", content decides ──────────────────
+    if ! _arc_detect "$p"; then
+      echo "  🔴  Skipping '$bn' — $_ARC_WHY"
       skipped=$((skipped + 1))
       continue
     fi
+    local fmt="$_ARC_FMT" folder_name="$_ARC_STEM"
+    [ -n "$folder_name" ] || folder_name="extracted"
 
     # ── Tool availability check ────────────────────────────────────────────
-    if [ "$fmt" = "zip" ] && ! command -v unzip &>/dev/null; then
-      echo "❌ 'unzip' not found — install it first (e.g. pkg install unzip)."
-      return 1
-    fi
-    if [ "$fmt" = "targz" ] && ! command -v tar &>/dev/null; then
-      echo "❌ 'tar' not found — install it first."
-      return 1
-    fi
+    _arc_need extract "$fmt" || return 1
 
     # ── Avoid clobbering an existing folder ───────────────────────────────
-    local dest_dir="${path}/${folder_name}"
+    local dest_dir="${dest_base}/${folder_name}"
     if [ -e "$dest_dir" ]; then
       local counter=1
       while [ -e "${dest_dir}_${counter}" ]; do
@@ -270,13 +213,8 @@ _decompress_paths() {
     mkdir -p "$dest_dir"
 
     # ── Decompress ─────────────────────────────────────────────────────────
-    if [ "$fmt" = "zip" ]; then
-      echo "  📂 Extracting '$bn' → $(basename "$dest_dir")/"
-      unzip -q "$p" -d "$dest_dir"
-    else
-      echo "  📂 Extracting '$bn' → $(basename "$dest_dir")/"
-      tar -xzf "$p" -C "$dest_dir"
-    fi
+    echo "  📂 Extracting '$bn' → $(basename "$dest_dir")/"
+    _arc_extract "$fmt" "$p" "$dest_dir"
     local rc=$?
 
     if [ $rc -eq 0 ]; then

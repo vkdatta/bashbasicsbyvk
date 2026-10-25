@@ -90,8 +90,9 @@ if [ $# -eq 1 ]; then
     path=$(get_abs_path "$target")
   elif [ -f "$target" ]; then
     selected=$(get_abs_path "$target")
-    handle_file "$selected"
-    exit $?
+    handle_file "$selected"; _o_rc=$?
+    [ "${_BVK_GO_PARENT:-0}" = 1 ] || exit $_o_rc     # "Go To Parent Folder": carry on in the main loop, in that folder
+    _BVK_GO_PARENT=0
   else
     echo "❌ Error: '$target' not found" >&2
     exit 1
@@ -212,6 +213,7 @@ while true; do
     s)           settings_menu ;;
     r)           handle_rename ;;
     cd)          if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁️  A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; else _lt_cleanup; cd "$path" && exec "$SHELL"; fi ;;
+    goto|goto\ *) handle_goto "$choice" ;;
     kl)          kill -9 -1 ;;
     i)           infinity_stones_menu ;;
     -u)          _inner_run upg ;;

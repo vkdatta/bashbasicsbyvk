@@ -76,3 +76,4 @@ loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
 cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
 pn         .mapto()  block()
 lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
+goto       .mapto()  block()
