@@ -68,6 +68,7 @@ _lt_b "start: recents daemon check";  _bvk_wake_recents_daemon; _lt_e
 _lt_b "start: telemetry (background)"; _bvk_telemetry_start; _lt_e
 _lt_b "start: snapshot daemon";       _snap_daemon_start; _lt_e         # Snapshots: background sync while  o  runs (does nothing until a path is on the list)
 _lt_b "start: terminal colours + screen setup"; _disp_startup; _lt_e
+_lt_b "start: engines fit this machine?"; _bvk_engine_heal "$@"; _lt_e   # install made on another CPU / OS: offer a reinstall
 
 trap '_gd_on_exit 2>/dev/null; _lt_cleanup; _bvk_paste_off 2>/dev/null; _bvk_mouse_off 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
       [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \

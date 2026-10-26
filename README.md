@@ -23,7 +23,7 @@ Browse, select, move, rename, search and organise files from one interactive com
 
 ## Overview
 
-`bashbasicsbyvk` is a terminal file manager for Linux, WSL, Termux (Android), Docker, macOS and cloud shells, with MIT-licensed source. 
+`bashbasicsbyvk` is a terminal file manager for Linux, WSL, Termux (Android), Docker, macOS and cloud shells, with MIT-licensed source. Native engines are prebuilt for Linux (amd64, arm64, arm, 386), Android / Termux (amd64, arm64, arm), macOS (Intel, Apple Silicon) and FreeBSD (amd64); pip installs only the three binaries of the machine it runs on, and the app offers to reinstall by itself if the install is later moved to another CPU or OS. 
 
 It has two parts:
 

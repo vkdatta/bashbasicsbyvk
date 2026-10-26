@@ -30,3 +30,5 @@ settings/bashbasicsbyvk_settings_ui	cc_truth cmd_drift nav_back hints settings_k
 cmdmap/(settings|home)	cc_truth cmd_drift
 functions/bashbasicsbyvk_archive_formats|staging/!buffer/other/bashbasicsbyvk_staging_archive|loops/rloop/run/	archive
 engine/bashbasicsbyvk_deps|functions/bashbasicsbyvk_(archive_formats|bundle_io)|infinity/tools/|settings/bashbasicsbyvk_timezone|loops/iloop/switch/bashbasicsbyvk_recents_daemon	deps deps_menu archive polyglot
+setup\.py|MANIFEST\.in|setup\.cfg|engine/bashbasicsbyvk_engine_target|engine/bvk-	wheel_target
+engine/bashbasicsbyvk_engine_(heal|target)|infinity/tools/bashbasicsbyvk_upgrade_install|script/o$	engine_heal

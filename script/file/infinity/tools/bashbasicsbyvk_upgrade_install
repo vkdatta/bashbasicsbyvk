@@ -2,26 +2,30 @@
 # bashbasicsbyvk_upgrade_install [REF]
 #   no REF  → install the default branch (latest main)      — the old -u behaviour
 #   REF     → install that git tag / branch / commit, e.g.  v0.0.12
-# Called by the -u upgrade loop (bashbasicsbyvk_upgrade.sh).
+# Called by the -u upgrade loop (bashbasicsbyvk_upgrade.sh) and by the start-up engine check (bashbasicsbyvk_engine_heal.sh).
+# BVK_REINSTALL_FRESH=1 adds --no-cache-dir: pip then builds the wheel again ON THIS machine (setup.py picks this CPU / OS's
+# engines) instead of reusing a cached wheel.
 
 REF="${1:-}"
 REPO_URL="https://github.com/vkdatta/bashbasicsbyvk.git"
 SPEC="git+${REPO_URL}${REF:+@${REF}}"
+FRESH=()
+[ "${BVK_REINSTALL_FRESH:-0}" = 1 ] && FRESH=(--no-cache-dir)
 
 INSTALL_LOC=$(pip show bashbasicsbyvk 2>/dev/null | grep '^Location:' | cut -d' ' -f2-)
 
 if [ -z "$INSTALL_LOC" ]; then
     echo "🔴  Not installed yet — doing fresh user-local install (${REF:-latest main})"
-    pip install -vvv --progress-bar on "$SPEC"
+    pip install -vvv --progress-bar on "${FRESH[@]}" "$SPEC"
     exit $?
 fi
 
 if [[ "$INSTALL_LOC" == /usr/* || "$INSTALL_LOC" == /lib/* || "$INSTALL_LOC" == /opt/* ]]; then
     echo "🔧 System install detected ($INSTALL_LOC) — using --break-system-packages (${REF:-latest main})"
-    pip install -vvv --progress-bar on --upgrade --force-reinstall \
+    pip install -vvv --progress-bar on --upgrade --force-reinstall "${FRESH[@]}" \
         "$SPEC" --break-system-packages
 else
     echo "🔧 User install detected ($INSTALL_LOC) — normal upgrade (${REF:-latest main})"
-    pip install -vvv --progress-bar on --upgrade --force-reinstall \
+    pip install -vvv --progress-bar on --upgrade --force-reinstall "${FRESH[@]}" \
         "$SPEC"
 fi

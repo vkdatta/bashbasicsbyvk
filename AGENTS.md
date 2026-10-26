@@ -161,7 +161,7 @@ So before you create anything, work in this order:
    - **ADF actions.** A `file_fx` action registers with `_fx_adf_register_fx LABEL FN` (the tree path comes from the label), never with a typed `file_fx/...` path. `tests/adf_registry.sh`.
    - **The command reference.** `o --map-doc` prints it from `cmd_def`; `llms-full.txt` section 9 holds the pasted copy between `cmd-ref:start` / `cmd-ref:end`.
      After adding or changing a command run `bash tests/cmd_docs.sh --write`. `tests/cmd_docs.sh`.
-   - **The CPU-to-binary mapping** (`uname -m`, android / linux) lives only in `_bvk_engine_target` (`engine/bashbasicsbyvk_engine_target.sh`). `tests/engine_target.sh`.
+   - **The CPU-to-binary mapping** (`uname -m` -> arm64 / amd64 / arm / 386; android / linux / darwin / freebsd) lives only in `_bvk_engine_target` (`engine/bashbasicsbyvk_engine_target.sh`). `setup.py` asks that function (it runs it with bash) to decide which binaries a wheel carries; it never repeats the table. `tests/engine_target.sh`, `tests/wheel_target.sh`.
 
 10. **No dead files.** A file that nothing loads is deleted, not left "untouched" or listed as legacy: `tests/adf_registry.sh` has no allowlist, and a test with an exceptions list is where drift hides.
     A file that another file depends on loads that dependency itself or degrades without it (`settings_ui.sh` works without `settings_desc.sh`: stand-alone callers and tests source it alone).
@@ -231,7 +231,8 @@ A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes 
 - Files are found by bare name (`source "bashbasicsbyvk_x.sh"`, `command -v bashbasicsbyvk_x`), never by relative path.
 - The command map finds `*commands.sh` / `*.map` by those suffixes: keep `bashbasicsbyvk_<menu>.map` and
   `bashbasicsbyvk_<menu>menucommands.sh`. `bashbasicsbyvk_mapgen` writes exactly those names.
-- Built `bvk-ls-<os>-<arch>` binaries are build output, not source: they keep that name (`setup.py`, `MANIFEST.in`, health check match it).
+- Built `bvk-<engine>-<os>-<arch>` binaries (engines `ls`, `fr`, `xfer`; os `android linux darwin freebsd`; arch `amd64 arm64 arm 386`) are build output, not source: they keep that name (`setup.py`, `MANIFEST.in`, health check match it).
+- **A wheel carries the binaries of ONE machine.** pip builds the wheel on the machine it installs to; `setup.py` keeps only that machine's three binaries and tags the wheel `py3-none-<platform>` (never `any`, so pip's wheel cache cannot hand it to another CPU / OS). `BVK_TARGET=<os>-<arch>` builds one for another machine (CI). When an install is carried to a different machine, `_bvk_engine_heal` (`engine/bashbasicsbyvk_engine_heal.sh`, called from `o`) offers a reinstall that builds fresh. `tests/wheel_target.sh`, `tests/engine_heal.sh`.
 
 ## When you add, rename or delete a file
 

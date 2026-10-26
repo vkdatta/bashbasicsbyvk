@@ -9,7 +9,48 @@ permissions:
   contents: write
 
 jobs:
+  # ── macOS engines: built on a real Mac (Apple clang), handed to the Linux job below, which commits everything in one go ────────
+  build-darwin:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build bvk-ls and bvk-fr (darwin)
+        run: |
+          for e in ls fr; do
+            (cd "script/file/engine/bvk-$e" && chmod +x bashbasicsbyvk_build.sh && BVK_ONLY=darwin REQUIRE_DARWIN=1 ./bashbasicsbyvk_build.sh)
+          done
+
+      - name: Verify darwin engines
+        run: |
+          set -x
+          cd script/file/engine
+          for e in ls fr; do
+            file "bvk-$e/bvk-$e-darwin-arm64" | grep -q "Mach-O 64-bit executable arm64"
+            file "bvk-$e/bvk-$e-darwin-amd64" | grep -q "Mach-O 64-bit executable x86_64"
+          done
+          # the arm64 build runs natively on this runner: same self-test + protocol number the app checks
+          test "$(./bvk-fr/bvk-fr-darwin-arm64 selftest)" = "bvk-fr ok"
+          test "$(./bvk-fr/bvk-fr-darwin-arm64 proto)" = "1"
+          ./bvk-ls/bvk-ls-darwin-arm64 count "$HOME" 0 > /dev/null
+          # the x86_64 build needs Rosetta; check it when the runner has it, never fail the build for its absence
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            test "$(arch -x86_64 ./bvk-fr/bvk-fr-darwin-amd64 selftest)" = "bvk-fr ok"
+          fi
+
+      - name: Hand the darwin engines to the commit job
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-engines
+          path: |
+            script/file/engine/bvk-ls/bvk-ls-darwin-*
+            script/file/engine/bvk-fr/bvk-fr-darwin-*
+          if-no-files-found: error
+
   build:
+    needs: build-darwin
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +66,15 @@ jobs:
             gcc-aarch64-linux-gnu \
             gcc-x86-64-linux-gnu \
             gcc-arm-linux-gnueabihf \
-            libc6-dev-armhf-cross
+            libc6-dev-armhf-cross \
+            gcc-i686-linux-gnu \
+            libc6-dev-i386-cross
+
+      # zig cc cross-compiles the FreeBSD C engines (no FreeBSD machine needed)
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -38,7 +87,7 @@ jobs:
         working-directory: script/file/engine/bvk-ls
         run: |
           chmod +x bashbasicsbyvk_build.sh
-          REQUIRE_ANDROID=1 ./bashbasicsbyvk_build.sh
+          BVK_ONLY="linux android freebsd" REQUIRE_ANDROID=1 REQUIRE_FREEBSD=1 ./bashbasicsbyvk_build.sh
 
       - name: Verify bvk-ls
         working-directory: script/file/engine/bvk-ls
@@ -46,9 +95,16 @@ jobs:
           file bvk-ls-linux-arm64
           file bvk-ls-linux-amd64
           file bvk-ls-linux-arm
+          file bvk-ls-linux-386
+          file bvk-ls-freebsd-amd64
           file bvk-ls-android-arm64
           file bvk-ls-android-amd64
           file bvk-ls-android-arm
+
+          file bvk-ls-linux-386 | grep -q "Intel 80386"
+          file bvk-ls-freebsd-amd64 | grep -q "FreeBSD"
+          # a 32-bit static binary runs on the 64-bit runner kernel
+          ./bvk-ls-linux-386 count . 0 > /dev/null
 
           # Android's linker needs PT_PHDR + PT_INTERP.
           # A glibc static-pie has neither.
@@ -60,7 +116,7 @@ jobs:
         working-directory: script/file/engine/bvk-fr
         run: |
           chmod +x bashbasicsbyvk_build.sh
-          REQUIRE_ANDROID=1 ./bashbasicsbyvk_build.sh
+          BVK_ONLY="linux android freebsd" REQUIRE_ANDROID=1 REQUIRE_FREEBSD=1 ./bashbasicsbyvk_build.sh
 
       - name: Verify bvk-fr
         working-directory: script/file/engine/bvk-fr
@@ -68,11 +124,17 @@ jobs:
           file bvk-fr-linux-arm64
           file bvk-fr-linux-amd64
           file bvk-fr-linux-arm
+          file bvk-fr-linux-386
+          file bvk-fr-freebsd-amd64
           file bvk-fr-android-arm64
           file bvk-fr-android-amd64
           file bvk-fr-android-arm
 
           set -x   # the last command shown before an error is the assertion that failed
+
+          file bvk-fr-linux-386 | grep -q "Intel 80386"
+          file bvk-fr-freebsd-amd64 | grep -q "FreeBSD"
+          test "$(./bvk-fr-linux-386 selftest)" = "bvk-fr ok"
 
           # Android's linker needs PT_PHDR + PT_INTERP (same rule as bvk-ls)
           readelf -lW bvk-fr-android-arm64 > /tmp/fr-android-phdr.txt
@@ -98,10 +160,13 @@ jobs:
           grep -q '^files_changed=1$' "$w/stats"
 
       # ── bvk-xfer: the Go FileAPI engine (pack · send · jget · netcheck) ─────
-      - name: Vet bvk-xfer
+      - name: Vet bvk-xfer (every OS / CPU it is built for)
         working-directory: script/file/engine/bvk-xfer
         run: |
-          go vet ./...
+          for t in linux/amd64 linux/arm64 linux/arm linux/386 darwin/amd64 darwin/arm64 freebsd/amd64; do
+            echo "go vet $t"
+            CGO_ENABLED=0 GOOS="${t%/*}" GOARCH="${t#*/}" go vet ./...
+          done
 
       - name: Build bvk-xfer
         working-directory: script/file/engine/bvk-xfer
@@ -115,6 +180,10 @@ jobs:
           file bvk-xfer-linux-arm64
           file bvk-xfer-linux-amd64
           file bvk-xfer-linux-arm
+          file bvk-xfer-linux-386
+          file bvk-xfer-darwin-amd64
+          file bvk-xfer-darwin-arm64
+          file bvk-xfer-freebsd-amd64
           file bvk-xfer-android-arm64
           file bvk-xfer-android-amd64
           file bvk-xfer-android-arm
@@ -122,7 +191,12 @@ jobs:
           set -x   # the last command shown before an error is the assertion that failed
 
           # the linux builds are pure Go: fully static, runnable anywhere
-          for a in amd64 arm64 arm; do
+          file bvk-xfer-darwin-arm64 | grep -q "Mach-O 64-bit executable arm64"
+          file bvk-xfer-darwin-amd64 | grep -q "Mach-O 64-bit executable x86_64"
+          file bvk-xfer-freebsd-amd64 | grep -q "FreeBSD"
+          test "$(./bvk-xfer-linux-386 selftest)" = "bvk-xfer ok"
+
+          for a in amd64 arm64 arm 386; do
             desc="$(file "bvk-xfer-linux-$a")"
             case "$desc" in *"statically linked"*) ;; *) echo "bvk-xfer-linux-$a is not static"; exit 1 ;; esac
           done
@@ -150,6 +224,22 @@ jobs:
           test -f "$w/o/blob0"
           test -f "$w/o/manifest.enc"
 
+      - name: Fetch the darwin engines built on the Mac
+        uses: actions/download-artifact@v4
+        with:
+          name: darwin-engines
+          path: script/file/engine
+
+      - name: Mark engines executable
+        run: chmod +x script/file/engine/bvk-*/bvk-*-*-*
+
+      # every machine type gets a wheel with exactly its own three binaries, tagged for its platform (never py3-none-any)
+      - name: Verify one wheel per machine type
+        run: |
+          python3 -m pip install --upgrade setuptools wheel
+          bash tests/wheel_target.sh
+          bash tests/engine_target.sh
+
       - name: Commit generated binaries
         run: |
           git config user.name "BashBasics Builder"
@@ -159,18 +249,30 @@ jobs:
             script/file/engine/bvk-ls/bvk-ls-linux-arm64 \
             script/file/engine/bvk-ls/bvk-ls-linux-amd64 \
             script/file/engine/bvk-ls/bvk-ls-linux-arm \
+            script/file/engine/bvk-ls/bvk-ls-linux-386 \
+            script/file/engine/bvk-ls/bvk-ls-darwin-arm64 \
+            script/file/engine/bvk-ls/bvk-ls-darwin-amd64 \
+            script/file/engine/bvk-ls/bvk-ls-freebsd-amd64 \
             script/file/engine/bvk-ls/bvk-ls-android-arm64 \
             script/file/engine/bvk-ls/bvk-ls-android-amd64 \
             script/file/engine/bvk-ls/bvk-ls-android-arm \
             script/file/engine/bvk-fr/bvk-fr-linux-arm64 \
             script/file/engine/bvk-fr/bvk-fr-linux-amd64 \
             script/file/engine/bvk-fr/bvk-fr-linux-arm \
+            script/file/engine/bvk-fr/bvk-fr-linux-386 \
+            script/file/engine/bvk-fr/bvk-fr-darwin-arm64 \
+            script/file/engine/bvk-fr/bvk-fr-darwin-amd64 \
+            script/file/engine/bvk-fr/bvk-fr-freebsd-amd64 \
             script/file/engine/bvk-fr/bvk-fr-android-arm64 \
             script/file/engine/bvk-fr/bvk-fr-android-amd64 \
             script/file/engine/bvk-fr/bvk-fr-android-arm \
             script/file/engine/bvk-xfer/bvk-xfer-linux-arm64 \
             script/file/engine/bvk-xfer/bvk-xfer-linux-amd64 \
             script/file/engine/bvk-xfer/bvk-xfer-linux-arm \
+            script/file/engine/bvk-xfer/bvk-xfer-linux-386 \
+            script/file/engine/bvk-xfer/bvk-xfer-darwin-arm64 \
+            script/file/engine/bvk-xfer/bvk-xfer-darwin-amd64 \
+            script/file/engine/bvk-xfer/bvk-xfer-freebsd-amd64 \
             script/file/engine/bvk-xfer/bvk-xfer-android-arm64 \
             script/file/engine/bvk-xfer/bvk-xfer-android-amd64 \
             script/file/engine/bvk-xfer/bvk-xfer-android-arm

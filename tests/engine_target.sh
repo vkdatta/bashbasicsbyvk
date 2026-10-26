@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# _bvk_engine_target is the ONE place that maps this machine to a prebuilt binary (arm64 | amd64 | arm, android | linux).   bash tests/engine_target.sh
+# _bvk_engine_target is the ONE place that maps this machine to a prebuilt binary (arm64 | amd64 | arm | 386, android | linux | darwin | freebsd).   bash tests/engine_target.sh
 # (1) the mapping table  (2) no other file re-implements the CPU case  (3) the stand-alone cmds (copy, delete) load it themselves
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; S="$ROOT/script"
@@ -18,7 +18,14 @@ chk armv7l  GNU/Linux linux-gnu     arm/linux
 chk armv8l  GNU/Linux linux-gnu     arm/linux
 chk aarch64 Android   linux-gnu     arm64/android
 chk aarch64 GNU/Linux linux-android arm64/android
-chk i686    GNU/Linux linux-gnu     none/linux
+chk i686    GNU/Linux linux-gnu     386/linux
+chk i386    GNU/Linux linux-gnu     386/linux
+chk arm64   Darwin    darwin23.0    arm64/darwin
+chk x86_64  Darwin    darwin22.1    amd64/darwin
+chk x86_64  FreeBSD   freebsd14.0   amd64/freebsd
+chk i686    Android   linux-android none/android
+chk armv7l  Darwin    darwin23.0    none/darwin
+chk arm64   FreeBSD   freebsd14.0   none/freebsd
 chk riscv64 GNU/Linux linux-gnu     none/linux
 
 dup="$(grep -rnE 'aarch64\|arm64\)' "$S" --include='*.sh' | grep -v 'bashbasicsbyvk_engine_target.sh' | head -3)"

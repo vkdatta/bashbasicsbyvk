@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds bvk-xfer for every machine the app runs on:  bvk-xfer-{linux,android}-{amd64,arm64,arm}
+# Builds bvk-xfer for every machine the app runs on:  bvk-xfer-{linux,android}-{amd64,arm64,arm}, bvk-xfer-linux-386,
+#                                                     bvk-xfer-darwin-{amd64,arm64}, bvk-xfer-freebsd-amd64
 # Needs only the Go toolchain (>= 1.21).  Pure Go, no cgo, fully static, cross-compiled from any host.
 #
 # "android-*": a static Linux binary runs fine on Android (Termux, adb shell) because netx.go brings its own DNS fallback and CA
@@ -15,8 +16,12 @@ build() {   # build <outname> <GOOS> <GOARCH> [GOARM]
   echo "built $out"
 }
 
-for a in amd64 arm64; do build "bvk-xfer-linux-$a" linux "$a"; done
+for a in amd64 arm64 386; do build "bvk-xfer-linux-$a" linux "$a"; done
 build bvk-xfer-linux-arm linux arm 7
+
+# macOS and FreeBSD: pure Go too (no cgo), so any host cross-compiles them
+for a in amd64 arm64; do build "bvk-xfer-darwin-$a" darwin "$a"; done
+build bvk-xfer-freebsd-amd64 freebsd amd64
 
 find_ndk() {
   local d

@@ -25,7 +25,7 @@ The free tool is a capable file manager. The paid FileAPI turns it into a comple
 
 - Open-source applies to the local tool's source code (MIT). The hosted FileAPI service, web viewer and `.ai` are paid, operator-run services under separate Terms. Do not call the whole product "free and open source".
 
-- macOS is not yet tested; However, since it shares same language as linux, almost all functions works well. macOS, Linux, WSL, Termux and Docker are the target platforms.
+- Prebuilt native engines exist for linux (amd64, arm64, arm, 386), android (amd64, arm64, arm), darwin (amd64, arm64) and freebsd (amd64); pip installs only the engines of the machine it runs on. macOS and FreeBSD engines are built by CI but not yet tested on real devices; However, since it shares same language as linux, almost all functions works well. macOS, Linux, WSL, Termux and Docker are the target platforms.
 
 - Not a graphical file manager and not a replacement for a full backup system. Backups cover only deletions made through the built-in delete.
 

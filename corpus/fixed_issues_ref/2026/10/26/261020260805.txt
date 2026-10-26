@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+Prebuilt engines (bvk-ls, bvk-fr, bvk-xfer) were only produced for linux and android on amd64, arm64 and arm. Wanted in addition: darwin-amd64, darwin-arm64, linux-386 and freebsd-amd64, found and used by the app like the others.
+
+1. HOW DID YOU DEBUG
+Read the three build scripts, build.yml, setup.py / MANIFEST.in, _bvk_engine_target and every place that names a binary (displayer, findrun, fileapi lib, health). The C sources already have a POSIX backend (scan_posix.c) and an __APPLE__ branch, so I compiled both engines with gcc -U__linux__ to check the non-Linux path (clean, no warnings). Built bvk-ls-linux-amd64 with the real script (CC_amd64=gcc BVK_ONLY=linux) and ran it. Tested the skip / REQUIRE_* logic of the darwin and freebsd groups without zig. NOT verified here (no zig, no Mac, no i686 cross gcc, no Go toolchain in this sandbox): the linux-386, darwin and freebsd binaries themselves, and the Go changes (read only). CI now builds, `file`-checks, runs (linux-386, darwin-arm64) and cross-`go vet`s all of them.
+
+1. CAUSE
+Targets were hard-wired in three build scripts and one workflow, _bvk_engine_target knew only three CPUs and two OSes, the Go stubs (tty_other.go, disk_other.go) made every non-Linux build lose its progress bar and raw mode, and health only understood ELF.
+
+1. FIX
+bvk-ls/bashbasicsbyvk_build.sh (shared by bvk-fr): four groups (linux +386, android, darwin, freebsd) selected by BVK_ONLY, REQUIRE_DARWIN / REQUIRE_FREEBSD; gnu11 for the BSDs; darwin with Apple clang on a Mac or zig cc, freebsd with zig cc. bvk-xfer/bashbasicsbyvk_build.sh: linux-386, darwin-{amd64,arm64}, freebsd-amd64. Go: disk_linux.go -> disk_unix.go (linux || darwin || freebsd), new tty_bsd.go (TIOCGETA / TIOCSETA), *_other.go only for the rest. bashbasicsbyvk_engine_target.sh: 386, darwin, freebsd, and "no binary" for combinations that are not built. health: Mach-O and FreeBSD ELF headers, 386 name. build.yml: macOS job for the darwin C engines handing an artifact to the Linux job, zig, i686 gcc, verify steps, cross go vet, one commit. Lesson: a new target is a new line in the build scripts, the workflow `git add` list, MANIFEST.in (globs now bvk-ls-* etc.) and tests/engine_target.sh, nowhere else.
+
+2. ISSUE IN BRIEF
+`pip install` put every prebuilt binary (18) into the install dir, so on Termux the browser listed all of them, and the wheel was tagged py3-none-any, so pip could reuse a wheel built for one CPU / OS on another. Nothing noticed or repaired an install that was carried to a different machine.
+
+2. HOW DID YOU DEBUG
+Read setup.py (data_files listed every bvk-*-linux/android file) and the install flow (pip builds the wheel on the target machine from git+https). Built wheels with a fake binary for every target: host build, and BVK_TARGET=<each target>; listed the zip content and the WHEEL tag; ran a real `pip install --prefix` (3 binaries landed). Mutation checks: with the filter disabled and with the tag forced to `any`, tests/wheel_target.sh goes red; with the loop guard removed tests/engine_heal.sh goes red; restored. Ran tests/run.sh wheel_target engine_target engine_heal: all green. The startup check runs under a pty with stubs for the menu, the installer and `o`; it was not run against a real pip reinstall or a real phone.
+
+2. CAUSE
+setup.py shipped every binary for every machine and left the wheel pure; the CPU mapping would have had to be copied into Python to fix it, which AGENTS.md rule 9 forbids.
+
+2. FIX
+setup.py asks _bvk_engine_target through bash (`source ...; _bvk_engine_target`) and ships only bvk-{ls,fr,xfer}-<this os>-<this cpu>; a bdist_wheel subclass makes the wheel a platform wheel (py3-none-<platform>); BVK_TARGET=<os>-<arch> builds for another machine; bash missing = ship all (old behaviour), unsupported CPU = ship none (the Python / Node fallbacks run). New engine/bashbasicsbyvk_engine_heal.sh (_bvk_engine_heal, loaded by _3bvk_import_engine.sh, called from `o` after _disp_startup): when the install lacks the three engines of this machine it names both machines, asks with _bvk_yn, runs bashbasicsbyvk_upgrade_install with BVK_REINSTALL_FRESH=1 (new: --no-cache-dir, so pip rebuilds here), then execs `o` again with BVK_HEALED=1; asks at most once a day per machine type, never without a terminal, BVK_NO_HEAL=1 turns it off. Tests: tests/wheel_target.sh, tests/engine_heal.sh, tests/engine_target.sh extended; registered in tests.list and covers.map. Follow-up of the 2026 engine_target work: any new per-machine file must be named bvk-<engine>-<os>-<arch> or setup.py will not select it.

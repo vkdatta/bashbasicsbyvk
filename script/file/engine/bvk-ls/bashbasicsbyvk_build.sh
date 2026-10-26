@@ -3,6 +3,11 @@
 set -euo pipefail
 
 # One build script for both C engines: bvk-fr/bashbasicsbyvk_build.sh runs this one with BVK_NAME=bvk-fr BVK_DIR=<its folder>.
+# Targets, in four groups (BVK_ONLY="linux darwin" builds just those; default = every group this machine can build):
+#   linux    {arm64 amd64 arm 386}   glibc cross gcc, static            (apt: gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu gcc-arm-linux-gnueabihf gcc-i686-linux-gnu)
+#   android  {arm64 amd64 arm}       NDK clang, bionic                  (REQUIRE_ANDROID=1 makes a missing NDK an error)
+#   darwin   {arm64 amd64}           Apple clang on a Mac, else zig cc  (REQUIRE_DARWIN=1)
+#   freebsd  {amd64}                 zig cc                             (REQUIRE_FREEBSD=1)
 NAME="${BVK_NAME:-bvk-ls}"
 cd "${BVK_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
 
@@ -20,6 +25,11 @@ CFLAGS_COMMON=(
 
 SRCS=(src/*.c)
 
+want() { case " ${BVK_ONLY:-linux android darwin freebsd} " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+
+# macOS / FreeBSD headers hide POSIX / BSD names under strict -std=c11; gnu11 drops __STRICT_ANSI__ (same code, no extra names needed)
+CFLAGS_BSD=("${CFLAGS_COMMON[@]/-std=c11/-std=gnu11}")
+
 if [ "${1:-}" = native ]; then
   make -s -f bashbasicsbyvk_Makefile clean
   make -s -f bashbasicsbyvk_Makefile CC="${CC:-cc}"
@@ -29,45 +39,23 @@ fi
 
 default_cc() {
   case "$1" in
-    arm64)
-      echo "${CC_arm64:-aarch64-linux-gnu-gcc}"
-      ;;
-    amd64)
-      echo "${CC_amd64:-x86_64-linux-gnu-gcc}"
-      ;;
-    arm)
-      echo "${CC_arm:-arm-linux-gnueabihf-gcc}"
-      ;;
-    *)
-      echo "Unsupported architecture: $1" >&2
-      return 1
-      ;;
+    arm64) echo "${CC_arm64:-aarch64-linux-gnu-gcc}" ;;
+    amd64) echo "${CC_amd64:-x86_64-linux-gnu-gcc}" ;;
+    arm)   echo "${CC_arm:-arm-linux-gnueabihf-gcc}" ;;
+    386)   echo "${CC_386:-i686-linux-gnu-gcc}" ;;
+    *)     echo "Unsupported architecture: $1" >&2; return 1 ;;
   esac
 }
 
-for a in arm64 amd64 arm; do
-  cc="$(default_cc "$a")"
-
-  if [ "$a" = arm ]; then
-    $cc \
-      "${CFLAGS_COMMON[@]}" \
-      -static \
-      -s \
-      "${SRCS[@]}" \
-      -o "${NAME}-linux-$a" \
-      -pthread
-  else
-    $cc \
-      "${CFLAGS_COMMON[@]}" \
-      -static-pie \
-      -s \
-      "${SRCS[@]}" \
-      -o "${NAME}-linux-$a" \
-      -pthread
-  fi
-
-  echo "built ${NAME}-linux-$a"
-done
+if want linux; then
+  for a in arm64 amd64 arm 386; do
+    cc="$(default_cc "$a")"
+    # static-pie where glibc supports it everywhere (64-bit); plain static for the 32-bit CPUs
+    case "$a" in arm|386) link=(-static) ;; *) link=(-static-pie) ;; esac
+    $cc "${CFLAGS_COMMON[@]}" "${link[@]}" -s "${SRCS[@]}" -o "${NAME}-linux-$a" -pthread
+    echo "built ${NAME}-linux-$a"
+  done
+fi
 
 # ── Android (bionic) builds ────────────────────────────────────────────────
 # The glibc static builds above cannot run on Android: the Android linker
@@ -90,7 +78,7 @@ find_ndk() {
   return 1
 }
 
-if NDK="$(find_ndk)"; then
+if want android && NDK="$(find_ndk)"; then
   BIN="$(echo "$NDK"/toolchains/llvm/prebuilt/*/bin)"
   for pair in \
     "arm64:aarch64-linux-android${ANDROID_API}-clang" \
@@ -106,7 +94,43 @@ if NDK="$(find_ndk)"; then
       -o "${NAME}-android-$a"
     echo "built ${NAME}-android-$a"
   done
-else
+elif want android; then
   echo "Android NDK not found; skipping ${NAME}-android-* (set ANDROID_NDK_HOME)" >&2
   if [ "${REQUIRE_ANDROID:-0}" = 1 ]; then exit 1; fi
+fi
+
+# ── macOS (darwin) builds ─────────────────────────────────────────────────────────────────────────────────────────────
+# On a Mac: Apple clang, one -arch per CPU (the macos runner can build both).  Elsewhere: zig cc (bundles the macOS SDK stubs).
+# macOS has no static linking, so these are normal dynamic executables; the minimum macOS is the oldest Go supports (10.15 / 11).
+if want darwin; then
+  built=0
+  for pair in "arm64:aarch64-macos:11.0" "amd64:x86_64-macos:10.15"; do
+    a="${pair%%:*}"; rest="${pair#*:}"; zt="${rest%%:*}"; minos="${rest#*:}"
+    out="${NAME}-darwin-$a"
+    if [ "$(uname -s)" = Darwin ]; then
+      arch="$a"; [ "$a" = amd64 ] && arch=x86_64
+      cc -arch "$arch" -mmacosx-version-min="$minos" "${CFLAGS_BSD[@]}" "${SRCS[@]}" -o "$out" -pthread
+      strip -x "$out"
+    elif command -v zig >/dev/null 2>&1; then
+      zig cc -target "$zt" "${CFLAGS_BSD[@]}" -s "${SRCS[@]}" -o "$out" -pthread
+    else
+      continue
+    fi
+    echo "built $out"; built=1
+  done
+  if [ "$built" = 0 ]; then
+    echo "no macOS toolchain (a Mac, or zig); skipping ${NAME}-darwin-*" >&2
+    if [ "${REQUIRE_DARWIN:-0}" = 1 ]; then exit 1; fi
+  fi
+fi
+
+# ── FreeBSD builds (zig cc: cross-compiles against FreeBSD libc stubs; the result is a normal dynamic FreeBSD executable) ─────────
+if want freebsd; then
+  if command -v zig >/dev/null 2>&1; then
+    zig cc -target x86_64-freebsd "${CFLAGS_BSD[@]}" -s "${SRCS[@]}" -o "${NAME}-freebsd-amd64" -pthread
+    echo "built ${NAME}-freebsd-amd64"
+  else
+    echo "zig not found; skipping ${NAME}-freebsd-* (https://ziglang.org/download/)" >&2
+    if [ "${REQUIRE_FREEBSD:-0}" = 1 ]; then exit 1; fi
+  fi
 fi

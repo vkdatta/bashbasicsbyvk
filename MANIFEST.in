@@ -1,1 +1,1 @@
-recursive-include script *.c *.h *.go go.mod bashbasicsbyvk_Makefile bashbasicsbyvk_build.sh .gitignore bvk-ls-linux-* bvk-ls-android-* bvk-xfer-linux-* bvk-xfer-android-* bvk-fr-linux-* bvk-fr-android-*
+recursive-include script *.c *.h *.go go.mod bashbasicsbyvk_Makefile bashbasicsbyvk_build.sh .gitignore bvk-ls-* bvk-fr-* bvk-xfer-*

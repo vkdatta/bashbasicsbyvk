@@ -30,6 +30,8 @@ buffer_sets|fast|40|bash tests/buffer_sets.sh|
 adf_registry|fast|20|bash tests/adf_registry.sh|
 cmd_docs|fast|30|bash tests/cmd_docs.sh|
 engine_target|fast|20|bash tests/engine_target.sh|
+wheel_target|fast|120|bash tests/wheel_target.sh|python3
+engine_heal|fast|40|bash tests/engine_heal.sh|python3
 smartload|fast|90|bash tests/smartload.sh|python3
 settings_desc|fast|40|bash tests/settings_desc.sh|python3
 delete_confirm|fast|30|bash tests/delete_confirm.sh|

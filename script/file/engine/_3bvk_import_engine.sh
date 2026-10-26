@@ -8,6 +8,7 @@ _lt_b "load cheatcode"; source "bashbasicsbyvk_cheatcode.sh"; _lt_e
 _lt_b "load viewport"; source "bashbasicsbyvk_viewport.sh"; _lt_e
 _lt_b "load mouse"; source "bashbasicsbyvk_mouse.sh"; _lt_e
 _lt_b "load engine_target"; source "bashbasicsbyvk_engine_target.sh"; _lt_e
+_lt_b "load engine_heal"; source "bashbasicsbyvk_engine_heal.sh"; _lt_e
 _lt_b "load displayer"; source "bashbasicsbyvk_displayer.sh"; _lt_e
 _lt_b "load browse"; source "bashbasicsbyvk_browse.sh"; _lt_e
 _lt_b "load health"; source "bashbasicsbyvk_health.sh"; _lt_e

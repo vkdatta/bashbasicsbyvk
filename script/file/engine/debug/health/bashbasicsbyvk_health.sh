@@ -62,16 +62,22 @@ _hl_noexec() {
     END { if (best==0) exit 2; if (opts ~ /(^|,)noexec(,|$)/) exit 0; exit 1 }' /proc/mounts
 }
 
-# ELF header → _HL_ELF = notelf | <class>:<machine>:<type>   (machine: amd64 arm64 arm x86 other)
+# Executable header → _HL_ELF = notelf | <class>:<machine>:<type>   (machine: amd64 arm64 arm 386 other)
+# ELF (linux, android, freebsd) and 64-bit little-endian Mach-O (darwin) both answer in the same shape; a Mach-O reports type MACHO.
 _hl_elf() {
   local hex cls mach typ
   hex="$(od -An -tx1 -N20 -v "$1" 2>/dev/null | tr -d ' \n')"
+  if [ "${hex:0:8}" = "cffaedfe" ]; then            # Mach-O 64: cputype is a little-endian word at byte 4
+    case "${hex:8:8}" in 0c000001) mach=arm64 ;; 07000001) mach=amd64 ;; *) mach="other(${hex:8:8})" ;; esac
+    _HL_ELF="64:$mach:MACHO"; return 0
+  fi
   if [ "${hex:0:8}" != "7f454c46" ]; then _HL_ELF="notelf"; return 1; fi
   case "${hex:8:2}" in 01) cls=32 ;; 02) cls=64 ;; *) cls=? ;; esac
   case "${hex:36:4}" in
-    3e00) mach=amd64 ;; b700) mach=arm64 ;; 2800) mach=arm ;; 0300) mach=x86 ;; *) mach="other(${hex:36:4})" ;;
+    3e00) mach=amd64 ;; b700) mach=arm64 ;; 2800) mach=arm ;; 0300) mach=386 ;; *) mach="other(${hex:36:4})" ;;
   esac
   case "${hex:32:4}" in 0200) typ=EXEC ;; 0300) typ=DYN/PIE ;; *) typ="type-${hex:32:4}" ;; esac
+  [ "${hex:14:2}" = "09" ] && typ="$typ/FreeBSD"
   _HL_ELF="$cls:$mach:$typ"
 }
 
@@ -81,7 +87,7 @@ _hl_explain() {                              # _hl_explain <rc> <stderr> <bin>
   case "$err" in
     *"Exec format error"*)
       _HL_WHY="Exec format error — the binary was built for a different CPU/OS than this machine"
-      _HL_FIX="Rebuild/ship the right bvk-ls-<os>-<arch> (CI: .github/workflows/build.yml) and check the arch name mapping in _bvk_go_bin" ;;
+      _HL_FIX="Rebuild/ship the right bvk-ls-<os>-<arch> (CI: .github/workflows/build.yml) and check the arch name mapping in _bvk_engine_target" ;;
     *PHDR*|*"broken executable"*)
       _HL_WHY="the Android linker refused it: this is a glibc static-pie build (no PT_PHDR)"
       _HL_FIX="On Android _bvk_go_bin must pick bvk-ls-android-<arch> (NDK build). Check 'uname -o' prints Android and that the android binary shipped" ;;
@@ -312,11 +318,11 @@ _hl_check_xfer() {                            # _hl_check_xfer <path> <expected-
     local em="${_HL_ELF#*:}"; em="${em%%:*}"
     if [ -n "$xm" ] && [ "$em" != "$xm" ]; then
       _HL_WHY="built for $em but this machine is $xm"
-      _HL_FIX="ship/choose bvk-xfer-<os>-$xm (bashbasicsbyvk_build.sh in engine/bvk-xfer builds all six)"; return 1
+      _HL_FIX="ship/choose bvk-xfer-<os>-$xm (bashbasicsbyvk_build.sh in engine/bvk-xfer builds them all)"; return 1
     fi
   else
-    _HL_WHY="not an ELF executable (a text/HTML error page saved as a binary, or a Git-LFS pointer?)"
-    _HL_FIX="re-install; check the file begins with 'ELF': head -c 4 $b"; return 1
+    _HL_WHY="not an ELF / Mach-O executable (a text/HTML error page saved as a binary, or a Git-LFS pointer?)"
+    _HL_FIX="re-install; check the file begins with 'ELF' (or is a Mach-O on macOS): head -c 4 $b"; return 1
   fi
   if [ ! -x "$b" ]; then
     _HL_WHY="no execute permission"; _HL_FIX="chmod +x $b"; return 1
@@ -388,7 +394,7 @@ _hl_xfer_report() {
   fi
   _bvk_engine_target; _m="$_bet_m"; _os="$_bet_os"
   if [ -z "$_m" ]; then
-    _hl_bad "CPU '$(uname -m)' has no bvk-xfer build (supported: arm64, amd64, arm)"
+    _hl_bad "CPU '$(uname -m)' has no bvk-xfer build (supported: arm64, amd64, arm, 386 on linux; arm64, amd64 on android and darwin; amd64 on freebsd)"
     _hl_xf "unsupported CPU '$(uname -m)'" "add it to _bvk_xfer_bin and engine/bvk-xfer/bashbasicsbyvk_build.sh"
   else
     _hl_ok "this machine should use:  bvk-xfer-$_os-$_m"
@@ -516,8 +522,8 @@ _hl_report() {
   _hl_h "3  expected binary"
   _bvk_engine_target; _m="$_bet_m"; _os="$_bet_os"
   if [ -z "$_m" ]; then
-    _hl_bad "CPU '$(uname -m)' has no prebuilt bvk-ls (supported: aarch64/arm64, x86_64/amd64, armv7*/armv8l)"
-    _hl_find "unsupported CPU '$(uname -m)'" "add it to the arch case in _bvk_go_bin and to bashbasicsbyvk_build.sh / build.yml"
+    _hl_bad "CPU '$(uname -m)' has no prebuilt bvk-ls (supported: aarch64/arm64, x86_64/amd64, armv7*/armv8l, i386..i686 on linux)"
+    _hl_find "unsupported CPU '$(uname -m)'" "add it to _bvk_engine_target (engine/bashbasicsbyvk_engine_target.sh) and to bashbasicsbyvk_build.sh / build.yml"
   else
     _hl_ok "this machine should use:  bvk-ls-$_os-$_m"
   fi
