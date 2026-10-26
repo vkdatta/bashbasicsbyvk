@@ -70,11 +70,12 @@ jobs:
             gcc-i686-linux-gnu \
             libc6-dev-i386-cross
 
-      # zig cc cross-compiles the FreeBSD C engines (no FreeBSD machine needed)
+      # zig cc cross-compiles the FreeBSD C engines (no FreeBSD machine needed).
+      # Needs Zig >= 0.15: FreeBSD libc headers/stubs are not bundled in 0.13/0.14 (the 'stdio.h' file not found failure).
       - name: Set up Zig
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.13.0
+          version: 0.15.2
 
       - name: Set up Go
         uses: actions/setup-go@v5

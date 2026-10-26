@@ -125,9 +125,10 @@ if want darwin; then
 fi
 
 # ── FreeBSD builds (zig cc: cross-compiles against FreeBSD libc stubs; the result is a normal dynamic FreeBSD executable) ─────────
+# Needs zig >= 0.15 and an explicit FreeBSD version: older zig has no FreeBSD libc headers, and the default target (freebsd.13) has no libc in zig.
 if want freebsd; then
   if command -v zig >/dev/null 2>&1; then
-    zig cc -target x86_64-freebsd "${CFLAGS_BSD[@]}" -s "${SRCS[@]}" -o "${NAME}-freebsd-amd64" -pthread
+    zig cc -target x86_64-freebsd.14.0 "${CFLAGS_BSD[@]}" -s "${SRCS[@]}" -o "${NAME}-freebsd-amd64" -pthread
     echo "built ${NAME}-freebsd-amd64"
   else
     echo "zig not found; skipping ${NAME}-freebsd-* (https://ziglang.org/download/)" >&2
