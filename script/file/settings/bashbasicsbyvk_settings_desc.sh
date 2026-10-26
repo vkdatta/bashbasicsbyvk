@@ -1,9 +1,9 @@
 declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 # bashbasicsbyvk_settings_desc.sh — a plain-words explanation of EVERY Settings screen and row
 # ════════════════════════════════════════════════════════════════════════════
-#  Shown above the suggestion row (the dim row right above "Select:") of every Settings screen: the text of the HIGHLIGHTED row,
-#  or of the screen itself while nothing is highlighted.  Written for a person who has never heard of a "buffer" or a "nuke time":
-#  what it does, when to change it, what is safe.  Type  ?  +  Enter on a Settings screen to read the whole text when it is long.
+#  The text of the SCREEN (key  <screen title>|*) is shown in the header of every Settings screen, between the title and the first rule.
+#  The text of a ROW (key  <screen title>|<row tag>) is read with  ?  +  Enter  on the highlighted row.  Written for a person who has never
+#  heard of a "buffer" or a "nuke time": what it does, when to change it, what is safe.  A long screen text is cut and  ?  shows all of it.
 #
 #  Keys are  <screen title>|<row tag>  (the title and tags are the ones the screen gives _st_run / _st_add) and  <screen title>|*  for the screen.
 #  A key can be made specific with a prefix:  "<parent screen>›<title>|<tag>"  or, inside Menu specific,  "<menu name>›<title>|<tag>".
@@ -469,50 +469,27 @@ _st_desc_wrap() {
   return 0
 }
 
-# How many lines the explanation of THIS screen takes: the tallest text among its rows and the screen's own, cut at a third of the screen.
-# The block must keep ONE height while the highlight moves: the Settings block is erased and redrawn by row count, so a block that grows and
-# shrinks with the highlighted row would move the prompt up and down and leave a blank row under it (and the touch / wheel maths would be off).
-# Uses _st_draw's  rows cols title parent_title cur  and the screen's  _st_tag _st_kind ; cached per screen and size.
-_ST_DESC_H_KEY=""; _ST_DESC_H=0
-_st_desc_height() {
-  local max=$1 key="$title|$parent_title|$cols|$max|${_st_tag[*]}" keep_cur=$cur h=0 n
-  if [ "$key" = "$_ST_DESC_H_KEY" ]; then return 0; fi
-  for (( cur = -1; cur < ${#_st_tag[@]}; cur++ )); do
-    _st_desc_for
-    [ -n "$_ST_DESC_TXT" ] || continue
-    _st_desc_wrap "$_ST_DESC_TXT" $(( cols - 4 ))
-    n=${#_ST_DESC_ALL[@]}; (( n > h )) && h=$n
-  done
-  cur=$keep_cur
-  (( h > max )) && h=$max
-  _ST_DESC_H=$h; _ST_DESC_H_KEY="$key"; _ST_DESC_KEY=""        # the wrap cache was used for the scan: rebuild it for the highlighted row
-  return 0
-}
-
-# fills _ST_DESC_LN (the lines drawn above the suggestion row) and _ST_DESC_N (how many); uses _st_draw's  rows cols.
-# At most a third of the screen: a long text is cut with … and  ?  + Enter shows all of it.  The block has the same height on every row of a screen
-# (shorter texts are padded with empty lines), see _st_desc_height.
+# fills _ST_DESC_LN (the lines drawn in the header, between the title and the rule) and _ST_DESC_N (how many); uses _st_draw's  rows cols.
+# The header always shows the text of the SCREEN (key  <screen title>|*), never the text of the highlighted row, so the block keeps ONE height
+# while the highlight moves (the block is erased and redrawn by row count) and no blank padding is needed.  The text of a row is read with  ?.
+# At most a third of the screen: a long text is cut with … and  ?  + Enter shows all of it.  A screen without a text has 0 lines.
 _st_desc_prepare() {
   _ST_DESC_N=0; _ST_DESC_TRUNC=0; _ST_DESC_LN=()
   (( rows >= 18 )) || return 0
-  local max=$(( rows / 3 )) last
+  local max=$(( rows / 3 )) last cur=-1                    # cur=-1 (local, shadows the caller's): _st_desc_for gives the screen's own text
   (( max < 3 )) && max=3
   (( max > rows - 15 )) && max=$(( rows - 15 ))
   (( max >= 2 )) || return 0
-  _st_desc_height "$max"
-  (( _ST_DESC_H > 0 )) || return 0
   _st_desc_for
-  if [ -n "$_ST_DESC_TXT" ]; then
-    if [ "$cols|$_ST_DESC_TXT" != "$_ST_DESC_KEY" ]; then _ST_DESC_KEY="$cols|$_ST_DESC_TXT"; _st_desc_wrap "$_ST_DESC_TXT" $(( cols - 4 )); fi
-    if (( ${#_ST_DESC_ALL[@]} > max )); then
-      _ST_DESC_LN=("${_ST_DESC_ALL[@]:0:max}"); _ST_DESC_TRUNC=1
-      last="${_ST_DESC_LN[max-1]}"; (( ${#last} > cols - 17 )) && last="${last:0:cols-17}"
-      _ST_DESC_LN[max-1]="${last}… (? = all)"
-    else
-      _ST_DESC_LN=("${_ST_DESC_ALL[@]}")
-    fi
+  [ -n "$_ST_DESC_TXT" ] || return 0
+  if [ "$cols|$_ST_DESC_TXT" != "$_ST_DESC_KEY" ]; then _ST_DESC_KEY="$cols|$_ST_DESC_TXT"; _st_desc_wrap "$_ST_DESC_TXT" $(( cols - 2 )); fi
+  if (( ${#_ST_DESC_ALL[@]} > max )); then
+    _ST_DESC_LN=("${_ST_DESC_ALL[@]:0:max}"); _ST_DESC_TRUNC=1
+    last="${_ST_DESC_LN[max-1]}"; (( ${#last} > cols - 17 )) && last="${last:0:cols-17}"
+    _ST_DESC_LN[max-1]="${last}… (? = all)"
+  else
+    _ST_DESC_LN=("${_ST_DESC_ALL[@]}")
   fi
-  while (( ${#_ST_DESC_LN[@]} < _ST_DESC_H )); do _ST_DESC_LN+=(""); done
   _ST_DESC_N=${#_ST_DESC_LN[@]}
   return 0
 }

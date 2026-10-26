@@ -151,8 +151,8 @@ So before you create anything, work in this order:
    - `VK_SMARTLOAD=0` turns it off, `VK_SMARTLOAD_GRACE_MS=2000` sets the delay (default 2 s). No terminal (pipes, tests) = every call is a no-op.
 
 8. **Every Settings screen and row explains itself.** `script/file/settings/bashbasicsbyvk_settings_desc.sh` holds one plain-words text per screen and per row
-   (key `<screen title>|<row tag>`, `<screen title>|*` for the screen; `<parent>›<title>|<tag>` when two screens share a title). `_st_draw` shows the text of the highlighted row
-   above the suggestion row, `?` shows all of it. A new Settings row or screen adds its line there, written for a person who has never heard of the feature.
+   (key `<screen title>|<row tag>`, `<screen title>|*` for the screen; `<parent>›<title>|<tag>` when two screens share a title). `_st_draw` shows the text of the screen
+   in the header (between the title and the first rule); the text of a row is read with `?` on the highlighted row. A new Settings row or screen adds its line there, written for a person who has never heard of the feature.
 
 9. **A list that exists twice is generated from one source, and a test fails when a copy goes stale.** What is generated today (add to this list, do not hand-copy):
    - **Footer keys.** A generic key (`u` `q` `z` `rf`) is passed to `_mc_footer` / `_mc_footer_register` as the BARE key and takes its label from `_MC_KEYLABEL`

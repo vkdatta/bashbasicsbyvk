@@ -1,17 +1,18 @@
 declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 # bashbasicsbyvk_settings_ui.sh — one small menu engine for every Settings screen
 # ════════════════════════════════════════════════════════════════════════════
-#  Styled exactly like the main menu (header · rule · numbered rows · rule ·
+#  Styled exactly like the main menu (header · what this screen is · rule · numbered rows · rule ·
 #  footer of suggested commands · "Select:" prompt):
 #
-#     ⚙️ Settings
+#     ⚙️ Settings › Display
+#
+#     How the list of files looks and behaves. Choose a row ...      (the screen's own text, see settings_desc.sh)
 #        ─────────────────────────────
 #      1) Hidden files        hide ›
 #      2) Sort order          A → Z ›
-#      3) Animation           pop / carpet ›
 #        ─────────────────────────────
-#     u) Back to main menu   q) Close   ↑↓) Move
-#     Type 1-3, then enter to choose
+#     u) Back   q) Close settings
+#
 #     Select:
 #
 #  Keys   Typing works like the main menu's "Select:" prompt: type a row
@@ -246,17 +247,13 @@ _st_draw() {
   done
 
   # footer = suggested commands (same two-step style as the main menu)
-  if (( _st_depth > 1 )); then f1="u) Back   q) Close settings   ↑↓) Move"; else f1="u) Back to main menu   q) Close   ↑↓) Move"; fi
+  if (( _st_depth > 1 )); then f1="u) Back   q) Close settings"; else f1="u) Up   q) Close"; fi
   [ -n "${_st_f1_custom:-}" ] && f1="$_st_f1_custom"          # cc: its own footer
-  case "$_st_cnt" in
-    0) if [ -n "${fq:-}" ]; then f2="No match for =$fq   (= + enter clears)"; else f2="Nothing to choose here"; fi ;;
-    1) f2="Type 1, then enter to ${_st_verb:-choose}" ;;
-    *) f2="Type 1-$_st_cnt, then enter to ${_st_verb:-choose}" ;;
-  esac
-  if [ -z "${fq:-}" ] && (( _st_cnt > 1 )) && [ "${_st_choice:-0}" != 1 ]; then f2="$f2   =) Filter"; fi
+  f2=""                                                        # second footer line: empty (a blank spacer) unless there is something to say
+  if (( _st_cnt == 0 )); then if [ -n "${fq:-}" ]; then f2="No match for =$fq   (= + enter clears)"; else f2="Nothing to choose here"; fi; fi
   if [[ "$hint" == *"←/→"* ]]; then f2="clr) Clear all"; fi
   [ -n "${_st_f2_custom:-}" ] && f2="$_st_f2_custom"           # a choice menu lists its own keys (y) Yes   n) No ...)
-  (( _ST_DESC_TRUNC )) && f2="$f2   ?) Full text"              # the explanation above was cut: ? + Enter reads all of it
+  (( _ST_DESC_TRUNC )) && f2="${f2:+$f2   }?) Full text"       # the explanation in the header was cut: ? + Enter reads all of it
 
   _ST_FTR1="$f1"; _ST_FTR2="$f2"                           # what _st_click needs to find the footer key that was touched
 
@@ -268,6 +265,8 @@ _st_draw() {
   [ -n "${fq:-}" ] && hd="$hd   [filter: =$fq]"
   out+="$nl${_st_icon:-⚙️} ${hd:0:cols-4}"$'\n'                          # header
   out+="$nl"$'\n'                                         # linebreak under the header
+  local _dl
+  for _dl in "${_ST_DESC_LN[@]}"; do out+="$nl"$'\033[2m'"$_dl"$'\033[0m\n'; done      # what this screen is, in plain words (between the header and the rule)
   if (( top > 0 )); then out+="$nl   ▲ $top more above"$'\n'; else out+="$nl$_ST_RULE"$'\n'; fi
 
   for (( i=top; i<top+vis; i++ )); do
@@ -302,8 +301,6 @@ _st_draw() {
   out+="$nl"$'\n'                                         # linebreak above the footer
   out+="$nl${f1:0:cols-1}"$'\n'
   out+="$nl${f2:0:cols-1}"$'\n'
-  local _dl
-  for _dl in "${_ST_DESC_LN[@]}"; do out+="$nl"$'\033[2m'"  $_dl"$'\033[0m\n'; done      # what the highlighted setting does, in plain words (above the suggestion row)
   _st_hint_text "$buf" "$cols"
   if [ -n "$_ST_HINT" ]; then out+="$nl"$'\033[2m'"$_ST_HINT"$'\033[0m\n'      # the suggestion row, right above "Select:" (same place as the main menu)
   else out+="$nl"$'\n'; fi
@@ -343,19 +340,21 @@ _st_wipe() {
   prev=0
 }
 
-# a click / tap (called from _st_run; shares its locals).  The block is  prev = vis + 10  rows, the cursor is on its last row (Select:):
-#   rows from the top: blank · title · blank · ▲/rule · vis list rows · ▼/rule · blank · footer 1 · footer 2 · hint · Select
+# a click / tap (called from _st_run; shares its locals).  The block is  prev = vis + 10 + _ST_DESC_N  rows, the cursor is on its last row (Select:):
+#   rows from the top: blank · title · blank · description (_ST_DESC_N rows) · ▲/rule · vis list rows · ▼/rule · blank · footer 1 · footer 2 · hint · Select
 # click a row = highlight it and type its number · double click = and open / switch it · ▲ / ▼ = page.  _ST_CLICK_ACT=1: a row was opened.
+# click the path in the title ("Settings › Display": the part before the last ›) = go back to that screen (_st_crumb_tap), one tap like the file list's nav path.
 _ST_CLICK_ACT=0
 _st_click() {
   _ST_CLICK_ACT=0
   (( prev > 10 + _ST_DESC_N )) || return 0
   _bvk_mouse_prow || return 0
-  local vis=$(( prev - 10 - _ST_DESC_N )) rel i d=$(( _BVK_CROW - _MS_Y )) dn=$_ST_DESC_N
-  rel=$(( _MS_Y - ( _BVK_CROW - vis - 5 - dn ) ))     # 0 = the first list row on screen (the description rows sit between the footer and the suggestion row)
+  local vis=$(( prev - 10 - _ST_DESC_N )) rel i d=$(( _BVK_CROW - _MS_Y ))
+  rel=$(( _MS_Y - ( _BVK_CROW - vis - 5 ) ))     # 0 = the first list row on screen
   if (( d == 0 )); then _BVK_LAST_ITEM=""; _bvk_mouse_pass "$_BVK_PASS_TAP_MS"      # the Select: row: the next tap opens the keyboard
-  elif (( d == 2 + dn || d == 3 + dn )); then                    # footer 2 / footer 1: a key there needs a DOUBLE tap (it is typed and Enter pressed)
-    if _bvk_mouse_cell_key "$( (( d == 3 + dn )) && builtin printf '%s' "$_ST_FTR1" || builtin printf '%s' "$_ST_FTR2" )"; then
+  elif (( d == prev - 2 )); then _BVK_LAST_ITEM=""; _st_crumb_tap                    # the title row: a part of the path
+  elif (( d == 2 || d == 3 )); then                    # footer 2 / footer 1: a key there needs a DOUBLE tap (it is typed and Enter pressed)
+    if _bvk_mouse_cell_key "$( (( d == 3 )) && builtin printf '%s' "$_ST_FTR1" || builtin printf '%s' "$_ST_FTR2" )"; then
       _bvk_mouse_ftr_tap "$_MS_FKEY"
       case "$_MS_FACT" in
         run)  buf="$_MS_FTEXT"; navbuf=0; _ST_PEND_ENTER=1; _ST_CLICK_ACT=1 ;;
@@ -372,6 +371,21 @@ _st_click() {
   elif (( rel == -1 && top > 0 )); then _BVK_LAST_ITEM=""; _st_move -1 "$page"; _st_navbuf
   elif (( rel == vis && top + vis < ${#_st_lbl[@]} )); then _BVK_LAST_ITEM=""; _st_move 1 "$page"; _st_navbuf
   fi
+  return 0
+}
+
+# A tap on the path in the title row ("⚙️ Settings › Display").  A part before the last › takes you back to that screen: the screens
+# above this one close themselves (_ST_JUMP_DEPTH, checked at the top of every _st_run loop) until the depth of the tapped part is reached.
+# Only the Settings path: a screen with its own crumb (Pending ...) or none (cc) is left alone.  Runs inside _st_click (_MS_X = the column).
+_ST_JUMP_DEPTH=0
+_st_crumb_tap() {
+  [ "${_st_crumb-Settings}" = Settings ] && [[ "$path_title" == "Settings › "* ]] || return 0
+  declare -F _bvk_dispw >/dev/null 2>&1 || return 0
+  local c=$(( _MS_X - 1 )) off w
+  _bvk_dispw "${_st_icon:-⚙️} "; off=$_BVK_W                 # the icon and its space come first
+  _bvk_dispw "Settings"; w=$_BVK_W
+  # the first part owns its text and the " › " after it (a fingertip is wider than one cell); the last part is where you already are
+  if (( c >= off && c < off + w + 3 )); then _ST_JUMP_DEPTH=1; _st_back=1; fi
   return 0
 }
 
@@ -482,6 +496,10 @@ _st_run() {
       _st_number
       _lt_e
       need=0
+    fi
+    if (( _ST_JUMP_DEPTH > 0 )); then                 # a tap on the path of a screen below: close every screen above the one that was tapped
+      (( _st_depth > _ST_JUMP_DEPTH )) && break
+      _ST_JUMP_DEPTH=0
     fi
     n=${#_st_lbl[@]}
     if [ -n "${_st_start_num:-}" ]; then      # a choice menu starts on its default row

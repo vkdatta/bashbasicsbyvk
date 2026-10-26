@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Settings and Home screens showed the plain-words description of the highlighted row in a padded block under the footer, leaving blank gaps, plus a "Type 1-N ... =) Filter" footer line and "u) Back to main menu ... ↑↓) Move". Wanted: the screen's own text right under the title, a short footer, no gaps, and a tap on the "Settings" part of the path "Settings › Display" going back to that screen.
+
+HOW DID YOU DEBUG
+Read _st_draw, _st_click, _st_run in bashbasicsbyvk_settings_ui.sh and _st_desc_for / _st_desc_height / _st_desc_prepare in bashbasicsbyvk_settings_desc.sh; read the mouse engine (_bvk_mouse_cell_key, _bvk_mouse_hdr_hit) to copy its single-tap header rule. Ran only bash -n on both files and one smoke render of _st_draw through a small stub harness (header, description, rows, footer looked right). The click / tap path, the path-tap jump and the Home screen were NOT run: verified by reading only. No test tier was run (minor change: looks).
+
+CAUSE
+The description was tied to the highlighted row, so the block had to be padded to the tallest text of the screen (_st_desc_height) to keep one height, and it was drawn between the footer and the suggestion row. The click maths counted those rows between footer and hint.
+
+FIX
+settings_ui.sh: _st_draw prints the description lines between the title and the first rule; footer 1 is "u) Up   q) Close" on the top screen and "u) Back   q) Close settings" below it; footer 2 is a blank spacer unless there is something to say (no match, clr, custom keys, ?) Full text); _st_click offsets no longer include the description rows; new _st_crumb_tap + _ST_JUMP_DEPTH (checked at the top of the _st_run loop) so one tap on "Settings" in the title closes the screens above it. settings_desc.sh: _st_desc_prepare shows only the screen text (cur=-1), no padding; _st_desc_height and its cache removed. AGENTS.md rule 8 reworded. Row texts stay in the table and are read with ?.
