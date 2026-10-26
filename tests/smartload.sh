@@ -23,6 +23,8 @@ done
 raw="$(sed -n '/^run_file() {/,$p' "$S/file/loops/rloop/run/bashbasicsbyvk_run.sh" | grep -nP '(?<!_rf_go )(?<![\w./-])(python3 -u|python -u|node|deno run|ts-node|bash|sh|zsh|php|perl|ruby|java -jar|go run|swift|Rscript|julia|lua|runhaskell|coffee|dart run|dart|scala) "\$(file|out)"|&& "\$tmp"|^\s+"\$file"$|(?<!_rf_go )"\$exe" "\$file"' | head -3)"
 [ -z "$raw" ] && ok "run_file starts every program through _rf_go (_sl_launch)" || bad "run_file launches a program without _rf_go: $raw"
 grep -q '_sl_launch' "$S/file/engine/bashbasicsbyvk_smartload.sh" && ok "smartload has _sl_launch" || bad "smartload lost _sl_launch"
+# the smart menu hands the picked row\'s name to the loading bar (a number alone would only say "Working")
+grep -q '_lt_enter "\$_sm_result" "\$__sl_l"' "$S/file/engine/bashbasicsbyvk_smartmenu.sh" && ok "smartmenu passes the picked row's name as the bar's label" || bad "smartmenu no longer passes the row name to _lt_enter"
 # the read shim never lets a secret (read -s) reach the bar's label
 sed -n '/^_cm_read_fallback()/,/^}/p' "$S/file/engine/bashbasicsbyvk_smartmenu.sh" | grep -q '__cmf_lab' && ok "the read shim passes a neutral label for read -s" || bad "the read shim can print a typed secret in the bar"
 

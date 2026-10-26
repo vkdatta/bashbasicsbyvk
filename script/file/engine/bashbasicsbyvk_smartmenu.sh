@@ -885,7 +885,14 @@ _sm_run() {
       _sm_result=""
     fi
   fi
-  _lt_enter "$_sm_result"
+  # the loading bar's label: the name of the row that was picked (a number or a bare Enter would only say "Working")
+  local __sl_l="" __sl_i
+  if [ -n "${_SL_ON:-}" ] && ! $multi; then
+    for (( __sl_i=0; __sl_i < ${#_sm_rows_token[@]}; __sl_i++ )); do
+      [ -n "$_sm_result" ] && [ "${_sm_rows_token[$__sl_i]}" = "$_sm_result" ] && { __sl_l="${_sm_rows_text[$__sl_i]}"; break; }
+    done
+  fi
+  _lt_enter "$_sm_result" "$__sl_l"
   return 0
 }
 

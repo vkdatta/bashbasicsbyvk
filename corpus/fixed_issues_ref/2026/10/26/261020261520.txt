@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+The smartload loading bar was left out for waits that should have had one: a silent helper (python, node, a Go engine) that was only computing got no bar, because any non-listed child holding the terminal on stdin, stdout or stderr counted as its owner. Whether a bar showed depended on whether the call site happened to redirect stderr.
+
+1. HOW DID YOU DEBUG
+Read smartload.sh (old and new tree) and every _lt_enter / _sl_ready / _sl_hold call site, then ran the same snippets in a real pty against both trees with default settings (silent builtin wait, whitelisted tool, python / node helper with the tty on stderr, the same with 2>/dev/null, a job printing every 1.5 s, subshell Enter). The python and node helpers got no bar and the 2>/dev/null variant did. Follow-up of BB-261020260736-1 (_sl_owned made independent of the children file, which made it active on every /proc system).
+
+1. CAUSE
+_sl_owned treated every exec'd child with the terminal on fd 0, 1 or 2 as the terminal's owner unless its name was in a list of about 50 silent utilities, so ownership meant "inherited the tty", not "draws on it".
+
+1. FIX
+smartload.sh: _sl_owned is a positive test: the child is exec'd, fd 1 or fd 2 IS the terminal, and _sl_wrote says it has written (wchar in /proc/<pid>/io above 0; unreadable counts as written, the quiet side). A child that holds the terminal but is silent is a wait (_SL_SILENT, named in the log). stdin alone no longer counts. tests/smartload/pty_test.py section 17: silent python helper gets the bar; a tool that printed owns the terminal; a helper that is silent and then prints gets the bar until its first line. Lesson: bash -c 'a; b' execs its last command, so a test child needs a trailing  ; :  to stay a bash.
+
+2. ISSUE IN BRIEF
+The loading bar's delay was inconsistent: 2 s for Enter, 4 s for Left / Right / Space / click (even where Space / click run the same command as Enter, settings_ui _st_activate) and 1 s for a program's start-up. The same action behaved differently depending on the key, and anything under 2 s, or any job that printed more often than every 2 s, never showed a bar.
+
+2. HOW DID YOU DEBUG
+Read _sl_enter (the b letter), the animator's light / lgrace variables and the settings_ui call sites (370 click, 553 left / right, 559 space, 591 enter); measured the old and new tree in a pty (0.5 s wait, a click that takes 3 s, a job that prints every 1.5 s). Follow-up of BB-261020260736-2, which moved the delay from 0.2 s to 2 s and added the light Enter.
+
+2. CAUSE
+Two corrections to a delay that had drifted to 0.2 s went too far: the default became 2 s and a second, slower delay was added for some keys, so the bar rarely showed and never in the same place twice.
+
+2. FIX
+smartload.sh: one delay for every kind of Enter, the app start and a program's start-up (_SL_GRACE = 500000 µs, VK_SMARTLOAD_GRACE_MS still 50 to 5000); _SL_LIGHT, _SL_LGRACE and the animator letter b are gone. pty_test.py section 11 (0.5 s default) and 15 (left / right / space / click / enter behave the same). AGENTS.md rule 7 and the fileapi lib comment say 0.5 s.
+
+3. ISSUE IN BRIEF
+When a bar appeared there was no way to tell why: its label was only "Working" for a menu pick (the smart menu passed just the row token), and nothing recorded which Enter opened the wait, who closed it, why an Enter opened none (subshell, hold) or which child muted the bar.
+
+3. HOW DID YOU DEBUG
+Read _sl_label and the _lt_enter sites: only browse.sh passed a row name. Checked _sl_label on coloured rows ("3) [ ] Delete files") and numbers. Ran the debug log in the pty suite (section 19). Not run: the real app on a device; the smart menu change was checked by a static test and by _sl_label, not by driving a menu.
+
+3. CAUSE
+Smartload decided silently and the menu engine gave it a number, not a name.
+
+3. FIX
+smartmenu.sh (the _lt_enter at the end of the pick): finds the picked row's text and passes it as the 2nd argument (single choice only). smartload.sh: _sl_label strips colours, the "N)" number and the [ ]/[x]/[o] mark and cuts at 40 characters; new _sl_dbg / _sl_from and VK_SMARTLOAD_DEBUG=1 (file VK_SMARTLOAD_DEBUG_FILE, default $TMPDIR/bvk-smartload.log) with one line per decision in the foreground (ENTER opens a wait / Enter IGNORED / wait CLOSED by / HOLD / release / LAUNCH / output restarts the delay / wiped) and in the animator (armed / owned by / child silent / DRAWN / disarmed). tests/smartload/pty_test.py sections 18 and 19, tests/smartload.sh static check. AGENTS.md rule 7 documents it.

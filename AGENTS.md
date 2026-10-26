@@ -136,7 +136,7 @@ So before you create anything, work in this order:
 
 7. **Never wire a loading bar by hand: smartload draws it.** (`script/file/engine/bashbasicsbyvk_smartload.sh`; same idea as smartmenu.)
    - Wait time > loading bar. A wait starts at the person's Enter / tap (`_lt_enter`) and ends when the next prompt is up (`_lt_ready`, the `read` shim, or an engine about to
-     draw a screen: `_st_draw`, `_vp_render_fresh`, `_cm_text_read`). If it lasts more than ~2 s and the screen is quiet, the bar appears by itself ON the cursor's own row, in the cursor's place (the cursor is hidden while it shows; never a row below it);
+     draw a screen: `_st_draw`, `_vp_render_fresh`, `_cm_text_read`). If it lasts more than 0.5 s and the screen is quiet, the bar appears by itself ON the cursor's own row, in the cursor's place (the cursor is hidden while it shows; never a row below it);
      `echo` / `printf` / `clear` wipe it before they write and restart its clock. So a new command, menu or function that waits gets its bar with **no line of code**.
    - Do NOT add a `_lb_run`-style wrapper, a spinner, `\r` progress text or a bar of your own around a call that may be slow. (The old `bashbasicsbyvk_loadingbar.sh` and every `_lb_*` call are gone.)
    - Engine code that writes the terminal with `builtin printf` during a wait (moving the cursor, redrawing) calls `[ "${_SL_WANT:-0}" = 1 ] && _sl_pulse` first. Code that draws its OWN progress
@@ -146,8 +146,11 @@ So before you create anything, work in this order:
      that is showing is wiped and none is drawn until it ends. Every fileapi call that lets a transfer tool draw its bar sits between `_bb_progress_begin` and `_bb_progress_end` (one shared pair in
      `bashbasicsbyvk_fileapi_lib.sh`, outside any `$( )`); `tests/smartload` fails on a transfer call that is not wrapped.
    - Full-screen programs (nano, vim, less, htop ...) are not a wait: smartload wraps those names (end of `bashbasicsbyvk_smartload.sh`) so no bar is drawn while they run; a new full-screen tool adds its name to that list, never a hand-made `_sl_hold`.
-   - A child program that has the terminal (its own prompt or progress bar: gitpush, bvk-xfer, rclone, git ...) is not a wait: smartload sees it by itself (`_sl_owned`, via /proc) and draws no bar while it runs. Never put `exec ... 2>/dev/null` in app code: with no command, `exec` makes the redirect permanent (stderr = prompts and tool progress bars).
-   - `VK_SMARTLOAD=0` turns it off, `VK_SMARTLOAD_GRACE_MS=2000` sets the delay (default 2 s). No terminal (pipes, tests) = every call is a no-op.
+   - A child program that DRAWS on the terminal (its own prompt or progress bar: gitpush, bvk-xfer, rclone, git ...) is not a wait: smartload sees it by itself (`_sl_owned`, via /proc) and draws no bar while it runs.
+     The test is positive: the child is exec'd, its stdout or stderr is the terminal AND it has written something (wchar in /proc/<pid>/io); a silent helper (python, node, a Go engine that is only computing) is still a wait and gets the bar. Never add a tool's name to a list to "fix" this. Never put `exec ... 2>/dev/null` in app code: with no command, `exec` makes the redirect permanent (stderr = prompts and tool progress bars).
+   - `VK_SMARTLOAD=0` turns it off, `VK_SMARTLOAD_GRACE_MS=500` sets the delay (default 0.5 s). **One delay for everything**: Enter, click, Space, Left / Right, the app start and a program's start-up (`_sl_launch`) all use it; never add a "light" or "slow" variant of it. No terminal (pipes, tests) = every call is a no-op.
+   - **Every `_lt_enter` site names what was chosen** (2nd argument: the row's name; `_sl_label` strips colours, the `3)` number and the `[ ]` mark), so the bar never says just "Working" when a name is known.
+   - **Why did it show / not show?** `VK_SMARTLOAD_DEBUG=1` (file: `VK_SMARTLOAD_DEBUG_FILE`, default `$TMPDIR/bvk-smartload.log`) logs one line per decision: the Enter that opened a wait and who called it, an Enter that was ignored (subshell, hold), what closed the wait, the child that owned the terminal, when the bar was drawn and wiped. Read it before changing any smartload rule.
 
 8. **Every Settings screen and row explains itself.** `script/file/settings/bashbasicsbyvk_settings_desc.sh` holds one plain-words text per screen and per row
    (key `<screen title>|<row tag>`, `<screen title>|*` for the screen; `<parent>›<title>|<tag>` when two screens share a title). `_st_draw` shows the text of the screen

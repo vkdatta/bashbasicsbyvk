@@ -121,11 +121,11 @@ check(('GOT:hello' in o and not has_bar(o)), 'a child tool that owns the termina
 o = run_pty('_sl_ready; _sl_enter "" "" "Go"; bash -c \'sleep 1.6\' >/dev/null 2>&1; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
 check(has_bar(o), 'a child whose output is captured is still a wait: the bar shows', f'no bar for a silent child: {o[-200:]!r}')
 
-# 11) the delay is 2 s by default (no VK_SMARTLOAD_GRACE_MS): a wait of about 1 s shows nothing, a longer one shows the bar
-o = run_pty('_sl_ready; _sl_enter "" "" "Short"; sleep 1.2; _sl_ready; echo MARK_END', env={'VK_SMARTLOAD_GRACE_MS': None})   # lint-wait-ok: the wait is the behaviour under test
-check((not has_bar(o) and 'MARK_END' in o), 'default delay: a wait shorter than 2 s never shows a bar', f'a bar for a 1.2 s wait: {o[-160:]!r}')
-o = run_pty('_sl_ready; _sl_enter "" "" "Long"; sleep 3.2; _sl_ready; echo MARK_END', env={'VK_SMARTLOAD_GRACE_MS': None})   # lint-wait-ok: the wait is the behaviour under test
-check(has_bar(o), 'default delay: a wait longer than 2 s shows the bar', f'no bar after 3.2 s: {o[-160:]!r}')
+# 11) the delay is 0.5 s by default (no VK_SMARTLOAD_GRACE_MS): a wait of about 0.3 s shows nothing, a longer one shows the bar
+o = run_pty('_sl_ready; _sl_enter "" "" "Short"; sleep 0.3; _sl_ready; echo MARK_END', env={'VK_SMARTLOAD_GRACE_MS': None})   # lint-wait-ok: the wait is the behaviour under test
+check((not has_bar(o) and 'MARK_END' in o), 'default delay: a wait shorter than 0.5 s never shows a bar', f'a bar for a 0.3 s wait: {o[-160:]!r}')
+o = run_pty('_sl_ready; _sl_enter "" "" "Long"; sleep 1.2; _sl_ready; echo MARK_END', env={'VK_SMARTLOAD_GRACE_MS': None})   # lint-wait-ok: the wait is the behaviour under test
+check(has_bar(o), 'default delay: a wait longer than 0.5 s shows the bar', f'no bar after 1.2 s: {o[-160:]!r}')
 
 # 12) a transfer's PROGRESS bar always wins over the LOADING bar: begin wipes a bar that is already showing and keeps it away, end lets it come back.
 #     The pair is taken from the real fileapi lib (never a copy of it in the test).
@@ -138,7 +138,7 @@ check((p1 >= 0 and p2 > p1 and '░' not in o[p1:p2]), 'while the progress bar o
 check((p2 >= 0 and '░' in o[p2:]), 'after the progress bar has ended a real wait gets its loading bar again', f'no loading bar after the progress ended: {o[p2:][-160:]!r}')
 
 # 14) a program the person chose to run (run_file) is not our app: the wait is its start-up only, up to its FIRST WRITE (_sl_launch)
-#     (GRACE_MS=400 here: the start-up bar shows after 200 ms of silence; a "light" Enter needs 800 ms)
+#     (GRACE_MS=400 here: the start-up bar shows after the same 400 ms of silence as every other wait)
 L0 = '_sl_ready; _sl_enter "" "" "Select"; '                  # what run.sh has just done: Enter on the Select: prompt opened a wait
 o = run_pty(L0 + '_sl_launch myprog bash -c \'sleep 1.6\'; echo MARK_END')   # lint-wait-ok: a silent program: the start-up gap is the behaviour under test
 i, w, e = o.find('░'), o.find(WIPE), o.find('MARK_END')
@@ -163,17 +163,45 @@ o = run_pty(L0 + '_sl_launch myprog bash -c \'sleep 1.6\'; _sl_enter "" "" "Next
 i1 = o.find('Starting myprog'); i2 = o.find('Next')
 check((i1 >= 0 and i2 > i1), 'after the program has exited an app wait gets its bar again', f'no bar for the wait after the program: {o[-200:]!r}')
 
-# 15) not every Enter is a wait: a value flip (left / right / space / click) needs twice the delay, a real Enter does not
-o = run_pty('_sl_ready; _sl_enter left "Row"; sleep 0.6; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
-check((not has_bar(o) and 'MARK_END' in o), 'a light Enter (Left / Right / Space / click) does not flash a bar for a short wait', f'a bar for a value flip: {o[-160:]!r}')
-o = run_pty('_sl_ready; _sl_enter x "Row"; sleep 0.6; _sl_ready; echo MARK_END')   # lint-wait-ok: the control: the same wait after a real Enter
-check(has_bar(o), 'control: the same wait after a real Enter shows the bar', f'no bar after a real Enter: {o[-160:]!r}')
-o = run_pty('_sl_ready; _sl_enter space "Row"; sleep 1.6; _sl_ready; echo MARK_END')   # lint-wait-ok: a flip that really is slow still shows a bar
-check(has_bar(o), 'a value flip that really is slow still shows the bar', f'no bar for a slow flip: {o[-160:]!r}')
+# 15) ONE delay for every kind of Enter: Left / Right / Space / click / Enter all behave the same (no "light" variant)
+for k in ('left', 'right', 'space', 'click', 'enter'):
+    o = run_pty(f'_sl_ready; _sl_enter {k} "Row"; sleep 0.2; _sl_ready; echo MARK_END')   # lint-wait-ok: shorter than the grace: no bar for any key
+    check((not has_bar(o) and 'MARK_END' in o), f'{k}: a wait shorter than the delay shows no bar', f'a bar for a short {k}: {o[-160:]!r}')
+    o = run_pty(f'_sl_ready; _sl_enter {k} "Row"; sleep 0.9; _sl_ready; echo MARK_END')   # lint-wait-ok: longer than the grace: a bar for any key, with the same delay
+    check(has_bar(o), f'{k}: a wait longer than the delay shows the bar (same delay as every other key)', f'no bar for a slow {k}: {o[-160:]!r}')
 
 # 16) what the person typed into a secret prompt is never printed in the bar
 o = run_pty('_sl_ready; _sl_enter "hunter2" "" "Working"; sleep 1.2; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
 check((has_bar(o) and 'hunter2' not in o), 'a label override wins over the typed text (read -s passes "Working")', f'typed text in the bar: {o[-160:]!r}')
+
+# (inside the snippets a trailing  ; :  keeps  bash -c 'a; b'  from exec-ing its last command: the child must stay a bash, not become  sleep)
+# 17) ownership is a POSITIVE test: a child counts only when its stdout / stderr is the terminal AND it has written.  A silent helper is a wait.
+o = run_pty('_sl_ready; _sl_enter "" "" "Go"; python3 -c "import time; time.sleep(1.6)"; _sl_ready; echo MARK_END')   # lint-wait-ok: a silent python helper with the terminal as stderr
+check(has_bar(o), 'a silent helper (python, tty on stderr, nothing written yet) is a wait: the bar shows', f'no bar for a silent python helper: {o[-200:]!r}')
+o = run_pty('_sl_ready; _sl_enter "" "" "Go"; bash -c \'echo FIRST; sleep 1.6; :\'; _sl_ready; echo MARK_END')   # lint-wait-ok: a tool that prints at once and then works quietly
+check((not has_bar(o) and 'FIRST' in o), 'a tool that has printed to the terminal owns it: no bar, even while it is quiet afterwards', f'bar over a tool that had printed: {o[-200:]!r}')
+o = run_pty('_sl_ready; _sl_enter "" "" "Go"; bash -c \'sleep 0.9; echo LATE; sleep 1.2; :\'; _sl_ready; echo MARK_END')   # lint-wait-ok: silent first, prints later
+b, lt = o.find('░'), o.find('LATE')
+check((b >= 0 and lt > b and '░' not in o[lt:o.find('MARK_END')]), 'the bar shows while the helper is silent and is gone for good once it prints', f'bar@{b} late@{lt}: {o[-240:]!r}')
+
+# 18) the label names what was picked: colours, the "3)" number and the [ ] mark are dropped
+o = run_pty('_sl_ready; _sl_enter x "$(printf \'\\033[1m3) [ ] Delete files\\033[0m\')"; sleep 0.9; _sl_ready; echo MARK_END')   # lint-wait-ok: the label is what is checked
+check(('Working on Delete files' in o and '[ ]' not in o.split('░')[-1][:60]), 'the label is the picked row\'s name, without colours, number and mark', f'label: {o[-200:]!r}')
+
+# 19) VK_SMARTLOAD_DEBUG=1: one line per decision says why a bar showed or did not
+with tempfile.TemporaryDirectory() as td:
+    lg = os.path.join(td, 'sl.log')
+    dbg = {'VK_SMARTLOAD_DEBUG': '1', 'VK_SMARTLOAD_DEBUG_FILE': lg}
+    run_pty('_sl_ready; _sl_enter enter "Row"; sleep 0.9; _sl_ready; ( _sl_enter enter "Sub" ); echo MARK_END', env=dbg)   # lint-wait-ok: a wait that draws a bar, then an Enter in a subshell
+    txt = open(lg, encoding='utf-8').read() if os.path.exists(lg) else ''
+    check(('ENTER opens a wait' in txt and "label='Working on Row'" in txt), 'debug log: names the Enter that opened the wait and its label', f'log: {txt[-400:]!r}')
+    check(('bar DRAWN' in txt and 'wait CLOSED' in txt), 'debug log: says when the bar was drawn and what closed the wait', f'log: {txt[-400:]!r}')
+    check('Enter IGNORED' in txt and 'subshell' in txt, 'debug log: says why an Enter in a subshell opened no wait', f'log: {txt[-400:]!r}')
+    run_pty('_sl_ready; _sl_enter enter "Row"; bash -c \'echo hi; sleep 1.2; :\'; _sl_ready', env=dbg)   # lint-wait-ok: a tool owns the terminal
+    txt = open(lg, encoding='utf-8').read()
+    check('terminal owned by' in txt, 'debug log: names the child that owned the terminal', f'log: {txt[-400:]!r}')
+o = run_pty('_sl_ready; _sl_enter enter "Row"; sleep 0.9; _sl_ready; echo MARK_END', env={'VK_SMARTLOAD_DEBUG': None})   # lint-wait-ok: debug off: no log, bar as usual
+check(has_bar(o), 'debug off (the default): nothing changes', f'bar lost with debug off: {o[-160:]!r}')
 
 # 13) every call that lets a transfer tool draw its own bar sits between _bb_progress_begin and _bb_progress_end (a new call site that forgets it fails here)
 import re
