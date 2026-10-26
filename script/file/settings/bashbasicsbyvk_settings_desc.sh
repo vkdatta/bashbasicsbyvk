@@ -490,6 +490,7 @@ _st_desc_prepare() {
   else
     _ST_DESC_LN=("${_ST_DESC_ALL[@]}")
   fi
+  _ST_DESC_LN+=("")                                          # one blank line between the text and the rule
   _ST_DESC_N=${#_ST_DESC_LN[@]}
   return 0
 }

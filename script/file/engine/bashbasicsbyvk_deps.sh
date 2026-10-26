@@ -522,9 +522,9 @@ _dep_ask() {
   fi
   if declare -F _bvk_yn >/dev/null 2>&1; then          # the shared choice menu: in the app, and in a tool run on its own (its import file loads it)
     if [ ! -t 0 ] && [ "${_DEP_CLI:-0}" = 1 ]; then   # stdin is the tool's data (cat file | tool): ask on the terminal, never on the data
-      _bvk_yn ans "Do you want to install them?" -t "Installer" -i "📦" -d n </dev/tty || return 1
+      _bvk_yn ans "Do you want to install them?" -t "Installer" -i "📦" </dev/tty || return 1
     else
-      _bvk_yn ans "Do you want to install them?" -t "Installer" -i "📦" -d n || return 1
+      _bvk_yn ans "Do you want to install them?" -t "Installer" -i "📦" || return 1
     fi
     [ "$ans" = y ]; return $?
   fi

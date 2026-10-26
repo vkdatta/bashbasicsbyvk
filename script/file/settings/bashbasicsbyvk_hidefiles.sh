@@ -73,7 +73,7 @@ _hidden_decide() {
       _hid_inc=false
       _hidden_any "$@" || return 0            # nothing hidden in there: no need to ask
       # u (back) and q (close) are the menu's own keys: they cancel the whole flow and make _bvk_yn return 1
-      _bvk_yn a "Include hidden files in $what?" -d n -i "👁️" || { echo "🚫 Cancelled."; return 1; }
+      _bvk_yn a "Include hidden files in $what?" -i "👁️" || { echo "🚫 Cancelled."; return 1; }
       [ "$a" = y ] && _hid_inc=true
       return 0 ;;
     *) [ "${show_hidden_files:-false}" = true ] && _hid_inc=true || _hid_inc=false ;;

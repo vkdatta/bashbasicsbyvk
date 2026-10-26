@@ -56,7 +56,7 @@ _bb_authed_put() {
 
     if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
       echo "🔴  ${msg}" >&2
-      _bvk_yn ans "Proceed at 1.2x credit cost?" -d n
+      _bvk_yn ans "Proceed at 1.2x credit cost?"
       if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
         confirmed=true
         continue
@@ -465,7 +465,7 @@ _bb_upload_init() {
 
     if [ "$http_status" == "409" ] && [ "$err_type" == "oversized_confirmation_required" ] && ! $confirmed; then
       echo "🔴  ${msg}" >&2
-      _bvk_yn ans "Proceed at 1.2x credit cost?" -d n
+      _bvk_yn ans "Proceed at 1.2x credit cost?"
       if [[ "$ans" == "y" || "$ans" == "Y" ]]; then confirmed=true; continue; fi
       echo "🚫 Cancelled." >&2
       return 1
@@ -838,7 +838,7 @@ handle_do_import() {
   local whost="${WORKER_URL#https://}"
   if [ "$lhost" != "$whost" ]; then
     echo "🔴  This link points to '$lhost', not your configured server ($whost)."
-    local ans; _bvk_yn ans "Continue anyway?" -d n
+    local ans; _bvk_yn ans "Continue anyway?"
     [[ "$ans" == "y" || "$ans" == "Y" ]] || { echo "🚫 Cancelled."; return 1; }
   fi
 

@@ -529,7 +529,7 @@ _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary l
     echo "   🔴  Fill Billing details first (at least NAME and EMAIL), then try again."; return 1; }
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
   body=$(_bvk_pay_build "$kind" "$amount" "$accts") || { echo "   ❌ Could not build the request (node is required)."; return 1; }
-  echo "   $4"; _bvk_yn ans "Create the payment link?" -d n </dev/tty
+  echo "   $4"; _bvk_yn ans "Create the payment link?" </dev/tty
   [[ "${ans,,}" == y* ]] || { echo "   Cancelled."; return 1; }
   echo "   ⏳ Creating link…"
   if ! _bvk_auth_call POST /api/orders "$body" creds "$_BVK_PAY_URL"; then _bvk_auth_err; return 1; fi
@@ -538,7 +538,7 @@ _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary l
   echo; echo "   💫 Payment link ready — total US\$$total · valid for 30 minutes, or until it is paid"
   echo "   🔗 $link"
   echo "   Open it, choose Razorpay or PayPal, and pay. Credits are added once the payment is confirmed."
-  _bvk_yn ans "Open in browser now?" -d n </dev/tty
+  _bvk_yn ans "Open in browser now?" </dev/tty
   [[ "${ans,,}" == y* ]] && { _bvk_pay_open "$link" || echo "   (no browser opener found — copy the link)"; }
   return 0
 }

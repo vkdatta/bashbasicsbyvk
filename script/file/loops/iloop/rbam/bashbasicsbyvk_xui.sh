@@ -141,7 +141,7 @@ _xui_ask() {                                 # _xui_ask "What to type" [default]
 }
 
 _xui_yes() {                                 # _xui_yes "Question?"  -> 0 on y
-  local a; _bvk_yn a "$1" -d n
+  local a; _bvk_yn a "$1"
   case "$a" in [yY]|[yY][eE][sS]) return 0 ;; esac
   echo "🚫 Cancelled"; return 1
 }

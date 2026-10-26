@@ -340,7 +340,7 @@ handle_fav_add() {                 # fa ...
       [ ${#_SEL_FOUND[@]} -eq 0 ] && { echo "📜  Nothing matched"; return; }
       picked=("${_SEL_FOUND[@]}")
       if [ ${#picked[@]} -gt 500 ]; then
-        local ans; _bvk_yn ans "Add ${#picked[@]} favourites?" -d n
+        local ans; _bvk_yn ans "Add ${#picked[@]} favourites?"
         [[ "$ans" == [yY] ]] || { echo "🚫 Cancelled"; return; }
       fi ;;
     *)

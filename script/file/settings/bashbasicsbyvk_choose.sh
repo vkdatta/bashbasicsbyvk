@@ -26,7 +26,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #                               [ ] off
 #
 #  API
-#     _bvk_yn   VAR "Question" [-d y|n] [-c] [-t Title] [-i Icon]
+#     _bvk_yn   VAR "Question" [-c] [-t Title] [-i Icon]
 #                  VAR = y | n | c        rc 0 answered · 1 backed out (u / q / a cancelled flow: VAR is "")
 #                  -d  the answer a bare Enter gives (highlighted at start).  Default n.   -d none: NO default: nothing is
 #                      highlighted and a bare Enter does nothing, the person has to answer y / n (or pick a row).  Every
@@ -249,10 +249,10 @@ _bvk_menu() {
   return 0
 }
 
-# _bvk_yn VAR "Question" [-d y|n] [-c] [-t Title] [-i Icon]    → VAR = y | n | c
-# A question that names a destructive action (delete, remove, nuke, clear, overwrite, revoke ...) has NO default answer: a bare Enter
-# must never answer it.  Enforced here, in the one place every yes/no question goes through, so no caller can forget `-d none`
-# (callers still write `-d none` so the source says it too; tests/delete_confirm.sh checks both).
+# _bvk_yn VAR "Question" [-c] [-t Title] [-i Icon]    → VAR = y | n | c
+# EVERY yes/no question has NO default answer: nothing is highlighted and a bare Enter does nothing, the person must answer.  Enforced
+# here, in the one place every yes/no question goes through; a `-d` flag is accepted and ignored.  (_bvk_destructive stays: tests/delete_confirm.sh
+# and the callers that name a destructive action still use it to check the wording.)
 _bvk_destructive() {
   case "${1,,}" in
     *delet*|*remov*|*nuke*|*clear*|*wipe*|*erase*|*discard*|*purge*|*overwrit*|*revoke*|*"free the"*|*"for good"*|*undone*|*"really sure"*) return 0 ;;
@@ -262,17 +262,16 @@ _bvk_destructive() {
 
 _bvk_yn() {
   local _by_var="$1" _by_q="$2"; shift 2
-  local _by_def=n _by_c=0 _by_t="" _by_i="❓"
+  local _by_def="" _by_c=0 _by_t="" _by_i="❓"       # a yes/no question has NO default, ever: nothing is highlighted and a bare Enter does nothing
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      -d) _by_def="${2,,}"; [ "$_by_def" = none ] && _by_def=""; shift 2 ;;
+      -d) shift 2 ;;                                   # accepted and ignored (old callers): the person must always answer
       -c) _by_c=1; shift ;;
       -t) _by_t="$2"; shift 2 ;;
       -i) _by_i="$2"; shift 2 ;;
       *)  shift ;;
     esac
   done
-  [ -n "$_by_def" ] && _bvk_destructive "$_by_q $_by_t" && _by_def=""
   local -a _by_items=("y|yes:Yes" "n|no:No")
   (( _by_c )) && _by_items+=("c|x|cancel:Cancel")
   local -a _by_flags=(-q "$_by_q" -i "$_by_i" -d "$_by_def" -k --yn)

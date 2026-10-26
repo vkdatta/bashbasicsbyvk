@@ -325,7 +325,7 @@ _api_cmd_regen() {
   echo "🔄 Regenerate ${#ks[@]} link(s) — each gets a NEW address; the current address stops working immediately,"
   echo "   for everyone who has it. Nothing is re-uploaded, expiry and credits are unchanged."
   for k in "${ks[@]}"; do printf '   • %s\n' "$(_api_name "$k")"; done
-  _bvk_yn ans "Regenerate now?" -d n
+  _bvk_yn ans "Regenerate now?"
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   for k in "${ks[@]}"; do
     id="${_API_ID[$k]}"
@@ -624,7 +624,7 @@ _api_do_edit() {         # _api_do_edit <idx> [spec]
           local cur0=$(( (${_API_EXPIRES[$k]} - ${_API_CREATED[$k]}) / 1000 ))
           if [[ "$mx0" =~ ^[0-9]+$ ]] && [ "$mx0" -gt "$cur0" ]; then
             echo "💳 Not enough credits: that extension costs $ch0, you have $bal0."
-            _bvk_yn ans "Longest you can afford: total life $(_bb_fmt_duration "$mx0"). Use that instead?" -d n
+            _bvk_yn ans "Longest you can afford: total life $(_bb_fmt_duration "$mx0"). Use that instead?"
             case "$ans" in [yY]|[yY][eE][sS]) total="$mx0"; nexp=$(( ${_API_CREATED[$k]} + total * 1000 )) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
           else
             echo "❌ Not enough credits: that extension costs $ch0, you have $bal0 — and there is nothing you can afford to add."; return 1
@@ -635,7 +635,7 @@ _api_do_edit() {         # _api_do_edit <idx> [spec]
       fi
     fi
   fi
-  _bvk_yn ans "$(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it.$costnote Continue?" -d n
+  _bvk_yn ans "$(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it.$costnote Continue?"
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total}" || return 1
   if [ "$_API_STATUS" != "200" ]; then _api_fail; return 1; fi

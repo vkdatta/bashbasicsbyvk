@@ -254,12 +254,20 @@ def say(msg):
 
 
 def ask_yes(prompt):
-    """y/N on the terminal (works while stdin/stdout are pipes).  No terminal -> no."""
+    """y/n on the terminal (works while stdin/stdout are pipes).  No default: asks again until y or n.  No terminal -> no."""
     try:
         with open("/dev/tty", "r+") as tty:
-            tty.write(prompt + " (y/N): ")
-            tty.flush()
-            return tty.readline().strip().lower() in ("y", "yes")
+            while True:
+                tty.write(prompt + " (y/n): ")
+                tty.flush()
+                line = tty.readline()
+                if not line:
+                    return False
+                a = line.strip().lower()
+                if a in ("y", "yes"):
+                    return True
+                if a in ("n", "no"):
+                    return False
     except OSError:
         return False
 

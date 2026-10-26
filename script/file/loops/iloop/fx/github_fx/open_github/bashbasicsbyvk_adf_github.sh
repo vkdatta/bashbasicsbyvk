@@ -287,11 +287,11 @@ _ghx_edit() {
     echo
     echo "⚠️  A commit cannot be edited in place: this makes a NEW commit with the same files and parents"
     echo "   (signatures are lost) and moves the tag(s) to it. Branches keep the old commit unless you say so."
-    _bvk_yn ans "Also move any branch that ends exactly at the old commit?" -d n
+    _bvk_yn ans "Also move any branch that ends exactly at the old commit?"
     case "$ans" in [yY]*) printf '1' > "$_GHX_JOB/move_branch" ;; esac
   fi
   if [ -f "$_GHX_JOB/tag_message.mode" ]; then echo "   📜 A tag message change replaces the tag (same commit); a lightweight tag becomes annotated."; fi
-  _bvk_yn ans "Apply to ${#_GHX_PICK[@]} item(s)?" -d n
+  _bvk_yn ans "Apply to ${#_GHX_PICK[@]} item(s)?"
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) rm -rf "$_GHX_JOB"; echo "🚫 Cancelled"; return 1 ;; esac
   _ghx_job_run edit
   _ghx_reload
@@ -327,7 +327,7 @@ _ghx_rename() {
   _gh_run rename --job "$_GHX_JOB" --plan; rc=$?
   if [ "$rc" != 0 ]; then rm -rf "$_GHX_JOB"; echo; return 1; fi
   echo "   Releases follow their tags; a release title that equals the old tag name is renamed too."
-  _bvk_yn ans "Rename now?" -d n
+  _bvk_yn ans "Rename now?"
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) rm -rf "$_GHX_JOB"; echo "🚫 Cancelled"; return 1 ;; esac
   _ghx_job_run rename
   _ghx_reload
@@ -353,7 +353,7 @@ _ghx_delete() {
 }
 
 _ghx_download() {
-  local how depth=0 withrel ans dest def=n
+  local how depth=0 withrel ans dest
   _bvk_menu how -t "Download ${#_GHX_PICK[@]} item(s) — clone at the tag" -i "⬇️" \
     "d:With depth — only the last N commits (fast, small)" "f:Without depth — the full history" || return 1
   if [ "$how" = d ]; then
@@ -361,13 +361,12 @@ _ghx_download() {
     [[ "$_XUI_IN" =~ ^[0-9]+$ ]] && [ "$_XUI_IN" -ge 1 ] || { echo "❌ Depth must be a number, 1 or more."; return 1; }
     depth="$_XUI_IN"
   fi
-  [ "$_GHX_TAB" = stable ] && def=y
-  _bvk_yn withrel "Also download the release notes and files (assets) of tags that have a release?" -d "$def"
+  _bvk_yn withrel "Also download the release notes and files (assets) of tags that have a release?"
   _xui_ask "Download into" "$_GHX_NAV" || return 1
   dest="${_XUI_IN/#\~/$HOME}"
   echo; echo "⬇️  ${#_GHX_PICK[@]} item(s) → $dest/$(_xui_trunc "${_GHX_REPO#*/}" 30)-<tag>/   ($([ "$depth" -gt 0 ] && echo "depth $depth" || echo "full history")$([[ "$withrel" == [yY]* ]] && echo ", with release notes and files"))"
   _ghx_show_picked
-  _bvk_yn ans "Start?" -d y
+  _bvk_yn ans "Start?"
   case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
   _ghx_job_new || return 1; _ghx_job_tags
   printf '%s' "$dest" > "$_GHX_JOB/dest"; printf '%s' "$depth" > "$_GHX_JOB/depth"
@@ -386,19 +385,19 @@ _ghx_create() {
     echo "   '$tag' is an existing tag — the release is attached to it."
   else
     IFS= read -e -r -p "   Branch, tag or commit to build it from (Enter = the default branch): " target
-    _bvk_yn ans "Make it an annotated tag with a message?" -d n
+    _bvk_yn ans "Make it an annotated tag with a message?"
     case "$ans" in [yY]*) echo "   ✏️  the editor opens: write the tag message."; _ghx_editor "" && msg="$_GHX_TEXT" ;; esac
   fi
   if [ "$_GHX_TAB" = tags ]; then
     _ghx_job_new || return 1
     printf '%s' "$tag" > "$_GHX_JOB/tag"; printf '%s' "$target" > "$_GHX_JOB/target"; printf '%s' "$msg" > "$_GHX_JOB/tag_message"
     _ghx_job_run create-tag && {
-      _bvk_yn ans "Also publish a stable release for it?" -d n
+      _bvk_yn ans "Also publish a stable release for it?"
       case "$ans" in [yY]*) _ghx_create_release_for "$tag" ;; esac; }
     _ghx_reload; return 0
   fi
   IFS= read -e -r -p "   Release title (Enter = the tag name): " title
-  _bvk_yn ans "Write the release notes now (opens the editor)?" -d y
+  _bvk_yn ans "Write the release notes now (opens the editor)?"
   case "$ans" in [yY]*) _ghx_editor "" && body="$_GHX_TEXT" ;; esac
   _ghx_job_new || return 1
   printf '%s' "$tag" > "$_GHX_JOB/tag"; printf '%s' "$target" > "$_GHX_JOB/target"; printf '%s' "$msg" > "$_GHX_JOB/tag_message"
@@ -410,7 +409,7 @@ _ghx_create() {
 _ghx_create_release_for() {      # a tag that was just made → its stable release
   local title body="" ans
   IFS= read -e -r -p "   Release title (Enter = the tag name): " title
-  _bvk_yn ans "Write the release notes now (opens the editor)?" -d y
+  _bvk_yn ans "Write the release notes now (opens the editor)?"
   case "$ans" in [yY]*) _ghx_editor "" && body="$_GHX_TEXT" ;; esac
   _ghx_job_new || return 1
   printf '%s' "$1" > "$_GHX_JOB/tag"; printf '%s' "$title" > "$_GHX_JOB/title"; printf '%s' "$body" > "$_GHX_JOB/body"

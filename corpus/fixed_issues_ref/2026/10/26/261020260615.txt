@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+A file such as 3bvk_full.gz (a gzip stream that holds a tar, but whose name has no "tar" word) was refused by uz-1 with "its name does not end like an archive".
+
+1. HOW DID YOU DEBUG
+Found the message in _arc_detect (bashbasicsbyvk_archive_formats.sh); read _arc_scan (a gz/xz/bz2/zst/lz4 word counts only after a "tar" word) and _arc_magic. Built x_full.gz (tar.gz), plain.gz and n.txt.gz in /tmp and ran _arc_detect on each: the first is now targz with stem x_full, the other two are still refused. The real uz-1 flow, run.sh and a real extraction were not run (read only).
+
+1. CAUSE
+The name was the gate: _arc_scan failed first, so the content check never ran.
+
+1. FIX
+New _arc_bare_stream in bashbasicsbyvk_archive_formats.sh, called by _arc_detect when the name scan fails: the name must end in a stream word that agrees with the magic bytes, and the first decompressed block must carry "ustar" at byte 257. Header comment updated.
+
+2. ISSUE IN BRIEF
+Yes/no menus opened with a default answer highlighted (for example -u asked "Continue?" with No), so a bare Enter answered them.
+
+2. HOW DID YOU DEBUG
+Read _bvk_yn in bashbasicsbyvk_choose.sh (default n unless -d said otherwise; only destructive wording forced none), listed every caller with -d y|n, and the stand-alone prompts with [Y/n] / [y/N] (gitpush, gd). bash -n / py_compile only; no menu was run.
+
+2. CAUSE
+The default was a caller choice (-d) with n as the fallback, so each question could have one.
+
+2. FIX
+_bvk_yn ignores -d and always has no default; 33 callers lost their -d y|n (github download no longer computes one); gitpush gets ask_yn (asks again until y or n) for its four questions; gd ask_yes loops until y or n. AGENTS.md rule 6 reworded.
+
+3. ISSUE IN BRIEF
+Settings and Home screens lacked a blank line between the description and the first rule, and showed two blank rows under the footer when no suggestion was present.
+
+3. HOW DID YOU DEBUG
+Rendered _st_draw through a stub harness with and without a typed suggestion; the layout matched the wanted screens when no suggestion is shown. The suggestion case and the tap offsets were verified by reading only.
+
+3. CAUSE
+The description block had no trailing blank and the suggestion row was always reserved (plus a spacer).
+
+3. FIX
+bashbasicsbyvk_settings_desc.sh adds one blank line after the description; bashbasicsbyvk_settings_ui.sh draws the suggestion row plus one blank line only while there is a suggestion (_ST_TAIL), and _st_click / prev use _ST_TAIL.

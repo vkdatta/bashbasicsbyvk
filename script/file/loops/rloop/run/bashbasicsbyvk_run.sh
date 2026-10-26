@@ -149,7 +149,7 @@ run_file() {
         return $?
     fi
     if [ -x "$file" ]; then
-        _bvk_yn yn "File is executable. Run directly?" -d n
+        _bvk_yn yn "File is executable. Run directly?"
         if [[ $yn =~ ^[Yy]$ ]]; then
             "$file"
             return $?
@@ -161,7 +161,7 @@ run_file() {
         interpreter=$(echo "$firstline" | cut -c3- | awk '{print $1}')
         exe=$(basename "$interpreter")
         if command -v "$exe" >/dev/null 2>&1; then
-            _bvk_yn yn2 "Run with shebang interpreter ($exe)?" -d n
+            _bvk_yn yn2 "Run with shebang interpreter ($exe)?"
             if [[ $yn2 =~ ^[Yy]$ ]]; then
                 "$exe" "$file"
                 return $?

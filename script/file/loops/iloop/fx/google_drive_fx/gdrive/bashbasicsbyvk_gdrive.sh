@@ -372,7 +372,7 @@ _gd_dispatch() {
   done
   if [ "$cnt" -gt 0 ]; then
     echo "📦 $cnt item(s) are staged for copy/move OUTSIDE Google Drive (your normal buffers)."
-    local a; _bvk_yn a "Apply them into this Drive folder too?" -d n
+    local a; _bvk_yn a "Apply them into this Drive folder too?"
     case "$a" in
       [yY]|[yY][eE][sS])
         local -a keep=()

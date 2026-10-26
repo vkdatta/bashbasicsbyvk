@@ -293,7 +293,7 @@ handle_scr_sync() {
       ;;
     2) _scr_validate ;;
     3)
-      _bvk_yn confirm "Full rebuild will rescan all of \$HOME. Continue?" -d n
+      _bvk_yn confirm "Full rebuild will rescan all of \$HOME. Continue?"
       [[ "$confirm" == "y" || "$confirm" == "Y" ]] && _scr_rebuild || echo "🚫 Cancelled."
       ;;
     q|Q|"") return 0 ;;

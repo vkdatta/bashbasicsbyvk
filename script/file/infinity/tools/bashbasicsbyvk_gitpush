@@ -127,11 +127,23 @@ Run:
 # ============================================================
 
 # Asks whether the new GitHub repository is private (default) or public; sets VISIBILITY for  gh repo create.
-ask_repo_visibility() {
-    read -e -r -p "Make repository private? [Y/n]: " private_answer
+# A yes/no question has NO default: it asks again until the answer is y or n (a bare Enter is not an answer).  Sets ANS to y | n.
+ask_yn() {
+    local a
+    while :; do
+        read -e -r -p "$1 [y/n]: " a || die "No answer (input closed)."
+        case "${a,,}" in
+            y|yes) ANS=y; return 0 ;;
+            n|no)  ANS=n; return 0 ;;
+        esac
+    done
+}
 
-    case "${private_answer:-Y}" in
-        n|N|no|NO|No)
+ask_repo_visibility() {
+    ask_yn "Make repository private?"; private_answer="$ANS"
+
+    case "$private_answer" in
+        n)
             VISIBILITY="--public"
             ;;
         *)
@@ -266,10 +278,10 @@ ensure_git_root() {
         echo "  $TARGET"
         echo
 
-        read -e -r -p "Use the Git repository root instead? [y/N]: " answer
+        ask_yn "Use the Git repository root instead?"; answer="$ANS"
 
-        case "${answer:-N}" in
-            y|Y|yes|YES|Yes)
+        case "$answer" in
+            y)
                 TARGET="$root"
 
                 # TARGET changed.
@@ -381,10 +393,10 @@ create_commit() {
     git status --short
     echo
 
-    read -e -r -p "Create this commit? [Y/n]: " answer
+    ask_yn "Create this commit?"; answer="$ANS"
 
-    case "${answer:-Y}" in
-        y|Y|yes|YES|Yes)
+    case "$answer" in
+        y)
             ;;
         *)
             die "Commit cancelled."
@@ -489,10 +501,10 @@ No force push was performed."
         echo "Any remote-only commits will no longer be reachable from $branch"
         echo "unless they are preserved elsewhere."
         echo
-        read -e -r -p "Do you want to override the remote with local version $local_version? [y/N]: " confirmation
+        ask_yn "Do you want to override the remote with local version $local_version?"; confirmation="$ANS"
 
         case "$confirmation" in
-            y|Y|yes|YES|Yes)
+            y)
                 ;;
             *)
                 die "Override cancelled.

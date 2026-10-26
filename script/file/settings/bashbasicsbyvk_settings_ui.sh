@@ -300,21 +300,22 @@ _st_draw() {
   if (( top + vis < n )); then out+="$nl   ▼ $(( n - top - vis )) more below"$'\n'; else out+="$nl$_ST_RULE"$'\n'; fi
   out+="$nl"$'\n'                                         # linebreak above the footer
   out+="$nl${f1:0:cols-1}"$'\n'
-  out+="$nl${f2:0:cols-1}"$'\n'
+  out+="$nl${f2:0:cols-1}"$'\n'                                  # footer 2, or a blank spacer
   _st_hint_text "$buf" "$cols"
-  if [ -n "$_ST_HINT" ]; then out+="$nl"$'\033[2m'"$_ST_HINT"$'\033[0m\n'      # the suggestion row, right above "Select:" (same place as the main menu)
-  else out+="$nl"$'\n'; fi
+  _ST_TAIL=0
+  if [ -n "$_ST_HINT" ]; then out+="$nl"$'\033[2m'"$_ST_HINT"$'\033[0m\n'"$nl"$'\n'; _ST_TAIL=2     # the suggestion row + a blank line, only while there is a suggestion
+  fi
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
   if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "${_st_msg:+$_st_msg  }Select: " "$buf" "${#buf}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
   else out+="${nl}Select: $buf"$'\033[J'; fi
   builtin printf '\033[?2026h%s\033[?2026l' "$out"
-  prev=$(( vis + 10 + _ST_DESC_N ))
+  prev=$(( vis + 9 + _ST_DESC_N + _ST_TAIL ))
 }
 
 # The suggestion row of EVERY Settings / Home style screen (what the typed text would do).  Same engine as the main menu's
 # row (_cm_hint: command map of the screen that owns this prompt), plus the two things only a list screen knows:
 # a typed row number ("Enter -> open <row>") and the = filter.  -> _ST_HINT ("" = nothing to say, the row stays blank)
-_ST_HINT=""
+_ST_HINT=""; _ST_TAIL=0      # _ST_TAIL = rows of the suggestion (hint + blank) under the footer, 0 when there is none
 _st_hint_text() {   # $1 typed text  $2 columns
   local b="$1" cols="${2:-80}" k
   _ST_HINT=""
@@ -340,21 +341,21 @@ _st_wipe() {
   prev=0
 }
 
-# a click / tap (called from _st_run; shares its locals).  The block is  prev = vis + 10 + _ST_DESC_N  rows, the cursor is on its last row (Select:):
-#   rows from the top: blank · title · blank · description (_ST_DESC_N rows) · ▲/rule · vis list rows · ▼/rule · blank · footer 1 · footer 2 · hint · Select
+# a click / tap (called from _st_run; shares its locals).  The block is  prev = vis + 9 + _ST_DESC_N + _ST_TAIL  rows, the cursor is on its last row (Select:):
+#   rows from the top: blank · title · blank · description (_ST_DESC_N rows, the last one blank) · ▲/rule · vis list rows · ▼/rule · blank · footer 1 · footer 2 · [hint · blank: _ST_TAIL=2] · Select
 # click a row = highlight it and type its number · double click = and open / switch it · ▲ / ▼ = page.  _ST_CLICK_ACT=1: a row was opened.
 # click the path in the title ("Settings › Display": the part before the last ›) = go back to that screen (_st_crumb_tap), one tap like the file list's nav path.
 _ST_CLICK_ACT=0
 _st_click() {
   _ST_CLICK_ACT=0
-  (( prev > 10 + _ST_DESC_N )) || return 0
+  (( prev > 9 + _ST_DESC_N + _ST_TAIL )) || return 0
   _bvk_mouse_prow || return 0
-  local vis=$(( prev - 10 - _ST_DESC_N )) rel i d=$(( _BVK_CROW - _MS_Y ))
-  rel=$(( _MS_Y - ( _BVK_CROW - vis - 5 ) ))     # 0 = the first list row on screen
+  local vis=$(( prev - 9 - _ST_DESC_N - _ST_TAIL )) rel i d=$(( _BVK_CROW - _MS_Y )) t=$_ST_TAIL
+  rel=$(( _MS_Y - ( _BVK_CROW - vis - 4 - t ) ))     # 0 = the first list row on screen
   if (( d == 0 )); then _BVK_LAST_ITEM=""; _bvk_mouse_pass "$_BVK_PASS_TAP_MS"      # the Select: row: the next tap opens the keyboard
   elif (( d == prev - 2 )); then _BVK_LAST_ITEM=""; _st_crumb_tap                    # the title row: a part of the path
-  elif (( d == 2 || d == 3 )); then                    # footer 2 / footer 1: a key there needs a DOUBLE tap (it is typed and Enter pressed)
-    if _bvk_mouse_cell_key "$( (( d == 3 )) && builtin printf '%s' "$_ST_FTR1" || builtin printf '%s' "$_ST_FTR2" )"; then
+  elif (( d == 1 + t || d == 2 + t )); then                    # footer 2 / footer 1: a key there needs a DOUBLE tap (it is typed and Enter pressed)
+    if _bvk_mouse_cell_key "$( (( d == 2 + t )) && builtin printf '%s' "$_ST_FTR1" || builtin printf '%s' "$_ST_FTR2" )"; then
       _bvk_mouse_ftr_tap "$_MS_FKEY"
       case "$_MS_FACT" in
         run)  buf="$_MS_FTEXT"; navbuf=0; _ST_PEND_ENTER=1; _ST_CLICK_ACT=1 ;;

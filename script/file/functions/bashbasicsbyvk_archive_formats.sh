@@ -14,6 +14,8 @@
 #    2. the CONTENT (the first bytes of the file) is the judge: the name only says "this might be an archive",
 #       the bytes say which one it really is. A name that lies (a .zip that is really a tar.gz) is opened as what it is;
 #       a text file called notes_zip is not an archive at all.
+#       Exception for a name that is only a compressed stream (backup_full.gz, site.xz): with no "tar" word the name cannot say, so the
+#       first decompressed block is read; a tar header inside makes it an archive (_arc_bare_stream), a plain notes.txt.gz stays a file.
 #
 #  API (all results come back in globals, no subshells — this runs on every file menu):
 #    _arc_scan NAME          name only      → _ARC_NFMT (format id the name claims), _ARC_STEM (name without the archive ending / copy marker)
@@ -141,10 +143,45 @@ _arc_magic() {
   return 0
 }
 
+# ── 1b. a compressed stream whose name has no "tar" word ──────────────────────
+# "backup_full.gz" / "site.xz" are usually a tar made by a tool that left the .tar out of the name.  The name alone cannot say, so the
+# content does: the stream is an archive only when its first decompressed block is a tar header (the word "ustar" at byte 257).
+# A real single compressed file (notes.txt.gz) is NOT one.  Sets _ARC_FMT / _ARC_STEM and returns 0 for an archive, 1 otherwise.
+_arc_bare_stream() {
+  local f="$1" n="${1##*/}" ln e m fmt dec h
+  ln="${n,,}"
+  [[ "$ln" =~ [._[:space:]-](gz|xz|bz2|zst|lz4)[0-9]*$ ]] || return 1
+  e="${BASH_REMATCH[1]}"
+  [ -f "$f" ] || return 1
+  _arc_magic "$f"; m="$_ARC_MAGIC"
+  [ "$m" = "$e" ] || return 1                                          # the name must agree with the bytes
+  case "$m" in
+    gz)  fmt=targz;  dec=(gzip -dc) ;;
+    xz)  fmt=tarxz;  dec=(xz -dc) ;;
+    bz2) fmt=tarbz2; dec=(bzip2 -dc) ;;
+    zst) fmt=tarzst; dec=(zstd -dc -q) ;;
+    lz4) fmt=tarlz4; dec=(lz4 -dc -q) ;;
+    *)   return 1 ;;
+  esac
+  command -v "${dec[0]}" >/dev/null 2>&1 || return 1
+  h="$("${dec[@]}" -- "$f" 2>/dev/null | LC_ALL=C head -c 265 | od -An -v -tx1 2>/dev/null)" || true
+  h="${h//[[:space:]]/}"
+  [ "${h:514:10}" = 7573746172 ] || return 1
+  _ARC_FMT="$fmt"
+  _ARC_STEM="${n:0:$(( ${#n} - ${#BASH_REMATCH[0]} ))}"
+  _ARC_STEM="${_ARC_STEM%"${_ARC_STEM##*[![:space:]._-]}"}"
+  [ -n "$_ARC_STEM" ] || _ARC_STEM="${n%.*}"
+  _ARC_WHY=""
+  return 0
+}
+
 # ── 1 + 2 together ──────────────────────────────────────────────────────────
 _arc_detect() {
   _ARC_FMT=""; _ARC_WHY=""
-  if ! _arc_scan "${1##*/}"; then _ARC_WHY="its name does not end like an archive (supported: $(_arc_supported))"; return 1; fi
+  if ! _arc_scan "${1##*/}"; then
+    _arc_bare_stream "$1" && return 0                                  # hello_full.gz that really holds a tar: the bytes decide
+    _ARC_WHY="its name does not end like an archive (supported: $(_arc_supported))"; return 1
+  fi
   if [ ! -f "$1" ]; then _ARC_WHY="not an existing file"; return 1; fi
   _arc_magic "$1"
   case "$_ARC_MAGIC" in
