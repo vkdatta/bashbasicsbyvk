@@ -103,7 +103,7 @@ jobs:
           file bvk-ls-android-amd64
           file bvk-ls-android-arm
 
-          file bvk-ls-linux-386 | grep -q "Intel 80386"
+          file bvk-ls-linux-386 | grep -Eq "Intel (80386|i386)"
           file bvk-ls-freebsd-amd64 | grep -q "FreeBSD"
           # a 32-bit static binary runs on the 64-bit runner kernel
           ./bvk-ls-linux-386 count . 0 > /dev/null
@@ -134,7 +134,7 @@ jobs:
 
           set -x   # the last command shown before an error is the assertion that failed
 
-          file bvk-fr-linux-386 | grep -q "Intel 80386"
+          file bvk-fr-linux-386 | grep -Eq "Intel (80386|i386)"
           file bvk-fr-freebsd-amd64 | grep -q "FreeBSD"
           test "$(./bvk-fr-linux-386 selftest)" = "bvk-fr ok"
 
