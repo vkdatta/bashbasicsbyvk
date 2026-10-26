@@ -137,8 +137,14 @@ force_share() {
     return 1
 }
 
+# Every program run_file starts (a script, a binary, a compiled file) goes through here.  It is not our app's environment: the loading bar covers only its
+# start-up, up to its first write, and never draws over what the program shows (see _sl_launch in smartload.sh).
+_rf_go() {
+    if declare -F _sl_launch >/dev/null 2>&1; then _sl_launch "${_RF_NAME:-}" "$@"; else "$@"; fi
+}
+
 run_file() {
-    local file="$1"
+    local file="$1" _RF_NAME="${1##*/}"          # _RF_NAME: the label of the start-up bar (_rf_go)
     if [ ! -e "$file" ]; then
         echo "❌ File not found: $file"
         return 1
@@ -151,7 +157,7 @@ run_file() {
     if [ -x "$file" ]; then
         _bvk_yn yn "File is executable. Run directly?"
         if [[ $yn =~ ^[Yy]$ ]]; then
-            "$file"
+            _rf_go "$file"
             return $?
         fi
     fi
@@ -163,7 +169,7 @@ run_file() {
         if command -v "$exe" >/dev/null 2>&1; then
             _bvk_yn yn2 "Run with shebang interpreter ($exe)?"
             if [[ $yn2 =~ ^[Yy]$ ]]; then
-                "$exe" "$file"
+                _rf_go "$exe" "$file"
                 return $?
             fi
         fi
@@ -172,41 +178,41 @@ run_file() {
     ext="${file##*.}"
     case "$ext" in
         py)
-            if command -v python3 >/dev/null 2>&1; then python3 -u "$file"; elif command -v python >/dev/null 2>&1; then python -u "$file"; elif _dep_need -c "Running a .py file" python3; then python3 -u "$file"; fi
+            if command -v python3 >/dev/null 2>&1; then _rf_go python3 -u "$file"; elif command -v python >/dev/null 2>&1; then _rf_go python -u "$file"; elif _dep_need -c "Running a .py file" python3; then _rf_go python3 -u "$file"; fi
             ;;
         pyc)
             echo "❌ Cannot run .pyc directly in Termux without proper interpreter setup"
             ;;
         js|mjs)
-            if command -v node >/dev/null 2>&1; then node "$file"; elif command -v deno >/dev/null 2>&1; then deno run "$file"; elif _dep_need -c "Running a JavaScript file" nodejs; then node "$file"; fi
+            if command -v node >/dev/null 2>&1; then _rf_go node "$file"; elif command -v deno >/dev/null 2>&1; then _rf_go deno run "$file"; elif _dep_need -c "Running a JavaScript file" nodejs; then _rf_go node "$file"; fi
             ;;
         ts)
-            if command -v deno >/dev/null 2>&1; then deno run "$file"; elif command -v ts-node >/dev/null 2>&1; then ts-node "$file"; else echo "❌ ts-node/deno not found"; fi
+            if command -v deno >/dev/null 2>&1; then _rf_go deno run "$file"; elif command -v ts-node >/dev/null 2>&1; then _rf_go ts-node "$file"; else echo "❌ ts-node/deno not found"; fi
             ;;
         sh|bash)
-            if command -v bash >/dev/null 2>&1; then bash "$file"; else sh "$file"; fi
+            if command -v bash >/dev/null 2>&1; then _rf_go bash "$file"; else _rf_go sh "$file"; fi
             ;;
         zsh)
-            if command -v zsh >/dev/null 2>&1 || _dep_need -c "Running a .zsh file" zsh; then zsh "$file"; fi
+            if command -v zsh >/dev/null 2>&1 || _dep_need -c "Running a .zsh file" zsh; then _rf_go zsh "$file"; fi
             ;;
         php)
-            if command -v php >/dev/null 2>&1 || _dep_need -c "Running a .php file" php; then php "$file"; fi
+            if command -v php >/dev/null 2>&1 || _dep_need -c "Running a .php file" php; then _rf_go php "$file"; fi
             ;;
         pl)
-            if command -v perl >/dev/null 2>&1 || _dep_need -c "Running a .pl file" perl; then perl "$file"; fi
+            if command -v perl >/dev/null 2>&1 || _dep_need -c "Running a .pl file" perl; then _rf_go perl "$file"; fi
             ;;
         rb)
-            if command -v ruby >/dev/null 2>&1 || _dep_need -c "Running a .rb file" ruby; then ruby "$file"; fi
+            if command -v ruby >/dev/null 2>&1 || _dep_need -c "Running a .rb file" ruby; then _rf_go ruby "$file"; fi
             ;;
         jar)
-            if command -v java >/dev/null 2>&1; then java -jar "$file"; else echo "❌ java not found"; fi
+            if command -v java >/dev/null 2>&1; then _rf_go java -jar "$file"; else echo "❌ java not found"; fi
             ;;
         class)
-            if command -v java >/dev/null 2>&1; then classname="$(basename "${file%.*}")"; java -cp "$(dirname "$file")" "$classname"; else echo "❌ java not found"; fi
+            if command -v java >/dev/null 2>&1; then classname="$(basename "${file%.*}")"; _rf_go java -cp "$(dirname "$file")" "$classname"; else echo "❌ java not found"; fi
             ;;
         java)
             if command -v javac >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
-                javac "$file" && classname="$(basename "${file%.*}")" && java -cp "$(dirname "$file")" "$classname"
+                javac "$file" && classname="$(basename "${file%.*}")" && _rf_go java -cp "$(dirname "$file")" "$classname"
             else
                 echo "❌ javac/java not found"
             fi
@@ -214,7 +220,7 @@ run_file() {
         c)
             if command -v gcc >/dev/null 2>&1; then
                 tmp="$HOME/tmp_exec_$RANDOM"
-                gcc "$file" -o "$tmp" && "$tmp"
+                gcc "$file" -o "$tmp" && _rf_go "$tmp"
                 rm -f "$tmp"
             else
                 echo "❌ gcc not found"
@@ -223,19 +229,19 @@ run_file() {
         cpp|cc|cxx|c++|c\+\+)
             if command -v g++ >/dev/null 2>&1; then
                 tmp="$HOME/tmp_exec_$RANDOM"
-                g++ "$file" -o "$tmp" && "$tmp"
+                g++ "$file" -o "$tmp" && _rf_go "$tmp"
                 rm -f "$tmp"
             else
                 echo "❌ g++ not found"
             fi
             ;;
         go)
-            if command -v go >/dev/null 2>&1; then go run "$file"; else echo "❌ go not found"; fi
+            if command -v go >/dev/null 2>&1; then _rf_go go run "$file"; else echo "❌ go not found"; fi
             ;;
         rs)
             if command -v rustc >/dev/null 2>&1; then
                 tmp="$HOME/tmp_exec_$RANDOM"
-                rustc "$file" -o "$tmp" && "$tmp"
+                rustc "$file" -o "$tmp" && _rf_go "$tmp"
                 rm -f "$tmp"
             elif command -v cargo >/dev/null 2>&1; then
                 echo "📜 For cargo projects use cargo run inside the project"
@@ -244,37 +250,37 @@ run_file() {
             fi
             ;;
         swift)
-            if command -v swift >/dev/null 2>&1; then swift "$file"; elif command -v swiftc >/dev/null 2>&1; then tmp="$HOME/tmp_exec_$RANDOM"; swiftc "$file" -o "$tmp" && "$tmp"; else echo "❌ swift not found"; fi
+            if command -v swift >/dev/null 2>&1; then _rf_go swift "$file"; elif command -v swiftc >/dev/null 2>&1; then tmp="$HOME/tmp_exec_$RANDOM"; swiftc "$file" -o "$tmp" && _rf_go "$tmp"; else echo "❌ swift not found"; fi
             ;;
         kt|kts|kotlin)
             if command -v kotlinc >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
                 out="$HOME/tmp_kt_$RANDOM.jar"
-                kotlinc "$file" -include-runtime -d "$out" && java -jar "$out"
+                kotlinc "$file" -include-runtime -d "$out" && _rf_go java -jar "$out"
                 rm -f "$out"
             else
                 echo "❌ kotlinc/java not found"
             fi
             ;;
         r)
-            if command -v Rscript >/dev/null 2>&1; then Rscript "$file"; else echo "❌ Rscript not found"; fi
+            if command -v Rscript >/dev/null 2>&1; then _rf_go Rscript "$file"; else echo "❌ Rscript not found"; fi
             ;;
         jl)
-            if command -v julia >/dev/null 2>&1; then julia "$file"; else echo "❌ julia not found"; fi
+            if command -v julia >/dev/null 2>&1; then _rf_go julia "$file"; else echo "❌ julia not found"; fi
             ;;
         lua)
-            if command -v lua >/dev/null 2>&1; then lua "$file"; else echo "❌ lua not found"; fi
+            if command -v lua >/dev/null 2>&1; then _rf_go lua "$file"; else echo "❌ lua not found"; fi
             ;;
         hs)
-            if command -v runhaskell >/dev/null 2>&1; then runhaskell "$file"; elif command -v ghc >/dev/null 2>&1; then tmp="$HOME/tmp_exec_$RANDOM"; ghc -o "$tmp" "$file" && "$tmp"; else echo "❌ runhaskell/ghc not found"; fi
+            if command -v runhaskell >/dev/null 2>&1; then _rf_go runhaskell "$file"; elif command -v ghc >/dev/null 2>&1; then tmp="$HOME/tmp_exec_$RANDOM"; ghc -o "$tmp" "$file" && _rf_go "$tmp"; else echo "❌ runhaskell/ghc not found"; fi
             ;;
         coffee)
-            if command -v coffee >/dev/null 2>&1; then coffee "$file"; else echo "❌ coffee not found"; fi
+            if command -v coffee >/dev/null 2>&1; then _rf_go coffee "$file"; else echo "❌ coffee not found"; fi
             ;;
         dart)
-            if command -v dart >/dev/null 2>&1; then dart "$file" || dart run "$file"; else echo "❌ dart not found"; fi
+            if command -v dart >/dev/null 2>&1; then _rf_go dart "$file" || _rf_go dart run "$file"; else echo "❌ dart not found"; fi
             ;;
         scala)
-            if command -v scala >/dev/null 2>&1; then scala "$file"; else echo "❌ scala not found"; fi
+            if command -v scala >/dev/null 2>&1; then _rf_go scala "$file"; else echo "❌ scala not found"; fi
             ;;
         md|markdown)
             if command -v glow >/dev/null 2>&1; then glow "$file"; elif command -v less >/dev/null 2>&1; then less "$file"; else cat "$file"; fi

@@ -19,6 +19,13 @@ for pair in "_st_draw:settings/bashbasicsbyvk_settings_ui.sh" "_vp_render_fresh:
   grep -A2 "^${fn}()" "$file" | grep -q '_sl_ready' && ok "$fn ends the wait before it draws" || bad "$fn does not call _sl_ready first (a bar would be left on the screen)"
 done
 
+# every program run_file starts goes through _rf_go (a raw  python3 -u "$file"  would leave the wait open for the whole run: the bar over the script's prompt)
+raw="$(sed -n '/^run_file() {/,$p' "$S/file/loops/rloop/run/bashbasicsbyvk_run.sh" | grep -nP '(?<!_rf_go )(?<![\w./-])(python3 -u|python -u|node|deno run|ts-node|bash|sh|zsh|php|perl|ruby|java -jar|go run|swift|Rscript|julia|lua|runhaskell|coffee|dart run|dart|scala) "\$(file|out)"|&& "\$tmp"|^\s+"\$file"$|(?<!_rf_go )"\$exe" "\$file"' | head -3)"
+[ -z "$raw" ] && ok "run_file starts every program through _rf_go (_sl_launch)" || bad "run_file launches a program without _rf_go: $raw"
+grep -q '_sl_launch' "$S/file/engine/bashbasicsbyvk_smartload.sh" && ok "smartload has _sl_launch" || bad "smartload lost _sl_launch"
+# the read shim never lets a secret (read -s) reach the bar's label
+sed -n '/^_cm_read_fallback()/,/^}/p' "$S/file/engine/bashbasicsbyvk_smartmenu.sh" | grep -q '__cmf_lab' && ok "the read shim passes a neutral label for read -s" || bad "the read shim can print a typed secret in the bar"
+
 [ -f "$ROOT/tests/smartload/pty_test.py" ] && { python3 -I "$ROOT/tests/smartload/pty_test.py" "$ROOT" || fail=1; }
 
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"

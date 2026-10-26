@@ -137,6 +137,44 @@ check((b1 >= 0 and w1 > b1 and p1 > w1), 'progress begins: the loading bar that 
 check((p1 >= 0 and p2 > p1 and '░' not in o[p1:p2]), 'while the progress bar owns the screen no loading bar is drawn', f'a loading bar over the progress bar: {o[p1:p2]!r}')
 check((p2 >= 0 and '░' in o[p2:]), 'after the progress bar has ended a real wait gets its loading bar again', f'no loading bar after the progress ended: {o[p2:][-160:]!r}')
 
+# 14) a program the person chose to run (run_file) is not our app: the wait is its start-up only, up to its FIRST WRITE (_sl_launch)
+#     (GRACE_MS=400 here: the start-up bar shows after 200 ms of silence; a "light" Enter needs 800 ms)
+L0 = '_sl_ready; _sl_enter "" "" "Select"; '                  # what run.sh has just done: Enter on the Select: prompt opened a wait
+o = run_pty(L0 + '_sl_launch myprog bash -c \'sleep 1.6\'; echo MARK_END')   # lint-wait-ok: a silent program: the start-up gap is the behaviour under test
+i, w, e = o.find('░'), o.find(WIPE), o.find('MARK_END')
+check((i >= 0 and 'Starting myprog' in o and w > i and e > w), 'a silent program gets a "Starting <name>" bar, wiped when it exits', f'no start-up bar / wipe for a silent program (bar@{i} wipe@{w} end@{e}): {o[-200:]!r}')
+o = run_pty(L0 + '_sl_launch myprog bash -c \'echo FIRST; sleep 1.6\'; echo MARK_END')   # lint-wait-ok: the program waits after its first paint
+check((not has_bar(o) and 'FIRST' in o and 'MARK_END' in o), 'a program that paints at once never gets a bar (the old "bar over the script\'s prompt")', f'a bar over a program that had painted: {o[-200:]!r}')
+o = run_pty(L0 + '_sl_launch myprog bash -c \'printf "Enter the number: "; read x; echo GOT:$x\' <<< 5; echo MARK_END')
+check((not has_bar(o) and 'GOT:5' in o), 'a program with its own prompt: no bar, and the typed answer still reaches it', f'bar over a prompt / answer lost: {o[-200:]!r}')
+o = run_pty(L0 + '_sl_launch myprog bash -c \'sleep 1.2; echo PAINT; sleep 1.6\'; echo MARK_END')   # lint-wait-ok: silent start-up, then a paint, then a long quiet stretch
+b, pt = o.find('░'), o.find('PAINT')
+check((b >= 0 and pt > b and '░' not in o[pt:]), 'the bar shows during the silent start-up and is gone at the first paint, for good (nothing drawn after it)', f'bar@{b} paint@{pt} bar-after-paint={"░" in o[pt:]}: {o[-240:]!r}')
+o = run_pty(L0 + '_sl_launch myprog bash -c \'sleep 1.2; echo PAINT; sleep 1.6\'; sleep 1.0; echo MARK_AFTER; _sl_ready', env={'VK_SMARTLOAD_NOCHILDREN': '1'})   # lint-wait-ok: the same without the kernel's children file
+b, pt = o.find('░'), o.find('PAINT')
+check((b >= 0 and pt > b and '░' not in o[pt:o.find('MARK_AFTER')]), 'without /proc/<pid>/task/<pid>/children (many Android kernels) the start-up bar works the same', f'no children file: bar@{b} paint@{pt}: {o[-240:]!r}')
+o = run_pty(L0 + '_sl_launch myprog bash -c \'echo FIRST; sleep 1.6\'; echo MARK_END', env={'VK_SMARTLOAD_NOCHILDREN': '1'})   # lint-wait-ok: the program waits after its first paint
+check((not has_bar(o) and 'FIRST' in o), 'without the children file a program that paints at once still gets no bar', f'bar over a program (no children file): {o[-200:]!r}')
+o = run_pty(L0 + '_sl_launch myprog bash -c \'echo FIRST; sleep 1.6\'; echo MARK_END', env={'VK_SMARTLOAD_LAUNCH': '0'})   # lint-wait-ok: the program waits after its first paint
+check(('FIRST' in o and 'MARK_END' in o), 'VK_SMARTLOAD_LAUNCH=0: the program still runs and its status comes back', f'launch off broke the run: {o[-160:]!r}')
+o = run_pty(L0 + '_sl_launch myprog bash -c \'exit 7\'; echo RC=$?')
+check('RC=7' in o, '_sl_launch returns the program\'s exit status', f'status lost: {o[-120:]!r}')
+o = run_pty(L0 + '_sl_launch myprog bash -c \'sleep 1.6\'; _sl_enter "" "" "Next"; sleep 1.2; _sl_ready; echo MARK_END')   # lint-wait-ok: after the program the app's own waits get their bar again
+i1 = o.find('Starting myprog'); i2 = o.find('Next')
+check((i1 >= 0 and i2 > i1), 'after the program has exited an app wait gets its bar again', f'no bar for the wait after the program: {o[-200:]!r}')
+
+# 15) not every Enter is a wait: a value flip (left / right / space / click) needs twice the delay, a real Enter does not
+o = run_pty('_sl_ready; _sl_enter left "Row"; sleep 0.6; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+check((not has_bar(o) and 'MARK_END' in o), 'a light Enter (Left / Right / Space / click) does not flash a bar for a short wait', f'a bar for a value flip: {o[-160:]!r}')
+o = run_pty('_sl_ready; _sl_enter x "Row"; sleep 0.6; _sl_ready; echo MARK_END')   # lint-wait-ok: the control: the same wait after a real Enter
+check(has_bar(o), 'control: the same wait after a real Enter shows the bar', f'no bar after a real Enter: {o[-160:]!r}')
+o = run_pty('_sl_ready; _sl_enter space "Row"; sleep 1.6; _sl_ready; echo MARK_END')   # lint-wait-ok: a flip that really is slow still shows a bar
+check(has_bar(o), 'a value flip that really is slow still shows the bar', f'no bar for a slow flip: {o[-160:]!r}')
+
+# 16) what the person typed into a secret prompt is never printed in the bar
+o = run_pty('_sl_ready; _sl_enter "hunter2" "" "Working"; sleep 1.2; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
+check((has_bar(o) and 'hunter2' not in o), 'a label override wins over the typed text (read -s passes "Working")', f'typed text in the bar: {o[-160:]!r}')
+
 # 13) every call that lets a transfer tool draw its own bar sits between _bb_progress_begin and _bb_progress_end (a new call site that forgets it fails here)
 import re
 FA = f'{ROOT}/script/file/staging/!buffer/fileapi'

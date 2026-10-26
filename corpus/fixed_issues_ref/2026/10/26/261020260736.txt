@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+A script started from the file menu's Run (run_file) kept the smartload wait open for its whole run: the loading bar drew over the script's own prompt, with a timer counting up, and the script's output could not wipe it. Wanted: a bar only for the few seconds between launching a script and its first paint, none inside the script.
+
+1. HOW DID YOU DEBUG
+Read the earlier smartload trace (wait opens on the Select: read shim, closes only on app-side _sl_ready calls) and run_file in bashbasicsbyvk_run.sh (every launch is a bare command, no hook). Wrote tests/smartload/pty_test.py section 14 (silent program, program that paints at once, program with a prompt reading a typed answer, silent start then paint, same without the children file, exit status, a later app wait) and ran it in a real pty together with the whole smartload test. Not run on a real Termux device; whether /proc/<pid>/io is readable there is not confirmed (the code then draws no bar for that launch).
+
+1. CAUSE
+The wait was opened by Enter on the Select: prompt and nothing closed it while the child ran. The child's output bypasses the echo/printf shims, and _sl_owned (the guard that should have hidden the bar) was switched off in _sl_init unless /proc/<pid>/task/<pid>/children is readable, which many Android kernels lack.
+
+1. FIX
+smartload.sh: new _sl_launch <label> <cmd...> (ends the app's wait, sends L to the animator, runs the program, wipes, sends D); the animator in launch mode draws after half the grace, and stops for good at the program's first write (_sl_kid_wrote: wchar in /proc/<kid>/io above 0, unreadable means no bar) or after VK_SMARTLOAD_LAUNCH_MAX_MS (8 s); VK_SMARTLOAD_LAUNCH=0 turns it off. New _sl_children with a /proc/*/stat scan when the children file is missing (used by _sl_owned too), and _sl_init no longer needs the file. run.sh: new _rf_go; every program run_file starts (direct, shebang, every interpreter, compiled binaries) goes through it. tests/smartload.sh has a static check that run_file keeps no raw launch. Lesson: a new launch line in run_file must go through _rf_go. Known limit: a program's first output is wiped within one 50 ms tick after it is written, not before, so a bar that was showing can leave a short remnant to the right of the first printed line.
+
+2. ISSUE IN BRIEF
+The loading bar showed after only 0.2 s of waiting and also for plain value flips (Left / Right / Space / click on a settings row), so it flashed on nearly every action. The header, the tests and the VK_SMARTLOAD_GRACE_MS note all say 2 s.
+
+2. HOW DID YOU DEBUG
+Compared _SL_GRACE with the header, with tests/smartload/pty_test.py test 11 ("the delay is 2 s by default") and the setting note; listed every _lt_enter site (smartmenu, browse, settings_ui, viewport) and judged each by whether it can take long. Ran pty_test.py sections 15 (light Enter, control with a real Enter, slow flip).
+
+2. CAUSE
+_SL_GRACE had drifted to 200000 (.2 s) while everything documenting it says 2 s; and every Enter was treated alike, though a value flip is instant work.
+
+2. FIX
+smartload.sh: _SL_GRACE back to 2000000; _sl_enter sends the letter b for left / right / space / click (animator delay = twice the grace, so a slow flip still shows a bar). Enter on menus, text prompts, browse rows, settings commands and the app start keep the normal delay: they can run a real job. Not changed: nothing else was found that starts a user-chosen program (the only exec lines are exec $SHELL on exit and refresh.sh).
+
+3. ISSUE IN BRIEF
+A line typed into a read -s prompt went through the text-prompt read shim, and its text became the loading bar's label ("Working on <typed text>") on a long wait.
+
+3. HOW DID YOU DEBUG
+Read _cm_read_fallback in bashbasicsbyvk_smartmenu.sh and _sl_label. Checked with pty_test.py section 16 that a label override replaces the typed text. The real read -s flow was not run (read only).
+
+3. CAUSE
+The typed text was passed to _lt_enter as the only label source.
+
+3. FIX
+smartmenu.sh _cm_read_fallback: when the read arguments hold -s, both _lt_enter calls pass the neutral label "Working" (third argument, which _sl_enter already honours).

@@ -62,6 +62,15 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  _sl_hold / _sl_release around it (the fileapi services use _bb_progress_begin / _bb_progress_end, one shared pair in the fileapi lib).  _sl_hold wipes
 #  a loading bar that is already showing; the loading bar comes back only after _sl_release, once the 2 s of quiet have passed again.
 #  A child program that has the terminal (its own prompt or progress bar) is not a wait either: no bar while it runs (_sl_owned; VK_SMARTLOAD_AUTOHOLD=0 turns that off).
+#
+#  A PROGRAM THE PERSON CHOSE TO RUN (a script, a binary, a compiled file: run.sh's run_file) is not our app's environment.  The only wait is the start-up: from the launch
+#  to the program's FIRST WRITE (_sl_launch).  The bar may show in that gap (after a shorter delay: half the normal one); the moment the program has written anything
+#  it is gone and never comes back for that program, and it ends for good when the program exits, or after VK_SMARTLOAD_LAUNCH_MAX_MS (default 8000) of silence.
+#  "Has it written?" is read from /proc/<pid>/io (wchar > 0).  Any write counts, files too: the error is always on the quiet side (the bar leaves early, it is never
+#  drawn over a program's screen).  If /proc/<pid>/io can not be read there is no bar at all for that launch.  Call sites write  _sl_launch <label> <command...>.
+#
+#  NOT EVERY ENTER IS A WAIT.  A key that only flips a value (Left / Right / Space / a click on a settings row) is instant work: it gets twice the normal delay, so
+#  a toggle never flashes a bar and a toggle that really is slow still shows one.
 # ============================================================
 
 _SL_ON=""             # 1 = running (needs a terminal, bash 5, mkfifo)
@@ -76,7 +85,12 @@ _SL_MSG=""            # file the animator reads its label from
 _SL_LABEL=""
 _SL_NEWLABEL=""
 _SL_SIGT=0            # µs: when the animator's clock was last (re)started
-_SL_GRACE=200000      # µs a wait must last before the bar shows (.2s)
+_SL_GRACE=2000000     # µs a wait must last before the bar shows (2 s: what the header, the tests and VK_SMARTLOAD_GRACE_MS say)
+_SL_LIGHT=4000000     # µs for a "light" Enter (a value flip): twice the grace
+_SL_LGRACE=1000000    # µs before the bar shows during a program's start-up: half the grace
+_SL_LCAP=8000000      # µs: the start-up bar never lasts longer than this
+_SL_LAUNCH=0          # 1 = a user program is starting / running (see _sl_launch)
+_SL_KIDS=""; _SL_KT=0  # _sl_children: the answer, and when /proc was last scanned
 _SL_PULSE_US=50000    # µs between two "A" letters during a burst of output
 
 # where to draw: the controlling terminal
@@ -89,10 +103,30 @@ _sl_target() {
 # Then it is NOT a wait: no bar is drawn while it runs.  A child counts when it was exec'd (its command line differs from the app's: a subshell
 # of the app is not one), has the terminal on fd 0, 1 or 2, and is not a plain silent utility.  Needs /proc; without it: always 1 (old behaviour).
 _SL_PTS=""; _SL_PCMD=""
+
+# the child pids of $1 → _SL_KIDS.  /proc/<pid>/task/<pid>/children needs CONFIG_PROC_CHILDREN, which many Android kernels lack: then /proc/*/stat is scanned
+# for parent = $1 (the scan costs a few ms, so it is repeated at most every $2 µs, default 0.4 s).  VK_SMARTLOAD_NOCHILDREN=1 forces the scan (tests).
+_sl_children() {
+  local f="/proc/$1/task/$1/children" s l p k="" now=${EPOCHREALTIME/[.,]/}; local -a w
+  if [ -z "${VK_SMARTLOAD_NOCHILDREN:-}" ] && [ -r "$f" ]; then
+    _SL_KIDS=""; builtin read -r _SL_KIDS <"$f" 2>/dev/null; return 0   # the file has no trailing newline: read returns 1 but fills the variable
+  fi
+  (( now - _SL_KT < ${2:-400000} )) && return 0
+  _SL_KT=$now
+  for s in /proc/[0-9]*/stat; do
+    l=""; builtin read -r l <"$s" 2>/dev/null; [ -n "$l" ] || continue
+    l="${l##*) }"; w=($l)                                      # after the "(comm)" field: state, ppid, ...
+    [ "${w[1]:-}" = "$1" ] || continue
+    p="${s#/proc/}"; k+="${p%/stat} "
+  done
+  _SL_KIDS="$k"
+  return 0
+}
+
 _sl_owned() {
   [ -n "$_SL_PTS" ] || return 1
   local parent="$1" me="$2" kids c f comm; local -a cmd
-  kids=""; builtin read -r kids <"/proc/$parent/task/$parent/children" 2>/dev/null   # the file has no trailing newline: read returns 1 but fills kids
+  _sl_children "$parent"; kids="$_SL_KIDS"
   [ -n "$kids" ] || return 1
   for c in $kids; do
     [ "$c" = "$me" ] && continue
@@ -107,6 +141,29 @@ _sl_owned() {
   return 1
 }
 
+# start-up of a user program (animator side): has it written anything yet?   0 = yes, or it can not be told (the bar must go and stay away) · 1 = still silent / not started.
+# $1 app pid  $2 the animator's own pid.  `kid` is a local of the animator (found once, then kept): the program is the first child that is neither the animator nor
+# a plain fork of the app (same command line).  Written = wchar in /proc/<kid>/io is above 0: a fresh process has written nothing, whatever the interpreter reads.
+_sl_kid_wrote() {
+  local parent="$1" me="$2" c line w=-1 cmdl; local -a cmd
+  if [ -z "$kid" ]; then
+    _sl_children "$parent" 0
+    for c in $_SL_KIDS; do
+      [ "$c" = "$me" ] && continue
+      cmd=(); builtin mapfile -d '' -t cmd <"/proc/$c/cmdline" 2>/dev/null
+      [ "${#cmd[@]}" -gt 0 ] || continue
+      [ "${cmd[*]}" = "$_SL_PCMD" ] && continue
+      kid="$c"; break
+    done
+    [ -n "$kid" ] || return 1
+  fi
+  while IFS= builtin read -r line; do
+    case "$line" in "wchar: "*) w="${line#wchar: }"; break ;; esac
+  done <"/proc/$kid/io" 2>/dev/null
+  [[ "$w" =~ ^[0-9]+$ ]] || return 0          # exited, or /proc/<pid>/io is not readable: no bar
+  (( w > 0 ))
+}
+
 # the animator (a background copy of the shell; it only ever draws)
 #   $1 tty  $2 parent pid  $3 grace µs  $4 label file  $5 command fd  $6 answer fd
 _sl_anim() {
@@ -114,26 +171,36 @@ _sl_anim() {
   exec </dev/null >/dev/null 2>&1           # holds no pipe, no file and no terminal of the foreground
   trap '' INT QUIT                          # Ctrl-C belongs to the foreground
   declare -F _lt_off >/dev/null 2>&1 && _lt_off     # the animator's own work is not work
-  local armed=0 paused=0 drawn=0 owned=0 t_arm=0 t_last=0 now tick cmd="" st
+  local armed=0 paused=0 drawn=0 owned=0 t_arm=0 t_last=0 now tick cmd="" st launch=0 kid="" g="$grace"
+  local light="$_SL_LIGHT" lgrace="$_SL_LGRACE" lcap="$_SL_LCAP"
   local W=22 BW=5 pos=0 dir=1 n=0 cols room maxmsg msg="" track blk left right line el t
   while :; do
     if (( armed && ! paused )); then tick=0.05; else tick=5; fi
     cmd=""
     builtin read -r -t "$tick" -N1 -u "$cfd" cmd 2>/dev/null
     case "$cmd" in
-      B) armed=1; paused=0; drawn=0; t_arm=${EPOCHREALTIME/[.,]/}; t_last=$t_arm ;;
+      B) armed=1; paused=0; drawn=0; launch=0; g=$grace; t_arm=${EPOCHREALTIME/[.,]/}; t_last=$t_arm ;;
+      b) armed=1; paused=0; drawn=0; launch=0; g=$light; t_arm=${EPOCHREALTIME/[.,]/}; t_last=$t_arm ;;     # a light Enter (a value flip): longer delay
+      L) armed=1; paused=0; drawn=0; launch=1; kid=""; g=$lgrace; t_arm=${EPOCHREALTIME/[.,]/}; t_last=$t_arm ;;   # a user program is starting
       A) armed=1; paused=0; t_last=${EPOCHREALTIME/[.,]/} ;;
-      D) armed=0; paused=0; drawn=0 ;;
+      D) armed=0; paused=0; drawn=0; launch=0 ;;
       P) paused=1; builtin printf '%s\n' "$drawn" >&"$afd"; drawn=0 ;;      # the foreground wipes the row when it is 1
     esac
     kill -0 "$parent" 2>/dev/null || break  # the app is gone: end too
     (( armed && ! paused )) || continue
     now=${EPOCHREALTIME/[.,]/}
-    if _sl_owned "$parent" "${BASHPID:-0}"; then      # a tool owns the terminal: wipe a bar that is showing, draw nothing
+    if (( launch )); then
+      # a user program is starting: the bar is for the gap before its first write only.  Once it has written (or the cap is reached) the bar is wiped and this
+      # animator sleeps until the foreground says the program is over: nothing may be drawn into the program's screen.
+      if (( now - t_arm >= lcap )) || _sl_kid_wrote "$parent" "${BASHPID:-0}"; then
+        (( drawn )) && { builtin printf '\0337\033[K\033[?25h\0338' >"$tty" 2>/dev/null; drawn=0; }
+        armed=0; continue
+      fi
+    elif _sl_owned "$parent" "${BASHPID:-0}"; then    # a tool owns the terminal: wipe a bar that is showing, draw nothing
       (( drawn )) && { builtin printf '\0337\033[K\033[?25h\0338' >"$tty" 2>/dev/null; drawn=0; }
       owned=1; continue
     elif (( owned )); then owned=0; t_last=$now; continue; fi    # the tool is gone: the grace clock starts again
-    (( now - t_last >= grace )) || continue
+    (( now - t_last >= g )) || continue
     if (( ! drawn )); then
       # first frame: size the bar to the screen and read the label.  The bar is drawn on the cursor's OWN row (never a row below it), so it
       # can never scroll the screen, not even on the last row; auto-wrap is switched off while it is drawn, so a long label is clipped
@@ -222,8 +289,30 @@ _sl_enter() {
   _sl_label "${1:-}" "${2:-}" "${3:-}"
   if [ "$_SL_NEWLABEL" != "$_SL_LABEL" ]; then _SL_LABEL="$_SL_NEWLABEL"; builtin printf '%s' "$_SL_LABEL" >"$_SL_MSG" 2>/dev/null; fi
   _SL_SIGT=${EPOCHREALTIME/[.,]/}
-  _sl_send B
+  case "${1:-}" in left|right|space|click) _sl_send b ;; *) _sl_send B ;; esac     # a value flip is not a real wait: twice the delay
   return 0
+}
+
+# a program the person chose to run (their script, a binary, a compiled file): it is not our app's environment.  The wait is only its start-up, up to its first
+# write (see the header); then nothing draws until it exits.   _sl_launch <label> <command and arguments...>   (returns the program's status)
+_sl_launch() {
+  local _ll="$1" _lrc
+  shift
+  if [ -z "$_SL_ON" ] || [ "${BASHPID:-$$}" != "$_SL_MAIN" ] || (( _SL_HOLD > 0 )) || [ "${VK_SMARTLOAD_LAUNCH:-1}" = 0 ]; then
+    _sl_ready; "$@"; return $?
+  fi
+  _sl_ready                                                  # the app's own wait ends here: the program is not ours
+  kill -0 "$_SL_PID" 2>/dev/null || _sl_spawn || { "$@"; return $?; }
+  _ll="${_ll//[[:cntrl:]]/ }"; _ll="${_ll:0:40}"
+  if [ -n "$_ll" ]; then _SL_NEWLABEL="Starting $_ll"; else _SL_NEWLABEL="Starting"; fi
+  if [ "$_SL_NEWLABEL" != "$_SL_LABEL" ]; then _SL_LABEL="$_SL_NEWLABEL"; builtin printf '%s' "$_SL_LABEL" >"$_SL_MSG" 2>/dev/null; fi
+  _SL_LAUNCH=1; _SL_SIGT=${EPOCHREALTIME/[.,]/}
+  _sl_send L
+  "$@"; _lrc=$?
+  _SL_LAUNCH=0
+  _sl_wipe                                                   # a bar that was still showing (a silent program) goes before the app draws again
+  _sl_send D
+  return "$_lrc"
 }
 
 # the app is ready for the next key (hooked into _lt_ready, the read shim and every screen-drawing engine):
@@ -287,13 +376,15 @@ _sl_init() {
   local d="${TMPDIR:-/tmp}" g="${VK_SMARTLOAD_GRACE_MS:-}"
   [ -d "$d" ] && [ -w "$d" ] || return 0
   [[ "$g" =~ ^[0-9]+$ ]] && (( g >= 50 && g <= 5000 )) && _SL_GRACE=$(( g * 1000 ))
+  _SL_LIGHT=$(( _SL_GRACE * 2 )); _SL_LGRACE=$(( _SL_GRACE / 2 ))
+  g="${VK_SMARTLOAD_LAUNCH_MAX_MS:-}"; [[ "$g" =~ ^[0-9]+$ ]] && (( g >= 500 && g <= 60000 )) && _SL_LCAP=$(( g * 1000 ))
   _SL_BASE="$d/bvk-sl.${UID:-0}.$$"
   command mkfifo "$_SL_BASE.ctl" "$_SL_BASE.ack" 2>/dev/null || return 0
   _SL_MSG="$_SL_BASE.msg"
   { exec {_SL_CTLFD}<>"$_SL_BASE.ctl"; } 2>/dev/null || { command rm -f "$_SL_BASE".ctl "$_SL_BASE".ack; return 0; }
   { exec {_SL_ACKFD}<>"$_SL_BASE.ack"; } 2>/dev/null || { exec {_SL_CTLFD}>&-; command rm -f "$_SL_BASE".ctl "$_SL_BASE".ack; return 0; }
   _SL_MAIN=$$
-  if [ "${VK_SMARTLOAD_AUTOHOLD:-1}" != 0 ] && [ -r "/proc/$$/task/$$/children" ]; then
+  if [ "${VK_SMARTLOAD_AUTOHOLD:-1}" != 0 ] && [ -d "/proc/$$" ]; then      # no children file needed: _sl_children scans /proc without it
     _SL_PTS="$(command readlink "/proc/$$/fd/1" 2>/dev/null)"; [ -e "$_SL_PTS" ] || _SL_PTS=""
     local -a _pc=(); builtin mapfile -d '' -t _pc <"/proc/$$/cmdline" 2>/dev/null; _SL_PCMD="${_pc[*]}"
   fi

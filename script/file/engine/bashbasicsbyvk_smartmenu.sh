@@ -896,20 +896,21 @@ _sm_run() {
 # live hint row and the command / @-escape rules apply to every prompt in the app.
 # $1 = ok(1|0)  $2 = prompt  $3 = initial text  $4 = variable  $5 = tab-complete(1|0)  then the original read args
 _cm_read_fallback() {
-  local __cmf_ok="$1" __cmf_p="$2" __cmf_i="$3" __cmf_v="$4" __cmf_c="$5" __cmf_rc
+  local __cmf_ok="$1" __cmf_p="$2" __cmf_i="$3" __cmf_v="$4" __cmf_c="$5" __cmf_rc __cmf_lab="" __cmf_a
   shift 5
+  for __cmf_a in "$@"; do [[ "$__cmf_a" == -[!-]*s* ]] && { __cmf_lab="Working"; break; }; done   # read -s: what is typed is a secret, the loading bar must not print it
   _lt_ready text
   if [ "$__cmf_ok" = 1 ] && [ -t 0 ] && [ -t 1 ] && [ "${VK_CMD_EDITOR:-1}" != 0 ] \
      && declare -F _cm_text_read >/dev/null 2>&1; then
     _cm_text_read "$__cmf_p" "$__cmf_i" "$__cmf_v" "$__cmf_c"; __cmf_rc=$?
     if [ "$__cmf_rc" -ne 99 ]; then
       builtin printf -v "$__cmf_v" '%s' "$_CM_RESULT"
-      _lt_enter "$_CM_RESULT"
+      _lt_enter "$_CM_RESULT" "" "$__cmf_lab"
       return "$__cmf_rc"
     fi
   fi
   builtin read "$@"; __cmf_rc=$?
-  _lt_enter "${!__cmf_v:-}"
+  _lt_enter "${!__cmf_v:-}" "" "$__cmf_lab"
   return "$__cmf_rc"
 }
 
