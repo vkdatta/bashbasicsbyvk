@@ -193,8 +193,8 @@ jobs:
           set -x   # the last command shown before an error is the assertion that failed
 
           # the linux builds are pure Go: fully static, runnable anywhere
-          file bvk-xfer-darwin-arm64 | grep -q "Mach-O 64-bit executable arm64"
-          file bvk-xfer-darwin-amd64 | grep -q "Mach-O 64-bit executable x86_64"
+          file bvk-xfer-darwin-arm64 | grep -Eq "Mach-O 64-bit (executable arm64|arm64 executable)"
+          file bvk-xfer-darwin-amd64 | grep -Eq "Mach-O 64-bit (executable x86_64|x86_64 executable)"
           file bvk-xfer-freebsd-amd64 | grep -q "FreeBSD"
           test "$(./bvk-xfer-linux-386 selftest)" = "bvk-xfer ok"
 
