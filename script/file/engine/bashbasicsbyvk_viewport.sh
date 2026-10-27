@@ -538,6 +538,7 @@ _vp_build_chrome() {
   _n=${#_vp_hdr_arr[@]}
   while (( _n > 0 )) && [[ "${_vp_hdr_arr[$((_n-1))]}" != *[![:space:]]* ]]; do _n=$(( _n - 1 )); done
   _vp_hdr_arr=("${_vp_hdr_arr[@]:0:_n}")
+  [ "${_multi_hdr_gap:-0}" = 1 ] && [ "$_n" -gt 0 ] && _vp_hdr_arr+=("")      # a screen may keep one blank row above the rule (rename)
 
   # footer: drop blanks at both edges, then frame it with one linebreak above and one below
   _n=${#_vp_ftr_arr[@]}
@@ -1233,7 +1234,7 @@ _multi_compute_set() {
 _multi_print_input_line() {
   local _mp back
   if [ "$_vp_mode" == "imaginary" ]; then _BVK_SCR_PROMPT="Group numbers:"; _mp="Group numbers: "
-  else _BVK_SCR_PROMPT="Item numbers:"; _mp="Item numbers: "; fi
+  else _mp="${_multi_label:-Item numbers}: "; _BVK_SCR_PROMPT="${_mp% }"; fi      # _multi_label: a screen that calls this "Select" (rename)
   _bvk_row_multi "$_mp" "$_buf" "$_pos" && return 0       # a text that does not fit one row: shown in full, as a block of rows
   declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
   builtin printf '\r\033[K'
@@ -1251,6 +1252,8 @@ _multi_header_fn() {
 }
 
 _multi_footer_fn() {
+  # a screen with its own footer (rename: "u) Up   q) Close") supplies it via this hook
+  if [ -n "${_multi_footer_hook:-}" ]; then $_multi_footer_hook; return 0; fi
   echo
   if [ "${_multi_allow_a:-false}" == "true" ]; then
     echo "$_prompt (ranges: 1-10,15-20,33   a = all   a-1-5,7 = all except)"

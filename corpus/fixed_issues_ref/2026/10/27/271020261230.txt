@@ -21,3 +21,15 @@ The stubs file was sourced by _lm_idle, AFTER the first paint. The first paint (
 
 2. FIX
 loadmap.sh: _lm_fg sources the stubs at its end (about 4 ms), before the first paint; loadmap.list note and AGENTS.md rule 13 say so. tests/loadmap/shortcut_paint.py (pty, fails on v1a) is run by tests/loadmap.sh; tests/loadmap.sh (2) now expects the stubs right after _lm_fg.
+
+3. ISSUE IN BRIEF
+The rename flow was two screens: the main-menu header + an "RENAME (supports ranges ...)" / "Item numbers:" picker, then a second Rename screen that drew the title, description and item list again. Wanted: one Rename screen (title, description, items, "u) Up   q) Close", "Select: 1-5"), then only "Old: name / New:" added below it for each item.
+
+3. HOW DID YOU DEBUG
+Read select_items_common and the multi picker in viewport.sh (the auth screens already customise it with _multi_header_hook), rendered both screens in a pty (tests/rename/pty_test.py) at 60 and 100 columns.
+
+3. CAUSE
+The picker had a fixed header (the folder header) and footer, and the label "Item numbers"; the one-by-one prompt redrew everything for each item.
+
+3. FIX
+viewport.sh: _multi_footer_hook, _multi_label and _multi_hdr_gap (all optional, default unchanged). rename.sh: _rn_pick_header, _rn_pick_footer, _rn_select_items (u / q / blank leave); _rn_name_prompt prints only Old / New. The cheat-code tip row of the old second screen is gone (the description says the same). tests/rename/pty_test.py updated; u and q cases added.

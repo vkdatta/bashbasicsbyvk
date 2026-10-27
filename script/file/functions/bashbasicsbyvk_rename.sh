@@ -153,41 +153,49 @@ _rn_finalize() {
 }
 
 # ---------------------------------------------------------------------------
-# _rn_name_prompt ITEM N TOTAL → _RN_FINAL.  rc 1 = blank / cancelled.
-#   ✏️ Rename · what it is (the Settings description) · the selected items · u) Up  q) Close · suggestions · Old: / New:
+# The rename screen is ONE screen (the same pieces as a Settings screen):
+#   ✏️ Rename · what it does (the Settings description) · the items · u) Up   q) Close · Select: 1-5
+# then, for each chosen item, only  Old: name / New:  is added below it (the screen is not drawn again).
+# _rn_pick_header / _rn_pick_footer are the picker's header / footer hooks (_multi_header_hook / _multi_footer_hook).
 # ---------------------------------------------------------------------------
-_rn_name_prompt() {
-  local item="$1" cur="$2" total="$3" bn="${item##*/}"
-  local rows cols; rows=$(_term_rows 2>/dev/null); cols=$(_term_cols 2>/dev/null)
+_rn_pick_header() {
+  local rows cols i out="" nl=$'\n'
+  rows=$(_term_rows 2>/dev/null); cols=$(_term_cols 2>/dev/null)
   [ "${_vp_rows_now:-0}" -gt 0 ] 2>/dev/null && { rows=$_vp_rows_now; cols=$_vp_cols_now; }
   [[ "$rows" =~ ^[0-9]+$ ]] || rows=24; [[ "$cols" =~ ^[0-9]+$ ]] || cols=60
-  local out="" nl=$'\n' rule="${_ST_RULE:-   ─────────────────────────────}" ln i
-  out+="$nl✏️ Rename$nl$nl"
+  echo; echo "✏️ Rename"; echo
   # the description: the same table and the same wrapping as a Settings screen
   declare -F _st_desc_load >/dev/null 2>&1 && { [ -n "${_ST_DESC[Settings|*]:-}" ] || _st_desc_load; }
   if declare -F _st_desc_wrap >/dev/null 2>&1 && [ -n "${_ST_DESC[Rename item|*]:-}" ] && (( rows >= 18 )); then
     _st_desc_wrap "${_ST_DESC[Rename item|*]}" $(( cols - 2 ))
     local dmax=$(( rows / 4 )); (( dmax < 2 )) && dmax=2
-    for (( i=0; i<${#_ST_DESC_ALL[@]} && i<dmax; i++ )); do out+=$'\033[2m'"${_ST_DESC_ALL[$i]}"$'\033[0m'"$nl"; done
-    out+="$nl"
+    for (( i=0; i<${#_ST_DESC_ALL[@]} && i<dmax; i++ )); do printf '\033[2m%s\033[0m\n' "${_ST_DESC_ALL[$i]}"; done
+    echo
   fi
-  # the selected items, a window that keeps the current one in view
-  local vis=$(( rows - 17 )); (( vis < 1 )) && vis=1; (( vis > total )) && vis=$total
-  local top=$(( cur - 1 - vis / 2 )); (( top > total - vis )) && top=$(( total - vis )); (( top < 0 )) && top=0
-  if (( top > 0 )); then out+="   ▲ $top more above$nl"; else out+="$rule$nl"; fi
-  local _rdp_icon _rdp_bn _sc_icon _sc_display
-  for (( i=top; i<top+vis; i++ )); do
-    _resolve_display_parts_v "${selected_items[$i]}"
-    printf -v ln ' %2d) %s %s' "$(( i + 1 ))" "$_rdp_icon" "$_rdp_bn"
-    if (( i + 1 == cur )); then out+=$'\033[1;7m'"$ln"$'\033[0m'"$nl"; else out+="$ln$nl"; fi
-  done
-  if (( top + vis < total )); then out+="   ▼ $(( total - top - vis )) more below$nl"; else out+="$rule$nl"; fi
-  out+="${nl}u) Up   q) Close$nl$nl"
-  # cheat-code suggestions: they expand onto more rows on a narrow screen, as everywhere
-  local tip="↑ or a tap on Old  →  copy the old name here and edit it  ·  print  ·  cc  ·  u  ·  q"
-  if declare -F _bvk_hint_wrap >/dev/null 2>&1; then _bvk_hint_wrap "$tip" 3 $(( cols - 2 )); for ln in "${_BVK_HINT_LN[@]}"; do out+=$'\033[2m'"$ln"$'\033[0m'"$nl"; done; fi
-  out+="$nl"
-  out+="Old: $bn$nl"
+}
+_rn_pick_footer() { echo; echo "u) Up   q) Close"; }
+
+# _rn_select_items → selected_items.  rc 1 = nothing chosen (u / q / blank / bad numbers).
+_rn_select_items() {
+  if [ ${#items[@]} -eq 0 ]; then echo "❌ No items available"; return 1; fi
+  local _multi_allow_a=false _multi_header_hook=_rn_pick_header _multi_footer_hook=_rn_pick_footer _multi_label="Select" _multi_hdr_gap=1 _prompt="RENAME"
+  local -A _msel_set=()
+  local _buf _pos itemlist idx
+  _vp_mode="items"
+  _multi_prompt_loop
+  itemlist="${_buf// /}"
+  case "${itemlist,,}" in u|q|"") return 1 ;; esac
+  local indices=($(parse_selection "$itemlist" "${#items[@]}"))
+  selected_items=()
+  for idx in "${indices[@]}"; do selected_items+=("${items[$((idx-1))]}"); done
+  if [ ${#selected_items[@]} -eq 0 ]; then echo "❌ No valid items selected"; return 1; fi
+  return 0
+}
+
+# _rn_name_prompt ITEM N TOTAL → _RN_FINAL.  rc 1 = blank / cancelled.   Adds  Old: / New:  under the screen above.
+_rn_name_prompt() {
+  local item="$1" bn="${item##*/}" out nl=$'\n'
+  out="${nl}Old: $bn$nl"
   builtin printf '%s' "$out"
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="New:"
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
@@ -206,7 +214,7 @@ _rn_name_prompt() {
 # Shortcut files get special handling (name-only, not the .shortcut pointer).
 # ---------------------------------------------------------------------------
 _rename_single_mutation() {
-  select_items_common "RENAME" || return
+  _rn_select_items || return
 
   # a long selection is not asked item by item: it goes straight to the CSV rename (rename.select.items.csv)
   local _lim="${rename_csv_above:-5}"

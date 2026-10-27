@@ -72,6 +72,9 @@ _do_rename_mv() { _lm_stub bashbasicsbyvk_rename.sh _do_rename_mv "$@"; }
 rename_item() { _lm_stub bashbasicsbyvk_rename.sh rename_item "$@"; }
 _rn_ext_of() { _lm_stub bashbasicsbyvk_rename.sh _rn_ext_of "$@"; }
 _rn_finalize() { _lm_stub bashbasicsbyvk_rename.sh _rn_finalize "$@"; }
+_rn_pick_header() { _lm_stub bashbasicsbyvk_rename.sh _rn_pick_header "$@"; }
+_rn_pick_footer() { _lm_stub bashbasicsbyvk_rename.sh _rn_pick_footer "$@"; }
+_rn_select_items() { _lm_stub bashbasicsbyvk_rename.sh _rn_select_items "$@"; }
 _rn_name_prompt() { _lm_stub bashbasicsbyvk_rename.sh _rn_name_prompt "$@"; }
 _rename_single_mutation() { _lm_stub bashbasicsbyvk_rename.sh _rename_single_mutation "$@"; }
 _rename_multi_mutation() { _lm_stub bashbasicsbyvk_rename.sh _rename_multi_mutation "$@"; }
