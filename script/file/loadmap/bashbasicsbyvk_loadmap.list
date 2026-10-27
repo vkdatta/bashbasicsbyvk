@@ -26,7 +26,7 @@ bashbasicsbyvk_filter.sh|||the filter (=) input reader the main prompt uses
 bashbasicsbyvk_notify.sh|||notification count in the header
 
 [bg]
-bashbasicsbyvk_loadmap_stubs.sh|||GENERATED lazy-load stubs and needs table (bashbasicsbyvk_loadmap_gen --write); loaded first after the paint
+bashbasicsbyvk_loadmap_stubs.sh|||GENERATED lazy-load stubs and needs table (bashbasicsbyvk_loadmap_gen --write); sourced by the loader at the end of [fg], before the first paint (an [fg] function may call a [bg] / [no] one)
 bashbasicsbyvk_run.sh|||opens / runs a file (Enter on a file); first background file because the first Enter may need it
 bashbasicsbyvk_choose.sh|||the shared choice menu (_bvk_yn / _bvk_menu): most questions use it
 bashbasicsbyvk_help.sh|||tool, run as its own process

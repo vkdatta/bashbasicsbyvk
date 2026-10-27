@@ -32,7 +32,7 @@ export HOME="$T/home" TERM=xterm LANG=C.UTF-8 PATH="$B:$PATH"; mkdir -p "$HOME"
 (cd "$T" && bash -c '
   source bashbasicsbyvk_loadmap.sh; _lm_fg || exit 9
   declare -F _vp_render_fresh >/dev/null && echo "fg:render" >&3
-  declare -F transfer_menu >/dev/null && echo "fg:transfer_menu_defined_early" >&3
+  declare -F _shortcut_read_field >/dev/null && echo "fg:stub_ready_before_paint" >&3
   [ -z "${_LM_DONE[bashbasicsbyvk_transfer.sh]:-}" ] && echo "fg:transfer_not_loaded" >&3
   _lm_ensure_stubs
   [ "$(declare -f transfer_menu | grep -c _lm_stub)" = 1 ] && echo "stub:transfer_menu" >&3
@@ -43,8 +43,10 @@ export HOME="$T/home" TERM=xterm LANG=C.UTF-8 PATH="$B:$PATH"; mkdir -p "$HOME"
 for w in "fg:render" "fg:transfer_not_loaded" "stub:transfer_menu" "real:transfer_menu"; do
   grep -qx "$w" <<<"$res" && ok "$w" || { bad "$w"; echo "$res" | head -5; }
 done
-grep -qx 'fg:transfer_menu_defined_early' <<<"$res" && bad "a [bg] function exists before its file loaded and before the stubs file" || ok "nothing from [bg] / [no] exists before the stubs"
+grep -qx 'fg:stub_ready_before_paint' <<<"$res" && ok "the stubs are there before the first paint (an [fg] function calling _shortcut_read_field of transfer.sh must not get 'command not found')" || bad "no stub for a [bg] function right after _lm_fg: a first paint that calls it fails with 'command not found'"
 grep -qx 'type:function' <<<"$res" && ok "a stub shows as a function (declare -F keeps working)" || bad "type -t of a stubbed function: $(grep '^type:' <<<"$res")"
+
+[ -f "$ROOT/tests/loadmap/shortcut_paint.py" ] && { python3 -I "$ROOT/tests/loadmap/shortcut_paint.py" "$ROOT" || fail=1; }   # the real first paint, in a pty
 
 # ---- (4) -------------------------------------------------------------------------------
 fns() { (cd "$T" && bash -c "$1" 2>"$T/err.$2" | sort); }

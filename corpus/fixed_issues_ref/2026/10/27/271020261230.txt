@@ -9,3 +9,15 @@ Two independent changes, one structural overlap: v1b's new bashbasicsbyvk_rename
 
 FIX
 v1a tree + v1b changes. renamesettings.sh added to bashbasicsbyvk_loadmap.list as one line next to findsettings.sh; loadmap_gen --write regenerated the stubs (943), --check ok. The 8 tests that were already red were left untouched on purpose.
+
+2. ISSUE IN BRIEF
+On Termux, opening a folder that holds a .shortcut file printed "bashbasicsbyvk_displayer.sh: line 947/948/949: _shortcut_read_field: command not found".
+
+2. HOW DID YOU DEBUG
+The function lives in transfer.sh ([bg]); its stub existed in the stubs file. Started `o` in a pty from a folder with a .shortcut: v1a prints the three errors, so it is a v1a bug, not a merge bug.
+
+2. CAUSE
+The stubs file was sourced by _lm_idle, AFTER the first paint. The first paint (displayer.sh, [fg]) calls _shortcut_display_parts -> _shortcut_read_field before that, so no stub and no function existed. The generator only checks load-time (top-level) needs of [fg] files, not calls made at run time.
+
+2. FIX
+loadmap.sh: _lm_fg sources the stubs at its end (about 4 ms), before the first paint; loadmap.list note and AGENTS.md rule 13 say so. tests/loadmap/shortcut_paint.py (pty, fails on v1a) is run by tests/loadmap.sh; tests/loadmap.sh (2) now expects the stubs right after _lm_fg.

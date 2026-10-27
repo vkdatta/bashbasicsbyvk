@@ -99,6 +99,9 @@ _lm_fg() {
     _LM_DONE[$__lm_f]=1
     _lm_src "$__lm_f"
   done
+  # the stubs go in HERE, before the first paint: [fg] code calls functions of [bg] / [no] files at run time (the first paint of a folder
+  # with a .shortcut calls _shortcut_read_field of transfer.sh); a call with no stub yet is "command not found". ~4 ms.
+  _lm_ensure_stubs
   [ "${BVK_LOADMAP:-}" = all ] && _lm_all
   return 0
 }
@@ -121,8 +124,7 @@ _lm_read_bg() {
   done
 }
 
-# after the first paint, before the prompt waits for a key: the stubs first (a key may already be waiting, and its command needs them),
-# then the [bg] items one by one, stopping the moment a key is waiting
+# after the first paint, before the prompt waits for a key: the [bg] items one by one, stopping the moment a key is waiting
 _lm_idle() {
   [ "$_LM_IDLE_DONE" = 1 ] && return 0
   if [ "$_LM_BG_READY" != 1 ]; then _lm_ensure_stubs; _lm_read_bg; fi
