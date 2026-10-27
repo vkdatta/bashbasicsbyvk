@@ -140,14 +140,14 @@ _fx_adf_breadcrumb() {
 
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF function files — each file declares its own adf-staging and calls
-#  _fx_adf_register.  They are loaded by _3bvk_import_fx.sh (right after this
+#  _fx_adf_register.  They are loaded through the load mapper (listed in the WITH column of this file)
 #  file, from o).  To add a new ADF function: create
-#  bashbasicsbyvk_adf_<folder>_<name>.sh and add one line to _3bvk_import_fx.sh.
+#  bashbasicsbyvk_adf_<folder>_<name>.sh add one line to the load mapper ([no]) and list it in the WITH column of bashbasicsbyvk_functions.sh.
 # ════════════════════════════════════════════════════════════════════════════
 
 
 
-# UDF tab extras (e-N edit item, ux / ui export / import all UDFs as a zip): bashbasicsbyvk_udf_io.sh, loaded by _3bvk_import_fx.sh
+# UDF tab extras (e-N edit item, ux / ui export / import all UDFs as a zip): bashbasicsbyvk_udf_io.sh, loaded through the load mapper
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Tab cycle

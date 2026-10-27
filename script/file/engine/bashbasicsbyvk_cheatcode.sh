@@ -120,6 +120,7 @@ _cc_build() {
 }
 
 _cc_act() {   # row index, key — the row's tag is the text to type
+  _lm_need bashbasicsbyvk_settings_ui.sh      # a settings callback: reads the screen's _st_tag / sets _st_back
   _CC_PICK="${_st_tag[$1]}"
   _st_back=1
 }

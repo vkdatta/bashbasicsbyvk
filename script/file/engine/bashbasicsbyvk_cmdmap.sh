@@ -105,7 +105,7 @@ _cm_find() {   # name -> _CM_FOUND (and stdout)
 
 # ------------------------------------------------------------ definitions
 # cmd_def ID KIND HANDLER CLASS "description" ["example"]
-# Registered under the basename of the file that calls it (a *commands.sh, loaded by _3bvk_import_cmdmap.sh).
+# Registered under the basename of the file that calls it (a *commands.sh, loaded through the load mapper).
 cmd_def() {
   local id="$1" kind="$2" handler="$3" class="$4" desc="${5:-}" ex="${6:-}"
   _CM_DEF["${BASH_SOURCE[1]##*/}:$id"]="$kind|$handler|$class|$desc|$ex"
@@ -152,6 +152,7 @@ _cm_parse_map() {   # $1 file  $2 = head (directives only, stop at the first wir
           else
             id="${BASH_REMATCH[3]}"; srcfile="${BASH_REMATCH[4]}"
             tgt="$srcfile:$id"
+            declare -F _lm_need >/dev/null 2>&1 && _lm_need "$srcfile"   # the load mapper: this menu's *commands.sh registers its cmd_defs only when it is wired in
           fi
           case "$tgt" in
             BLOCK|BACK)
@@ -410,9 +411,7 @@ _cm_hint() {
     back)  _hint_want="$_CM_KEY  →  go back (cancels this)${esc}" ;;
     block) _hint_want="$_CM_KEY  →  ✗ not available here — Enter will cancel${esc}" ;;
   esac
-  # keep it on one row
-  local cols="${_vp_cols_now:-80}"
-  [ "${#_hint_want}" -ge "$cols" ] && _hint_want="${_hint_want:0:$(( cols - 2 ))}…"
+  # no cut here: every painter expands a long suggestion onto the next rows (_bvk_hint_wrap)
   return 0
 }
 
@@ -731,11 +730,13 @@ _cm_edit_draw() {   # redraw the whole prompt + text; long text WRAPS onto the n
   (( erow > trow )) && builtin printf '\033[%dA' $(( erow - trow ))
   builtin printf '\r'; (( tcol > 0 )) && builtin printf '\033[%dC' "$tcol"
   _CE_ROW=$trow
-  # 3. dim hint on the row below the text, then back
+  # 3. dim hint on the rows below the text (a long one expands onto more rows), then back
   if [ -n "$hint" ]; then
-    _bvk_clip "$hint"
+    local hl hn=1
+    if declare -F _bvk_hint_wrap >/dev/null 2>&1; then _bvk_hint_wrap "$hint" "${_CE_HINT_MAX:-3}"; hn=$_BVK_HINT_N; else _bvk_clip "$hint"; _BVK_HINT_LN=("$_BVK_CLIP"); fi
     (( erow > trow )) && builtin printf '\033[%dB' $(( erow - trow ))
-    builtin printf '\n\r\033[2m%s\033[0m\033[%dA\r' "$_BVK_CLIP" $(( erow + 1 - trow ))
+    for hl in "${_BVK_HINT_LN[@]}"; do builtin printf '\n\r\033[2K\033[2m%s\033[0m' "$hl"; done
+    builtin printf '\033[%dA\r' $(( erow + hn - trow ))
     (( tcol > 0 )) && builtin printf '\033[%dC' "$tcol"
   fi
   _CE_ENDROW=$erow; _CE_ENDCOL=$ecol; _CE_FULL=$(( T > 0 && T % W == 0 ? 1 : 0 ))
@@ -776,6 +777,9 @@ _cm_line_edit() {
   # lines above the prompt row are printed once; the prompt row + text are (re)drawn by _cm_edit_draw, which counts wrapped rows
   [[ "$_ce_prompt" == *$'\n'* ]] && builtin printf '%s\n' "${_ce_prompt%$'\n'*}"
   _bvk_paste_on
+  # _CE_FILL: a text the caller offers (the rename screen: the old name).  The Up arrow, or a tap / click on the row just above the
+  # prompt (the "Old:" line), puts it into the line.  Reports for the tap are asked for only while such a text is offered.
+  [ -n "${_CE_FILL:-}" ] && declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on
   _cm_edit_draw
   # text that cc just typed in for you: show what it does, like any typed command
   if [ "${_CC_HINT_NOW:-0}" = 1 ]; then
@@ -793,6 +797,10 @@ _cm_line_edit() {
       done
       case "$seq" in
         '[200~') _bvk_paste_bracketed; _cm_edit_paste "$_BVK_PASTE" ;;   # a paste: ONE insert, ONE redraw (line breaks are text)
+        '[A') [ -n "${_CE_FILL:-}" ] && { _ce_buf="$_CE_FILL"; _ce_pos=${#_ce_buf}; } ;;
+        '[<'*) if [ -n "${_CE_FILL:-}" ] && declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$seq" && [ "$_MS_ACT" = press ] && _bvk_mouse_prow; then
+                 (( _BVK_CROW - _MS_Y == _CE_ROW + 1 )) && { _ce_buf="$_CE_FILL"; _ce_pos=${#_ce_buf}; }
+               fi ;;
         '[D') [ "$_ce_pos" -gt 0 ] && _ce_pos=$(( _ce_pos - 1 )) ;;
         '[C') [ "$_ce_pos" -lt "${#_ce_buf}" ] && _ce_pos=$(( _ce_pos + 1 )) ;;
         '[H'|'[1~'|OH) _ce_pos=0 ;;
@@ -830,6 +838,7 @@ _cm_line_edit() {
   done
   # leave: wipe the hint row, put the cursor after the text, newline
   _bvk_paste_off
+  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
   _CM_HINT_SHOW=""
   _cm_edit_leave
   [ -n "$stty_orig" ] && stty "$stty_orig" 2>/dev/null
@@ -855,6 +864,9 @@ _cm_text_read() {   # prompt initial var can_complete
   local _tr_saved; _tr_saved="$(declare -p _CM_LOCAL 2>/dev/null)"
   _cm_prompt_collect "$prompt"
   while :; do
+    # a command that ran last time (print, cc, settings ...) may have asked questions of its own: each answer opened a wait, and
+    # nothing closed it before this prompt is drawn again.  The prompt is up again here: the wait is over (else a bar sits on it)
+    [ "${_SL_WANT:-0}" = 1 ] && _sl_ready
     _cm_ctx_find
     _cm_line_edit "$prompt" "$start" "$var" "$cc" || { _CM_RESULT=""; _cm_text_read_done "$_tr_saved"; return 1; }
     if _cm_prompt_has_choices "$prompt"; then _CM_RESULT="$_CM_OUT"; _cm_text_read_done "$_tr_saved"; return 0; fi

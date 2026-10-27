@@ -123,6 +123,40 @@ _bvk_clip() {   # $1 text [$2 max cells; default cols-1] -> _BVK_CLIP = text cut
   _BVK_CLIP="$s"
 }
 
+# _bvk_hint_wrap TEXT [MAX_LINES=3] [WIDTH]  ->  _BVK_HINT_LN[] (the lines) · _BVK_HINT_N (how many, 0 for an empty text)
+# The ONE rule for every suggestion row (cheat-code hints, notices): a text longer than one row EXPANDS onto the next rows, broken at
+# spaces, the way a Settings description does (_st_desc_wrap), instead of being cut with "…".  Only a text that would need more than
+# MAX_LINES rows is cut, with "…" on the last row.  A text that fits is returned untouched (its own spacing).
+_bvk_hint_wrap() {
+  local t="$1" max="${2:-3}" lim="${3:-}" x line="" cand
+  local -a words
+  _BVK_HINT_LN=(); _BVK_HINT_N=0
+  [ -n "$t" ] || return 0
+  [ -n "$lim" ] || { _bvk_cols; lim=$(( _BVK_COLS - 1 )); }
+  (( lim < 8 )) && lim=8
+  (( max < 1 )) && max=1
+  _bvk_dispw "$t"
+  if (( _BVK_W <= lim )); then _BVK_HINT_LN=("$t"); _BVK_HINT_N=1; return 0; fi
+  builtin read -ra words <<< "$t"
+  for x in "${words[@]}"; do
+    if [ -z "$line" ]; then cand="$x"; else cand="$line $x"; fi
+    _bvk_dispw "$cand"
+    if (( _BVK_W <= lim )); then line="$cand"; continue; fi
+    [ -n "$line" ] && _BVK_HINT_LN+=("$line")
+    _bvk_dispw "$x"
+    (( _BVK_W > lim )) && { _bvk_clip "$x" "$lim"; x="$_BVK_CLIP"; }       # one word wider than a row: cut it
+    line="$x"
+  done
+  [ -n "$line" ] && _BVK_HINT_LN+=("$line")
+  if (( ${#_BVK_HINT_LN[@]} > max )); then
+    _BVK_HINT_LN=("${_BVK_HINT_LN[@]:0:max}")
+    _bvk_clip "${_BVK_HINT_LN[max-1]}" $(( lim - 1 ))
+    _BVK_HINT_LN[max-1]="${_BVK_CLIP}…"
+  fi
+  _BVK_HINT_N=${#_BVK_HINT_LN[@]}
+  return 0
+}
+
 _BVK_FIT_S=0
 # _bvk_fit_input PROMPT TEXT CURSOR [LEFT_MARGIN_CELLS]
 #   -> _BVK_FIT_PROMPT (prompt, shortened if the screen is tiny) · _BVK_FIT (what to print after it) · _BVK_FIT_BACK (cells to
@@ -563,15 +597,20 @@ _vp_geometry() {
 
   # Select-prompt screens keep ONE suggestion row ABOVE the prompt (between the footer and "Select:"): hints ("type to filter live",
   # "s → Settings"), notices and the loading bar are drawn there, never on the line being typed on.
-  _vp_hint_row=0
-  _vp_wants_hint_row && _vp_hint_row=1
+  # It is one row on a wide screen and two on a narrow one (a phone): a suggestion longer than the row expands onto the second row
+  # (_bvk_hint_wrap) instead of being cut.  _vp_hint_row stays the 0/1 flag "this prompt has the area", _vp_hint_n is its height.
+  _vp_hint_row=0; _vp_hint_n=0
+  if _vp_wants_hint_row; then
+    _vp_hint_row=1; _vp_hint_n=1
+    (( _vp_cols_now < ${BVK_HINT_WIDE:-100} && rows >= 24 )) && _vp_hint_n=2
+  fi
 
   min_rows=3
   (( _vp_R > 0 && _vp_R < min_rows )) && min_rows=$_vp_R
   (( min_rows < 1 )) && min_rows=1
 
   while :; do
-    chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_row ))
+    chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_n ))
     (( rows - chrome >= min_rows )) && break
     if   (( _vp_ftr_show > 0 ));  then _vp_ftr_show=$(( _vp_ftr_show - 1 ))
     elif (( _vp_ind > 0 ));       then _vp_ind=0
@@ -582,13 +621,13 @@ _vp_geometry() {
 
   _vp_apply_chrome_budget
 
-  chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_row ))
+  chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_n ))
   _vp_page=$(( rows - chrome ))
   (( _vp_page < 1 )) && _vp_page=1
   (( _vp_page > _vp_R )) && _vp_page=$_vp_R
   _vp_rows_printed=$_vp_page
   (( _vp_n == 0 )) && _vp_rows_printed=1
-  _blk_h=$(( _vp_hdr_show + _vp_ind + _vp_rows_printed + _vp_ind + _vp_ftr_show + _vp_hint_row + 1 ))
+  _blk_h=$(( _vp_hdr_show + _vp_ind + _vp_rows_printed + _vp_ind + _vp_ftr_show + _vp_hint_n + 1 ))
 }
 
 _vp_ensure_visible() {
@@ -698,7 +737,7 @@ _vp_emit() {
 
   for line in "${_vp_ftr_out[@]}"; do _vp_fit "$line"; _vp_el "$_vp_line"; done
   # the suggestion row: sits between the footer and the "Select:" line (see _bvk_hint_paint)
-  if (( ${_vp_hint_row:-0} )); then _vp_el ""; _hint_cur="?"; fi   # the row was just redrawn blank: the next sync repaints the suggestion
+  if (( ${_vp_hint_row:-0} )); then local _hn; for (( _hn=0; _hn<${_vp_hint_n:-1}; _hn++ )); do _vp_el ""; done; _hint_cur="?"; fi   # the rows were just redrawn blank: the next sync repaints the suggestion
 
   # frame is complete — one write; ?2026 = synchronized output (terminals that lack it ignore it)
   builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
@@ -781,7 +820,7 @@ _vp_filter_header_line() {
   printf '🔍 filter: %s*  (%d/%d)\n' "${_filter_query^^}" "${#items[@]}" "$(_filter_total_count)"
 }
 
-_vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + _vp_hint_row + 1 )); }
+_vp_dist() { echo $(( _vp_end - $1 + _vp_ind + _vp_ftr_show + _vp_hint_n + 1 )); }
 
 _vp_repaint_row() {
   local i="$1" r="$1" line
@@ -901,7 +940,9 @@ _bvk_row_multi() {
   nvis=$(( R - top )); (( nvis > maxv )) && nvis=$maxv
   _BLK_TOP=$top
   out=$'\r'; (( _BLK_CROW > 0 )) && out+=$'\033['"$_BLK_CROW"A
-  [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ] && out+=$'\033[1A\r\033[2K\033[1B'   # the block replaces the suggestion
+  if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then   # the block replaces the suggestion (every row of it)
+    for (( k=1; k<=${_vp_hint_n:-1}; k++ )); do out+=$'\033['"$k"$'A\r\033[2K\033['"$k"$'B'; done
+  fi
   out+=$'\033[J'
   for (( k=top; k<top+nvis; k++ )); do
     (( k > top )) && out+=$'\r\n'
@@ -937,14 +978,20 @@ _bvk_room() { (( ${#_buf} + $1 <= _BVK_MAX_INPUT )); }
 #     Select: _
 # It is part of the drawn block (_vp_hint_row, counted in _blk_h / _vp_dist), so painting it never scrolls the screen.
 # The cursor is on row _BLK_CROW of the prompt block; it ends where it started (column 0).
-_bvk_hint_paint() {   # $1 text ("" = wipe)  $2 sgr (default dim)
-  local up=$(( ${_BLK_CROW:-0} + 1 )) sgr="${2:-2}"
-  if [ -n "$1" ]; then builtin printf '\033[%dA\r\033[2K\033[%sm%s\033[0m\033[%dB\r' "$up" "$sgr" "$1" "$up"
-  else builtin printf '\033[%dA\r\033[2K\033[%dB\r' "$up" "$up"; fi
+_bvk_hint_paint() {   # $1 text ("" = wipe)  $2 sgr (default dim).  A long text expands onto the next reserved row (_bvk_hint_wrap).
+  local n=${_vp_hint_n:-1} i up sgr="${2:-2}" out="" ln
+  _BVK_HINT_N=0; [ -n "$1" ] && _bvk_hint_wrap "$1" "$n"
+  for (( i=0; i<n; i++ )); do
+    up=$(( ${_BLK_CROW:-0} + n - i ))                     # row i of the area, counted up from the cursor's row
+    ln=""; (( i < _BVK_HINT_N )) && ln=$'\033['"$sgr"'m'"${_BVK_HINT_LN[i]}"$'\033[0m'
+    out+=$'\033['"$up"$'A\r\033[2K'"$ln"$'\033['"$up"$'B'
+  done
+  builtin printf '%s\r' "$out"
 }
-_bvk_hint_leave() {   # the prompt is being left (cursor on the block's LAST row): wipe the row above its FIRST row
-  local up=${_BLK_ROWS:-1}
-  builtin printf '\033[%dA\r\033[2K\033[%dB\r' "$up" "$up"
+_bvk_hint_leave() {   # the prompt is being left (cursor on the block's LAST row): wipe the rows above its FIRST row
+  local n=${_vp_hint_n:-1} i up out=""
+  for (( i=0; i<n; i++ )); do up=$(( ${_BLK_ROWS:-1} + i )); out+=$'\033['"$up"$'A\r\033[2K\033['"$up"$'B'; done
+  builtin printf '%s\r' "$out"
 }
 _bvk_notice() {
   if [ "${_vp_hint_row:-0}" = 1 ]; then
@@ -1114,7 +1161,7 @@ _BVK_TO_MAIN=0
 _bvk_exit() {
   _bvk_paste_off
   declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
-  if ${_sw_did_switch:-false}; then declare -F _gd_before_exec >/dev/null && _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi
+  if ${_sw_did_switch:-false}; then [ "${_GD_ACTIVE:-0}" = 1 ] && _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi
 }
 _bvk_quit() {
   _fx_in_mode=0; _sw_in_mode=0

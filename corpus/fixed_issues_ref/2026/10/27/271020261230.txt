@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+v1a (load mapper: first paint 283 ms -> 167 ms) and v1b (stuck Working bar on text prompts, Settings-style rename screen, wrapping suggestion rows) were made in parallel from the same base and had to become one tree.
+
+HOW DID YOU DEBUG
+Diffed both trees against base: six files edited by both (browse, cmdmap, viewport, covers.map, smartload.sh, tests.list) merged three-way with no conflict; fixed_issues_index.jsonl needed both teams' lines kept. v1b also edited settings/_3bvk_import_settings.sh, which v1a deleted. Ran tests/run.sh all on the result: 8 failed (choose, choose_plain, delete_confirm, deps, hints, mouse, settings_desc, wheel_target), the same 8 as v1a's baseline, with identical FAIL lines to v1a for the four re-compared; loadmap, smartload, rename_screen, nav_back, loadtime_print, adf_registry pass. NOT verified: e2e_pending, e2e_services (need ../fileapi); real Termux timing.
+
+CAUSE
+Two independent changes, one structural overlap: v1b's new bashbasicsbyvk_renamesettings.sh was registered in an import file that no longer exists.
+
+FIX
+v1a tree + v1b changes. renamesettings.sh added to bashbasicsbyvk_loadmap.list as one line next to findsettings.sh; loadmap_gen --write regenerated the stubs (943), --check ok. The 8 tests that were already red were left untouched on purpose.

@@ -101,7 +101,7 @@ _bvk_mouse_hit() {
   _MS_KIND=none; _MS_ITEM=0
   (( d <= 0 && d > - ${_BLK_ROWS:-1} )) && { _MS_KIND=prompt; return 0; }       # the Select: row itself (a long text spans several rows)
   (( d > 0 )) || return 0
-  base=$(( ${_vp_ind:-0} + ${_vp_ftr_show:-0} + ${_vp_hint_row:-0} ))
+  base=$(( ${_vp_ind:-0} + ${_vp_ftr_show:-0} + ${_vp_hint_n:-0} ))
   r=$(( _vp_end + base + 1 - d ))                       # screen row of the list (inverse of _vp_dist)
   if (( _vp_n > 0 && r >= _vp_start && r <= _vp_end )); then
     it=$r
@@ -225,7 +225,7 @@ _bvk_mouse_wheel_window() {
 #   _bvk_mouse_ftr_hit CLICKED_ROW PROMPT_ROW  -> 0 and _MS_FKEY = the key of the cell that was touched (the text before the ")"), else 1
 _bvk_mouse_ftr_hit() {
   _MS_FKEY=""
-  local d=$(( $2 - $1 )) h=${_vp_hint_row:-0} f=${_vp_ftr_show:-0}
+  local d=$(( $2 - $1 )) h=${_vp_hint_n:-0} f=${_vp_ftr_show:-0}
   (( f > 0 && d > h && d <= h + f )) || return 1
   local k=$(( f - (d - h) ))
   _vp_strip_ansi "${_vp_ftr_out[k]:-}"

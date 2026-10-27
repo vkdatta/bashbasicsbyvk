@@ -80,7 +80,7 @@ if command -v tmux >/dev/null 2>&1; then
   echo 00000000-0000-4000-8000-000000000000 >"$H/.config/bashbasicsbyvk/telemetry/uuid"; echo "$(date -u +%F) true" >"$H/.config/bashbasicsbyvk/telemetry/daily"   # telemetry already reported today: no network wait
   find "$ROOT/script" -type f -not -path '*/bvk-ls/*' -not -name '*.txt' -not -name '*.xlsx' -exec cp {} "$B/" \; ; chmod +x "$B"/*
   S="bvktest$$"; t_start
-  tmx_start "$S" 100 40 "$T/d" "env PATH=$B:\$PATH HOME=$H TERM=xterm-256color bash --norc --noprofile $B/o"
+  tmx_start "$S" 100 40 "$T/d" "env PATH=$B:\$PATH HOME=$H TERM=xterm-256color BVK_LOADMAP=all bash --norc --noprofile $B/o"   # all = nothing loads in the background: the report this test reads has the same length every time
   tmx_wait "$S" 15 "a.txt" || bad "app did not start"
   snd() { tmx_dol "$S" "$1"; }                       # type a line + Enter, wait for the screen to react
   tmx_line "$S" print "Copy to clipboard" && ok "tmux: print offers copy / save at the main menu" || bad "tmux print"

@@ -16,7 +16,7 @@
 #     bucket and every Worker secret — cannot read an item. No link is ever shown; the data and kdk are served to the
 #     owner only. To open an item on another device you need e-mail + diseps + API key AND the dinons.
 #     Names are CSE too: sent as "e1.<ciphertext>" under the per-user label key (see _bb_alias_prepare).
-# Sourced by: o (via _3bvk_import_fileapi.sh) and the stand-alone bashbasicsbyvk_delete command.
+# Sourced by: o (via the load mapper) and the stand-alone bashbasicsbyvk_delete command.
 
 _SVC_QUIET=0            # 1 = background work: no price prompt, no progress chatter
 _SVC_SNAP_TGT=""        # snapshot only: id of the watched path

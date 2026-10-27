@@ -120,6 +120,7 @@ _st_bg_build() {
   _st_add r "Custom…" "$_o" "$( (( _o )) && echo "#$terminal_bg_color" )" custom
 }
 _st_bg_act() {
+  _lm_need bashbasicsbyvk_settings_ui.sh      # a settings callback: reads _st_tag
   case "${_st_tag[$1]}" in
     default) _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR" ;;
     custom)
@@ -142,6 +143,7 @@ _st_fg_build() {
   _st_add r "Custom…" "$cu" "$( (( cu )) && echo "#$terminal_text_color" )" custom
 }
 _st_fg_act() {
+  _lm_need bashbasicsbyvk_settings_ui.sh      # a settings callback: reads _st_tag
   case "${_st_tag[$1]}" in
     normal) _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_NORMAL" ;;
     coder)  _apply_text_color "$DEFAULT_TERMINAL_TEXT_COLOR_CODER" ;;

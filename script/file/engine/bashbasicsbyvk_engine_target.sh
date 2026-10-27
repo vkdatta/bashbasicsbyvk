@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Loaded by _3bvk_import_engine.sh (the app) and by the stand-alone cmd import files (copy, delete), which cannot load displayer.sh.
+# Loaded by the load mapper (the app) and by the stand-alone cmd import files (copy, delete), which cannot load displayer.sh.
 # Also run by setup.py at install time (bash -c 'source <this file>; _bvk_engine_target') so the wheel ships only this machine's binaries.
 # _bvk_engine_target — which prebuilt engine binary fits this machine: sets _bet_m (arm64 | amd64 | arm | 386 | "" = none) and
 # _bet_os (android | linux | darwin | freebsd).  ONE place for bvk-ls, bvk-fr (find & replace), bvk-xfer and anything else that ships per-CPU binaries.

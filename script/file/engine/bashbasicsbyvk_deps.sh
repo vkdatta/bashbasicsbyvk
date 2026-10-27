@@ -17,7 +17,7 @@
 #  (the central registry and the menu -> dependency map).  This file only reads it.  A new external dependency = one line there.
 #
 #  Two ways to use it (same file):
-#     source "bashbasicsbyvk_deps.sh"            (the app: `o` loads it through _3bvk_import_engine.sh; import files of stand-alone tools)
+#     source "bashbasicsbyvk_deps.sh"            (the app: `o` loads it through the load mapper, rule 13; import files of stand-alone tools)
 #         _dep_need  [opts] <id|feature>...      rc 0 everything required is there (maybe after installing) · 1 declined / failed / no terminal
 #         _dep_have  <id|feature>...             rc 0 when all required are installed; silent, never installs; _DEP_MISSING lists what is not
 #     bashbasicsbyvk_deps.sh [opts] <id|feature>...   (stand-alone tools, python: bashbasicsbyvk_deps.py)   same, as an exit code

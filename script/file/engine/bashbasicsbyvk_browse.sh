@@ -563,7 +563,7 @@ _menu_header() {
   echo
   _bvk_hdr_status; echo
   echo
-  _gd_view_path "$path"      # Google Drive open: show the Drive path, not the mirror folder
+  if [ "${_GD_ACTIVE:-0}" = 1 ]; then _gd_view_path "$path"; else _gd_vp="$path"; fi      # Google Drive open: show the Drive path, not the mirror folder
   local _hdr_loc="☁️ nav path: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
   if [ -n "$_filter_query" ]; then
     if ${imaginary_mode:-false}; then
@@ -650,8 +650,7 @@ _input_hint_sync() {
   [ "$_hint_want" = "$_hint_cur" ] && return 0
   _hint_cur="$_hint_want"
   if [ -n "$_hint_want" ]; then
-    declare -F _bvk_clip >/dev/null 2>&1 && { _bvk_clip "$_hint_want"; _hint_want_shown="$_BVK_CLIP"; } || _hint_want_shown="$_hint_want"
-    _bvk_hint_paint "$_hint_want_shown"
+    _bvk_hint_paint "$_hint_want"                      # the painter expands a long suggestion onto the next row (_bvk_hint_wrap)
   else
     _bvk_hint_paint ""
   fi
@@ -1062,11 +1061,11 @@ group_prefix=""
 force_show=false
 _has_group_view=false
 _gv_chain=""
-declare -a imaginary_map=()
-declare -a imaginary_lines=()
+declare -ga imaginary_map=()
+declare -ga imaginary_lines=()
 _imag_banner=""
-declare -a group_chars=()
-declare -A group_counts=()
+declare -ga group_chars=()
+declare -gA group_counts=()
 nav_result_path=""
 nav_selected_items=()
 gcloud_nav_result_path=""

@@ -1,0 +1,242 @@
+[fg]
+bashbasicsbyvk_loadmap.sh|||BOOTSTRAP: the loader itself. o sources it before this list is read; the loader skips it
+bashbasicsbyvk_loadtime.sh|||the load-time recorder: first, so the loading of the scripts is on its timeline (o runs _lt_init right after it)
+bashbasicsbyvk_smartload.sh|||the loading bar; its shims are called by print / smartmenu, so it loads before them
+bashbasicsbyvk_print.sh|||the `print` command shim; reads what the last frame drew
+bashbasicsbyvk_smartmenu.sh|||smart menus + the `read` shim every prompt goes through
+bashbasicsbyvk_menuchrome.sh|||footer keys / menu chrome
+bashbasicsbyvk_cmdmap.sh|||the command-map engine (typed words, hints); loads the menucommands files it is asked for
+bashbasicsbyvk_cheatcode.sh|||cc cheat codes: _CC_PREFILL is read by the input readers
+bashbasicsbyvk_viewport.sh|||draws the main list (first paint) and reads keys
+bashbasicsbyvk_mouse.sh|||mouse / touch on (a terminal setup step before the first paint)
+bashbasicsbyvk_engine_target.sh|||which CPU / OS binaries fit this machine
+bashbasicsbyvk_engine_heal.sh|||offers a reinstall when the install was carried to another machine (checked before the first paint)
+bashbasicsbyvk_displayer.sh|||builds the item rows of a folder
+bashbasicsbyvk_browse.sh|||the main-loop input reader and header / footer
+bashbasicsbyvk_maincommands.sh|||the MAIN commands of the command map: the hint row of the first paint reads them
+bashbasicsbyvk_lock.sh|||lock marks drawn in the list
+bashbasicsbyvk_fileapi_lib.sh|||FileAPI config reader used by the pending hint (split candidate: only _bb_cfg_val is needed before the first paint)
+bashbasicsbyvk_staging_pending.sh|||the "unfinished uploads" hint of the main screen (split candidate: only the count / hint are needed)
+bashbasicsbyvk_select.sh|||selection (.s) state: the header counts it
+bashbasicsbyvk_display_filter.sh|||the .d display filter: it narrows the first list
+bashbasicsbyvk_favourites.sh|||favourites mode: decides which list is drawn
+bashbasicsbyvk_settings.sh|||settings file reader, timezone, defaults: every screen reads these
+bashbasicsbyvk_colors.sh|||colour settings applied at start
+bashbasicsbyvk_filter.sh|||the filter (=) input reader the main prompt uses
+bashbasicsbyvk_notify.sh|||notification count in the header
+
+[bg]
+bashbasicsbyvk_loadmap_stubs.sh|||GENERATED lazy-load stubs and needs table (bashbasicsbyvk_loadmap_gen --write); loaded first after the paint
+bashbasicsbyvk_run.sh|||opens / runs a file (Enter on a file); first background file because the first Enter may need it
+bashbasicsbyvk_choose.sh|||the shared choice menu (_bvk_yn / _bvk_menu): most questions use it
+bashbasicsbyvk_help.sh|||tool, run as its own process
+bashbasicsbyvk_home.sh|||tool, run as its own process
+bashbasicsbyvk_refresh.sh|||stand-alone command, run as its own process
+bashbasicsbyvk_create.sh|||tool, run as its own process
+bashbasicsbyvk_delete.sh|||tool, run as its own process
+bashbasicsbyvk_rename.sh|||tool, run as its own process
+bashbasicsbyvk_find.sh|||tool, run as its own process
+bashbasicsbyvk_findrun.sh|||tool, run as its own process
+bashbasicsbyvk_organise.sh|||tool, run as its own process
+bashbasicsbyvk_transfer.sh|||tool, run as its own process
+bashbasicsbyvk_carry.sh|||tool, run as its own process
+bashbasicsbyvk_bundle_io.sh|||tool, run as its own process
+bashbasicsbyvk_action_confirm_key.sh|||tool, run as its own process
+bashbasicsbyvk_archive_formats.sh|||tool, run as its own process
+bashbasicsbyvk_ghlib.sh|||tool, run as its own process
+bashbasicsbyvk_staging_helpers.sh|||tool, run as its own process
+bashbasicsbyvk_staging_archive.sh|||tool, run as its own process
+bashbasicsbyvk_staging_map.sh|||tool, run as its own process
+bashbasicsbyvk_staging_move.sh|||tool, run as its own process
+bashbasicsbyvk_staging_copy.sh|||tool, run as its own process
+bashbasicsbyvk_staging_shortcut.sh|||tool, run as its own process
+bashbasicsbyvk_staging_shortcut_registry.sh|||tool, run as its own process
+bashbasicsbyvk_staging_bookmark.sh|||tool, run as its own process
+bashbasicsbyvk_staging_buffer.sh|||tool, run as its own process
+bashbasicsbyvk_settings_ui.sh|||tool, run as its own process
+bashbasicsbyvk_settings_groups.sh|||tool, run as its own process
+bashbasicsbyvk_settings_desc.sh|||tool, run as its own process
+bashbasicsbyvk_menu_sort.sh|||tool, run as its own process
+bashbasicsbyvk_hidefiles.sh|||tool, run as its own process
+bashbasicsbyvk_indexmode.sh|||tool, run as its own process
+bashbasicsbyvk_importnano.sh|||tool, run as its own process
+bashbasicsbyvk_compress.sh|||tool, run as its own process
+bashbasicsbyvk_timezone.sh|||tool, run as its own process
+bashbasicsbyvk_findsettings.sh|||tool, run as its own process
+bashbasicsbyvk_renamesettings.sh|||tool, run as its own process (Settings > Rename)
+bashbasicsbyvk_deps.sh|||the central dependency installer (asked only when a program is missing)
+bashbasicsbyvk_health.sh|||the health check command
+bashbasicsbyvk_rules.sh|||.r rule book
+bashbasicsbyvk_daemon_cmd.sh|||.dm daemon commands
+bashbasicsbyvk_telemetry.sh|||the daily usage ping: started after the first paint (@call below)
+bashbasicsbyvk_switch.sh|||sw: recents and bookmarks
+@call _bvk_telemetry_start | usage ping: after the first paint (it was a start-up step before)
+@call _snap_daemon_start | snapshot daemon: after the first paint
+
+[no]
+bashbasicsbyvk_apimenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_findmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_fxmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_homemenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_infinitymenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_organisemenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_promptmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_renamemenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_pendingmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_rulesmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_settingsmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_snapshotmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_switchmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_transfermenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_upgrademenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xuimenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_authmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_auth_submenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_auth_usermenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_rbmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_csmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_nfmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_ghpmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_ghrmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_staging_svc.sh|||upload service layer
+bashbasicsbyvk_staging_upload.sh|||up- / c2c- upload
+bashbasicsbyvk_staging_ux.sh|||ux- RBAM share
+bashbasicsbyvk_staging_backup.sh|||bk backup
+bashbasicsbyvk_staging_saved.sh|||sv saved surf
+bashbasicsbyvk_staging_snapshot.sh|||sn snapshots + the snapshot daemon (@call below)
+bashbasicsbyvk_csv.sh|||csv menu
+bashbasicsbyvk_upgrade.sh|||upgrade loop (-u)
+bashbasicsbyvk_api.sh|||api: link manager
+bashbasicsbyvk_pending.sh|||pn: pending uploads menu
+bashbasicsbyvk_functions.sh||bashbasicsbyvk_adf_rename_csv.sh,bashbasicsbyvk_adf_move_csv.sh,bashbasicsbyvk_adf_copy_csv.sh,bashbasicsbyvk_adf_shortcut_csv.sh,bashbasicsbyvk_adf_upload_csv.sh,bashbasicsbyvk_adf_map_csv.sh,bashbasicsbyvk_adf_bookmark_csv.sh,bashbasicsbyvk_adf_delete_common.sh,bashbasicsbyvk_adf_delete_ext.sh,bashbasicsbyvk_adf_delete_date.sh,bashbasicsbyvk_adf_zip_csv.sh,bashbasicsbyvk_adf_unzip_csv.sh,bashbasicsbyvk_adf_delete_csv.sh,bashbasicsbyvk_adf_upload_text_csv.sh,bashbasicsbyvk_adf_import_link.sh,bashbasicsbyvk_adf_selection.sh,bashbasicsbyvk_adf_selected.sh,bashbasicsbyvk_adf_gdrive.sh,bashbasicsbyvk_adf_cfwp.sh,bashbasicsbyvk_adf_github.sh|fx menu (and the registry the adf_* files fill)
+bashbasicsbyvk_adf_rename_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_move_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_copy_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_shortcut_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_upload_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_map_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_bookmark_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_delete_common.sh|||tool, run as its own process
+bashbasicsbyvk_adf_delete_ext.sh|||tool, run as its own process
+bashbasicsbyvk_adf_delete_date.sh|||tool, run as its own process
+bashbasicsbyvk_adf_zip_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_unzip_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_delete_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_upload_text_csv.sh|||tool, run as its own process
+bashbasicsbyvk_adf_import_link.sh|||tool, run as its own process
+bashbasicsbyvk_adf_selection.sh|||tool, run as its own process
+bashbasicsbyvk_adf_selected.sh|||tool, run as its own process
+bashbasicsbyvk_adf_gdrive.sh|||tool, run as its own process
+bashbasicsbyvk_adf_cfwp.sh|||tool, run as its own process
+bashbasicsbyvk_adf_github.sh|||tool, run as its own process
+bashbasicsbyvk_udf_io.sh|||UDF export / import
+bashbasicsbyvk_infinity.sh|||i: infinity stones
+bashbasicsbyvk_auth.sh|||auth: accounts
+bashbasicsbyvk_xui.sh|||shared screen for rbam / nf / cs
+bashbasicsbyvk_rbam.sh|||rbam: share people
+bashbasicsbyvk_csurf.sh|||cs: cloud surf
+bashbasicsbyvk_ai.sh|||.ai commands
+bashbasicsbyvk_gdrive.sh|bashbasicsbyvk_run.sh,bashbasicsbyvk_transfer.sh,bashbasicsbyvk_staging_archive.sh,bashbasicsbyvk_staging_helpers.sh,bashbasicsbyvk_staging_upload.sh,bashbasicsbyvk_staging_ux.sh,bashbasicsbyvk_staging_buffer.sh,bashbasicsbyvk_carry.sh||Google Drive session layer: wraps native functions, only inert until gd is used
+_3bvk_import_cmd_copy.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+_3bvk_import_cmd_delete.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+_3bvk_import_deps.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+_3bvk_import_gitpush.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+bashbasicsbyvk_api.map|||command-map wiring, read as data
+bashbasicsbyvk_auth.map|||command-map wiring, read as data
+bashbasicsbyvk_auth_sub.map|||command-map wiring, read as data
+bashbasicsbyvk_auth_user.map|||command-map wiring, read as data
+bashbasicsbyvk_cfwp|||tool, run as its own process
+bashbasicsbyvk_cfwp_inventory.py|||python helper, run as a process
+bashbasicsbyvk_cfwp_pages.py|||python helper, run as a process
+bashbasicsbyvk_cmdmap_guide.txt|||data / text
+bashbasicsbyvk_copy|||stand-alone command, run as its own process
+bashbasicsbyvk_create|||stand-alone command, run as its own process
+bashbasicsbyvk_delete|||stand-alone command, run as its own process
+bashbasicsbyvk_deps.list|||data
+bashbasicsbyvk_deps.py|||python helper, run as a process
+bashbasicsbyvk_erase|||stand-alone command, run as its own process
+bashbasicsbyvk_fav_lib.py|||python helper, run as a process
+bashbasicsbyvk_find.map|||command-map wiring, read as data
+bashbasicsbyvk_findrep|||tool, run as its own process
+bashbasicsbyvk_fx.map|||command-map wiring, read as data
+bashbasicsbyvk_gd|||tool, run as its own process
+bashbasicsbyvk_gen_sql|||tool, run as its own process
+bashbasicsbyvk_github|||tool, run as its own process
+bashbasicsbyvk_gitpush|||tool, run as its own process
+bashbasicsbyvk_help.txt|||data / text
+bashbasicsbyvk_home.map|||command-map wiring, read as data
+bashbasicsbyvk_index_lib.py|||python helper, run as a process
+bashbasicsbyvk_infinity.map|||command-map wiring, read as data
+bashbasicsbyvk_js_audit|||tool, run as its own process
+bashbasicsbyvk_js_audit_1a.py|||python helper, run as a process
+bashbasicsbyvk_js_audit_1b.py|||python helper, run as a process
+bashbasicsbyvk_js_audit_1c.py|||python helper, run as a process
+bashbasicsbyvk_js_audit_1d.py|||python helper, run as a process
+bashbasicsbyvk_js_audit_1e.py|||python helper, run as a process
+bashbasicsbyvk_js_audit_1f.py|||python helper, run as a process
+bashbasicsbyvk_js_audit_2.py|||python helper, run as a process
+bashbasicsbyvk_js_audit_constants.py|||python helper, run as a process
+bashbasicsbyvk_js_audit_helpers.py|||python helper, run as a process
+bashbasicsbyvk_loadmap.list|||data
+bashbasicsbyvk_loadmap_gen|||tool, run as its own process
+bashbasicsbyvk_loadtime_report|||tool, run as its own process
+bashbasicsbyvk_localhost|||tool, run as its own process
+bashbasicsbyvk_lt.py|||python helper, run as a process
+bashbasicsbyvk_main.map|||command-map wiring, read as data
+bashbasicsbyvk_mapgen|||tool, run as its own process
+bashbasicsbyvk_menus.list|||data
+bashbasicsbyvk_open|||stand-alone command, run as its own process
+bashbasicsbyvk_organise.map|||command-map wiring, read as data
+bashbasicsbyvk_overwrite|||stand-alone command, run as its own process
+bashbasicsbyvk_pending.map|||command-map wiring, read as data
+bashbasicsbyvk_polyglot|||tool, run as its own process
+bashbasicsbyvk_polyglot.md|||data / text
+bashbasicsbyvk_polyglot_constants.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_crawler.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_embeddings.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_extractor.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_languages.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_metrics.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_normalize.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_pipeline.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_report.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_similarity.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_ui.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_verify.py|||python helper, run as a process
+bashbasicsbyvk_polyglot_xlsx.py|||python helper, run as a process
+bashbasicsbyvk_prompt.map|||command-map wiring, read as data
+bashbasicsbyvk_py_audit|||tool, run as its own process
+bashbasicsbyvk_recents_daemon|||tool, run as its own process
+bashbasicsbyvk_recover|||tool, run as its own process
+bashbasicsbyvk_recover_api.py|||python helper, run as a process
+bashbasicsbyvk_recover_creds.py|||python helper, run as a process
+bashbasicsbyvk_recover_jslex.py|||python helper, run as a process
+bashbasicsbyvk_recover_names.py|||python helper, run as a process
+bashbasicsbyvk_recover_project.py|||python helper, run as a process
+bashbasicsbyvk_recover_unbundle.py|||python helper, run as a process
+bashbasicsbyvk_recover_util.py|||python helper, run as a process
+bashbasicsbyvk_recover_wasm.py|||python helper, run as a process
+bashbasicsbyvk_recover_worker.py|||python helper, run as a process
+bashbasicsbyvk_recover_wrangler.py|||python helper, run as a process
+bashbasicsbyvk_rename.map|||command-map wiring, read as data
+bashbasicsbyvk_rules.map|||command-map wiring, read as data
+bashbasicsbyvk_sast|||stand-alone command, run as its own process
+bashbasicsbyvk_select_expr|||tool, run as its own process
+bashbasicsbyvk_settings.map|||command-map wiring, read as data
+bashbasicsbyvk_snapshot.map|||command-map wiring, read as data
+bashbasicsbyvk_staging_jslib.js|||data / text
+bashbasicsbyvk_staging_pending_xfer|||tool, run as its own process
+bashbasicsbyvk_staging_ux_crypto|||tool, run as its own process
+bashbasicsbyvk_switch.map|||command-map wiring, read as data
+bashbasicsbyvk_transfer.map|||command-map wiring, read as data
+bashbasicsbyvk_upgrade.map|||command-map wiring, read as data
+bashbasicsbyvk_upgrade_install|||tool, run as its own process
+bashbasicsbyvk_xtract|||tool, run as its own process
+bashbasicsbyvk_xtract.md|||data / text
+bashbasicsbyvk_xui.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_cs.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_ghp.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_ghr.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_nf.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_rb.map|||command-map wiring, read as data
+

@@ -4,6 +4,8 @@ mkdir -p "$CONFIG_DIR"
 
 DEFAULT_SHOW_HIDDEN_FILES=false
 DEFAULT_INDEX_MODE_THRESHOLD=200
+DEFAULT_RENAME_CSV_ABOVE=5          # r: more selected items than this are handed to the CSV rename (rename.select.items.csv); 0 = never
+DEFAULT_RENAME_NOEXT_MODE="ask"      # r: a new name typed WITHOUT an extension: old (keep the old one) · none (create without) · ask
 DEFAULT_TERMINAL_BG_COLOR="000000"
 DEFAULT_TERMINAL_TEXT_COLOR_NORMAL="FFFFFF"
 DEFAULT_TERMINAL_TEXT_COLOR_CODER="00D000"
@@ -106,6 +108,8 @@ unset find_input_mode
 unset find_maxsize_mb
 unset find_show_limit
 unset find_threads
+unset rename_csv_above
+unset rename_noext_mode
 
 # Reads a settings file written by save_settings (key=value or key="value", one per line).
 # It is DATA, not code: nothing in the file is ever executed, and only lower-case keys are assigned.
@@ -259,6 +263,10 @@ _tz_label() {
 
 _apply_timezone
 
+: "${rename_csv_above:=$DEFAULT_RENAME_CSV_ABOVE}"
+[[ "$rename_csv_above" =~ ^[0-9]{1,6}$ ]] || rename_csv_above=$DEFAULT_RENAME_CSV_ABOVE
+: "${rename_noext_mode:=$DEFAULT_RENAME_NOEXT_MODE}"
+[[ "$rename_noext_mode" =~ ^(old|none|ask)$ ]] || rename_noext_mode=$DEFAULT_RENAME_NOEXT_MODE
 : "${find_case_mode:=$DEFAULT_FIND_CASE_MODE}"
 [[ "$find_case_mode" =~ ^(ask|exact|any)$ ]] || find_case_mode=$DEFAULT_FIND_CASE_MODE
 : "${find_regex_mode:=$DEFAULT_FIND_REGEX_MODE}"
@@ -341,6 +349,8 @@ save_settings() {
     echo "find_maxsize_mb=$find_maxsize_mb"
     echo "find_show_limit=$find_show_limit"
     echo "find_threads=$find_threads"
+    echo "rename_csv_above=$rename_csv_above"
+    echo "rename_noext_mode=$rename_noext_mode"
   } > "$SETTINGS_FILE"
 }
 
@@ -626,6 +636,8 @@ _st_reset_act() {
   find_maxsize_mb=$DEFAULT_FIND_MAXSIZE_MB
   find_show_limit=$DEFAULT_FIND_SHOW_LIMIT
   find_threads=$DEFAULT_FIND_THREADS
+  rename_csv_above=$DEFAULT_RENAME_CSV_ABOVE
+  rename_noext_mode=$DEFAULT_RENAME_NOEXT_MODE
   _items_presorted=false
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "${_st_tag[$1]}" in

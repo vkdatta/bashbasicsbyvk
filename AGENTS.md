@@ -79,14 +79,14 @@ So before you create anything, work in this order:
    (`CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`). A bridge never holds a rule of its own: change the rule in `AGENTS.md`, nowhere else.
    The only exception is `corpus/` (rule 5): it sits at the repo root, is not installed, and its
    notes are named by timestamp (inside year/month/day folders), not `bashbasicsbyvk_`.
-2. **`_3bvk_` is reserved for import files.** An import file is a `.sh` whose only job is to `source` other files,
-   named `_3bvk_import_<topic>.sh` (e.g. `_3bvk_import_engine.sh`). Nothing else may start with `_3bvk_`
+2. **`_3bvk_` is reserved for import files of stand-alone tools.** An import file is a `.sh` whose only job is to `source` other files,
+   named `_3bvk_import_<topic>.sh` (e.g. `_3bvk_import_cmd_delete.sh`). The app itself has none: `o` loads through the load mapper (rule 13). Nothing else may start with `_3bvk_`
    — no helpers, libs, python modules or tools. Use `bashbasicsbyvk_` for those.
-3. **`source` (and `.`) is allowed only in `o` and in import files.** No other file may source anything:
+3. **`source` (and `.`) is allowed only in `o` (one line: the loader), in the loader `bashbasicsbyvk_loadmap.sh` (the one `source` that loads the app's files) and in the import files of stand-alone tools.** No other file may source anything:
    not libs, not other scripts, not config files. This keeps the dependency graph in one place and free of cycles.
-   - An import file holds only lines like `_lt_b "load x"; source "bashbasicsbyvk_x.sh"; _lt_e`, written in load order.
-   - If file A needs file B, B must be loaded *earlier* by `o` or an import file. A never loads B itself.
-   - To load a new file: add one line to the right `_3bvk_import_*.sh` (or to `o`, which keeps the global load order).
+   - An import file (stand-alone tools only) holds only plain `source "bashbasicsbyvk_x.sh"` lines.
+   - If file A needs file B at load time (top-level code, or a variable B sets), B must be loaded *earlier*: the load mapper checks it (rule 13). A never loads B itself, except `_lm_need B` in a function that reads B's variables.
+   - To load a new file: add ONE line to the load mapper (rule 13), nowhere else.
    - Config/data files (e.g. the settings file) are parsed as data (`_bvk_settings_read`), never sourced.
    - Stand-alone executables run as their own process (`script/cmd/*`, `bashbasicsbyvk_gitpush`) cannot inherit `o`'s
      functions. They may `source` exactly ONE thing: their own `_3bvk_import_cmd_*.sh` / `_3bvk_import_gitpush.sh`
@@ -166,7 +166,7 @@ So before you create anything, work in this order:
      After adding or changing a command run `bash tests/cmd_docs.sh --write`. `tests/cmd_docs.sh`.
    - **The CPU-to-binary mapping** (`uname -m` -> arm64 / amd64 / arm / 386; android / linux / darwin / freebsd) lives only in `_bvk_engine_target` (`engine/bashbasicsbyvk_engine_target.sh`). `setup.py` asks that function (it runs it with bash) to decide which binaries a wheel carries; it never repeats the table. `tests/engine_target.sh`, `tests/wheel_target.sh`.
 
-10. **No dead files.** A file that nothing loads is deleted, not left "untouched" or listed as legacy: `tests/adf_registry.sh` has no allowlist, and a test with an exceptions list is where drift hides.
+10. **No dead files.** A file that nothing loads (not in the load mapper, rule 13, and not run as a process) is deleted, not left "untouched" or listed as legacy: `tests/adf_registry.sh` has no allowlist, and a test with an exceptions list is where drift hides.
     A file that another file depends on loads that dependency itself or degrades without it (`settings_ui.sh` works without `settings_desc.sh`: stand-alone callers and tests source it alone).
 
 11. **GitHub talks through ONE engine and ONE helper file.** (`fx → github_fx → open github`, and the `-u` upgrade loop.)
@@ -188,6 +188,20 @@ So before you create anything, work in this order:
       A tool may still PROBE with `command -v` to choose between alternatives it can work without (clipboard tools, `xdg-open` / `termux-open`), but a dependency it cannot work without is asked for through the engine.
     - A new dependency = one `D` line (+ one `F` line for the menu that needs it) + `bash tests/deps/deps_test.sh`. A pip family (`tree_sitter_<lang>`) is a `G` line. A multi-step install is a `@recipe` in the engine, never a copy in the caller.
     - Scripted runs (CI, agents, e.g. the polyglot check above): `BVK_DEPS_ASSUME=yes` answers the menu, `BVK_DEPS_ASSUME=no` refuses, `--dry-run` prints the commands. The engine installs system packages in one call and pip / npm in parallel lanes.
+
+13. **Every file passes through the load mapper; nothing is loaded outside it.** (`script/file/loadmap/`: `bashbasicsbyvk_loadmap.list`, `bashbasicsbyvk_loadmap.sh`, `bashbasicsbyvk_loadmap_gen`, generated `bashbasicsbyvk_loadmap_stubs.sh`.)
+    - **Why:** first paint used to wait for ~130 files that the first screen never calls. `o` now sources only the loader, which reads `bashbasicsbyvk_loadmap.list` BEFORE anything else is loaded and loads only what it says. The first-paint time is the product: every byte in `[fg]` costs it.
+    - **Three sections, one line per file** (`file|needs|with|note`, the note says WHY it sits there):
+      `[fg]` loaded before the first paint, in the order listed: ONLY what the first screen needs.
+      `[bg]` loaded after the first paint, one file at a time, only while no key is waiting (`_lm_idle`, called by `o` before every prompt); a key stops it at once. `@call fn args` lines run a function after the files above them (start-ups that must not delay the paint: the usage ping, the snapshot daemon).
+      `[no]` never loaded unless something calls one of its functions: every function of a `[bg]` / `[no]` file is a generated one-line stub; the first call loads the file (and the files it needs) and runs the real function. Python / C / data / stand-alone commands and `*.map` files are `[no]` too (they are run or read, never sourced).
+      "Background" is idle time inside the same shell: bash cannot hand functions from a child process to its parent, so a real background process cannot load a library.
+    - **A new file = one mapper line.** Default to `[no]`; use `[bg]` for what the person will probably use in the first seconds (Enter on a file, a common key); `[fg]` ONLY if the first paint cannot happen without it. Say why in the note. A new helper that an `[fg]` file calls goes to the file that already is `[fg]` only if it is needed before the paint; otherwise it lives in a `[bg]` / `[no]` file and its stub loads it on the first call.
+    - **After any change** (a file added / renamed / moved between sections / deleted, a function added / renamed, a line moved) run `python3 script/file/loadmap/bashbasicsbyvk_loadmap_gen --write`, then `--check` (or `bash tests/loadmap.sh`). The check fails on: a file without a line or a line without a file; an `[fg]` file that needs a later or non-`[fg]` file (top-level call, a variable the other file sets, a redefined function); a `[bg]` file that needs a `[no]` file; a stale stubs file; a top-level `declare` without `-g` (a file loads inside a function: a plain `declare` would stay local).
+    - **Code in `[fg]` never assumes a `[bg]` / `[no]` variable exists:** read it as `${VAR:-default}`, or call a function of that file first (its stub loads it), or put `_lm_need bashbasicsbyvk_x.sh` at the top of the function. Guard optional features by their own flag (`[ "${_GD_ACTIVE:-0}" = 1 ] && _gd_...`), never with `declare -F` (a stub makes `declare -F` true and the call would load the whole file).
+    - **Registries and wrappers:** a file that fills a registry another file reads (the `adf_*` files fill the fx menu) is listed in that file's WITH column; a file that wraps another file's functions at load time (`gdrive.sh`) lists the wrapped files in NEEDS (a dependency no text search can see).
+    - `BVK_LOADMAP=all` loads everything before the first paint (the old behaviour): use it to tell a load-order bug from a real one. `loadtime` shows every load, before and after the paint.
+    - **Measure it:** `loadtime` (rule 7's recorder) and the `[fg]` percentage in `bashbasicsbyvk_loadmap_gen --report`. Before you move a file to `[fg]`, say what needs it before the paint.
 
 ## Tests: seconds, not half an hour (the rules the owner and the agents framed)
 
@@ -240,7 +254,7 @@ A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes 
 ## When you add, rename or delete a file
 
 1. Pick the folder by feature, name it `bashbasicsbyvk_<what_it_does>.<ext>`.
-2. If it is shell code that `o` needs, add its `source` line to an import file (rule 3). Do not source it anywhere else.
+2. If it is shell code (`*.sh`) `o` may need, add ONE line to the load mapper (rule 13) and run `bashbasicsbyvk_loadmap_gen --write`; every other file (python, data, tools) gets a `[no]` line. Do not source it anywhere else.
 3. When renaming: grep the old name across the WHOLE repo (script/, tests/, README, llms*.txt, SECURITY.md, setup.py,
    MANIFEST.in, python `import`s, comments, user-facing messages) and fix every hit. Python modules are imported by
    their file stem, so the import lines change too.
@@ -251,8 +265,10 @@ A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes 
 find script -type f ! -name 'bashbasicsbyvk_*' ! -name '_3bvk_import_*.sh' ! -path script/o
 # 2. _3bvk_ only for import files
 find script -name '_3bvk_*' ! -name '_3bvk_import_*.sh'
-# 3. source only in o and import files (stand-alone entry points that source their own import file are filtered out)
-grep -rnE '(^|[;&|({]|[[:space:]])(source|\.)[[:space:]]+["$]' script | grep -vE '^script/o:|_3bvk_import_'
+# 3. source only in o, the loader and import files (stand-alone entry points that source their own import file are filtered out)
+grep -rnE '(^|[;&|({]|[[:space:]])(source|\.)[[:space:]]+["$]' script | grep -vE '^script/o:|_3bvk_import_|bashbasicsbyvk_loadmap.sh:'
+# 7. the load mapper: every file mapped, no impossible [fg], stubs current (rule 13)
+python3 script/file/loadmap/bashbasicsbyvk_loadmap_gen --check
 # 4. no basename collisions, no stale names
 find script -type f -printf '%f\n' | sort | uniq -d
 grep -rnI '_3bvk_' script tests setup.py MANIFEST.in README.md | grep -v '_3bvk_import_'
@@ -270,7 +286,7 @@ print([r['issue_id'] for r in R if sum(x['issue_id'] == r['issue_id'] for x in R
       [p for p in P if p.split('/')[-4:-1] != [n(p)[4:8], n(p)[2:4], n(p)[0:2]]])
 EOF
 ```
-Checks 1-4 and 6 are cheap: run them whenever you add, rename or delete a file or a note. Checks 1-4 must print nothing; check 6 must print `[] [] [] []`. **Check 5 (polyglot) is NOT part of the routine run**: it scans the whole repo (and installs numpy / tree-sitter on first run), so on an ordinary job it costs minutes for nothing. Run it ONLY when the prompt asks to dedupe, find duplicates or clean up copies; an ordinary job covers rule 1-4 of the principle with `grep -rn <keyword> script tests` instead (search before you write). When it IS asked for: Check 5 lists CANDIDATES, not proven copies: polyglot is NOT a 100% reliable
+Checks 1-4, 6 and 7 are cheap: run them whenever you add, rename or delete a file or a note. Checks 1-4 must print nothing; check 6 must print `[] [] [] []`. **Check 5 (polyglot) is NOT part of the routine run**: it scans the whole repo (and installs numpy / tree-sitter on first run), so on an ordinary job it costs minutes for nothing. Run it ONLY when the prompt asks to dedupe, find duplicates or clean up copies; an ordinary job covers rule 1-4 of the principle with `grep -rn <keyword> script tests` instead (search before you write). When it IS asked for: Check 5 lists CANDIDATES, not proven copies: polyglot is NOT a 100% reliable
 mechanism (it can miss real copies and flag look-alikes). Run it before and after your dedupe change, read every cluster your change touches or adds, and say
 in HOW DID YOU DEBUG how you judged each; your change must not add a cluster that is a real copy (the clusters already there are not yours to fix
 unless the task says so). It asks the central installer for numpy / tree-sitter on first run (`BVK_DEPS_ASSUME=yes` answers the menu in scripted runs, `--no-install` to forbid). If it finds a real copy, do NOT edit the copies in step: move the code into ONE helper

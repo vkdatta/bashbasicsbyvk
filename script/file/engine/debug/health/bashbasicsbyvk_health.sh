@@ -34,7 +34,7 @@
 
 _HL_BAD=0
 _HL_WARN=0
-declare -a _HL_FINDINGS=()      # "what is wrong|how to fix"
+declare -ga _HL_FINDINGS=()      # "what is wrong|how to fix"
 _HL_WHY=""
 _HL_FIX=""
 
@@ -258,7 +258,7 @@ _hl_subcommands() {
 # ════════════════════════════════════════════════════════════════════════════
 #  FileAPI engine: Go (bvk-xfer) or Node.  Same method as the drill engine above: say WHY, never just "it fell back".
 # ════════════════════════════════════════════════════════════════════════════
-declare -a _HL_XF=()                          # root causes for the FileAPI engine: "what|fix"
+declare -ga _HL_XF=()                          # root causes for the FileAPI engine: "what|fix"
 _hl_xf() { _HL_XF+=("$1|$2"); }
 
 # load the fileapi lib (it owns _bvk_xfer_bin) if this shell has not yet

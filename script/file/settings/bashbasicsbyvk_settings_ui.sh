@@ -234,7 +234,10 @@ _st_draw() {
   else rows=$(_term_rows); cols=$(_term_cols); fi
   if declare -F _st_desc_prepare >/dev/null 2>&1; then _st_desc_prepare   # the plain-words text of the highlighted row (0 lines when there is none)
   else _ST_DESC_N=0; _ST_DESC_TRUNC=0; _ST_DESC_LN=(); fi                  # settings_desc.sh not loaded (a stand-alone caller): no description, nothing breaks
-  vis=$(( rows - 12 - _ST_DESC_N )); (( vis < 3 )) && vis=3; (( vis > n )) && vis=$n
+  _st_hint_text "$buf" "$cols"                              # the suggestion first: a long one expands onto more rows (_bvk_hint_wrap) and the list gives them up
+  _ST_HINT_N=0; _BVK_HINT_LN=()
+  [ -n "$_ST_HINT" ] && { if declare -F _bvk_hint_wrap >/dev/null 2>&1; then _bvk_hint_wrap "$_ST_HINT" 3 $(( cols - 2 )); else _BVK_HINT_LN=("${_ST_HINT:0:cols-2}"); _BVK_HINT_N=1; fi; _ST_HINT_N=$_BVK_HINT_N; }
+  vis=$(( rows - 12 - _ST_DESC_N - ( _ST_HINT_N > 1 ? _ST_HINT_N - 1 : 0 ) )); (( vis < 3 )) && vis=3; (( vis > n )) && vis=$n
   if (( cur >= 0 )); then
     (( cur < top )) && top=$cur
     (( cur >= top + vis )) && top=$(( cur - vis + 1 ))
@@ -301,9 +304,10 @@ _st_draw() {
   out+="$nl"$'\n'                                         # linebreak above the footer
   out+="$nl${f1:0:cols-1}"$'\n'
   out+="$nl${f2:0:cols-1}"$'\n'                                  # footer 2, or a blank spacer
-  _st_hint_text "$buf" "$cols"
   _ST_TAIL=0
-  if [ -n "$_ST_HINT" ]; then out+="$nl"$'\033[2m'"$_ST_HINT"$'\033[0m\n'"$nl"$'\n'; _ST_TAIL=2     # the suggestion row + a blank line, only while there is a suggestion
+  if (( _ST_HINT_N > 0 )); then
+    local hl; for hl in "${_BVK_HINT_LN[@]}"; do out+="$nl"$'\033[2m'"$hl"$'\033[0m\n'; done
+    out+="$nl"$'\n'; _ST_TAIL=$(( _ST_HINT_N + 1 ))     # the suggestion rows + a blank line, only while there is a suggestion
   fi
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
   if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "${_st_msg:+$_st_msg  }Select: " "$buf" "${#buf}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
@@ -315,7 +319,7 @@ _st_draw() {
 # The suggestion row of EVERY Settings / Home style screen (what the typed text would do).  Same engine as the main menu's
 # row (_cm_hint: command map of the screen that owns this prompt), plus the two things only a list screen knows:
 # a typed row number ("Enter -> open <row>") and the = filter.  -> _ST_HINT ("" = nothing to say, the row stays blank)
-_ST_HINT=""; _ST_TAIL=0      # _ST_TAIL = rows of the suggestion (hint + blank) under the footer, 0 when there is none
+_ST_HINT=""; _ST_HINT_N=0; _ST_TAIL=0      # _ST_TAIL = rows of the suggestion (hint + blank) under the footer, 0 when there is none
 _st_hint_text() {   # $1 typed text  $2 columns
   local b="$1" cols="${2:-80}" k
   _ST_HINT=""
@@ -330,7 +334,6 @@ _st_hint_text() {   # $1 typed text  $2 columns
     declare -F _cm_ctx_find >/dev/null 2>&1 && _cm_ctx_find
     _cm_hint "$b" menu; _ST_HINT="$_hint_want"
   fi
-  (( ${#_ST_HINT} >= cols )) && _ST_HINT="${_ST_HINT:0:cols-2}…"
   return 0
 }
 

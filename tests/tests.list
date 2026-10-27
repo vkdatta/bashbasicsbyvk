@@ -33,6 +33,7 @@ engine_target|fast|20|bash tests/engine_target.sh|
 wheel_target|fast|120|bash tests/wheel_target.sh|python3
 engine_heal|fast|40|bash tests/engine_heal.sh|python3
 smartload|fast|90|bash tests/smartload.sh|python3
+rename_screen|fast|240|bash tests/rename_screen.sh|python3
 settings_desc|fast|40|bash tests/settings_desc.sh|python3
 delete_confirm|fast|30|bash tests/delete_confirm.sh|
 github_engine|fast|120|python3 tests/github/github_test.py|python3
@@ -42,3 +43,4 @@ cc_truth|slow|240|python3 tests/cc_truth/cc_truth_test.py|python3
 archive|fast|60|bash tests/archive/archive_test.sh|
 deps|fast|60|bash tests/deps/deps_test.sh|
 deps_menu|fast|60|python3 tests/deps/standalone_test.py|python3
+loadmap|fast|60|bash tests/loadmap.sh|python3

@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""bashbasicsbyvk_loadmap_gen - the checker and generator of the load mapper (AGENTS.md rule 13).
+
+  bashbasicsbyvk_loadmap_gen --check     fail (exit 1) when the mapper is wrong or the generated file is stale   (what tests/loadmap.sh runs)
+  bashbasicsbyvk_loadmap_gen --write     regenerate bashbasicsbyvk_loadmap_stubs.sh from bashbasicsbyvk_loadmap.list
+  bashbasicsbyvk_loadmap_gen --report    one table: every shell library, its mode, size, functions, what it needs
+  [--root DIR]                           the folder that holds `script/` (default: found from this file)
+
+WHAT IT DOES
+  The mapper (bashbasicsbyvk_loadmap.list) is the ONLY place that says when a file is loaded:  [fg] before the first paint,
+  [bg] after it (one file at a time, only while no key is waiting),  [no] never, unless something calls one of its functions.
+  This tool reads the mapper and the shell libraries and
+    * checks that every file under script/ has exactly one line in the mapper (and that every line is a real file);
+    * works out what a library needs LOADED BEFORE it can be loaded (it reads nothing at run time):
+        - "state"    it reads a variable that another library sets when it is loaded (an unset array / a missing default breaks it silently),
+        - "call"     its top-level code calls a function of another library while loading,
+        - "override" it redefines a function of another library (the later definition must win, so the earlier file loads first);
+      plus the NEEDS column of the mapper (a dependency no text search can see: a function called by name from a string, a registry);
+    * refuses a mapping that cannot work: an [fg] file may only need [fg] files (listed earlier), a [bg] file only [fg] or [bg] files;
+    * writes bashbasicsbyvk_loadmap_stubs.sh: one tiny stub per function of every [bg] / [no] library (the first call loads the file and
+      runs the real function) and the needs table the loader follows.
+"""
+import os, re, sys, collections
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+MAPPER = 'bashbasicsbyvk_loadmap.list'
+STUBS = 'bashbasicsbyvk_loadmap_stubs.sh'
+LOADER = 'bashbasicsbyvk_loadmap.sh'
+BUILD_TREES = ('bvk-ls', 'bvk-fr', 'bvk-xfer')      # compiled before distribution, never loaded: not in the mapper
+SECTIONS = ('fg', 'bg', 'no')
+
+
+# ------------------------------------------------------------------ a tiny reader of this repo's bash style
+FDEF_ML = re.compile(r'^(?:function\s+)?([A-Za-z_][\w:.\-]*)\s*\(\)\s*\{?\s*(?:#.*)?$')
+FDEF_1 = re.compile(r'^(?:function\s+)?([A-Za-z_][\w:.\-]*)\s*\(\)\s*(\{.*|\(.*)$')
+HERE_RX = re.compile(r'<<-?\s*(["\']?)([A-Za-z_][A-Za-z0-9_]*)\1')
+
+
+def scan(text):
+    """(functions {name: (first, last line)}, top-level lines [(lineno, text)]).  Function bodies and heredocs are not top-level code."""
+    funcs = {}; top = []
+    lines = text.split('\n'); i = 0; n = len(lines)
+    while i < n:
+        ln = lines[i]; s = ln.strip(); ind = len(ln) - len(ln.lstrip())
+        if not s or s.startswith('#'):
+            i += 1; continue
+        m1 = FDEF_1.match(s) if ind == 0 or not s.startswith(('if', 'for', 'while', 'case', 'until')) else None
+        mml = FDEF_ML.match(s) if not s.startswith(('if ', 'for ', 'while ', 'case ', 'until ')) else None
+        if mml and not (m1 and m1.group(2).rstrip().endswith('}') and m1.group(2).count('{') == m1.group(2).count('}')):
+            j = i + 1; hd = None
+            while j < n:
+                l2 = lines[j]
+                if hd is not None:
+                    if l2.strip() == hd: hd = None
+                    j += 1; continue
+                hm = HERE_RX.search(l2)
+                if hm and not l2.lstrip().startswith('#'): hd = hm.group(2)
+                if re.match(r'^' + (' ' * ind) + r'\}', l2) and (len(l2) - len(l2.lstrip())) == ind: break
+                j += 1
+            funcs[mml.group(1)] = (i + 1, j + 1); i = j + 1; continue
+        if m1:
+            body = m1.group(2); depth = body.count('{') - body.count('}'); j = i
+            while depth > 0 and j + 1 < n:
+                j += 1; depth += lines[j].count('{') - lines[j].count('}')
+            funcs[m1.group(1)] = (i + 1, j + 1); i = j + 1; continue
+        top.append((i + 1, ln))
+        hm = HERE_RX.search(ln)
+        if hm:
+            tag = hm.group(2); j = i + 1
+            while j < n and lines[j].strip() != tag and lines[j].lstrip('\t') != tag: j += 1
+            i = j + 1; continue
+        i += 1
+    return funcs, top
+
+
+ASSIGN = re.compile(r'(?:^|[;&|({\s])((?:declare|typeset|export|readonly)\s+(?:-\S+\s+)*)?([A-Za-z_]\w*)(\[[^\]]*\])?\+?=')
+DECLARE = re.compile(r'^\s*(?:declare|typeset|export|readonly)\s+((?:-\S+\s+)*)(.*)')
+BUILTINS = {'read', 'printf', 'echo', 'cd', 'test', 'true', 'false', 'exit', 'return', 'eval', 'set', 'unset', 'shift', 'trap', 'kill', 'wait', 'type', 'command', 'declare', 'local', 'export'}
+DEFS_OF = {}
+TOKEN = re.compile(r'[A-Za-z_][\w:.\-]*')
+
+
+def strip_comment(l):
+    """the line without its # comment (a # inside quotes is kept)"""
+    q = None
+    for i, c in enumerate(l):
+        if q:
+            if c == q and l[i - 1] != '\\': q = None
+        elif c in '"\'': q = c
+        elif c == '#' and (i == 0 or l[i - 1] in ' \t;'): return l[:i]
+    return l
+
+
+# ------------------------------------------------------------------ the mapper
+class Entry:
+    def __init__(self, name, mode, needs, with_, note, line):
+        self.name, self.mode, self.needs, self.with_, self.note, self.line = name, mode, needs, with_, note, line
+
+
+def read_mapper(path, errs):
+    entries = []; calls = []; sect = None
+    for n, raw in enumerate(open(path, encoding='utf-8'), 1):
+        ln = raw.rstrip('\n')
+        if not ln.strip() or ln.lstrip().startswith('#'): continue
+        m = re.match(r'^\[(\w+)\]\s*$', ln)
+        if m:
+            sect = m.group(1)
+            if sect not in SECTIONS: errs.append('%s:%d: unknown section [%s] (use fg, bg or no)' % (MAPPER, n, sect))
+            continue
+        if sect is None:
+            errs.append('%s:%d: a line before the first [section]' % (MAPPER, n)); continue
+        if ln.startswith('@call'):
+            if sect != 'bg': errs.append('%s:%d: @call lines belong in [bg] (they run after the first paint)' % (MAPPER, n))
+            parts = ln.split('|', 1)
+            calls.append((n, parts[0][5:].strip(), parts[1].strip() if len(parts) > 1 else ''))
+            continue
+        f = [x.strip() for x in ln.split('|')]
+        f += [''] * (4 - len(f))
+        name = f[0]
+        if not name or ' ' in name: errs.append('%s:%d: file name missing or with a space: %r' % (MAPPER, n, name)); continue
+        entries.append(Entry(name, sect, [x for x in f[1].split(',') if x], [x for x in f[2].split(',') if x], '|'.join(f[3:]).strip(), n))
+    return entries, calls
+
+
+# ------------------------------------------------------------------ the tree
+def find_root(arg):
+    if arg: return os.path.abspath(arg)
+    d = HERE
+    while d != '/' and not os.path.isfile(os.path.join(d, 'script', 'o')) and not (os.path.basename(d) == 'script' and os.path.isfile(os.path.join(d, 'o'))):
+        d = os.path.dirname(d)
+    return os.path.dirname(d) if os.path.basename(d) == 'script' else d
+
+
+def tree_files(script):
+    out = {}
+    for dp, dn, fn in os.walk(script):
+        dn[:] = [d for d in dn if d not in BUILD_TREES and d != '__pycache__']
+        for f in fn:
+            if f == 'o' and dp == script: continue
+            out.setdefault(f, []).append(os.path.relpath(os.path.join(dp, f), script))
+    return out
+
+
+def guarded(d, lines, i, owners):
+    """a reference is safe when, earlier in the same function, the code already called a function of the owner (its stub loaded the file)
+    or named the owner file in `_lm_need`"""
+    for fn, (a, b) in d['funcs'].items():
+        if a <= i <= b:
+            toks = set()
+            for j in range(a, i + 1): toks.update(TOKEN.findall(lines[j - 1][1]))
+            if 'bashbasicsbyvk_%s' % '' and any(('_lm_need' in lines[j - 1][1] and o in lines[j - 1][1]) for j in range(a, i + 1) for o in owners): return True
+            return any(t in DEFS_OF.get(o, ()) for o in owners for t in toks if t not in d['funcs'])
+    return False
+
+
+def is_lib(name):
+    return name.endswith('.sh') and not name.startswith('_3bvk_')
+
+
+def main():
+    args = sys.argv[1:]
+    root = None; mode = 'check'
+    while args:
+        a = args.pop(0)
+        if a == '--root': root = args.pop(0)
+        elif a in ('--check', '--write', '--report'): mode = a[2:]
+        else: print(__doc__); return 2
+    root = find_root(root); script = os.path.join(root, 'script')
+    errs = []; warns = []
+    files = tree_files(script)
+    mpath = None
+    for rel in files.get(MAPPER, []): mpath = os.path.join(script, rel)
+    if not mpath: print('FAIL: %s not found under %s' % (MAPPER, script)); return 1
+    entries, calls = read_mapper(mpath, errs)
+
+    # 1. the mapper lists every file exactly once ------------------------------------------------------
+    seen = collections.Counter(e.name for e in entries)
+    for n, c in seen.items():
+        if c > 1: errs.append('%s lists %s %d times: one line per file' % (MAPPER, n, c))
+    for b, rels in sorted(files.items()):
+        if len(rels) > 1: errs.append('two files are named %s (%s): every basename must be unique (AGENTS.md "How the install works")' % (b, ', '.join(rels)))
+        if b not in seen: errs.append('%s is not in the mapper: add ONE line to [fg], [bg] or [no] of %s' % (rels[0], MAPPER))
+    for e in entries:
+        if e.name not in files: errs.append('%s:%d: %s is not a file under script/ (renamed or deleted? remove the line)' % (MAPPER, e.line, e.name))
+        if e.mode == 'fg' and not is_lib(e.name) and e.name in files:
+            errs.append('%s:%d: %s is not a shell library (*.sh), it can never be loaded before the first paint: put it in [no]' % (MAPPER, e.line, e.name))
+        if e.mode == 'bg' and not is_lib(e.name) and e.name in files:
+            errs.append('%s:%d: %s is not a shell library (*.sh): put it in [no]' % (MAPPER, e.line, e.name))
+    by = {e.name: e for e in entries}
+    order = {e.name: i for i, e in enumerate(sorted(entries, key=lambda e: (SECTIONS.index(e.mode) if e.mode in SECTIONS else 9, e.line)))}
+    libs = [e for e in entries if is_lib(e.name) and e.name in files and e.name not in (STUBS, LOADER)]
+    for e in entries:
+        for dep in e.needs + e.with_:
+            if dep not in by: errs.append('%s:%d: %s names %s, which is not in the mapper' % (MAPPER, e.line, e.name, dep))
+
+    # 2. read the libraries -----------------------------------------------------------------------------
+    defs = collections.defaultdict(list)          # function -> [lib, ...] in load order
+    info = {}
+    for e in sorted(libs, key=lambda e: order[e.name]):
+        text = open(os.path.join(script, files[e.name][0]), encoding='utf-8', errors='replace').read()
+        funcs, top = scan(text)
+        state = set(); toptoks = set(); badflags = []
+        for ln, l in top:
+            c = strip_comment(l)
+            for m in ASSIGN.finditer(c): state.add(m.group(2))
+            dm = DECLARE.match(c)
+            if dm and 'F' not in dm.group(1) and 'f' not in dm.group(1):
+                if 'g' not in dm.group(1) and re.match(r'^\s*(declare|typeset)\b', c): badflags.append((ln, l.strip()[:80]))
+                head = re.split(r'[("\'`$]', dm.group(2).replace('=(', ' ('), maxsplit=1)[0] if '=' not in dm.group(2).split()[0:1] else dm.group(2)
+                for tok in re.findall(r'(?:^|\s)([A-Za-z_]\w*)(?==|\s|$)', re.split(r'=[("\'`]', head, maxsplit=1)[0]): state.add(tok)
+            if re.match(r'^\s*local\b', c): badflags.append((ln, l.strip()[:80]))
+            toptoks.update(TOKEN.findall(c))
+        info[e.name] = dict(text=text, funcs=funcs, state=state, top=toptoks, bad=badflags, size=len(text.encode()))
+        for fn in funcs: defs[fn].append(e.name)
+    for _f, _d in info.items(): DEFS_OF[_f] = set(_d['funcs'])
+    owner = collections.defaultdict(set)
+    for f, d in info.items():
+        for v in d['state']:
+            if len(v) >= 5: owner[v].add(f)
+
+    # 3. what each library needs loaded before it ----------------------------------------------------------
+    why = collections.defaultdict(lambda: collections.defaultdict(list))       # lib -> needed lib -> [reasons]
+    for f, d in info.items():
+        for ln, what in d['bad']:
+            errs.append('%s:%d: a top-level `%s` is local to the function that happens to load the file: use `declare -g` (AGENTS.md rule 13)' % (files[f][0], ln, what))
+        lines = [(i + 1, strip_comment(l)) for i, l in enumerate(d['text'].split('\n'))]
+        # override: a later library redefines a function of an earlier one
+        for fn, fl in defs.items():
+            if f in fl and fl.index(f) > 0:
+                for earlier in fl[:fl.index(f)]: why[f][earlier].append('override ' + fn)
+        # call: top-level code runs a function of another library while loading
+        for tok in d['top']:
+            for g in defs.get(tok, []):
+                if g != f and tok not in d['funcs'] and tok not in BUILTINS: why[f][g].append('call ' + tok)
+        # state: it reads a variable another library sets when it is loaded, in a form that breaks when the variable is unset
+        for v, owners in owner.items():
+            if f in owners: continue
+            rx = re.compile(r'(?<![\w$])' + re.escape(v) + r'(?![\w])')
+            if not rx.search(d['text']): continue
+            if re.search(r'\blocal\b[^\n;]*(?<![\w$])' + re.escape(v) + r'(?![\w])', d['text']): continue
+            safe = re.compile(r'\$\{' + re.escape(v) + r':?[-+]|(?<![\w$])' + re.escape(v) + r'\+?=|\$\{#?' + re.escape(v) + r'(\[[@*]\])?\}|unset\s+' + re.escape(v) + r'\b|-v\s+' + re.escape(v) + r'\b')
+            for i, l in lines:
+                if not rx.search(l): continue
+                rest = safe.sub(' ', l)
+                if rx.search(rest):
+                    if guarded(d, lines, i, owners): continue
+                    for g in owners: why[f][g].append('state %s (line %d)' % (v, i))
+                    break
+    needs = {}
+    for f in info:
+        s = set(why[f]) | set(by[f].needs)
+        s.discard(f); needs[f] = s
+    # 4. a mapping that cannot work ---------------------------------------------------------------------------
+    for f in info:
+        m = by[f].mode
+        for g in sorted(needs[f]):
+            gm = by[g].mode if g in by else 'no'
+            reasons = '; '.join(why[f].get(g, ['NEEDS column'])[:3])
+            if m == 'fg' and gm != 'fg':
+                errs.append('[fg] %s needs [%s] %s (%s): a file that loads before the first paint cannot depend on one that does not. Make %s [fg], or guard the use (${VAR:-default}), or remove the dependency' % (f, gm, g, reasons, g))
+            elif m == 'fg' and gm == 'fg' and order[g] > order[f] and any(r.startswith(('call', 'override')) for r in why[f].get(g, [])):
+                errs.append('[fg] %s needs %s (%s) but the mapper lists %s later: move it above' % (f, g, reasons, g))
+            elif m == 'bg' and gm == 'no':
+                errs.append('[bg] %s needs [no] %s (%s): a file that loads in the background cannot pull in one that must never load. Make %s [bg], or guard the use, or make %s [no]' % (f, g, reasons, g, f))
+    for e in entries:
+        for dep in e.with_:
+            if dep in by and e.mode != 'no' and by[dep].mode == 'no':
+                errs.append('[%s] %s lists WITH %s which is [no]' % (e.mode, e.name, dep))
+
+    if mode == 'report':
+        tot = sum(d['size'] for d in info.values()); fg = sum(d['size'] for f, d in info.items() if by[f].mode == 'fg')
+        bg = sum(d['size'] for f, d in info.items() if by[f].mode == 'bg')
+        print('%-52s %-3s %8s %5s  %s' % ('library', 'mode', 'bytes', 'funcs', 'needs'))
+        for f in sorted(info, key=lambda f: (SECTIONS.index(by[f].mode), order[f])):
+            print('%-52s %-3s %8d %5d  %s' % (f, by[f].mode, info[f]['size'], len(info[f]['funcs']), ' '.join(sorted(g.replace('bashbasicsbyvk_', '') for g in needs[f]))))
+        print('\nlibraries %d, %d bytes.   fg %d bytes (%.0f%%)   bg %d bytes (%.0f%%)   no %d bytes (%.0f%%)' % (
+            len(info), tot, fg, 100.0 * fg / tot, bg, 100.0 * bg / tot, tot - fg - bg, 100.0 * (tot - fg - bg) / tot))
+        for e in errs: print('PROBLEM:', e)
+        return 0
+
+    # 5. the generated file -------------------------------------------------------------------------------------
+    fgset = {f for f in info if by[f].mode == 'fg'}
+    lazy = [f for f in sorted(info, key=lambda f: order[f]) if by[f].mode != 'fg']
+    nd = {f: sorted((g for g in needs[f] if g in by and by[g].mode != 'fg'), key=lambda g: order[g]) for f in lazy}
+    wd = {f: [g for g in by[f].with_ if g in by and by[g].mode != 'fg'] for f in lazy}
+    out = ['#!/usr/bin/env bash',
+           '# GENERATED by bashbasicsbyvk_loadmap_gen --write from bashbasicsbyvk_loadmap.list.  Do NOT edit by hand: change the mapper and regenerate.',
+           '# What it holds: the needs table (a file loads the files it needs first, and its WITH companions right after it) and one stub per',
+           '# function of every [bg] / [no] library. The first call of a stub loads the library that defines the function (bashbasicsbyvk_loadmap.sh, _lm_stub), then runs it.',
+           'declare -gA _LM_NEEDS=() _LM_WITH=()']
+    for f in lazy:
+        if nd[f]: out.append('_LM_NEEDS[%s]="%s"' % (f, ' '.join(nd[f])))
+    for f in lazy:
+        if wd[f]: out.append('_LM_WITH[%s]="%s"' % (f, ' '.join(wd[f])))
+    seenfn = set()
+    for f in lazy:
+        if f == STUBS: continue
+        for fn in sorted(info[f]['funcs'], key=lambda x: info[f]['funcs'][x]):
+            if fn in seenfn or fn in fgset_funcs(info, fgset) or not re.match(r'^[A-Za-z_][\w:.\-]*$', fn): continue
+            seenfn.add(fn)
+            out.append('%s() { _lm_stub %s %s "$@"; }' % (fn, f, fn))
+    gen = '\n'.join(out) + '\n'
+    spath = os.path.join(script, files[STUBS][0]) if STUBS in files else os.path.join(os.path.dirname(mpath), STUBS)
+    if mode == 'write':
+        if errs:
+            for e in errs: print('PROBLEM:', e)
+            print('not written: fix the problems above first'); return 1
+        open(spath, 'w', encoding='utf-8').write(gen)
+        print('wrote %s: %d stubs, %d libraries with needs' % (os.path.relpath(spath, root), len(seenfn), len([f for f in nd if nd[f]]))); return 0
+    # check
+    if STUBS not in files: errs.append('%s does not exist yet: run bashbasicsbyvk_loadmap_gen --write' % STUBS)
+    elif open(spath, encoding='utf-8').read() != gen: errs.append('%s is stale: run  bashbasicsbyvk_loadmap_gen --write  (a file or function was added, renamed, moved between sections or deleted)' % STUBS)
+    for n, fn, note in calls:
+        if fn not in defs and not fn.startswith('_lm_'): errs.append('%s:%d: @call %s: no library defines that function' % (MAPPER, n, fn))
+    if errs:
+        for e in errs: print('FAIL', e)
+        print('FAILED: %d problem(s)' % len(errs)); return 1
+    print('ok: %d files mapped (%d libraries: %d fg, %d bg, %d no), %d stubs, derived file is current' % (
+        len(entries), len(info), len(fgset), sum(1 for f in info if by[f].mode == 'bg'), sum(1 for f in info if by[f].mode == 'no'), len(seenfn)))
+    return 0
+
+
+_fg_cache = {}
+def fgset_funcs(info, fgset):
+    k = id(info)
+    if k not in _fg_cache:
+        s = set()
+        for f in fgset: s.update(info[f]['funcs'])
+        _fg_cache[k] = s
+    return _fg_cache[k]
+
+
+if __name__ == '__main__':
+    sys.exit(main())

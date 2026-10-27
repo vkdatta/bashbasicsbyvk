@@ -40,7 +40,7 @@ _sm_sync_on() {
   if $_sm_enabled && ! $_sm_active; then _sm_on=1; else _sm_on=0; fi
 }
 
-declare -a _sm_lines=()
+declare -ga _sm_lines=()
 _sm_partial=""
 _sm_max=400
 _sm_keep=250

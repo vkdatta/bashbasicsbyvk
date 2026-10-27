@@ -640,6 +640,7 @@ _st_fm_build() {
   _st_eq "$filter_recursive" true;  _st_add r "On   (all sub-folders from this path)"  "$_o" "" r:true
 }
 _st_fm_act() {
+  _lm_need bashbasicsbyvk_settings_ui.sh      # a settings callback: reads _st_tag
   case "${_st_tag[$1]}" in
     m:*) filter_mode="${_st_tag[$1]#m:}" ;;
     h:*) filter_hidden_mode="${_st_tag[$1]#h:}" ;;

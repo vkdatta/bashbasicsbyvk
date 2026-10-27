@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+Typing print (or cc, loadtime, settings) at a plain text prompt such as the rename New name line, leaving that command's menu with u or q, left a smartload Working bar on the prompt row while it waited for input; _cm_text_read closed the wait once, not on every redraw of the prompt.
+
+1. HOW DID YOU DEBUG
+Frames of the screen recording showed the bar on the New name row after leaving print's Select: menu. Reproduced in a pty (r, 1, print, u) with VK_SMARTLOAD_DEBUG=1: the log showed a wait opened by _sm_run < read < _map_deliver < bvk_print_cmd that nothing closed before the prompt was drawn again.
+
+1. CAUSE
+_cm_text_read ended the wait once, before its loop. After a command ran (_cm_gate_text rc 3) the loop redrew the prompt; the command's own Select: read had called _lt_enter on its answer and returned without a ready point.
+
+1. FIX
+bashbasicsbyvk_cmdmap.sh: _cm_text_read calls _sl_ready at the top of every loop iteration. tests/smartload/rename_print.py (pty, fails on the old tree) is run by tests/smartload.sh.
+
+2. ISSUE IN BRIEF
+The one-by-one rename screen was an old two-line prompt. It is now a Settings-style Rename screen with description, item list, footer, suggestions and Old / New lines; Up or a tap on Old copies the old name; long selections go to the CSV rename (limit in Settings > Rename); a new name without an extension follows Settings > Rename > No extension.
+
+2. HOW DID YOU DEBUG
+Read the rename flow (select_items_common, _rename_single_mutation), the Settings engine (_st_draw, _st_desc_wrap, _st_choice_open) and the line editor, then drove the new screen in a pty for every branch (tests/rename/pty_test.py).
+
+2. CAUSE
+The old flow printed Current name / New name with a plain read and always renamed 1 item at a time, with the typed name used as is.
+
+2. FIX
+functions/bashbasicsbyvk_rename.sh: _rn_name_prompt, _rn_ext_of, _rn_finalize; above the limit the job goes to _rename_multi_mutation. cmdmap.sh: _CE_FILL (Up / tap on Old). New settings rename_csv_above (default 5) and rename_noext_mode (ask / old / none) in settings.sh, renamesettings.sh, settings_groups.sh, settings_desc.sh, gdrive sync list.
+
+3. ISSUE IN BRIEF
+Suggestion (cheat code) rows were cut with an ellipsis when longer than one row. They now expand onto more rows, like a Settings description, in the main menu, Settings and every text prompt (_bvk_hint_wrap).
+
+3. HOW DID YOU DEBUG
+Compared the Settings description (wrapped by _st_desc_wrap) with the hint rows (cut with an ellipsis in _cm_hint, _st_hint_text, _cm_edit_draw, _bvk_hint_paint) and probed 44-column screens.
+
+3. CAUSE
+Every hint row was clipped to one row at its source and again at each painter.
+
+3. FIX
+viewport.sh: _bvk_hint_wrap; the main menu reserves _vp_hint_n rows (2 below 100 columns); _st_draw, _cm_edit_draw and _bvk_hint_paint draw every row; mouse.sh row math uses _vp_hint_n.

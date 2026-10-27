@@ -1,36 +1,9 @@
 #!/usr/bin/env bash
 
-source "bashbasicsbyvk_loadtime.sh"      # first: so that even the loading of the scripts is on the loadtime timeline
-_lt_init
-
-_lt_b "load import_engine"; source "_3bvk_import_engine.sh"; _lt_e
-_lt_b "load import_cmdmap"; source "_3bvk_import_cmdmap.sh"; _lt_e
-_lt_b "load import_functions"; source "_3bvk_import_functions.sh"; _lt_e
-_lt_b "load import_staging"; source "_3bvk_import_staging.sh"; _lt_e
-_lt_b "load import_fileapi"; source "_3bvk_import_fileapi.sh"; _lt_e
-_lt_b "load import_select"; source "_3bvk_import_select.sh"; _lt_e
-
-_lt_b "load run"; source "bashbasicsbyvk_run.sh"; _lt_e
-_lt_b "load csv"; source "bashbasicsbyvk_csv.sh"; _lt_e
-_lt_b "load import_settings"; source "_3bvk_import_settings.sh"; _lt_e
-_lt_b "load help"; source "bashbasicsbyvk_help.sh"; _lt_e
-_lt_b "load home"; source "bashbasicsbyvk_home.sh"; _lt_e
-_lt_b "load refresh"; source "bashbasicsbyvk_refresh.sh"; _lt_e
-_lt_b "load switch"; source "bashbasicsbyvk_switch.sh"; _lt_e
-_lt_b "load upgrade"; source "bashbasicsbyvk_upgrade.sh"; _lt_e
-_lt_b "load api"; source "bashbasicsbyvk_api.sh"; _lt_e
-_lt_b "load pending"; source "bashbasicsbyvk_pending.sh"; _lt_e   # pn: Pending FileAPI actions (continue / pause / resume / stop unfinished uploads)
-_lt_b "load functions"; source "bashbasicsbyvk_functions.sh"; _lt_e
-_lt_b "load import_fx"; source "_3bvk_import_fx.sh"; _lt_e
-_lt_b "load infinity"; source "bashbasicsbyvk_infinity.sh"; _lt_e
-_lt_b "load telemetry"; source "bashbasicsbyvk_telemetry.sh"; _lt_e
-_lt_b "load auth"; source "bashbasicsbyvk_auth.sh"; _lt_e
-_lt_b "load xui"; source "bashbasicsbyvk_xui.sh"; _lt_e
-_lt_b "load rbam"; source "bashbasicsbyvk_rbam.sh"; _lt_e
-_lt_b "load notify"; source "bashbasicsbyvk_notify.sh"; _lt_e
-_lt_b "load csurf"; source "bashbasicsbyvk_csurf.sh"; _lt_e
-_lt_b "load ai"; source "bashbasicsbyvk_ai.sh"; _lt_e
-_lt_b "load gdrive"; source "bashbasicsbyvk_gdrive.sh"; _lt_e   # Google Drive (fx → google_drive_fx): session layer, wraps the native read/copy functions
+# THE LOAD MAPPER (AGENTS.md rule 13): the first file o loads. It reads bashbasicsbyvk_loadmap.list before anything else is loaded, and
+# loads only what that list says: [fg] now (what the first paint needs), [bg] after the paint (_lm_idle, below), [no] only when called.
+source "bashbasicsbyvk_loadmap.sh"
+_lm_fg || exit 1
 
 # Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), pn (Pending uploads), bk (Backup), sv (Saved Surf), sn (Snapshots), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
@@ -63,14 +36,15 @@ _inner_run() {
 _bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _bvk_d=. ;; esac   # no dirname process
 SCRIPT_DIR="$(cd -- "$_bvk_d" && pwd)"; unset _bvk_d
 
-_lt_b "start: dependencies";            _dep_need -c "Starting the app" app.core || exit 1; _lt_e   # python3: the central registry (bashbasicsbyvk_deps.list) offers to install it
+_lt_b "start: dependencies"
+command -v python3 >/dev/null 2>&1 || { _lm_need bashbasicsbyvk_deps.sh; _dep_need -c "Starting the app" app.core || exit 1; }   # python3: only when it is missing does the central registry (bashbasicsbyvk_deps.list) load and offer to install it
+_lt_e
 _lt_b "start: recents daemon check";  _bvk_wake_recents_daemon; _lt_e
-_lt_b "start: telemetry (background)"; _bvk_telemetry_start; _lt_e
-_lt_b "start: snapshot daemon";       _snap_daemon_start; _lt_e         # Snapshots: background sync while  o  runs (does nothing until a path is on the list)
+# the usage ping and the snapshot daemon start after the first paint: the @call lines of [bg] in bashbasicsbyvk_loadmap.list
 _lt_b "start: terminal colours + screen setup"; _disp_startup; _lt_e
 _lt_b "start: engines fit this machine?"; _bvk_engine_heal "$@"; _lt_e   # install made on another CPU / OS: offer a reinstall
 
-trap '_gd_on_exit 2>/dev/null; _lt_cleanup; _bvk_paste_off 2>/dev/null; _bvk_mouse_off 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
+trap '[ "${_GD_ACTIVE:-0}" = 1 ] && _gd_on_exit 2>/dev/null; _lt_cleanup; _bvk_paste_off 2>/dev/null; _bvk_mouse_off 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
       [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
       [ -n "${_BVK_DSIZE_TMP:-}" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
       true' EXIT
@@ -79,9 +53,9 @@ _orig_stty=$(stty -g 2>/dev/null)
 
 # command map tooling:  o --map-show [menu] · o --map-lint · o --map-doc · o --map-gen
 case "${1:-}" in
-  --map-show) _cm_show "${2:-main}"; exit $? ;;
-  --map-lint) _cm_lint; exit $? ;;
-  --map-doc)  _cm_doc; exit $? ;;
+  --map-show) _lm_all; _cm_show "${2:-main}"; exit $? ;;
+  --map-lint) _lm_all; _cm_lint; exit $? ;;
+  --map-doc)  _lm_all; _cm_doc; exit $? ;;
   --map-gen)  _mg=$(_cm_find bashbasicsbyvk_mapgen) && exec python3 "$_mg" "${@:2}"; echo "mapgen not found"; exit 1 ;;
 esac
 
@@ -92,7 +66,7 @@ if [ $# -eq 1 ]; then
     path=$(get_abs_path "$target")
   elif [ -f "$target" ]; then
     selected=$(get_abs_path "$target")
-    handle_file "$selected"; _o_rc=$?
+    _lm_need bashbasicsbyvk_run.sh; handle_file "$selected"; _o_rc=$?
     [ "${_BVK_GO_PARENT:-0}" = 1 ] || exit $_o_rc     # "Go To Parent Folder": carry on in the main loop, in that folder
     _BVK_GO_PARENT=0
   else
@@ -105,7 +79,7 @@ shopt -s nullglob
 while true; do
   _BVK_TO_MAIN=0                                 # we ARE the main loop: a q from a menu / flow has arrived
   declare -F _cm_abort_clear >/dev/null 2>&1 && _cm_abort_clear
-  _lt_b "gdrive: sync cycle"; _gd_cycle; _lt_e     # Google Drive open: push what the last command changed, list this folder
+  [ "${_GD_ACTIVE:-0}" = 1 ] && { _lt_b "gdrive: sync cycle"; _gd_cycle; _lt_e; }     # Google Drive open: push what the last command changed, list this folder
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   _lt_b "count items in this folder"; total=$(count_items_in_path "$path"); _lt_e
 
@@ -158,7 +132,7 @@ while true; do
   _lt_e
   _lt_b "apply filters / drive order / group view"
   $imaginary_mode || _disp_apply   # narrow to the .d display filter
-  $imaginary_mode || _gd_order_items   # Google Drive: folders first, like drive.google.com
+  $imaginary_mode || [ "${_GD_ACTIVE:-0}" != 1 ] || _gd_order_items   # Google Drive: folders first, like drive.google.com
   # Group view: breadcrumb drill (menu of groups, then the files of the picked group)
   _gv_crumb_menu=false; _gv_leaf=false
   $imaginary_mode || $_fav_on || _gv_crumb_apply
@@ -185,16 +159,17 @@ while true; do
   _vp_render_fresh
   _lt_e
 
+  _lm_idle      # [bg] of the load mapper: one file at a time, only while no key is waiting
   _read_choice_filtered
   _lt_mark "dispatch: ${choice:-?}"
 
   shopt -s nocasematch
   case "$choice" in
-    q)           if $_sw_did_switch; then _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi ;;   # q on the main loop = leave the app
+    q)           if ${_sw_did_switch:-false}; then [ "${_GD_ACTIVE:-0}" = 1 ] && _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi ;;   # q on the main loop = leave the app
     -h)          open_help ;;
     h)           home_menu ;;
     __navpath__) [ -d "${_BVK_NAV_TARGET:-}" ] && { path="$_BVK_NAV_TARGET"; group_prefix=""; force_show=false; }; _BVK_NAV_TARGET="" ;;   # a folder name of the nav path was touched (bashbasicsbyvk_mouse.sh)
-    u)           if _gd_at_root; then echo "☁️  This is the top of your Google Drive — gdx leaves it"
+    u)           if [ "${_GD_ACTIVE:-0}" = 1 ] && _gd_at_root; then echo "☁️  This is the top of your Google Drive — gdx leaves it"
                  elif [ -n "$group_prefix" ]; then
                    group_prefix="${group_prefix%?}"; force_show=false
                  elif [ "${#_gv_crumbs[@]}" -gt 0 ]; then

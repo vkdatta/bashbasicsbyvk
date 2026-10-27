@@ -14,7 +14,7 @@
 #  The parsing lives in the engine (python: bashbasicsbyvk_github parse-releases / parse-commit) so the upgrade loop
 #  and the GitHub screens read releases the same way. tests/github/github_test.py proves the output is byte-for-byte
 #  what the upgrade loop's own code printed before.
-#  No source here (AGENTS rule 3): this file is loaded by _3bvk_import_functions.sh, before the upgrade loop.
+#  No source here (AGENTS rule 3): this file is loaded through the load mapper, before the upgrade loop.
 # ════════════════════════════════════════════════════════════════════════════
 
 _GH_US=$'\x1f'

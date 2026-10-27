@@ -188,6 +188,16 @@ Select buffer (s-)|v:add	The new items join the existing set, which then holds b
 Select buffer (s-)|v:replace	The new items take the place of the old ones; the old items are forgotten. Choose this when the newest list is always the one that counts. The old content cannot be recovered.
 Select buffer (s-)|v:deny	Nothing changes: the existing set is kept exactly as it is and the new items are not saved. The safest choice if you never want an existing set to be touched.
 Select buffer (s-)|v:ask	You are asked every time, and you may even choose another name. Safest for beginners and the standard, at the cost of one extra question.
+Settings|rename	How renaming behaves. Here you choose how many selected items are renamed one by one before the program hands the job to a CSV table, and what happens when you type a new name that has no ending such as .txt.
+Rename item|*	Type the new name for the item shown under Old. Press the up arrow, or tap the Old line, to copy the old name into the line and change just a part of it. A name that has an ending such as .txt is used as typed; a name without one follows Settings, Rename. Leave the line empty to skip this item.
+Rename|*	Two choices that make renaming quicker. The first decides when a long selection is moved to the CSV table instead of being asked item by item. The second decides what a new name without an ending becomes.
+Rename|limit	Type the number of selected items that are still renamed one by one on the rename screen. Choose more than that and the job goes straight to the CSV table, which is faster for long lists. Type 0 to always rename one by one. The usual value is 5.
+Rename|noext	Decides what happens when you type a new name with no ending, for example print instead of print.gz. You can keep the old ending, create the file without any ending, or be asked each time. A name that already has an ending is used exactly as typed. The usual choice is to ask every time.
+Rename|reset	Put both choices back to the usual values: five items before the CSV table, and asking every time about a missing ending.
+No extension|*	Pick what happens when you rename a file and type a new name without an ending such as .txt. A name that does have an ending is always used as typed.
+No extension|v:ask	Every time you type a name without an ending, the program asks whether to keep the old ending or leave it off.
+No extension|v:old	A name without an ending automatically gets the ending of the old file, so base.tar.gz renamed to print becomes print.tar.gz.
+No extension|v:none	A name without an ending stays exactly as you typed it, so the new file has no ending at all.
 Find & replace|*	Every question that Find and replace may ask can be fixed here. Open a row and pick either a fixed answer, so it never asks again, or Ask every time. Rows are grouped into how you search, what is searched and how replacing is done.
 Find & replace|case	Fixes whether capital and small letters count as different. With exact case, Apple and apple are different words; with any case they match. Open it to set a permanent answer or choose Ask every time.
 Find & replace|regex	Fixes whether what you type is plain text or a pattern language called a regular expression, for experts who need wildcards and rules. Open it to set a permanent answer or choose Ask every time.
