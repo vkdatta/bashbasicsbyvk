@@ -35,11 +35,11 @@
 #           prefix  typed starts with key      (c-  → c-1,3)
 #           word    key, or key + space or "."  (.s → ".s.ext png", ".s foo")
 #  CLASSES  nav     can run from anywhere, opens a screen          (s h q i -h)
-#           util    can run from anywhere, prints something        (disk ram health)
+#           util    can run from anywhere, prints something        (disk ram health kl rf)
 #           act     acts on the main file list: main prompt only   (c d r z t f ...)
 #           filter  handled by the list loop itself (=)             (=)
 #           local   the menu's own loop handles it (handler "-")
-#           danger  main prompt only, never from a nested prompt    (kl)
+#           danger  main prompt only, never from a nested prompt    (none today: kl is util, the owner wants it everywhere)
 #
 #  Disable the whole layer with:  export VK_CMDMAP=0
 # ============================================================
@@ -460,6 +460,8 @@ bvk_main_exec() {
     i)      infinity_stones_menu ;;
     -h)     open_help ;;
     disk)   df -h ;;
+    kl)     kill -9 -1 ;;
+    rf)     _vp_cache_reset ;;   # a screen that is not the main list: redraw it (the main list's own rf reloads the shell, see o)
     ram)    free -h ;;
     health) bvk_health ;;
     lang)   bvk_lang ;;

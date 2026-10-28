@@ -9,10 +9,10 @@ q          .mapto()  q          from bashbasicsbyvk_maincommands.sh
 u          .mapto()  back()
 h          .mapto()  h          from bashbasicsbyvk_maincommands.sh
 s          .mapto()  s          from bashbasicsbyvk_maincommands.sh
-i          .mapto()  block()
--h         .mapto()  block()
+i          .mapto()  i          from bashbasicsbyvk_maincommands.sh
+-h         .mapto()  -h         from bashbasicsbyvk_maincommands.sh
 -u         .mapto()  block()
--auth      .mapto()  block()
+-auth      .mapto()  -auth      from bashbasicsbyvk_maincommands.sh
 cd         .mapto()  block()
 sw         .mapto()  block()
 fx         .mapto()  block()
@@ -35,7 +35,7 @@ fs         .mapto()  block()
 forceshow  .mapto()  block()
 ns         .mapto()  block()
 fa         .mapto()  block()
-rf         .mapto()  block()
+rf         .mapto()  rf         from bashbasicsbyvk_maincommands.sh
 l-         .mapto()  block()
 ul-        .mapto()  block()
 z-         .mapto()  block()
@@ -62,15 +62,16 @@ scr-sync   .mapto()  block()
 .d         .mapto()  block()
 .dm        .mapto()  block()
 .ai        .mapto()  block()
-health     .mapto()  block()
-disk       .mapto()  block()
-ram        .mapto()  block()
-clear      .mapto()  block()
-sast       .mapto()  block()
-kl         .mapto()  block()
+health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
+disk       .mapto()  disk       from bashbasicsbyvk_maincommands.sh
+ram        .mapto()  ram        from bashbasicsbyvk_maincommands.sh
+clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
 print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
 loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
 cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
 pn         .mapto()  block()
-lang       .mapto()  block()
+lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
 goto       .mapto()  block()
+eb-        .mapto()  block()

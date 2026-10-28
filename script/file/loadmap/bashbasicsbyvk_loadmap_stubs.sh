@@ -168,6 +168,13 @@ _gh_releases_rows() { _lm_stub bashbasicsbyvk_ghlib.sh _gh_releases_rows "$@"; }
 _gh_commit_row() { _lm_stub bashbasicsbyvk_ghlib.sh _gh_commit_row "$@"; }
 _gh_tags_newest_first() { _lm_stub bashbasicsbyvk_ghlib.sh _gh_tags_newest_first "$@"; }
 _gh_print_body() { _lm_stub bashbasicsbyvk_ghlib.sh _gh_print_body "$@"; }
+_eb_commas() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_commas "$@"; }
+_eb_unit() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_unit "$@"; }
+_eb_dir_bytes() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_dir_bytes "$@"; }
+_eb_item_bytes() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_item_bytes "$@"; }
+_eb_table() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_table "$@"; }
+_eb_save_sheet() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_save_sheet "$@"; }
+handle_eb() { _lm_stub bashbasicsbyvk_exactbytes.sh handle_eb "$@"; }
 _sp_file_for() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_file_for "$@"; }
 _sp_op_pfx() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_op_pfx "$@"; }
 _sp_op_label() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_op_label "$@"; }
@@ -298,6 +305,7 @@ _st_grp_buffers_build() { _lm_stub bashbasicsbyvk_settings_groups.sh _st_grp_buf
 _st_grp_buffers_act() { _lm_stub bashbasicsbyvk_settings_groups.sh _st_grp_buffers_act "$@"; }
 buffers_group_settings() { _lm_stub bashbasicsbyvk_settings_groups.sh buffers_group_settings "$@"; }
 _st_grp_system_build() { _lm_stub bashbasicsbyvk_settings_groups.sh _st_grp_system_build "$@"; }
+_nano_wrap_label() { _lm_stub bashbasicsbyvk_settings_groups.sh _nano_wrap_label "$@"; }
 _st_grp_system_act() { _lm_stub bashbasicsbyvk_settings_groups.sh _st_grp_system_act "$@"; }
 system_group_settings() { _lm_stub bashbasicsbyvk_settings_groups.sh system_group_settings "$@"; }
 _st_top_build() { _lm_stub bashbasicsbyvk_settings_groups.sh _st_top_build "$@"; }
@@ -345,6 +353,7 @@ _st_im_act() { _lm_stub bashbasicsbyvk_indexmode.sh _st_im_act "$@"; }
 index_mode_threshold_settings() { _lm_stub bashbasicsbyvk_indexmode.sh index_mode_threshold_settings "$@"; }
 _get_nanorc_file() { _lm_stub bashbasicsbyvk_importnano.sh _get_nanorc_file "$@"; }
 import_nanorc_settings() { _lm_stub bashbasicsbyvk_importnano.sh import_nanorc_settings "$@"; }
+bvk_nano_wrap_apply() { _lm_stub bashbasicsbyvk_importnano.sh bvk_nano_wrap_apply "$@"; }
 _st_cf_build() { _lm_stub bashbasicsbyvk_compress.sh _st_cf_build "$@"; }
 _st_cf_act() { _lm_stub bashbasicsbyvk_compress.sh _st_cf_act "$@"; }
 compress_format_settings() { _lm_stub bashbasicsbyvk_compress.sh compress_format_settings "$@"; }

@@ -37,7 +37,7 @@ fs         .mapto()  block()
 forceshow  .mapto()  block()
 ns         .mapto()  block()
 fa         .mapto()  block()
-rf         .mapto()  block()
+rf         .mapto()  rf         from bashbasicsbyvk_maincommands.sh
 l-         .mapto()  block()
 ul-        .mapto()  block()
 z-         .mapto()  block()
@@ -72,7 +72,8 @@ sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
 print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
 loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
 cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
-kl         .mapto()  block()
+kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
 pn         .mapto()  block()
 lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
 goto       .mapto()  block()
+eb-        .mapto()  block()

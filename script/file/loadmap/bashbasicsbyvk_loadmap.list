@@ -44,6 +44,7 @@ bashbasicsbyvk_bundle_io.sh|||tool, run as its own process
 bashbasicsbyvk_action_confirm_key.sh|||tool, run as its own process
 bashbasicsbyvk_archive_formats.sh|||tool, run as its own process
 bashbasicsbyvk_ghlib.sh|||tool, run as its own process
+bashbasicsbyvk_exactbytes.sh|||eb- command (exact bytes of items); only loaded when eb- is typed, its stub loads it
 bashbasicsbyvk_staging_helpers.sh|||tool, run as its own process
 bashbasicsbyvk_staging_archive.sh|||tool, run as its own process
 bashbasicsbyvk_staging_map.sh|||tool, run as its own process

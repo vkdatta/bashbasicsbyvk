@@ -201,6 +201,7 @@ while true; do
     do-)         handle_do_import ;;
     c2c-*)       handle_c2c_upload "$choice" ;;
     up-*)        handle_up_upload "$choice" ;;
+    eb-*)        handle_eb "$choice" ;;
     ux-*)        handle_ux_upload "$choice" ;;
     save-*)      handle_save_upload "$choice" ;;
     snap-*)      handle_snap_add "$choice" ;;

@@ -73,3 +73,4 @@ cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
 pn         .mapto()  pn         from bashbasicsbyvk_maincommands.sh
 lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
 goto       .mapto()  goto       from bashbasicsbyvk_maincommands.sh
+eb-        .mapto()  eb-        from bashbasicsbyvk_maincommands.sh

@@ -293,11 +293,17 @@ _st_grp_system_build() {
   _st_reset
   _st_add a "Timezone"             0 "${app_timezone:-system} · $_tzabbr" timezone
   _st_add a "Import nano settings" 0 ""                                    nano
+  _st_add a "Nano text wrap"       0 "$(_nano_wrap_label)"                 nanowrap
 }
+_nano_wrap_label() { case "${nano_wrap:-nowrap}" in wrap) printf 'wrap long lines' ;; *) printf 'no wrap' ;; esac; }
 _st_grp_system_act() {
   case "${_st_tag[$1]}" in
     timezone) timezone_settings ;;
     nano)     import_nanorc_settings; _st_note "💫 nano settings added" ;;
+    nanowrap) _st_choice_open "Nano text wrap" nano_wrap "Nano: long lines" "" \
+                wrap "Wrap — long lines continue on the next screen row (breaks at blanks)" \
+                nowrap "No wrap — one line stays one row, the screen scrolls sideways (default)"
+              bvk_nano_wrap_apply && _st_note "💫 nano: $(_nano_wrap_label) — written to $(_get_nanorc_file)" ;;
   esac
 }
 system_group_settings() { _st_run "System" _st_grp_system_build _st_grp_system_act; }

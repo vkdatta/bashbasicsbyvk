@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+Owner asked for a Settings option "nano wrap or no wrap", with the other nano functions writing it to nanorc too.
+
+HOW DID YOU DEBUG
+Read importnano.sh (import_nanorc_settings only appended a block once), the Settings plumbing (settings.sh defaults/validation/save/reset, settings_groups.sh System group, settings_desc.sh) and the nano launch sites (they all just run nano, so the nanorc is the one place to write). tests/exactbytes.sh runs bvk_nano_wrap_apply in a scratch HOME: block written once, replaced on change, rest of the file untouched, no blank-line growth, --if-present creates nothing. NOT verified: the Settings row in a real terminal; nano itself rendering the wrap.
+
+CAUSE
+No setting existed; the only nanorc writer was add-once.
+
+FIX
+New setting nano_wrap (wrap | nowrap, default nowrap). New row System > "Nano text wrap" with leaf-screen descriptions. bvk_nano_wrap_apply keeps ONE managed block "# bashbasicsbyvk nano wrap" (set softwrap + atblanks, or the unset forms) and replaces it on each call; import_nanorc_settings calls it; Reset all calls it with --if-present.
+
+2. ISSUE IN BRIEF
+Owner asked for a new command eb: eb-1-5 shows exact bytes, binary and data units, then asks to save in Excel or copy to the clipboard, reusing the byte calculation the app already has.
+
+HOW DID YOU DEBUG
+Found the sizes: item_size[] / item_dsize[] (displayer) and the shared item resolver _sp_guard_and_resolve; copied the copy-to-clipboard and openpyxl-with-CSV-fallback patterns from p- and .ai. tests/exactbytes.sh covers byte counts (file, folder, empty, cached, fifo), unit rounding/rollover, table and sheet rows; a deliberate break of the rollover line turned it red. NOT verified: the eb- menu flow, the Excel file and the clipboard in a real terminal. "binary and data" was read as 1024-based (KiB) and 1000-based (KB) units.
+
+CAUSE
+Feature did not exist.
+
+FIX
+New prefix command eb- (cmd_def in maincommands.sh, case in o, wired in main, blocked in the other menus like up-) and bashbasicsbyvk_exactbytes.sh (handle_eb). Loadmap line, stubs and deps F line (eb) added, llms-full.txt regenerated.
+
+3. ISSUE IN BRIEF
+Owner: kl, disk, ram, rf and the other general-purpose commands must not be blocked on any menu (they were block() in up to 19 of the 25 menus; prompt and rename blocked disk, ram, health, lang, clear, sast, i, -h, -auth).
+
+HOW DID YOU DEBUG
+Tabulated every `.mapto() block()` line per map. kl was class danger and rf class act with handler "-" (only the main list loop knows them), so un-blocking the map lines alone would have advertised commands nothing runs. rf on the main list re-execs the shell (handle_refresh) so it can not be reused inside a menu.
+
+CAUSE
+Map lines blocked them, and kl/rf had no handler runnable from a menu.
+
+FIX
+51 map lines now `.mapto() <cmd> from bashbasicsbyvk_maincommands.sh`. kl and rf became class util with handler bvk_main_exec (kl runs kill -9 -1; rf redraws the screen via _vp_cache_reset; the main list keeps its own local handling in o). Left blocked on purpose: commands that need the main file list (-u, pn, .ai, sw ...). Tests: cmd_drift, cheatcode, cmd_docs pass. Already red before this change, identical on the original archive: choose_plain, delete_confirm, hints, settings_desc. loadmap fails only when those leave script/choose_test_driver.sh behind; it passes alone.

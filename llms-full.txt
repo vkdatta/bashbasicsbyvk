@@ -216,6 +216,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `d-` | act | Apply staged items HERE   (d- set1 = only that set) | `d- set1` |
 | `disk` | util | Disk usage |  |
 | `do-` | act | Download from a link |  |
+| `eb-` | act | Exact bytes of items (binary + data units) — copy or save to Excel | `eb-1-5` |
 | `f` | act | Find |  |
 | `fa` | act | Favourite — add an alias | `fa 3` |
 | `forceshow` | act | Force-show every item (big folder) |  |
@@ -228,7 +229,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `health` | util | What is active on this machine |  |
 | `i` | nav | Infinity stones — extra tools |  |
 | `k-` | act | Stage SHORTCUT | `k-1,3` |
-| `kl` | danger | Kill every process of this user (kill -9 -1) |  |
+| `kl` | util | Kill every process of this user (kill -9 -1) |  |
 | `l-` | act | Lock items | `l-1,3` |
 | `lang` | util | Which engines run: Drill (C or Python) · FileAPI (Go or Node) · Find & Replace (C or Python) |  |
 | `loadtime` | tool | Load time: what each screen change cost (loadtime 2 · loadtime all) |  |
@@ -242,7 +243,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `r` | act | Rename items |  |
 | `ram` | util | Memory usage |  |
 | `rbam` | act | Roles & access |  |
-| `rf` | act | Refresh the list |  |
+| `rf` | util | Refresh — the main list reloads the shell, every other screen redraws |  |
 | `s` | nav | Settings |  |
 | `s-` | act | Stage SELECT (a set for fx → <action>.selected.items) | `s-1,3 as set1` |
 | `sast` | util | Static security scan |  |

@@ -34,3 +34,4 @@ engine/bashbasicsbyvk_deps|functions/bashbasicsbyvk_(archive_formats|bundle_io)|
 setup\.py|MANIFEST\.in|setup\.cfg|engine/bashbasicsbyvk_engine_target|engine/bvk-	wheel_target
 engine/bashbasicsbyvk_engine_(heal|target)|infinity/tools/bashbasicsbyvk_upgrade_install|script/o$	engine_heal
 script/	loadmap
+functions/bashbasicsbyvk_exactbytes|settings/bashbasicsbyvk_(importnano|settings\b|settings_groups)	exactbytes

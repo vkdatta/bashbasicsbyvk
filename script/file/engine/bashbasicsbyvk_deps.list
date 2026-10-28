@@ -130,6 +130,7 @@ F|cmd.overwrite|Overwrite from the clipboard (bashbasicsbyvk_overwrite)||termux-
 F|cmd.sast|Static code scan (bashbasicsbyvk_sast)|python3|
 F|telemetry|Usage ping|curl|
 F|ai|AI helper (.ai)|curl python3|openpyxl
+F|eb|Exact bytes (eb-)|python3|openpyxl
 # GitHub, upgrade and Google Drive
 F|upgrade|Upgrade loop (-u)|curl git|
 F|github|GitHub screens (fx > github)|python3|git gh

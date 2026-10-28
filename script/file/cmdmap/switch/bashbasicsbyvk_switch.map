@@ -74,10 +74,11 @@ scr-sync   .mapto()  block()
 health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
 clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
 sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
-kl         .mapto()  block()
+kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
 print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
 loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
 cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
 pn         .mapto()  block()
 lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
 goto       .mapto()  block()
+eb-        .mapto()  block()

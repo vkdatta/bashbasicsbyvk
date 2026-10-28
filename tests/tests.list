@@ -7,6 +7,7 @@ lint_waits|fast|20|bash tests/lint_waits.sh|
 regex_portability|fast|30|bash tests/regex_portability.sh|
 cmd_drift|fast|90|bash tests/cmd_drift.sh|
 settings_keys|fast|30|bash tests/settings_keys.sh|
+exactbytes|fast|30|bash tests/exactbytes.sh|
 group_view|fast|40|bash tests/group_view.sh|
 width|fast|20|bash tests/width/width_consistency.sh|
 choose_plain|fast|20|bash tests/choose/plain_test.sh|

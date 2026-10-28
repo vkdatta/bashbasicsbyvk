@@ -6,6 +6,7 @@ DEFAULT_SHOW_HIDDEN_FILES=false
 DEFAULT_INDEX_MODE_THRESHOLD=200
 DEFAULT_RENAME_CSV_ABOVE=5          # r: more selected items than this are handed to the CSV rename (rename.select.items.csv); 0 = never
 DEFAULT_RENAME_NOEXT_MODE="ask"      # r: a new name typed WITHOUT an extension: old (keep the old one) · none (create without) · ask
+DEFAULT_NANO_WRAP="nowrap"         # nano long lines:  wrap (soft-wrap on screen, at blanks) | nowrap (one line, scroll sideways); written to nanorc by bvk_nano_wrap_apply
 DEFAULT_TERMINAL_BG_COLOR="000000"
 DEFAULT_TERMINAL_TEXT_COLOR_NORMAL="FFFFFF"
 DEFAULT_TERMINAL_TEXT_COLOR_CODER="00D000"
@@ -80,6 +81,7 @@ unset display_filter_persist
 unset anim_outer
 unset anim_inner
 unset mouse_mode
+unset nano_wrap
 unset nuke_time_seconds
 unset ux_nuke_time_seconds
 unset app_timezone
@@ -162,6 +164,7 @@ unset _bc _bcv _bcd
 : "${anim_outer:=$DEFAULT_ANIM_OUTER}"
 : "${anim_inner:=$DEFAULT_ANIM_INNER}"
 : "${mouse_mode:=$DEFAULT_MOUSE_MODE}"
+: "${nano_wrap:=$DEFAULT_NANO_WRAP}"
 : "${nuke_time_seconds:=$DEFAULT_NUKE_TIME_SECONDS}"
 : "${ux_nuke_time_seconds:=$DEFAULT_UX_NUKE_TIME_SECONDS}"
 : "${app_timezone=$DEFAULT_APP_TIMEZONE}"
@@ -197,6 +200,7 @@ fi
 [[ "$anim_outer" == pop || "$anim_outer" == carpet ]] || anim_outer=$DEFAULT_ANIM_OUTER
 [[ "$anim_inner" == pop || "$anim_inner" == carpet ]] || anim_inner=$DEFAULT_ANIM_INNER
 [[ "$mouse_mode" == on || "$mouse_mode" == off ]] || mouse_mode=$DEFAULT_MOUSE_MODE
+[[ "$nano_wrap" == wrap || "$nano_wrap" == nowrap ]] || nano_wrap=$DEFAULT_NANO_WRAP
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Timezone  (Settings → Timezone)
@@ -326,6 +330,7 @@ save_settings() {
     echo "anim_outer=$anim_outer"
     echo "anim_inner=$anim_inner"
     echo "mouse_mode=$mouse_mode"
+    echo "nano_wrap=$nano_wrap"
     echo "nuke_time_seconds=$nuke_time_seconds"
     echo "ux_nuke_time_seconds=$ux_nuke_time_seconds"
     echo "app_timezone=\"$app_timezone\""
@@ -613,6 +618,7 @@ _st_reset_act() {
   anim_outer=$DEFAULT_ANIM_OUTER
   anim_inner=$DEFAULT_ANIM_INNER
   mouse_mode=$DEFAULT_MOUSE_MODE
+  nano_wrap=$DEFAULT_NANO_WRAP; bvk_nano_wrap_apply --if-present   # only touches a nanorc that already carries our wrap block
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
   ux_nuke_time_seconds=$DEFAULT_UX_NUKE_TIME_SECONDS
   app_timezone=$DEFAULT_APP_TIMEZONE; _apply_timezone
