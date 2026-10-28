@@ -75,3 +75,5 @@ kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
 lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
 goto       .mapto()  block()
 eb-        .mapto()  block()
+xtr-       .mapto()  block()
+i-         .mapto()  block()

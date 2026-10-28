@@ -74,3 +74,5 @@ pn         .mapto()  pn         from bashbasicsbyvk_maincommands.sh
 lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
 goto       .mapto()  goto       from bashbasicsbyvk_maincommands.sh
 eb-        .mapto()  eb-        from bashbasicsbyvk_maincommands.sh
+xtr-       .mapto()  xtr-       from bashbasicsbyvk_maincommands.sh
+i-         .mapto()  i-         from bashbasicsbyvk_maincommands.sh

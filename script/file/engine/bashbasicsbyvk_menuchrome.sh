@@ -158,6 +158,25 @@ _bvk_invalid() {
   return 0
 }
 
+# Info mode: a command that only SHOWS something (i-N: info of a version, a rule, a release) prints it, then waits for one key
+# and hands back to the menu, which then redraws below.  Without the wait the menu was never drawn again and the screen ended
+# on a bare "Select:" under the text (the footer came back, the menu did not).  Usage:  show_it && _bvk_info_wait ; fresh=true
+_BVK_MSG_INFO_EXIT="Press any key to exit info mode"
+_bvk_info_wait() {
+  [ -t 0 ] && [ -t 1 ] || return 0                      # no terminal (a pipe, a test harness): nothing to wait for
+  local _k _s
+  [ "${_SL_WANT:-0}" = 1 ] && _sl_ready                  # smartload: the command is done, we wait for the person now (no "Working…" bar on the prompt)
+  echo
+  echo -n "$_BVK_MSG_INFO_EXIT"
+  stty -icanon -echo min 1 time 0 2>/dev/null
+  IFS= builtin read -rsn1 _k
+  if [[ "$_k" == $'\x1b' ]]; then                       # an arrow key / mouse report is ONE key: swallow the rest of it
+    while IFS= builtin read -rsn1 -t 0.02 _s; do :; done
+  fi
+  builtin printf '\r\033[2K'                            # the question goes away, the text above it stays
+  return 0
+}
+
 # ---- registered footers -------------------------------------------------
 _mc_footer_register file_menu    u.up q h:Home
 _mc_footer_register browse_main  u.up cd:Change_directory q '|' h:Home s:Settings -h:Help -u:Upgrade

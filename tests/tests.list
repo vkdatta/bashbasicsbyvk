@@ -45,3 +45,4 @@ archive|fast|60|bash tests/archive/archive_test.sh|
 deps|fast|60|bash tests/deps/deps_test.sh|
 deps_menu|fast|60|python3 tests/deps/standalone_test.py|python3
 loadmap|fast|60|bash tests/loadmap.sh|python3
+xtr_info|fast|40|bash tests/xtr_info.sh|python3

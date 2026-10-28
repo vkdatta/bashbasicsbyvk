@@ -197,7 +197,8 @@ _rn_name_prompt() {
   local item="$1" bn="${item##*/}" out nl=$'\n'
   out="${nl}Old: $bn$nl"
   builtin printf '%s' "$out"
-  _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="New:"
+  # the picker's frame stays part of the screen (a command typed at "New:" - s, h ... - redraws it, see _cm_text_repaint); the Old: lines pile up below it
+  _BVK_SCR_EXTRA+="$out"; _BVK_SCR_PROMPT="New:"
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   local in
   _CE_FILL="$bn"

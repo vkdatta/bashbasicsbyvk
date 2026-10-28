@@ -174,7 +174,14 @@ _eb_dir_bytes() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_dir_bytes "$@"; }
 _eb_item_bytes() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_item_bytes "$@"; }
 _eb_table() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_table "$@"; }
 _eb_save_sheet() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_save_sheet "$@"; }
+_eb_finish() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_finish "$@"; }
 handle_eb() { _lm_stub bashbasicsbyvk_exactbytes.sh handle_eb "$@"; }
+_fi_scan() { _lm_stub bashbasicsbyvk_fileinfo.sh _fi_scan "$@"; }
+_fi_build() { _lm_stub bashbasicsbyvk_fileinfo.sh _fi_build "$@"; }
+handle_info() { _lm_stub bashbasicsbyvk_fileinfo.sh handle_info "$@"; }
+_xtr_ask_int() { _lm_stub bashbasicsbyvk_extract.sh _xtr_ask_int "$@"; }
+_xtr_engine() { _lm_stub bashbasicsbyvk_extract.sh _xtr_engine "$@"; }
+handle_xtr() { _lm_stub bashbasicsbyvk_extract.sh handle_xtr "$@"; }
 _sp_file_for() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_file_for "$@"; }
 _sp_op_pfx() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_op_pfx "$@"; }
 _sp_op_label() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_op_label "$@"; }
@@ -199,6 +206,7 @@ _sp_append_as() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_append_as "$@";
 _sp_append() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_append "$@"; }
 _sp_parse_all_except() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_parse_all_except "$@"; }
 _sp_guard_and_resolve() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_guard_and_resolve "$@"; }
+_sp_files_only() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_files_only "$@"; }
 _sp_conflict_mode() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_conflict_mode "$@"; }
 _sp_conflict_decide() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_conflict_decide "$@"; }
 _sp_stage_buffer() { _lm_stub bashbasicsbyvk_staging_helpers.sh _sp_stage_buffer "$@"; }

@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+New main commands were wanted: xtr- (extract lines, words, characters or bytes from files, files only, with first / range / last / random / duplicate / unique modes and a size unit for bytes) and i- (file info for several files, files only). Both must print their result before offering copy or Excel, like eb-.
+
+1. HOW DID YOU DEBUG
+Read AGENTS.md, exactbytes.sh (eb-), the item pickers (select_items_common, _sp_guard_and_resolve), the command map generator and the load mapper. Confirmed by reading that eb- already prints its table before the menu (the choice menu draws inline and never clears the screen). Ran the new engines on sample files and tests/xtr_info.sh (breaking the folder message on purpose turned it red). The interactive menus (_bvk_menu, pickers) were NOT run in a real terminal here.
+
+1. CAUSE
+Not a bug: the Excel writer and the "Excel or clipboard" question lived inside eb- with its columns hard-coded, so a second and third command would have needed a copy.
+
+1. FIX
+exactbytes.sh: _eb_save_sheet takes header / sheet / numeric columns from _EB_HEAD _EB_SHEET _EB_NUMS _EB_BOLDLAST (eb- defaults unchanged); new _eb_finish is the shared tail of eb- and i-. staging_helpers.sh: new _sp_files_only (pick or ask, refuse folders with the names listed). New files bashbasicsbyvk_fileinfo.sh (i-) and bashbasicsbyvk_extract.sh (xtr-), wired in o, maincommands.sh (cmd_def), every map (mapgen), the load mapper, deps.list (F lines) and the command reference. New test tests/xtr_info.sh.

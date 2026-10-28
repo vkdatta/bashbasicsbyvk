@@ -443,7 +443,7 @@ _ghr_cmd() {
     c)  _ghx_create; return 0 ;;
     i-*)
       _xui_parse_sel "${1#*-}" || return 1
-      _ghx_pick_names; _ghx_run_action i; return 1 ;;
+      _ghx_pick_names; _ghx_run_action i; _bvk_info_wait; return 0 ;;      # info mode: any key, then the list is drawn again
     e|e-*|r|r-*|d|d-*|g|g-*)
       _xui_select_rows "SELECT" "🐙  Which items?" "$1" || return 1
       _ghx_pick_names; _ghx_run_action "${1:0:1}"; return 0 ;;

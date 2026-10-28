@@ -228,6 +228,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `h` | nav | Home — recents, bookmarks, favourites |  |
 | `health` | util | What is active on this machine |  |
 | `i` | nav | Infinity stones — extra tools |  |
+| `i-` | act | Info of files (size, words, lines, dates…) — files only, copy or save to Excel | `i-1,3` |
 | `k-` | act | Stage SHORTCUT | `k-1,3` |
 | `kl` | util | Kill every process of this user (kill -9 -1) |  |
 | `l-` | act | Lock items | `l-1,3` |
@@ -260,6 +261,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `ux-` | act | Share with a user | `ux-1` |
 | `uz-` | act | Unzip items | `uz-2` |
 | `v-` | act | View staged items and sets |  |
+| `xtr-` | act | Extract lines / words / characters / bytes from files (files only) | `xtr-1,3` |
 | `z` | act | Organise by year, month, extension… |  |
 | `z-` | act | Zip items | `z-1,3` |
 <!-- cmd-ref:end -->

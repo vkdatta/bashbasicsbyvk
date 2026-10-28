@@ -855,11 +855,25 @@ _cm_text_read_done() {   # put back the keys that were known before this prompt 
   return 0
 }
 
+# A command that ran from a text prompt (s, h, -h, cc ...) put its own screen on the terminal.  The prompt is asked again, so the
+# screen that OWNED it (the Create menu above "Enter folder names:") is drawn again first: a lone prompt under another screen's
+# leftovers is the "footer repaints without the menu" bug.  $1/$2 = what print remembered before the command (frame, text after it).
+_cm_text_repaint() {
+  local raw="$1" extra="$2"
+  builtin printf '\r\033[J'
+  [ -n "$raw" ] && builtin printf '%s' "$raw"
+  [ -n "$extra" ] && builtin printf '%s' "$extra"
+  [ -n "$extra" ] && [[ "$extra" != *$'\n' ]] && builtin printf '\n'
+  _BVK_SCR_RAW="$raw"; _BVK_SCR_EXTRA="$extra"        # print must still see this screen, not the command's
+  return 0
+}
+
 # Entry used by the read shim. Returns the exit status the shim should give the caller.
 # Sets _CM_RESULT to the value for the variable.
 _cm_text_read() {   # prompt initial var can_complete
   [ "${_SL_WANT:-0}" = 1 ] && _sl_ready          # smartload: the wait is over
   local prompt="$1" init="$2" var="$3" cc="$4" st
+  local _tr_raw="${_BVK_SCR_RAW-}" _tr_extra="${_BVK_SCR_EXTRA-}"     # the screen this prompt belongs to (see _cm_text_repaint)
   local start="$init"        # what the editor starts with; $init stays "what was already there" for the gate
   _cm_on || return 99
   [ "$_CM_BOOTED" = 1 ] || _cm_boot
@@ -875,7 +889,7 @@ _cm_text_read() {   # prompt initial var can_complete
     _cm_gate_text "$_CM_OUT" "$init"; st=$?
     case "$st" in
       0) _CM_RESULT="$_CM_OUT"; _cm_text_read_done "$_tr_saved"; return 0 ;;
-      3) init=""; start="${_CC_PREFILL:-}"; _CC_PREFILL=""; [ -n "$start" ] && _CC_HINT_NOW=1; continue ;;   # a command ran (e.g. settings, cc); ask again — cc leaves its pick in the line
+      3) init=""; start="${_CC_PREFILL:-}"; _CC_PREFILL=""; [ -n "$start" ] && _CC_HINT_NOW=1; _cm_text_repaint "$_tr_raw" "$_tr_extra"; continue ;;   # a command ran (e.g. settings, cc); ask again — cc leaves its pick in the line
       *) _CM_RESULT=""; _cm_text_read_done "$_tr_saved"; return 1 ;;           # aborted: the flow unwinds
     esac
   done

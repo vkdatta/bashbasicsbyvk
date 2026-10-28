@@ -605,7 +605,7 @@ rules_menu() {
 
       e-*)  _rl_cmd_edit rule "${_rl_choice#[eE]-}" || _rl_fresh=false ;;
       em-*) _rl_cmd_edit meta "${_rl_choice#[eE][mM]-}" || _rl_fresh=false ;;
-      i-*)  _rl_cmd_info "${_rl_choice#[iI]-}"; _rl_fresh=false ;;
+      i-*)  _rl_cmd_info "${_rl_choice#[iI]-}" && _bvk_info_wait ;;      # info mode: any key, then the list is drawn again
 
       clr)
         if [ "$_rl_tab" = last ]; then

@@ -338,7 +338,7 @@ upgrade_menu() {
 
       -h) _upg_help; _up_fresh=false ;;
 
-      i-*)  _upg_cmd_info "${_up_choice#[iI]-}"; _up_fresh=false ;;
+      i-*)  _upg_cmd_info "${_up_choice#[iI]-}" && _bvk_info_wait ;;      # info mode: any key, then the list is drawn again
 
       m|main)
         _upg_do_install main "latest main (default branch)" || true

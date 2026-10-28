@@ -348,6 +348,42 @@ _sp_guard_and_resolve() {
   _sp_resolve_itemlist "$itemlist"
 }
 
+# Files-only pick for the commands that cannot work on a folder (i-  xtr-).
+# Usage: _sp_files_only "$itemlist" "$pfx" "$LABEL" "can't be extracted"  || return 0
+#   itemlist  what was typed after the prefix (1,3  1-5  a  a-2). EMPTY = ask now with the shared item picker (the one `d` uses).
+#   A folder in the pick refuses the WHOLE pick: "<names> are folders, which can't be extracted." (nothing runs, pick again).
+# On success sp_files[] holds the file paths.
+_sp_files_only() {
+  local raw="$1" pfx="$2" label="$3" whynot="$4" p n=0 shown=""
+  local -a dirs=() odd=()
+  sp_files=()
+  if [ -z "$raw" ]; then
+    if $imaginary_mode; then select_imaginary_items_common "$path" "$group_prefix" "$label" || return 1
+    else select_items_common "$label" allow_a || return 1; fi
+    sp_resolved=("${selected_items[@]}")
+  else
+    _sp_guard_and_resolve "$raw" "$pfx" || return 1
+  fi
+  for p in "${sp_resolved[@]}"; do
+    if [ -d "$p" ]; then dirs+=("${p##*/}")
+    elif [ -f "$p" ]; then sp_files+=("$p")
+    else odd+=("${p##*/}"); fi
+  done
+  if [ ${#dirs[@]} -gt 0 ]; then
+    for p in "${dirs[@]:0:5}"; do shown+="${shown:+, }$p"; done
+    [ ${#dirs[@]} -gt 5 ] && shown+=" … and $(( ${#dirs[@]} - 5 )) more"
+    if [ ${#dirs[@]} -eq 1 ]; then echo "🔴  $shown is a folder, which $whynot."
+    else echo "🔴  $shown are folders, which $whynot."; fi
+    sp_files=(); return 1
+  fi
+  if [ ${#odd[@]} -gt 0 ]; then
+    echo "🔴  ${odd[*]:0:5}: not a regular file — nothing done."
+    sp_files=(); return 1
+  fi
+  [ ${#sp_files[@]} -gt 0 ] || { echo "❌ No files selected"; return 1; }
+  return 0
+}
+
 # ─────────────────────────────────────────────
 #  Named sets:  c-1,3 as set1  — what happens when the name is already taken
 # ─────────────────────────────────────────────

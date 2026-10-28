@@ -1,4 +1,6 @@
 # bashbasicsbyvk_exactbytes.sh — the `eb-` command: the EXACT size of the numbered items.
+#   Also the home of the helpers `i-` (bashbasicsbyvk_fileinfo.sh) and `xtr-` (bashbasicsbyvk_extract.sh) share:
+#   _eb_commas, _eb_unit, _eb_save_sheet (Excel / CSV) and _eb_finish (the "Excel or clipboard?" question).
 #
 #   eb-1,3   eb-1-5   eb-a   eb-a-2        (the same item lists as up- c- z-: _sp_guard_and_resolve)
 #
@@ -86,35 +88,53 @@ _eb_table() {
 }
 
 # _eb_save_sheet FILE-WITHOUT-EXTENSION  -> writes .xlsx (openpyxl) or, when openpyxl is missing, .csv; prints where
+#   rows come from _EB_TSV (tab separated, one row per line).  The callers that are not eb- set, before the call:
+#     _EB_HEAD   the header cells, tab separated   (default: the eb- table)
+#     _EB_SHEET  the sheet name                    (default: exact bytes)
+#     _EB_NUMS   1-based numeric columns, comma separated: written as numbers, shown with thousands commas (default: 4)
+#     _EB_BOLDLAST  1 = the last row (a Total row) is bold (default 1)
 _eb_save_sheet() {
-  local base="$1" tsv; tsv="$(mktemp)" || return 1
+  local base="$1" tsv head sheet nums boldlast
+  tsv="$(mktemp)" || return 1
   printf '%s' "$_EB_TSV" > "$tsv"
-  python3 - "$base" "$tsv" <<'PYEOF'
+  printf -v head 'No.\tName\tType\tExact bytes\tBinary (1024)\tData (1000)\tFull path'
+  head="${_EB_HEAD-$head}"; sheet="${_EB_SHEET:-exact bytes}"; nums="${_EB_NUMS-4}"; boldlast="${_EB_BOLDLAST:-1}"
+  python3 - "$base" "$tsv" "$head" "$sheet" "$nums" "$boldlast" <<'PYEOF'
 import csv, sys
-base, tsv = sys.argv[1], sys.argv[2]
-head = ["No.", "Name", "Type", "Exact bytes", "Binary (1024)", "Data (1000)", "Full path"]
+base, tsv, head_s, sheet, nums_s, boldlast = sys.argv[1:7]
+head = head_s.split("\t")
+n = len(head)
+nums = [int(x) - 1 for x in nums_s.split(",") if x.strip().isdigit()]
 rows = []
 with open(tsv, encoding="utf-8") as f:
     for line in f.read().split("\n"):
         if not line:
             continue
         c = line.split("\t")
-        c += [""] * (7 - len(c))
-        c[3] = int(c[3])
-        rows.append(c[:7])
+        c += [""] * (n - len(c))
+        c = c[:n]
+        for i in nums:
+            if c[i] != "":
+                try:
+                    c[i] = int(c[i])
+                except ValueError:
+                    pass
+        rows.append(c)
 try:
     from openpyxl import Workbook
     from openpyxl.styles import Font
-    wb = Workbook(); ws = wb.active; ws.title = "exact bytes"
+    wb = Workbook(); ws = wb.active; ws.title = sheet[:31]
     ws.append(head)
     for r in rows:
         ws.append(r)
     for cell in ws[1]:
         cell.font = Font(bold=True)
-    for cell in ws[len(rows) + 1]:
-        cell.font = Font(bold=True)
+    if boldlast == "1" and rows:
+        for cell in ws[len(rows) + 1]:
+            cell.font = Font(bold=True)
     for r in range(2, len(rows) + 2):
-        ws.cell(r, 4).number_format = "#,##0"
+        for i in nums:
+            ws.cell(r, i + 1).number_format = "#,##0"
     ws.freeze_panes = "A2"
     for i, h in enumerate(head, 1):
         w = max([len(h)] + [len(str(r[i - 1])) for r in rows]) + 2
@@ -131,9 +151,26 @@ PYEOF
   return $rc
 }
 
+# _eb_finish TITLE ICON FILE-STEM COMMAND   the one question that ends eb- and i-: save _EB_TSV in Excel, or copy _EB_TEXT.
+#   The table is ALWAYS printed before this is called (the caller prints _EB_TEXT first); nothing is saved or copied unseen.
+_eb_finish() {
+  local title="$1" icon="$2" stem="$3" cmd="${4:-$3}" ans stamp
+  _bvk_menu ans -t "$title" -i "$icon" -q "What do you want to do with this table?" \
+    "x:Save it in Excel" "c:Copy it to the clipboard" || return 0
+  [ "${_CM_ABORT:-0}" = 1 ] && return 0
+  case "${ans,,}" in
+    x) _dep_need -c "$cmd Excel file (without it a CSV is saved instead)" openpyxl || true
+       printf -v stamp '%(%Y%m%d_%H%M%S)T' -1
+       _eb_save_sheet "${path%/}/${stem}_$stamp" ;;
+    c) printf '%s\n' "$_EB_TEXT" | bashbasicsbyvk_copy && echo "💫 Copied to clipboard" ;;
+    *) _bvk_invalid ;;
+  esac
+  return 0
+}
+
 # eb-<items>
 handle_eb() {
-  local raw="$1" p i ans
+  local raw="$1" p
   _sp_guard_and_resolve "${raw#eb-}" "eb-" || return 0
   local -a _eb_names=() _eb_bytes=() _eb_kinds=() _eb_paths=()
   local _eb_total=0 _EB_B _EB_C _EB_U _EB_TEXT _EB_TSV
@@ -150,15 +187,6 @@ handle_eb() {
   echo "📐 Exact bytes"
   printf '%s\n' "$_EB_TEXT"
   echo
-  _bvk_menu ans -t "Exact bytes" -i "📐" -q "What do you want to do with this table?" \
-    "x:Save it in Excel" "c:Copy it to the clipboard" || return 0
-  [ "${_CM_ABORT:-0}" = 1 ] && return 0
-  case "${ans,,}" in
-    x) _dep_need -c "eb- Excel file (without it a CSV is saved instead)" openpyxl || true
-       local stamp; printf -v stamp '%(%Y%m%d_%H%M%S)T' -1
-       _eb_save_sheet "${path%/}/exact_bytes_$stamp" ;;
-    c) printf '%s\n' "$_EB_TEXT" | bashbasicsbyvk_copy && echo "💫 Copied to clipboard" ;;
-    *) _bvk_invalid ;;
-  esac
+  _eb_finish "Exact bytes" "📐" "exact_bytes" "eb-"
   return 0
 }

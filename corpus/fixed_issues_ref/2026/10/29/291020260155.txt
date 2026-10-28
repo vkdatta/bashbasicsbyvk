@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+A command typed into a plain text question (s, h, cc ... at "Enter folder names", "New:") ran, but when the question was asked again the screen that owned it was not drawn: the output of the command (Settings) stayed on screen with only the prompt under it.
+
+1. HOW DID YOU DEBUG
+Reproduced in a real pty with tests/paste_input/ptyapp.py (c, 1, s, u): the Settings screen ended on a lone "Enter folder names" line. Read _cm_text_read / _cm_gate_dispatch in cmdmap.sh: status 3 ("a command ran, ask again") just looped into _cm_line_edit, while menus redraw through _vp_render_fresh and smart menus through _CM_REDRAW_FRESH. Checked the other re-ask paths (item picker _multi_prompt_loop, _cm_gate_sm, choose.sh, _st_cm_gate): they already redraw their screen. After the fix the same pty run shows the Create menu above the prompt; rename (r, 1, s, u) shows the rename screen above Old / New.
+
+1. CAUSE
+_cm_text_read had no memory of the screen it belonged to, so after a command it could only draw the prompt again. rename.sh also threw the picker frame away (_BVK_SCR_RAW="Old: ..."), so even a snapshot would have held only the Old line.
+
+1. FIX
+cmdmap.sh: _cm_text_read keeps _BVK_SCR_RAW / _BVK_SCR_EXTRA at entry; new _cm_text_repaint draws them again (and restores them for print) before the prompt is asked again. rename.sh _rn_name_prompt: the Old: line is appended to _BVK_SCR_EXTRA and the picker frame stays in _BVK_SCR_RAW. Lesson: a prompt that can run a command must be able to redraw the screen it sits under. Follow-up of BB-271020261200-1.
+
+2. ISSUE IN BRIEF
+i-N (info of a version, a rule, a release) printed its text and then left a bare "Select:" under it: the menu was not drawn again, only the prompt came back. The info screen was wanted to end with "Press any key to exit info mode" and then hand back to the menu.
+
+2. HOW DID YOU DEBUG
+Read upgrade_menu, the rules loop and _ghr_cmd: all three ran the info and set fresh=false (or returned 1), so nothing redrew. Listed every local i- in cmdmap/*menucommands.sh (upgrade, rules, xui_ghr). Ran the rule book in a pty (.r, 1, i-1, any key): info, the exit line, then the list again. The upgrade menu was run with a fake git / curl on PATH (tags tab, i-1, any key). The GitHub releases screen needs the network: checked by reading and bash -n only.
+
+2. CAUSE
+Each loop treated i-N like a command that needs no redraw; nothing waited for the person to finish reading.
+
+2. FIX
+menuchrome.sh: new shared _bvk_info_wait (prints the exit line, one key, swallows arrow / mouse sequences, clears the line, ends the smartload bar first). upgrade.sh and rules.sh: i-N is followed by _bvk_info_wait and the loop redraws (a failed pick also redraws). adf_github.sh _ghr_cmd: i-N ends with _bvk_info_wait and returns 0 so the list is drawn again.
