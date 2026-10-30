@@ -56,7 +56,7 @@ _GD_SET_VARS=(show_hidden_files index_mode_threshold terminal_bg_color terminal_
   filter_hidden_mode filter_recursive display_filter_persist anim_outer anim_inner nuke_time_seconds
   ux_nuke_time_seconds app_timezone credit_prompts backup_mode backup_nuke_time_seconds saved_nuke_time_seconds
   snapshot_enabled snapshot_interval_seconds snapshot_keep_seconds
-  rename_csv_above rename_noext_mode find_case_mode find_regex_mode find_depth_mode find_word_mode find_hidden_mode find_target_mode find_binary_mode find_vcs_mode find_confirm_mode find_input_mode find_maxsize_mb find_show_limit find_threads)
+  rename_csv_above rename_noext_mode find_case_mode find_regex_mode find_depth_mode find_word_mode find_hidden_mode find_target_mode find_binary_mode find_vcs_mode find_confirm_mode find_input_mode find_maxsize_mb find_show_limit find_threads xfer_chunk_mb xfer_streams)
 
 # state kept GLOBAL on purpose (not swapped per profile): upgrades, UDF scripts, the recents daemon, logs
 _GD_GLOBAL_TOPS="gdrive upgrade execute recents.list recents.pid recents.log recents_exclude.conf daemon.version daemon.status lastdir health.log index_roots.conf .watchdog_install_attempted"

@@ -27,7 +27,9 @@ script/file/	smartload settings_desc delete_confirm rename_screen
 fx/github_fx/	github_engine github_ui github_upgrade_shared choose_plain
 functions/bashbasicsbyvk_ghlib|loops/iloop/upgrade/	github_engine github_upgrade_shared
 cmdmap/xui_ghp|cmdmap/xui_ghr	github_ui cmd_drift
-settings/bashbasicsbyvk_settings_ui	cc_truth cmd_drift nav_back hints settings_keys
+settings/bashbasicsbyvk_settings_ui	cc_truth cmd_drift nav_back hints settings_keys settings_deep
+settings/bashbasicsbyvk_deepsearch	settings_deep loadmap
+settings/bashbasicsbyvk_settings_desc	settings_desc settings_deep
 cmdmap/(settings|home)	cc_truth cmd_drift
 functions/bashbasicsbyvk_archive_formats|staging/!buffer/other/bashbasicsbyvk_staging_archive|loops/rloop/run/	archive
 engine/bashbasicsbyvk_deps|functions/bashbasicsbyvk_(archive_formats|bundle_io)|infinity/tools/|settings/bashbasicsbyvk_timezone|loops/iloop/switch/bashbasicsbyvk_recents_daemon	deps deps_menu archive polyglot

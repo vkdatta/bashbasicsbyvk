@@ -36,6 +36,7 @@ engine_heal|fast|40|bash tests/engine_heal.sh|python3
 smartload|fast|90|bash tests/smartload.sh|python3
 rename_screen|fast|240|bash tests/rename_screen.sh|python3
 settings_desc|fast|40|bash tests/settings_desc.sh|python3
+settings_deep|fast|30|bash tests/settings_deep.sh|python3
 delete_confirm|fast|30|bash tests/delete_confirm.sh|
 github_engine|fast|120|python3 tests/github/github_test.py|python3
 github_upgrade_shared|fast|30|bash tests/github/upgrade_shared.sh|python3

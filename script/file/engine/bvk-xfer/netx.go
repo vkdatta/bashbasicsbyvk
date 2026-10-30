@@ -110,6 +110,16 @@ func loadRoots() *x509.CertPool {
 	return pool
 }
 
+// Transfer-profile limits (Settings > File API > Transfer speed): the SAME numbers are in the worker (worker.js TRANSFER_LIMITS) and in
+// bashbasicsbyvk_xfersettings.sh.  Streams = parallel requests; a chunk is the plain bytes of one encrypted blob.
+const (
+	maxStreams       = 64
+	minChunkBytes    = 1 << 20
+	maxChunkBytes    = 64 << 20
+	maxInFlightBytes = 512 << 20
+	blobOverhead     = 28 // 12-byte IV + 16-byte GCM tag
+)
+
 // one client for the whole run: one TCP+TLS handshake, then HTTP/2 streams over it (and a few extra connections when many blobs fly at once)
 func newClient(conc int) *http.Client {
 	if conc < 2 {

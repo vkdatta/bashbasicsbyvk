@@ -506,8 +506,8 @@ func cmdXfer(args []string) int {
 		dc = 8
 	}
 	x.conc = envInt("BB_CONC", dc)
-	if x.conc > 32 {
-		x.conc = 32
+	if x.conc > maxStreams {
+		x.conc = maxStreams
 	}
 	x.chunk = int64(envInt("BB_CHUNK", 90<<20))
 	om := envInt("BB_OFFLINE_MAX", 1800)

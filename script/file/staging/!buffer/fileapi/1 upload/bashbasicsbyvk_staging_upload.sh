@@ -7,11 +7,21 @@ _SP_HARD_LIMIT_BYTES=$((32*1024*1024*1024))
 # any blob at or below this goes up in one PUT, anything larger uses R2 multipart.
 # _BB_MAX_PAR is how many blobs/parts upload concurrently.
 _BB_CHUNK_BYTES=$((90*1024*1024))
-_BB_MAX_PAR="${FILEAPI_BASHBASICS_PARALLEL:-16}"
+# (the values come from Settings > File API > Transfer speed: xfer_streams / xfer_chunk_mb; the FILEAPI_BASHBASICS_* variables still win, for tests and scripts)
+_BB_MAX_PAR=16
 # The tar.gz stream is cut into encrypted chunks of this size (default 4 MiB) => no file-size limit.  A blob is also the unit of RESUME
 # (a cut PUT is thrown away), so what an outage can cost = blobs in flight x blob size.  Small blobs let MANY streams run in parallel
 # (full speed on fast links) while only ~FILEAPI_BASHBASICS_INFLIGHT_MB (64) is ever at risk.  Was 16 MiB x 16 streams = 256 MB at risk.
-_BB_PACK_BYTES=$(( ${FILEAPI_BASHBASICS_PACK_MB:-4} * 1024 * 1024 ))
+_BB_PACK_BYTES=$((4 * 1024 * 1024))
+# _bb_xfer_apply: (re)compute stream count and chunk size from the settings.  Called once here and again whenever the person changes them.
+# Anything outside the limits (1-64 streams, 1-64 MB) falls back to the setting, never beyond: the worker refuses the rest anyway.
+_bb_xfer_apply() {
+  local st="${FILEAPI_BASHBASICS_PARALLEL:-${xfer_streams:-16}}" mb="${FILEAPI_BASHBASICS_PACK_MB:-${xfer_chunk_mb:-4}}"
+  [[ "$st" =~ ^[0-9]{1,3}$ ]] && [ "$((10#$st))" -ge 1 ] && [ "$((10#$st))" -le "${XFER_MAX_STREAMS:-64}" ] || st=${xfer_streams:-16}
+  [[ "$mb" =~ ^[0-9]{1,3}$ ]] && [ "$((10#$mb))" -ge 1 ] && [ "$((10#$mb))" -le "${XFER_MAX_CHUNK_MB:-64}" ] || mb=${xfer_chunk_mb:-4}
+  _BB_MAX_PAR=$((10#$st)); _BB_PACK_BYTES=$(( 10#$mb * 1024 * 1024 ))
+}
+_bb_xfer_apply
 
 _bb_authed_put() {
   local endpoint="$1" est_size="$2"; shift 2
@@ -528,8 +538,11 @@ _bb_fast_send() {
   local fcfg fh fconc fbudget="${FILEAPI_BASHBASICS_INFLIGHT_MB:-64}" fbsz=$_BB_PACK_BYTES fmax="${FILEAPI_BASHBASICS_FAST_MAX_MB:-64}"
   [[ "$fbudget" =~ ^[0-9]{1,4}$ ]] && [ "$fbudget" -ge 4 ] || fbudget=64
   [[ "$fmax" =~ ^[0-9]{1,6}$ ]] || fmax=64
-  fconc=$(( fbudget * 1048576 / fbsz )); [ "$fconc" -lt 2 ] && fconc=2; [ "$fconc" -gt 16 ] && fconc=16
-  [[ "${FILEAPI_BASHBASICS_PARALLEL:-}" =~ ^[0-9]{1,2}$ ]] && [ "$FILEAPI_BASHBASICS_PARALLEL" -ge 1 ] && fconc=$FILEAPI_BASHBASICS_PARALLEL
+  _bb_xfer_apply; fbsz=$_BB_PACK_BYTES
+  fconc=$_BB_MAX_PAR
+  if [ -n "${FILEAPI_BASHBASICS_INFLIGHT_MB:-}" ] && [ -z "${FILEAPI_BASHBASICS_PARALLEL:-}" ]; then   # an explicit byte budget still sets the count
+    fconc=$(( fbudget * 1048576 / fbsz )); [ "$fconc" -lt 2 ] && fconc=2; [ "$fconc" -gt "${XFER_MAX_STREAMS:-64}" ] && fconc=${XFER_MAX_STREAMS:-64}
+  fi
   fcfg=$({ _bb_auth_cfg
            _bb_link_cfg
            [ -n "${_BB_OVERSIZE_OK:-}" ] && _bb_cfg_header X-Confirm-Oversized yes

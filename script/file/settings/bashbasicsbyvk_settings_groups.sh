@@ -169,6 +169,7 @@ _st_grp_api_build() {
   _st_add a "Backup"                  0 "$backup_mode · $(_bb_fmt_duration "$backup_nuke_time_seconds")"          backup
   _st_add a "Saved Surf (save-)"      0 "$(_bb_fmt_duration "$saved_nuke_time_seconds")"                          saved
   _st_add a "Snapshots"               0 "$snapshot_enabled · every $(_bb_fmt_duration "$snapshot_interval_seconds")" snapshots
+  _st_add a "Transfer speed (up- / do-)" 0 "${xfer_chunk_mb} MB x ${xfer_streams} streams"                          xfer
 }
 _st_grp_api_act() {
   case "${_st_tag[$1]}" in
@@ -178,6 +179,7 @@ _st_grp_api_act() {
     backup)    backup_group_settings ;;
     saved)     saved_nuke_settings ;;
     snapshots) snapshot_group_settings ;;
+    xfer)      xfer_speed_settings ;;
   esac
 }
 fileapi_group_settings() { _st_run "File API" _st_grp_api_build _st_grp_api_act; }

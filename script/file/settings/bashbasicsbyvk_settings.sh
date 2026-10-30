@@ -60,6 +60,10 @@ DEFAULT_FIND_INPUT_MODE="ask"
 DEFAULT_FIND_MAXSIZE_MB="200"
 DEFAULT_FIND_SHOW_LIMIT="300"
 DEFAULT_FIND_THREADS="auto"
+# Transfer speed (up- / do- / pending): MB per encrypted chunk x parallel streams.  Limits are the same in the worker (TRANSFER_LIMITS) and bvk-xfer (netx.go).
+DEFAULT_XFER_CHUNK_MB="4"
+DEFAULT_XFER_STREAMS="16"
+XFER_MIN_CHUNK_MB=1; XFER_MAX_CHUNK_MB=64; XFER_MAX_STREAMS=64; XFER_MAX_INFLIGHT_MB=512
 
 unset show_hidden_files
 unset index_mode_threshold
@@ -110,6 +114,8 @@ unset find_input_mode
 unset find_maxsize_mb
 unset find_show_limit
 unset find_threads
+unset xfer_chunk_mb
+unset xfer_streams
 unset rename_csv_above
 unset rename_noext_mode
 
@@ -297,6 +303,16 @@ _apply_timezone
 [[ "$find_show_limit" =~ ^[0-9]{1,6}$ ]] || find_show_limit=$DEFAULT_FIND_SHOW_LIMIT
 : "${find_threads:=$DEFAULT_FIND_THREADS}"
 [[ "$find_threads" =~ ^(auto|1|2|4|8)$ ]] || find_threads=$DEFAULT_FIND_THREADS
+: "${xfer_chunk_mb:=$DEFAULT_XFER_CHUNK_MB}"
+: "${xfer_streams:=$DEFAULT_XFER_STREAMS}"
+# a hand-edited file must not get past the limits: anything odd resets BOTH values
+if ! [[ "$xfer_chunk_mb" =~ ^[0-9]{1,3}$ && "$xfer_streams" =~ ^[0-9]{1,3}$ ]] \
+   || [ "$((10#$xfer_chunk_mb))" -lt "$XFER_MIN_CHUNK_MB" ] || [ "$((10#$xfer_chunk_mb))" -gt "$XFER_MAX_CHUNK_MB" ] \
+   || [ "$((10#$xfer_streams))" -lt 1 ] || [ "$((10#$xfer_streams))" -gt "$XFER_MAX_STREAMS" ] \
+   || [ "$(( 10#$xfer_chunk_mb * 10#$xfer_streams ))" -gt "$XFER_MAX_INFLIGHT_MB" ]; then
+  xfer_chunk_mb=$DEFAULT_XFER_CHUNK_MB; xfer_streams=$DEFAULT_XFER_STREAMS
+fi
+xfer_chunk_mb=$((10#$xfer_chunk_mb)); xfer_streams=$((10#$xfer_streams))
 
 declare -ga group_view_levels=()
 if [ -n "$group_view_levels_str" ]; then
@@ -354,6 +370,8 @@ save_settings() {
     echo "find_maxsize_mb=$find_maxsize_mb"
     echo "find_show_limit=$find_show_limit"
     echo "find_threads=$find_threads"
+    echo "xfer_chunk_mb=$xfer_chunk_mb"
+    echo "xfer_streams=$xfer_streams"
     echo "rename_csv_above=$rename_csv_above"
     echo "rename_noext_mode=$rename_noext_mode"
   } > "$SETTINGS_FILE"
@@ -642,6 +660,7 @@ _st_reset_act() {
   find_maxsize_mb=$DEFAULT_FIND_MAXSIZE_MB
   find_show_limit=$DEFAULT_FIND_SHOW_LIMIT
   find_threads=$DEFAULT_FIND_THREADS
+  xfer_chunk_mb=$DEFAULT_XFER_CHUNK_MB; xfer_streams=$DEFAULT_XFER_STREAMS
   rename_csv_above=$DEFAULT_RENAME_CSV_ABOVE
   rename_noext_mode=$DEFAULT_RENAME_NOEXT_MODE
   _items_presorted=false

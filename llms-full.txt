@@ -56,7 +56,7 @@ Example: `.s.ext png,jpg & .s.size <3mb & !.s.time 2025..2026` selects small, ol
 
 **Transfer (`t`).** Local copy and move, plus Google Drive via your own `rclone` remote and Google Cloud Shell via your own `gcloud` login. These go straight to Google; the maintainer never receives that data.
 
-**Settings (`s`).** Hidden files, sort order, file details, group-by, filters, compress format, timezone (any tz-database zone, applied app-wide), animations, big-folder limit, colours, nano settings import, reset to defaults.
+**Settings (`s`).** Hidden files, sort order, file details, group-by, filters, compress format, transfer speed (chunk size x streams for up- / do-, within hard limits), timezone (any tz-database zone, applied app-wide), animations, big-folder limit, colours, nano settings import, reset to defaults. In Settings, Home and every screen below them, `=text` filters the rows live and `==text` + Enter searches every screen (names and explanations, any depth) and lists the screens that match; a number opens one.
 
 **Maintenance.** `-u` upgrades (Stable releases or beta Tags, with version choice and descriptions). `health` diagnoses whether the native `bvk-ls` helper or the Python fallback is loading files, and whether the find & replace engine (`bvk-fr`) or its Python twin is in use. `rf` refreshes the pipeline, `disk` and `ram` wrap `df -h` and `free -h`, `-h` opens help and the docs link.
 

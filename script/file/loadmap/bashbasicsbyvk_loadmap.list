@@ -64,6 +64,8 @@ bashbasicsbyvk_hidefiles.sh|||tool, run as its own process
 bashbasicsbyvk_indexmode.sh|||tool, run as its own process
 bashbasicsbyvk_importnano.sh|||tool, run as its own process
 bashbasicsbyvk_compress.sh|||tool, run as its own process
+bashbasicsbyvk_xfersettings.sh|||tool, run as its own process (Settings > File API > Transfer speed)
+bashbasicsbyvk_deepsearch.sh|||tool, run as its own process (== deep search of every Settings / Home screen)
 bashbasicsbyvk_timezone.sh|||tool, run as its own process
 bashbasicsbyvk_findsettings.sh|||tool, run as its own process
 bashbasicsbyvk_renamesettings.sh|||tool, run as its own process (Settings > Rename)

@@ -254,6 +254,8 @@ _st_tty_raw() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_tty_raw "$@"; }
 _st_tty_cooked() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_tty_cooked "$@"; }
 _st_readkey() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_readkey "$@"; }
 _st_draw() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_draw "$@"; }
+_st_deep_on() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_deep_on "$@"; }
+_st_fq_sync() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_fq_sync "$@"; }
 _st_hint_text() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_hint_text "$@"; }
 _st_wipe() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_wipe "$@"; }
 _st_click() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_click "$@"; }
@@ -365,6 +367,19 @@ bvk_nano_wrap_apply() { _lm_stub bashbasicsbyvk_importnano.sh bvk_nano_wrap_appl
 _st_cf_build() { _lm_stub bashbasicsbyvk_compress.sh _st_cf_build "$@"; }
 _st_cf_act() { _lm_stub bashbasicsbyvk_compress.sh _st_cf_act "$@"; }
 compress_format_settings() { _lm_stub bashbasicsbyvk_compress.sh compress_format_settings "$@"; }
+_xfer_check() { _lm_stub bashbasicsbyvk_xfersettings.sh _xfer_check "$@"; }
+_xfer_set() { _lm_stub bashbasicsbyvk_xfersettings.sh _xfer_set "$@"; }
+_st_xfer_build() { _lm_stub bashbasicsbyvk_xfersettings.sh _st_xfer_build "$@"; }
+_st_xfer_act() { _lm_stub bashbasicsbyvk_xfersettings.sh _st_xfer_act "$@"; }
+xfer_speed_settings() { _lm_stub bashbasicsbyvk_xfersettings.sh xfer_speed_settings "$@"; }
+_sd_split_key() { _lm_stub bashbasicsbyvk_deepsearch.sh _sd_split_key "$@"; }
+_sd_scan() { _lm_stub bashbasicsbyvk_deepsearch.sh _sd_scan "$@"; }
+_sd_home_labels() { _lm_stub bashbasicsbyvk_deepsearch.sh _sd_home_labels "$@"; }
+_sd_search() { _lm_stub bashbasicsbyvk_deepsearch.sh _sd_search "$@"; }
+_sd_first_text() { _lm_stub bashbasicsbyvk_deepsearch.sh _sd_first_text "$@"; }
+_sd_build() { _lm_stub bashbasicsbyvk_deepsearch.sh _sd_build "$@"; }
+_sd_act() { _lm_stub bashbasicsbyvk_deepsearch.sh _sd_act "$@"; }
+st_deep_search() { _lm_stub bashbasicsbyvk_deepsearch.sh st_deep_search "$@"; }
 _tz_db_present() { _lm_stub bashbasicsbyvk_timezone.sh _tz_db_present "$@"; }
 _tz_bootstrap() { _lm_stub bashbasicsbyvk_timezone.sh _tz_bootstrap "$@"; }
 _tz_load_manual() { _lm_stub bashbasicsbyvk_timezone.sh _tz_load_manual "$@"; }
@@ -529,6 +544,7 @@ _svc_say() { _lm_stub bashbasicsbyvk_staging_svc.sh _svc_say "$@"; }
 _svc_upload() { _lm_stub bashbasicsbyvk_staging_svc.sh _svc_upload "$@"; }
 _svc_vault_key() { _lm_stub bashbasicsbyvk_staging_svc.sh _svc_vault_key "$@"; }
 _svc_restore() { _lm_stub bashbasicsbyvk_staging_svc.sh _svc_restore "$@"; }
+_bb_xfer_apply() { _lm_stub bashbasicsbyvk_staging_upload.sh _bb_xfer_apply "$@"; }
 _bb_authed_put() { _lm_stub bashbasicsbyvk_staging_upload.sh _bb_authed_put "$@"; }
 _crypto_check() { _lm_stub bashbasicsbyvk_staging_upload.sh _crypto_check "$@"; }
 _crypto_new_key() { _lm_stub bashbasicsbyvk_staging_upload.sh _crypto_new_key "$@"; }

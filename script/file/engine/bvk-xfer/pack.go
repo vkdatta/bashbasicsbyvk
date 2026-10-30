@@ -119,11 +119,11 @@ func cmdPack(args []string) int {
 	if err := fs.Parse(args); err != nil || *out == "" {
 		return 2
 	}
-	if *chunk < 1<<20 {
-		*chunk = 1 << 20
+	if *chunk < minChunkBytes {
+		*chunk = minChunkBytes
 	}
-	if *chunk > 90<<20 {
-		*chunk = 90 << 20
+	if *chunk > maxChunkBytes {
+		*chunk = maxChunkBytes
 	}
 	if *level < 1 || *level > 9 {
 		*level = 6

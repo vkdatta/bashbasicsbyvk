@@ -125,8 +125,13 @@ _pn_xfer() {
   if [ "$pipe" = ux ]; then bsz=$((16*1024*1024));   # ux chunks are 16 MiB (staging_ux_crypto)
    else bsz=$(wc -c < "$d/blob0" 2>/dev/null | tr -d ' '); fi
   [[ "$bsz" =~ ^[0-9]+$ ]] && [ "$bsz" -ge 1048576 ] || bsz=$((16*1024*1024))
+  # the person's own choice (Settings > File API > Transfer speed) sets the stream count; with none, the byte budget above decides
   conc=$(( budget * 1048576 / bsz )); [ "$conc" -lt 2 ] && conc=2; [ "$conc" -gt 16 ] && conc=16
+  if [ "$pipe" != ux ]; then _bb_xfer_apply; conc=$_BB_MAX_PAR; fi
   [[ "${FILEAPI_BASHBASICS_PARALLEL:-}" =~ ^[0-9]{1,2}$ ]] && [ "$FILEAPI_BASHBASICS_PARALLEL" -ge 1 ] && conc=$FILEAPI_BASHBASICS_PARALLEL
+  [ "$conc" -gt "${XFER_MAX_STREAMS:-64}" ] && conc=${XFER_MAX_STREAMS:-64}
+  # never more than 512 MB in flight, whatever the blob size of a job packed earlier
+  [ $((conc * bsz)) -gt 536870912 ] && { conc=$((536870912 / bsz)); [ "$conc" -lt 1 ] && conc=1; }
   retry="${FILEAPI_BASHBASICS_RETRY_MIN:-30}"; [[ "$retry" =~ ^[0-9]{1,4}$ ]] || retry=30
   [ "$pipe" = ux ] && [ "$conc" -gt 8 ] && conc=8
   export BB_EMAIL="$FILEAPI_BASHBASICS_EMAIL" BB_UTOKEN="$tok" BB_N="$nb" BB_CHUNK="$_BB_CHUNK_BYTES" BB_CONC="$conc" \

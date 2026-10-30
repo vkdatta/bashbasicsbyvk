@@ -316,6 +316,11 @@ _st_draw() {
   prev=$(( vis + 9 + _ST_DESC_N + _ST_TAIL ))
 }
 
+# "==" (deep search, bashbasicsbyvk_deepsearch.sh) is on every screen except a choice menu (a short list of values: there is nothing below it).
+_st_deep_on() { [ "${_st_choice:-0}" != 1 ] && declare -F st_deep_search >/dev/null 2>&1; }
+# the live filter text for what is typed (a local of _st_run): "=text" filters the rows as you type; "==text" only collects the text, Enter searches all screens
+_st_fq_sync() { if [[ "$buf" == ==* ]] && _st_deep_on; then fq=""; else fq="${buf:1}"; fi; }
+
 # The suggestion row of EVERY Settings / Home style screen (what the typed text would do).  Same engine as the main menu's
 # row (_cm_hint: command map of the screen that owns this prompt), plus the two things only a list screen knows:
 # a typed row number ("Enter -> open <row>") and the = filter.  -> _ST_HINT ("" = nothing to say, the row stays blank)
@@ -325,8 +330,11 @@ _st_hint_text() {   # $1 typed text  $2 columns
   _ST_HINT=""
   if [[ "$b" == "?" ]]; then
     _ST_HINT="?  →  read the whole explanation of the highlighted setting"
+  elif [[ "$b" == ==* ]] && _st_deep_on; then
+    if [ -n "${b:2}" ]; then _ST_HINT="Enter  →  search every screen for “${b:2}”"
+    else _ST_HINT="==  →  type what to look for, then Enter searches every screen  (== + Enter clears it)"; fi
   elif [[ "$b" == =* ]]; then
-    _ST_HINT="=  →  filter this list live  (= + Enter clears it)"
+    _ST_HINT="=  →  filter this list live  (= + Enter clears it;  == searches every screen)"
   elif [[ "$b" =~ ^[0-9]+$ ]] && (( ${#b} < 9 )); then
     k=$(( 10#$b ))
     if (( k >= 1 && k <= ${_st_cnt:-0} )) && [ -n "${_st_nrow[$k]+x}" ]; then case "${_st_kind[${_st_nrow[$k]}]}" in t|r) if [ "${_st_choice:-0}" = 1 ]; then _ST_HINT="Enter  →  choose  ${_st_lbl[${_st_nrow[$k]}]}"; else _ST_HINT="Enter  →  switch  ${_st_lbl[${_st_nrow[$k]}]}"; fi ;; *) _ST_HINT="Enter  →  open  ${_st_lbl[${_st_nrow[$k]}]}" ;; esac; else _ST_HINT="no row $k here  (1-${_st_cnt:-0})"; fi
@@ -476,7 +484,7 @@ _st_cm_gate() {   # $1 = typed text, lower case
 #   cmd_fn BUF — optional: gets typed text before the number/command rules; return 0 = handled
 _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}" cmdfn="${5:-}"
-  local cur=-1 top=0 prev=0 n buf="" num path_title fq="" need=1 page="${_vp_page_step:-10}" navbuf=0 typed=0
+  local cur=-1 top=0 prev=0 n buf="" num path_title fq="" _sdq="" need=1 page="${_vp_page_step:-10}" navbuf=0 typed=0
   local parent_title="${_st_title_now:-}"
   _st_depth=$(( _st_depth + 1 ))
   # a sub screen shows its way in ("Settings › Sort order"); _st_crumb="" drops the prefix (cc)
@@ -532,7 +540,7 @@ _st_run() {
       end)   need=0; cur=-1; _st_move -1; _st_navbuf ;;
       bksp)
         navbuf=0; buf="${buf%?}"
-        if [[ "$buf" == =* ]]; then fq="${buf:1}"; cur=-1; top=0
+        if [[ "$buf" == =* ]]; then _st_fq_sync; cur=-1; top=0
         else _st_follow; need=0; fi ;;
       char)
         (( navbuf )) && [ "$_st_d" != "?" ] && { buf=""; navbuf=0; }        # the number an arrow put on the line is replaced by what is typed
@@ -540,7 +548,7 @@ _st_run() {
         elif [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
         elif [ "$_st_d" = "?" ] && [[ "$buf" =~ ^[0-9]*$ ]]; then          # ?  = read the whole explanation of the highlighted row (no Enter needed)
           _st_wipe; _st_tty_cooked; declare -F _st_desc_show >/dev/null 2>&1 && _st_desc_show; _st_tty_raw
-        elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
+        elif [[ "$buf" == =* ]]; then buf+="$_st_d"; _st_fq_sync; cur=-1; top=0
         else buf+="$_st_d"; _st_follow; need=0; fi ;;
       paste|pasteenter)
         # a pasted text goes into the row in ONE step; it is accepted only by the user's own Enter
@@ -548,8 +556,8 @@ _st_run() {
         if (( ${#buf} + ${#_st_d} > ${_BVK_MAX_INPUT:-512} )); then _st_msg="[too large: $(( ${#buf} + ${#_st_d} )) chars, max ${_BVK_MAX_INPUT:-512}, not accepted]"; _st_d=""; fi
         _st_d="${_st_d//$'\n'/ }"                                   # this row is one line: line breaks become spaces
         if [ -z "$_st_d" ]; then _st_k=paste           # refused (too large) or empty: its Enter must not run what was typed before it
-        elif [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; fq="${buf:1}"; cur=-1; top=0
-        elif [[ "$buf" == =* ]]; then buf+="$_st_d"; fq="${buf:1}"; cur=-1; top=0
+        elif [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; _st_fq_sync; cur=-1; top=0
+        elif [[ "$buf" == =* ]]; then buf+="$_st_d"; _st_fq_sync; cur=-1; top=0
         else buf+="$_st_d"; _st_follow; need=0; fi
         [ "$_st_k" = pasteenter ] && _ST_PEND_ENTER=1 ;;    # typed text + Enter that arrived together: the Enter comes next
       left|right)
@@ -557,12 +565,24 @@ _st_run() {
         ;;
       space)
         navbuf=0; typed=0
-        if [[ "$buf" == =* ]]; then buf+=" "; fq="${buf:1}"; cur=-1; top=0     # a space inside =text is part of the search
+        if [[ "$buf" == =* ]]; then buf+=" "; _st_fq_sync; cur=-1; top=0     # a space inside =text is part of the search
         elif [ -n "$buf" ] && [[ "$buf" == [a-z]* ]]; then buf+=" "            # a command being typed (loadtime 2)
         elif (( cur >= 0 )) && _st_selectable "$cur"; then buf=""; _lt_enter "space" "${_st_lbl[$cur]}"; _st_activate; fi
         ;;
       enter)
         navbuf=0; typed=0
+        if [[ "$buf" == ==* ]] && _st_deep_on; then
+          # ==text + Enter searches every screen (a list of the screens that match; a number opens one) · == + Enter clears
+          _sdq="${buf:2}"; buf=""; fq=""; cur=-1; top=0
+          if [ -n "${_sdq//[[:space:]]/}" ]; then
+            _lt_enter "==" "$_sdq"
+            _st_wipe; _st_tty_cooked          # like a row that opens a sub-screen (_st_activate)
+            st_deep_search "${_sdq#"${_sdq%%[![:space:]]*}"}"
+            _st_tty_raw
+            (( _st_quit )) && break
+          fi
+          continue
+        fi
         if [[ "$buf" == =* ]]; then
           # =text + Enter keeps the filter · = + Enter clears it
           [ "$buf" = "=" ] && fq=""

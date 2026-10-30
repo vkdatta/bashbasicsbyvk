@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+The shared-link viewer page (0002-fileapi, page.js) showed "Download failed: decryption error" for every tar.gz archive upload made with up- when its Download all button was pressed in a browser, although do- from the CLI opened the same link. The error text was shown for every kind of failure, so it pointed at the encryption instead of the real cause.
+
+1. HOW DID YOU DEBUG
+Read the viewer script, pack.go (what up- encrypts) and send.go; the AES-GCM format and the AAD strings (bbvk4|blob|i, bbvk4|manifest) are identical on both sides, so encryption was ruled out. Read downloadArchive and renderUpload: the archive record ARC was built from the manifest with name, size and blobCount but without chunkBytes, while downloadArchive divides by m.chunkBytes to pick the number of workers. Reproduced with node: 64MB / undefined gives NaN, zero workers start, the loop that adds up the parts then throws a TypeError, and the catch block reported it as "decryption error". Built a stubbed-browser test with real AES-GCM blobs (1 blob of 283 KB, 3 blobs of 4 MiB, 3 blobs of 16 MiB, one tampered blob) that clicks Download all: the original page.js fails all four with the reported toast, the fixed page passes the three good ones and still fails the tampered one with "decryption error". Not run in a real Chrome.
+
+1. CAUSE
+renderUpload dropped chunkBytes when it copied the manifest into ARC, and the worker count was computed from it without a guard. Any failure inside the download, not only a wrong key, was then shown as "decryption error".
+
+1. FIX
+0002-fileapi/fileapi/src/page.js: ARC keeps chunkBytes; downloadArchive falls back to 4 MiB when the value is missing or not a number and always starts at least one worker; a missing part throws missing-chunk instead of crashing in the size loop; new dlReason() gives one honest reason per failure (no key, server status, incomplete file, real AES-GCM failure = "decryption error", anything else = unexpected error with the code), used by both toasts. Lesson: a catch that shows one fixed message hides the real bug; keep a field you later divide by in the object you pass on.
+
+2. ISSUE IN BRIEF
+The chunk size and the number of parallel streams of up-, do- and the pending resume were fixed by the program (4 MB pieces, up to 16 streams, 8 for downloads). A setting was wanted where the person picks 4 MB x 64, 8 MB x 32, 16 MB x 16 (recommended) or custom numbers, with a description of who each choice suits, and with hard limits so absurd numbers cannot be used.
+
+2. HOW DID YOU DEBUG
+Read the settings engine (settings.sh, settings_groups.sh, compress.sh and the nuke-time screen as the template for presets plus Custom, settings_desc.sh, the loadmap list and its generator), staging_upload.sh (_BB_PACK_BYTES, _BB_MAX_PAR, the fast send), staging_pending.sh (_pn_xfer), and bvk-xfer (pack.go, send.go, fetch.go, xfer.go, netx.go). Checked the earlier note 211020260630 and BB-211020260720-1: a blob is the unit of resume, so bytes in flight (chunk x streams) is what an outage costs. Ran: tests/loadmap.sh and tests/settings_keys.sh pass; tests/settings_desc.sh has 3 failures that are identical on the untouched archive (not caused by this change); the description coverage check passes; own tests for the limits (accepted and refused pairs including 93757588393, missing arguments), for the apply function (valid environment variables still win, absurd ones fall back to the setting), for save and reload (all presets, hand-edited files with huge, zero, text and 64x64 values reset to defaults, 08 and 09 read as decimal) and for the rows the screen draws. The Go code was edited but NOT compiled or run (no Go toolchain in the session).
+
+2. CAUSE
+Not a bug: the numbers were constants spread over bash, node and Go, each with its own cap (16, 8, 32), so there was no single place for a person to choose them.
+
+2. FIX
+New file script/file/settings/bashbasicsbyvk_xfersettings.sh (screen "Transfer speed": three presets + Custom, _xfer_check / _xfer_set); settings.sh: xfer_chunk_mb and xfer_streams (defaults 4 and 16 = the old behaviour), limits 1-64 MB, 1-64 streams, 512 MB in flight, read / save / reset, invalid values from a hand-edited file reset both; settings_groups.sh: row "Transfer speed (up- / do-)" in File API; settings_desc.sh: screen, preset and Custom texts that say who each choice suits; gdrive.sh settings list; loadmap list + regenerated stubs. staging_upload.sh: _bb_xfer_apply sets _BB_MAX_PAR and _BB_PACK_BYTES from the setting (FILEAPI_BASHBASICS_PARALLEL / _PACK_MB still win when valid), the fast send uses it, an explicit _INFLIGHT_MB still sets the stream count; staging_pending.sh: stream count from the setting for the up- pipeline (ux- is unchanged: 16 MiB chunks, at most 8), clamped to 64 and to 512 MB in flight whatever the blob size of the job; staging_pending_xfer: node cap 32 to 64. bvk-xfer: shared limits in netx.go; send.go cap 16 to 64 and sends X-Chunk-Bytes / X-Streams with the first request of a multi-blob upload; fetch.go cap 8 to 64 and the client uses the stream count; xfer.go cap 32 to 64; pack.go clamps 1-64 MB (a 90 MB chunk became a blob over the worker's own 90 MiB request cap). Follow-up of BB-211020260720-1: the default stays 4 MB x 16 on purpose, because big chunks x many streams lose more on a dropped connection; 16 x 16 is one pick away.
+
+3. ISSUE IN BRIEF
+The worker accepted any declared transfer shape and had no stated limit for chunk size, streams or blob count, which matters once the person can choose them.
+
+3. HOW DID YOU DEBUG
+Read worker.js (CHUNK_BYTES, MAX_BLOBS, parseIdx, authorizeUpload, handleUploadInit, handleUploadFast, the init answer). Ran test/backend.test.mjs before and after: 12 groups before, 13 after; the "Cron ux expiry failed: no such table: ux_shares" line is printed by the untouched code too.
+
+3. CAUSE
+Not a bug: there was only the per-request blob cap (90 MiB) and MAX_BLOBS of 200000, which is one more than the viewer opens (199999). Streams cannot be counted by a worker, so only what the client declares can be checked.
+
+3. FIX
+0002-fileapi/fileapi/src/worker.js: MIN_CHUNK_BYTES 1 MiB, MAX_PLAIN_CHUNK_BYTES 64 MiB, MAX_STREAMS 64, MAX_IN_FLIGHT_BYTES 512 MiB, MAX_ARCHIVE_BLOBS 199999 and TRANSFER_LIMITS; checkTransferProfile() reads X-Chunk-Bytes, X-Streams and X-Blob-Count (absent = older client, accepted) and answers 400 invalid_transfer_profile with the limits, before anything is stored or charged; called by handleUploadInit and handleUploadFast; both answers carry limits. test/backend.test.mjs group 15: 4x64, 8x32, 16x16, 64x8, 1x64, 37x13 and no header accepted; 93757588393 streams or bytes, 65 / 0 / negative / text streams, chunk under 1 MB or over 64 MB, 64 MB x 64, 16 MB x 33, blob counts 0 and 200000 refused; a refused fast upload charged nothing. ux- (ux.js) was not touched.

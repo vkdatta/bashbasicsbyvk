@@ -36,8 +36,8 @@ func cmdFetch(args []string) int {
 			conc = v
 		}
 	}
-	if conc > 8 {
-		conc = 8
+	if conc > maxStreams {
+		conc = maxStreams
 	}
 	kb, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(os.Getenv("BB_KEY"), "="))
 	if err != nil || len(kb) != 32 {
@@ -53,7 +53,7 @@ func cmdFetch(args []string) int {
 		ct := buf[12:]
 		return g.Open(ct[:0], buf[:12], ct, []byte(aad)) // in place: no second copy of the blob
 	}
-	cl := newClient(24)
+	cl := newClient(conc)
 	auth := os.Getenv("BB_FETCH_AUTH") == "1"
 	get := func(url string) []byte {
 		for a := 0; a < 4; a++ {

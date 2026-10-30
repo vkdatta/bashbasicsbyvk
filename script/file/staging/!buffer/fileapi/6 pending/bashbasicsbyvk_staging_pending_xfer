@@ -35,7 +35,7 @@ const [pipeline, base, id, dir] = process.argv.slice(2);
 if (!/^(upload|ux)$/.test(pipeline || "") || !base || !id || !dir) { console.log("FAIL"); process.exit(2); }
 const utoken = process.env.BB_UTOKEN || "";
 const email = process.env.BB_EMAIL || "";
-const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || (pipeline === "ux" ? 8 : 16), 32));
+const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || (pipeline === "ux" ? 8 : 16), 64));
 const CHUNK = parseInt(process.env.BB_CHUNK, 10) || 90 * 1024 * 1024;
 const OFFLINE_MAX = Math.max(10, parseInt(process.env.BB_OFFLINE_MAX, 10) || 1800) * 1000;
 const STATE = process.env.BB_STATE || "";

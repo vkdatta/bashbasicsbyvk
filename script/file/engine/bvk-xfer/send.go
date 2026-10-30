@@ -272,8 +272,8 @@ func cmdSend(args []string) int {
 	if *conc < 1 {
 		*conc = 1
 	}
-	if *conc > 16 {
-		*conc = 16
+	if *conc > maxStreams {
+		*conc = maxStreams
 	}
 	rnd := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, rnd); err != nil {
@@ -320,6 +320,11 @@ func cmdSend(args []string) int {
 	first = append(first, cfg.initH...)
 	first = append(first, hdrs{{"X-Estimated-Size", strconv.FormatInt(*est, 10)}, {"X-Upload-Nonce", nonce}}...)
 	single := *n == 1
+	if !single { // declare the profile (the worker checks it against its limits); blob 0 of a multi-blob upload is always a full chunk
+		if cb := len(b0) - blobOverhead; cb >= minChunkBytes && cb <= maxChunkBytes {
+			first = append(first, hdrs{{"X-Chunk-Bytes", strconv.Itoa(cb)}, {"X-Streams", strconv.Itoa(*conc)}}...)
+		}
+	}
 	if single {
 		first = append(first, commitH...)
 	} else if *pending {
