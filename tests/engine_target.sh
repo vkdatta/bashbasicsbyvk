@@ -8,8 +8,9 @@ fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 T="$(find "$S" -name bashbasicsbyvk_engine_target.sh -print -quit)"
 [ -n "$T" ] && ok "engine_target.sh exists" || { bad "bashbasicsbyvk_engine_target.sh not found"; echo FAILED; exit 1; }
 
-row() ( uname() { case "$1" in -m) echo "$FM" ;; -o) echo "$FO" ;; esac; }; source "$T"; OSTYPE="$FT"; _bvk_engine_target; echo "${_bet_m:-none}/$_bet_os" )
-chk() { FM="$1" FO="$2" FT="$3" got="$(FM="$1" FO="$2" FT="$3" row)"; [ "$got" = "$4" ] && ok "uname -m=$1 uname -o=$2 OSTYPE=$3 -> $4" || bad "uname -m=$1 uname -o=$2 OSTYPE=$3 -> $got (want $4)"; }
+# HOSTTYPE (bash's own CPU name, which the function trusts for the four 64-bit names without a uname) is faked too: FH, default = the uname -m value
+row() ( uname() { case "$1" in -m) echo "$FM" ;; -o) echo "$FO" ;; esac; }; source "$T"; OSTYPE="$FT"; HOSTTYPE="${FH:-$FM}"; _bvk_engine_target; echo "${_bet_m:-none}/$_bet_os" )
+chk() { FM="$1" FO="$2" FT="$3" got="$(FM="$1" FO="$2" FT="$3" FH="${FH:-}" row)"; [ "$got" = "$4" ] && ok "uname -m=$1 uname -o=$2 OSTYPE=$3 -> $4" || bad "uname -m=$1 uname -o=$2 OSTYPE=$3 -> $got (want $4)"; }
 chk aarch64 GNU/Linux linux-gnu     arm64/linux
 chk arm64   GNU/Linux linux-gnu     arm64/linux
 chk x86_64  GNU/Linux linux-gnu     amd64/linux
@@ -27,6 +28,10 @@ chk i686    Android   linux-android none/android
 chk armv7l  Darwin    darwin23.0    none/darwin
 chk arm64   FreeBSD   freebsd14.0   none/freebsd
 chk riscv64 GNU/Linux linux-gnu     none/linux
+# a 32-bit bash on a 64-bit kernel: HOSTTYPE says "arm" (not trusted), uname -m says aarch64 -> the engine of the kernel's CPU
+FH=arm chk aarch64 GNU/Linux linux-android arm64/android
+FH=i686 chk x86_64 GNU/Linux linux-gnu     amd64/linux
+# a real x86_64 host (like the CI runner) must not decide for a faked uname: HOSTTYPE=x86_64 with uname arm64 is not a real machine, so it is not tested
 
 dup="$(grep -rnE 'aarch64\|arm64\)' "$S" --include='*.sh' | grep -v 'bashbasicsbyvk_engine_target.sh' | head -3)"
 [ -z "$dup" ] && ok "no other file re-implements the CPU mapping" || bad "CPU mapping copied, call _bvk_engine_target instead: $dup"
