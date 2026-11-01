@@ -11,7 +11,7 @@ permissions:
 jobs:
   # ── macOS engines: built on a real Mac (Apple clang), handed to the Linux job below, which commits everything in one go ────────
   build-darwin:
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout repository
