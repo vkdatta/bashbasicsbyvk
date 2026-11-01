@@ -1,0 +1,47 @@
+1. ISSUE IN BRIEF
+Start-up spent about 450 ms of a 2,133 ms launch on process spawns (uname, mktemp, rm, stty, stat, cat, sha1sum) and the native-engine probe ran again on every call because it ran inside $(...).
+
+1. HOW DID YOU DEBUG
+Read the loadtime report (ranked list: stty x5, mktemp x4, rm x3, uname x3, stat x2) and the code of each step. Team B's patch (9 files) was merged onto Team A's tree with git merge-file: the two shared files (settings.sh, settings_ui.sh) merged without conflicts. bash -n on every script, tests/loadmap.sh and settings_deep.sh.
+
+1. CAUSE
+Every one of these was a process launched for something bash does itself ($HOSTTYPE, a file name built from $$ and $RANDOM, read instead of $(cat), -e before rm, a size probe reused for 0.3 s) and _bvk_go_bin cached its answer in a subshell, where it is lost.
+
+1. FIX
+script/o: _bvk_go_bin runs once in the main shell. engine_target.sh: $HOSTTYPE for aarch64 / arm64 / x86_64 / amd64, uname for every other name. displayer.sh: _bvk_tmp builds the name in bash, one re-used file per tag, truncated instead of rm. viewport.sh: _vp_probe_size reuses a probe younger than 0.3 s; the WINCH traps clear it (viewport.sh and settings_ui.sh); the clock is read as ${EPOCHREALTIME/[.,]/} because a comma locale would break the subtraction. browse.sh, display_filter.sh, settings.sh, favourites.sh: read / test instead of cat / rm / mkdir / stat / sha1sum. run.sh: _rf_is_elf and _rf_shebang use read instead of head | od | tr. Lesson: a cache filled inside $(...) is thrown away; test a speed-up where the old code asked the OS (uname) with a faked uname AND the matching bash variable.
+
+2. ISSUE IN BRIEF
+The CI step 'Verify one wheel per machine type' failed: every case of tests/engine_target.sh answered amd64.
+
+2. HOW DID YOU DEBUG
+Read the CI log: 14 FAIL lines 'uname -m=aarch64 ... -> amd64/linux (want arm64/linux)'. The test fakes uname and OSTYPE; the new $HOSTTYPE shortcut in _bvk_engine_target does not call uname on a real x86_64 runner. Confirmed by running the test after the fix and by comparing with v1a.
+
+2. CAUSE
+The test did not fake HOSTTYPE, so the real host decided. The speed patch had been delivered without running tests.
+
+2. FIX
+tests/engine_target.sh: row() sets HOSTTYPE (FH, default the uname value); two new cases: a 32-bit bash on a 64-bit kernel (HOSTTYPE=arm, uname aarch64 -> arm64) and HOSTTYPE=i686 with uname x86_64. Follow-up of the speed patch above.
+
+3. ISSUE IN BRIEF
+Every start launched bvk-ls twice more (count and the 'group' check) as a self-test, about 90 ms on the phone, and the folder-size job, two listings of browse.sh and the time zone check each spawned mktemp / rm / date.
+
+3. HOW DID YOU DEBUG
+Read _bvk_go_bin and the loadtime trace of the v2.1 run ('start: native engine probe 94 ms', mktemp x3, rm x2, date 17 ms). Tested the probe with a stub bvk-ls on PATH: first start 2 launches, second 0, after touching the binary 4 in total, BVK_NO_GO=1 gives no engine. Ran the fast tier. Not measured on a device.
+
+3. CAUSE
+The probe result lived only in the process; the others were small leftovers of the same kind as the issue above.
+
+3. FIX
+displayer.sh _bvk_go_bin: a binary that passed is written to ~/.bashbasicsbyvk/engine.ok and trusted while it is not newer than that file (builtin read and -nt; delete the file to force a probe). _dir_size_job: the job file name is built in bash. browse.sh: the prefix and hash listings use a tagged re-used file. settings.sh _tz_valid: TZ=zone printf '%(%Z)T' instead of date, with date as the fallback.
+
+4. ISSUE IN BRIEF
+A start of o showed nothing for about a second (1,304 ms on the phone, of which only about 200 ms were process launches; the rest is bash loading its functions and building the rows), so the app felt slow however many processes were removed.
+
+4. HOW DID YOU DEBUG
+Ranked the v2.1 loadtime report: shell steps 56%, prepare rows 423 ms. A native rows command was weighed too and was judged to bring the real time down by about 35-45% only. Built the preview and ran it in tmux with tests/firstscreen.sh (nine checks, all green) and by hand: the marker 'cached first screen is on the screen' came at +8 ms against +262 ms for ready on the build machine; the final screen equals the first one. Not measured on a device.
+
+4. CAUSE
+Nothing was drawn until the real first paint, which needs the whole load; the screen of a folder hardly changes between two starts.
+
+4. FIX
+script/o: _fs_replay (before the loader, builtins plus one stty size) paints the saved frame of $PWD when the folder, the app and the settings are not newer than it and the window size matches; _pp_drop and _BVK_PP_H. viewport.sh _vp_emit erases the preview in the SAME write as the real frame. engine_heal.sh and the python3 / loader failures drop it first. New bashbasicsbyvk_firstscreen.sh: _fs_save writes ~/.bashbasicsbyvk/firstscreen/<folder with / as %> (header v1 rows cols block-height length, then _BVK_SCR_RAW); it runs as a [bg] @call after the first paint and after every later main-loop paint. Switch off with BVK_FIRSTSCREEN=0 or the file ~/.bashbasicsbyvk/firstscreen.off. loadtime shows the marker. Known limit: Enter pressed in the first second is echoed by the terminal under the preview, so the erase can leave one row. Lesson: when the real work cannot be shortened, show the last result first and replace it in one write.

@@ -107,7 +107,7 @@ _bvk_prefix_scan() {
 # records _BVK_LOAD_SRC for the header tag).
 _bvk_load_prefix_items() {
   local _h=0; [ "${show_hidden_files:-false}" = "true" ] && _h=1
-  local _f; _f="$(_bvk_tmp)" || return 1
+  local _f; _f="$(_bvk_tmp prefix)" || return 1
   if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin \
      && "$_BVK_GO_BIN" scan "$1" raw "$_h" "$2" >"$_f" 2>/dev/null; then
     _BVK_LOAD_SRC=c
@@ -117,14 +117,14 @@ _bvk_load_prefix_items() {
   fi
   _BVK_META_SRC=""
   mapfile -t items <"$_f"
-  rm -f "$_f"
+  case "$_f" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$_f" ;; *) rm -f "$_f" ;; esac   # a re-used file: truncate (no process)
 }
 
 # items[] = the "#" group of prefix $2 (names whose next char is not a letter,
 # digit or a known special). C `hashscan`; Python when Unicode rules are needed.
 _bvk_load_hash_items() {
   local _h=0; [ "${show_hidden_files:-false}" = "true" ] && _h=1
-  local _f; _f="$(_bvk_tmp)" || return 1
+  local _f; _f="$(_bvk_tmp hash)" || return 1
   if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin \
      && "$_BVK_GO_BIN" hashscan "$1" "$_h" "$2" >"$_f" 2>/dev/null; then
     _BVK_LOAD_SRC=c
@@ -134,7 +134,7 @@ _bvk_load_hash_items() {
   fi
   _BVK_META_SRC=""
   mapfile -t items <"$_f"
-  rm -f "$_f"
+  case "$_f" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$_f" ;; *) rm -f "$_f" ;; esac   # a re-used file: truncate (no process)
 }
 
 # ═══════════════════════════════════════════════════════════════════════════

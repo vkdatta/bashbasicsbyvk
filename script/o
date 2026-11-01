@@ -1,9 +1,41 @@
 #!/usr/bin/env bash
 
+# FIRST SCREEN (speed): the last finished screen of this folder is painted at once, with bash builtins only (the one process is the
+# terminal size), BEFORE the load mapper below loads anything. The real first paint then erases it and draws the real screen in ONE write
+# (_vp_emit, via _BVK_PP_H). It is only a preview: the app reads no key until the real screen is up, exactly as before.
+# Saved by _fs_save (bashbasicsbyvk_firstscreen.sh) after a paint. Not used when: an argument is given, there is no terminal, the folder or the
+# settings changed since it was saved, the window size differs, or  BVK_FIRSTSCREEN=0  /  the file ~/.bashbasicsbyvk/firstscreen.off  exists.
+_BVK_PP_H=""; _BVK_PP_T1=""
+# _pp_drop: take the preview away (for anything that must print before the real first paint: a question, an error)
+_pp_drop() {
+  [ -n "${_BVK_PP_H:-}" ] || return 0
+  (( _BVK_PP_H > 1 )) && builtin printf '\033[%dA' "$(( _BVK_PP_H - 1 ))"
+  _BVK_PP_H=""; builtin printf '\r\033[J'
+}
+_fs_replay() {
+  [ "${BVK_FIRSTSCREEN:-1}" = 0 ] && return 0
+  [ -t 0 ] && [ -t 1 ] || return 0
+  local d="${HOME}/.bashbasicsbyvk/firstscreen" f ver rows cols bh len frame sz cfg
+  f="$d/${PWD//\//%}"
+  [ -f "$f" ] && [ ! -e "$d.off" ] || return 0
+  cfg="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/config"
+  [ "$PWD" -nt "$f" ] && return 0                           # something was added / removed / renamed here since it was saved
+  [ "${BASH_SOURCE[0]}" -nt "$f" ] && return 0              # the app was upgraded
+  [ -e "$cfg" ] && [ "$cfg" -nt "$f" ] && return 0          # a setting changed
+  { IFS=' ' read -r ver rows cols bh len || return 0; IFS= read -r -d '' frame; } < "$f"
+  [ "$ver" = v1 ] && [[ "$bh" =~ ^[0-9]+$ ]] && [ "${#frame}" = "$len" ] || return 0
+  sz=$(stty size 2>/dev/null) || return 0                    # the only process: a frame drawn for another size would wrap and break the erase
+  [ "$sz" = "$rows $cols" ] || return 0
+  builtin printf '\033[?2026h%s\033[?2026l\r\033[KSelect: ' "$frame"
+  _BVK_PP_H="$bh"; _BVK_PP_T1="${EPOCHREALTIME/[.,]/}"
+}
+[ $# -eq 0 ] && _fs_replay
+
 # THE LOAD MAPPER (AGENTS.md rule 13): the first file o loads. It reads bashbasicsbyvk_loadmap.list before anything else is loaded, and
 # loads only what that list says: [fg] now (what the first paint needs), [bg] after the paint (_lm_idle, below), [no] only when called.
 source "bashbasicsbyvk_loadmap.sh"
-_lm_fg || exit 1
+_lm_fg || { _pp_drop; exit 1; }
+[ -n "$_BVK_PP_T1" ] && [ "${_LT_ON:-0}" = 1 ] && _lt_w M "$_BVK_PP_T1" 0 "cached first screen is on the screen" "the saved screen of this folder; the real one replaces it"
 
 # Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), pn (Pending uploads), bk (Backup), sv (Saved Surf), sn (Snapshots), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
 # while the outer main loop stays untouched.
@@ -37,7 +69,7 @@ _bvk_d="${BASH_SOURCE[0]}"; case "$_bvk_d" in */*) _bvk_d="${_bvk_d%/*}" ;; *) _
 SCRIPT_DIR="$(cd -- "$_bvk_d" && pwd)"; unset _bvk_d
 
 _lt_b "start: dependencies"
-command -v python3 >/dev/null 2>&1 || { _lm_need bashbasicsbyvk_deps.sh; _dep_need -c "Starting the app" app.core || exit 1; }   # python3: only when it is missing does the central registry (bashbasicsbyvk_deps.list) load and offer to install it
+command -v python3 >/dev/null 2>&1 || { _pp_drop; _lm_need bashbasicsbyvk_deps.sh; _dep_need -c "Starting the app" app.core || exit 1; }   # python3: only when it is missing does the central registry (bashbasicsbyvk_deps.list) load and offer to install it
 _lt_e
 _lt_b "start: recents daemon check";  _bvk_wake_recents_daemon; _lt_e
 # the usage ping and the snapshot daemon start after the first paint: the @call lines of [bg] in bashbasicsbyvk_loadmap.list
@@ -160,6 +192,7 @@ while true; do
   _vp_render_fresh
   _lt_e
 
+  [ "${_LM_IDLE_DONE:-0}" = 1 ] && _fs_save   # the first screen is saved by the [bg] @call (below the paint); later screens here
   _lm_idle      # [bg] of the load mapper: one file at a time, only while no key is waiting
   _read_choice_filtered
   _lt_mark "dispatch: ${choice:-?}"

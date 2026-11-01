@@ -246,7 +246,11 @@ _tz_valid() {
   done
   # tz data kept somewhere unusual (e.g. Android's single tzdata blob): trust the zone if date resolves it
   # to a real abbreviation instead of echoing the name back
-  [[ "$z" == */* ]] && [ "$(TZ="$z" date +%Z 2>/dev/null)" != "${z%%/*}" ] && return 0
+  if [[ "$z" == */* ]]; then
+    local _za=""
+    TZ="$z" printf -v _za '%(%Z)T' -1 2>/dev/null || _za="$(TZ="$z" date +%Z 2>/dev/null)"     # printf is a builtin: no date process (~18 ms on a phone)
+    [ "$_za" != "${z%%/*}" ] && return 0
+  fi
   return 1
 }
 

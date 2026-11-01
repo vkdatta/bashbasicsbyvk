@@ -22,7 +22,8 @@ _bvk_go_bin() {
     if [ "${BVK_NO_GO:-0}" = "1" ]; then
       _BVK_GO_WHY="BVK_NO_GO=1 is set — the C engine is switched off on purpose"
     else
-      local _m _os _b _o _d _old=""
+      local _m _os _b _o _d _c _old=""
+      local _BVK_PROBE_OK="${HOME}/.bashbasicsbyvk/engine.ok"
       local -a _cand=()
       _bvk_engine_target; _m="$_bet_m"; _os="$_bet_os"
       [ -n "$_m" ] || _BVK_GO_WHY="no prebuilt bvk-ls for CPU '$(uname -m)'"
@@ -37,6 +38,13 @@ _bvk_go_bin() {
         [ -n "$_b" ] && [ -f "$_b" ] || continue
         [ -x "$_b" ] || chmod +x "$_b" 2>/dev/null
         [ -x "$_b" ] || { _BVK_GO_WHY="$_b exists but is not executable"; continue; }
+        # a binary that already passed both checks below is trusted until it changes: its path is in $_BVK_PROBE_OK and the binary is not
+        # newer than that file (an upgrade or a re-download makes it newer -> probed again). Builtins only: the two checks below are two
+        # launches of bvk-ls (~90 ms on a phone) on every start. `health` and BVK_NO_GO are not affected; delete the file to force a probe.
+        if [ -r "$_BVK_PROBE_OK" ]; then
+          IFS= read -r _c < "$_BVK_PROBE_OK"
+          if [ "$_c" = "$_b" ] && ! [ "$_b" -nt "$_BVK_PROBE_OK" ]; then _BVK_GO_BIN="$_b"; _BVK_GO_WHY=""; break; fi
+        fi
         # self-test: skip binaries the OS refuses to run. Probe $HOME, not "/":
         # Android denies apps access to the filesystem root, so "count /" fails
         # even for a perfectly working binary.
@@ -46,7 +54,9 @@ _bvk_go_bin() {
         case "$("$_b" group 2>&1 </dev/null)" in
           *'unknown command'*) [ -n "$_old" ] || _old="$_b"; _BVK_GO_WHY="$_b is out of date (no 'group' command)"; continue ;;
         esac
-        _BVK_GO_BIN="$_b"; _BVK_GO_WHY=""; break
+        _BVK_GO_BIN="$_b"; _BVK_GO_WHY=""
+        [ -d "${_BVK_PROBE_OK%/*}" ] && printf '%s\n' "$_b" > "$_BVK_PROBE_OK" 2>/dev/null
+        break
       done
       [ -z "$_BVK_GO_BIN" ] && [ -n "$_old" ] && _BVK_GO_BIN="$_old"
     fi
@@ -759,7 +769,9 @@ _load_dir_size_window() {
   _BVK_DSIZE_JOB_IN=""
   _BVK_DSIZE_JOB_OUT=""
 
-  local tmp_in; tmp_in=$(mktemp "$_BVK_DSIZE_TMP/in.XXXXXX" 2>/dev/null) || tmp_in=$(mktemp)
+  local tmp_in
+  if [ -n "${_BVK_DSIZE_TMP:-}" ] && [ -d "$_BVK_DSIZE_TMP" ]; then tmp_in="$_BVK_DSIZE_TMP/in.$$.$RANDOM$RANDOM"   # no mktemp process
+  else tmp_in=$(mktemp) || return 0; fi
   local i f
   for (( i=_win_lo; i<=_win_hi; i++ )); do
     f="${items[$((i-1))]}"

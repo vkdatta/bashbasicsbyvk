@@ -30,6 +30,7 @@ _bvk_engine_heal() {
     read -r _t _last < "$_mark" 2>/dev/null
     [ "$_t" = "$_want" ] && [ -n "$_last" ] && [ -n "$_now" ] && [ $((_now - _last)) -lt 86400 ] && return 0
   fi
+  declare -F _pp_drop >/dev/null 2>&1 && _pp_drop      # the first-screen preview of o must not sit under this question
   echo
   echo "⚠️  This install was made for ${_ts:-another machine}, but this machine is $_want."
   echo "   The fast engines (list, find & replace, file transfer) need the $_want build; until then the app uses its slower fallbacks."
