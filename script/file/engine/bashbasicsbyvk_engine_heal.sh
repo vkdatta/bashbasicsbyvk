@@ -12,7 +12,7 @@ _bvk_engine_heal() {
   local _o _d _bin _e _f _t _have="" _want _ts _eh_ans _core _mark _now _last
   _bvk_engine_target
   [ -n "$_bet_m" ] || return 0                                 # a CPU / OS with no prebuilt engine: nothing to fetch
-  _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
+  if declare -F _bvk_pathfind >/dev/null 2>&1; then _bvk_pathfind o; _o="$_BVK_PF"; else _o="$(command -v o 2>/dev/null)"; fi; _d="${_o%/*}"
   _bin="$_d/../bashbasicsbyvk/bin"
   [ -d "$_bin" ] || return 0                                   # run from a source checkout, not a pip install
   _want="$_bet_os-$_bet_m"

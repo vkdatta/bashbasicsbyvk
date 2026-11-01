@@ -5,7 +5,7 @@
 # (_vp_emit, via _BVK_PP_H). It is only a preview: the app reads no key until the real screen is up, exactly as before.
 # Saved by _fs_save (bashbasicsbyvk_firstscreen.sh) after a paint. Not used when: an argument is given, there is no terminal, the folder or the
 # settings changed since it was saved, the window size differs, or  BVK_FIRSTSCREEN=0  /  the file ~/.bashbasicsbyvk/firstscreen.off  exists.
-_BVK_PP_H=""; _BVK_PP_T1=""
+_BVK_PP_H=""; _BVK_PP_T1=""; _BVK_PP_SZ=""
 # _pp_drop: take the preview away (for anything that must print before the real first paint: a question, an error)
 _pp_drop() {
   [ -n "${_BVK_PP_H:-}" ] || return 0
@@ -27,7 +27,7 @@ _fs_replay() {
   sz=$(stty size 2>/dev/null) || return 0                    # the only process: a frame drawn for another size would wrap and break the erase
   [ "$sz" = "$rows $cols" ] || return 0
   builtin printf '\033[?2026h%s\033[?2026l\r\033[KSelect: ' "$frame"
-  _BVK_PP_H="$bh"; _BVK_PP_T1="${EPOCHREALTIME/[.,]/}"
+  _BVK_PP_H="$bh"; _BVK_PP_T1="${EPOCHREALTIME/[.,]/}"; _BVK_PP_SZ="$sz"
 }
 [ $# -eq 0 ] && _fs_replay
 
@@ -35,6 +35,9 @@ _fs_replay() {
 # loads only what that list says: [fg] now (what the first paint needs), [bg] after the paint (_lm_idle, below), [no] only when called.
 source "bashbasicsbyvk_loadmap.sh"
 _lm_fg || { _pp_drop; exit 1; }
+if [ -n "$_BVK_PP_SZ" ]; then   # the preview just asked the terminal for its size: the first paint reuses it (3 s) instead of a second stty
+  _vp_rows_now="${_BVK_PP_SZ%% *}"; _vp_cols_now="${_BVK_PP_SZ##* }"; _vp_probe_t="$_BVK_PP_T1"; _vp_probe_ttl=3000000
+fi
 [ -n "$_BVK_PP_T1" ] && [ "${_LT_ON:-0}" = 1 ] && _lt_w M "$_BVK_PP_T1" 0 "cached first screen is on the screen" "the saved screen of this folder; the real one replaces it"
 
 # Inner-loop driver: sw, fx, r (the .r rule book), upg (the -u upgrade loop), api (the link manager), pn (Pending uploads), bk (Backup), sv (Saved Surf), sn (Snapshots), rbam, nf (notifications) and cs (cloud surf) hand over to each other via _inner_next,
@@ -192,6 +195,7 @@ while true; do
   _vp_render_fresh
   _lt_e
 
+  _vp_probe_ttl=300000                          # the first paint is done: back to the 0.3 s reuse
   [ "${_LM_IDLE_DONE:-0}" = 1 ] && _fs_save   # the first screen is saved by the [bg] @call (below the paint); later screens here
   _lm_idle      # [bg] of the load mapper: one file at a time, only while no key is waiting
   _read_choice_filtered

@@ -23,12 +23,13 @@ _vp_read_size() {
 }
 
 _vp_probe_t=0
+_vp_probe_ttl=300000        # µs a probe is reused; o raises it for the first paint when the preview just asked for the size
 _vp_probe_size() {
   # stty is a process (~25 ms on a phone) and one paint asks for the size 3-4 times: a probe younger than 0.3 s is reused.
   # A resize (_vp_on_resize, the WINCH trap) clears the stamp, so the next probe is always live. No EPOCHREALTIME (bash < 5): probe every time.
   local _pt="${EPOCHREALTIME/[.,]/}"      # [.,]: a comma-decimal locale writes 1730000000,123456
   if [ -n "$_pt" ] && [ "${_vp_rows_now:-0}" -gt 0 ] 2>/dev/null && [ "${_vp_cols_now:-0}" -gt 0 ] 2>/dev/null \
-     && (( _pt - _vp_probe_t < 300000 )); then
+     && (( _pt - _vp_probe_t < _vp_probe_ttl )); then
     return 0
   fi
   _vp_probe_t="${_pt:-0}"
@@ -290,15 +291,22 @@ _vp_strip_ansi() {
 # CJK count 2, variation selectors / joiners / combining marks count 0.
 # (${#s} counts characters, not cells: a row with 📁 / 👤 is one cell wider than
 #  its length, which is how a "fitting" line still wrapped on a phone.)
+# Speed: every row has an emoji icon, so no row takes the ASCII shortcut. Only the NON-ASCII characters are looked at one by one (the ASCII ones
+# are counted from the two lengths), and the width of a character is remembered (_VP_CWC): the same icon is measured once, not once per row.
+declare -gA _VP_CWC=()
 _vp_cells() {
-  local s="$1" i c cp w=0
+  local s="$1" i c cp w na
   _vp_strip_ansi "$s"; s="$_vp_plain"
   if [[ "$s" != *[![:ascii:]]* ]]; then _vp_w=${#s}; return 0; fi
-  for ((i=0; i<${#s}; i++)); do
-    c="${s:i:1}"
-    if [[ "$c" == [[:ascii:]] ]]; then w=$(( w + 1 )); continue; fi
-    builtin printf -v cp '%d' "'$c" 2>/dev/null || cp=0
-    _vp_cpw "$cp"; w=$(( w + _VP_CPW ))
+  na="${s//[[:ascii:]]/}"
+  w=$(( ${#s} - ${#na} ))
+  for ((i=0; i<${#na}; i++)); do
+    c="${na:i:1}"
+    if [ -z "${_VP_CWC[$c]+x}" ]; then
+      builtin printf -v cp '%d' "'$c" 2>/dev/null || cp=0
+      _vp_cpw "$cp"; _VP_CWC[$c]=$_VP_CPW
+    fi
+    w=$(( w + _VP_CWC[$c] ))
   done
   _vp_w=$w
 }

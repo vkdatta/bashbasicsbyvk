@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+Row measuring was the biggest left-over of the first paint: _vp_cells looked at every character of every row one by one because each row has an emoji icon and so never took the ASCII shortcut; 'prepare rows' took 268 ms of its own time on the phone.
+
+1. HOW DID YOU DEBUG
+Read the loadtime report of the previous build (prepare rows 362 ms, 31% of 1,167 ms) and _vp_prime_rows_run -> _vp_fit -> _vp_cells. Compared the old and the new function on 3,018 strings (ASCII, emoji, CJK, fullwidth, combining marks, joiners, ANSI codes, random mixes): no difference. On the build machine 52 rows went from 37.8 ms to 3.8 ms. tests/cell_width.sh keeps expected widths made by the old version. The phone gain is an estimate, not a measurement.
+
+1. CAUSE
+The per-character loop ran for the whole row (about 40 characters, a bash step each) although only the one or two non-ASCII characters need a width lookup; and the same icon was looked up again for every row.
+
+1. FIX
+viewport.sh _vp_cells: the non-ASCII characters are cut out with ${s//[[:ascii:]]/}, the ASCII ones are counted from the two lengths, and only the others are measured, each once (_VP_CWC remembers the width of a character). Lesson: when a shortcut is guarded by 'no non-ASCII at all', check that the common input can reach it.
+
+2. ISSUE IN BRIEF
+After the first speed-up the build list still ran mktemp and rm on every start, and the engine probe still cost 55 ms: the temp folder name was inherited through the environment from an earlier session and pointed to a folder that no longer existed, and $(command -v ...) forked a subshell three times.
+
+2. HOW DID YOU DEBUG
+Read the loadtime trace: 'mktemp 20.7 ms' and 'rm 19.0 ms' under 'build the item list' while 'load displayer.sh' showed no mktemp, so _BVK_DSIZE_TMP was set but not usable and _bvk_tmp fell back to mktemp and rm. Tested by tests/startup_spawns.sh (stale folder replaced, valid one kept, no mktemp on PATH needed, _bvk_pathfind equal to command -v, a folder with a space, a non-executable file). Not measured on a device.
+
+2. CAUSE
+displayer.sh only tested that the variable was empty, never that its folder existed; _bvk_go_bin and _bvk_engine_heal asked $(command -v o) / $(command -v bvk-ls) which forks.
+
+2. FIX
+displayer.sh: the temp folder is created again when the name is empty or the folder is gone; new _bvk_pathfind (a PATH search in bash) used by _bvk_go_bin and _bvk_engine_heal; the sort by new / old / big / small uses _bvk_tmp. viewport.sh: _vp_probe_ttl (0.3 s) so the first paint can reuse the terminal size the first-screen preview already asked for (o sets 3 s until that paint is done).

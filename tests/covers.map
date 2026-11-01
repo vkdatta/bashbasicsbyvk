@@ -39,3 +39,5 @@ script/	loadmap
 functions/bashbasicsbyvk_exactbytes|settings/bashbasicsbyvk_(importnano|settings\b|settings_groups)	exactbytes
 functions/bashbasicsbyvk_(fileinfo|extract|exactbytes)|staging/buffer!/bashbasicsbyvk_staging_helpers	xtr_info
 o|engine/bashbasicsbyvk_(firstscreen|viewport|engine_heal)|loadmap/	firstscreen
+engine/bashbasicsbyvk_(displayer|engine_heal|viewport)|^o$	startup_spawns
+engine/bashbasicsbyvk_viewport	cell_width

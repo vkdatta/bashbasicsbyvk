@@ -15,6 +15,18 @@
 declare -g _BVK_GO_WHY=""
 # _bvk_engine_target (which prebuilt binary fits this machine) lives in bashbasicsbyvk_engine_target.sh, loaded before this file.
 
+# _bvk_pathfind NAME -> _BVK_PF = the first executable file called NAME on PATH ("" and return 1 when none). No $(command -v ...): that forks a subshell.
+_bvk_pathfind() {
+  _BVK_PF=""
+  local _pd; local -a _pds=()
+  IFS=: read -r -a _pds <<< "$PATH"
+  for _pd in "${_pds[@]}"; do
+    [ -n "$_pd" ] || _pd=.
+    if [ -f "$_pd/$1" ] && [ -x "$_pd/$1" ]; then _BVK_PF="$_pd/$1"; return 0; fi
+  done
+  return 1
+}
+
 _bvk_go_bin() {
   if [ -z "${_BVK_GO_BIN+x}" ]; then
     _BVK_GO_BIN=""
@@ -27,11 +39,11 @@ _bvk_go_bin() {
       local -a _cand=()
       _bvk_engine_target; _m="$_bet_m"; _os="$_bet_os"
       [ -n "$_m" ] || _BVK_GO_WHY="no prebuilt bvk-ls for CPU '$(uname -m)'"
-      _o="$(command -v o 2>/dev/null)"; _d="${_o%/*}"
-      _cand=("$(command -v bvk-ls 2>/dev/null)")
+      _bvk_pathfind o; _o="$_BVK_PF"; _d="${_o%/*}"
+      _bvk_pathfind bvk-ls; _cand=("$_BVK_PF")
       if [ -n "$_m" ]; then
-        _cand+=("$_d/../bashbasicsbyvk/bin/bvk-ls-$_os-$_m"
-                "$(command -v "bvk-ls-$_os-$_m" 2>/dev/null)")
+        _bvk_pathfind "bvk-ls-$_os-$_m"
+        _cand+=("$_d/../bashbasicsbyvk/bin/bvk-ls-$_os-$_m" "$_BVK_PF")
       fi
       [ -n "$_BVK_GO_WHY" ] || _BVK_GO_WHY="no bvk-ls binary found (looked next to 'o' and on PATH)"
       for _b in "${_cand[@]}"; do
@@ -142,7 +154,8 @@ declare -g _BVK_DSIZE_JOB_IN=""
 declare -g _BVK_DSIZE_JOB_OUT=""
 
 # Per-session temp dir for job scratch
-if [ -z "${_BVK_DSIZE_TMP:-}" ]; then
+# (an exported name inherited from an earlier session may point to a folder that is gone: every _bvk_tmp call then fell back to mktemp + rm)
+if [ -z "${_BVK_DSIZE_TMP:-}" ] || [ ! -d "$_BVK_DSIZE_TMP" ]; then
   _BVK_DSIZE_TMP="$(mktemp -d -t bvk-dsize.XXXXXX 2>/dev/null)"
   export _BVK_DSIZE_TMP
 fi
@@ -580,7 +593,7 @@ apply_sort() {
       mapfile -t items <<< "$sorted_output"
       ;;
     new|old|big|small)
-      local tmp_in; tmp_in=$(mktemp)
+      local tmp_in; tmp_in=$(_bvk_tmp sort_in)
       printf '%s\n' "${items[@]}" > "$tmp_in"
       local sorted_output
       sorted_output=$(python3 - "$tmp_in" "$mode" <<'PYEOF'
@@ -631,7 +644,7 @@ for r in records:
     print(r[0])
 PYEOF
       )
-      rm -f "$tmp_in"
+      case "$tmp_in" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$tmp_in" ;; *) rm -f "$tmp_in" ;; esac
       items=()
       mapfile -t items <<< "$sorted_output"
       ;;
