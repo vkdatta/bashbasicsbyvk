@@ -32,6 +32,7 @@
 
 _FAV_DIR="${HOME}/.bashbasicsbyvk/favourites"
 
+declare -gA _FAV_HC=()             # folder → its hash (the hash is 3 processes: printf | sha1sum | cut, so it is computed once per folder)
 declare -gA _FAV_LABEL=()          # full path → text shown instead of the plain name
 declare -ga _fav_names=() _fav_alias=() _fav_ids=() _fav_stale=() _fav_moved=()
 declare -gA _FAV_MOVED_TO=()       # missing item path → where it moved to (sw ⭐ tab)
@@ -98,7 +99,8 @@ _fav_unlock() {
 # Sets _FAV_FILE. Returns 0 when the file exists, 1 otherwise.
 _fav_file_for() {
   local dir; dir=$(_fav_norm "$1")
-  _FAV_FILE="$_FAV_DIR/$(_fav_hash "$dir").fav"
+  [ -n "${_FAV_HC[$dir]+x}" ] || _FAV_HC[$dir]="$(_fav_hash "$dir")"
+  _FAV_FILE="$_FAV_DIR/${_FAV_HC[$dir]}.fav"
   [ -f "$_FAV_FILE" ] && return 0
   local -a all=("$_FAV_DIR"/*.fav)
   [ ${#all[@]} -eq 0 ] && return 1
@@ -123,11 +125,17 @@ _fav_adopted=false
 _fav_load() {
   local dir; dir=$(_fav_norm "$1")
   _fav_adopted=false
+  local -a _fa=("$_FAV_DIR"/*.fav)
+  if [ ! -e "${_fa[0]:-/nonexistent}" ]; then      # no favourites file for ANY folder: nothing to hash, stat or adopt (the usual case)
+    _fav_names=(); _fav_alias=(); _fav_ids=(); _fav_stale=(); _fav_moved=()
+    _fav_base="$dir"; _fav_dirty=false; _fav_cache_key=""
+    return 1
+  fi
   local existed=true
   _fav_file_for "$dir" || existed=false
-  local key="$dir|$(_fav_mtime "$_FAV_FILE")|$(_fav_mtime "$dir")"
-  if $existed && [ "$key" = "$_fav_cache_key" ] && [ "$_fav_base" = "$dir" ]; then
-    return 0
+  if $existed; then
+    local key="$dir|$(_fav_mtime "$_FAV_FILE")|$(_fav_mtime "$dir")"     # no file = no key (saves two stat processes)
+    if [ "$key" = "$_fav_cache_key" ] && [ "$_fav_base" = "$dir" ]; then return 0; fi
   fi
   _fav_names=(); _fav_alias=(); _fav_ids=(); _fav_stale=(); _fav_moved=()
   _fav_base="$dir"; _fav_dirty=false

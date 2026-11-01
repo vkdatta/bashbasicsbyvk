@@ -80,8 +80,17 @@ _bvk_src_tag() { local _bst_out; _bvk_src_tag_v; printf '%s' "$_bst_out"; }
 # bash reads a pipe/process-substitution ONE BYTE at a time, which made
 # `mapfile -t items < <(cmd)` ~30x slower than the listing itself (200k files:
 # ~1.1 s from a pipe vs ~35 ms from a regular file).
+# No mktemp (a process, ~25 ms on a phone): the name is built in bash. $_BVK_DSIZE_TMP is this session's private folder (removed on exit).
+#   _bvk_tmp        -> a fresh unique file (callers rm it)
+#   _bvk_tmp <tag>  -> ONE re-used file per tag and shell ($$ is the same in a $(...) subshell): callers truncate it with  : >"$f"
+#                      instead of rm, so nothing piles up and no rm process runs. Never use a tag from a background job.
 _bvk_tmp() {
-  mktemp "${_BVK_DSIZE_TMP:-${TMPDIR:-/tmp}}/ld.XXXXXX" 2>/dev/null || mktemp
+  local _d="${_BVK_DSIZE_TMP:-}" _n
+  if [ -z "$_d" ] || [ ! -d "$_d" ]; then mktemp; return; fi
+  if [ -n "${1:-}" ]; then _n="$_d/$1.$$"
+  else _n="$_d/ld.$$.$RANDOM$RANDOM"; fi
+  : >"$_n" 2>/dev/null || { mktemp; return; }
+  printf '%s\n' "$_n"
 }
 
 # _bvk_fill_items <python-fallback-fn> <bvk-ls subcommand> args...
@@ -89,7 +98,7 @@ _bvk_tmp() {
 # same args minus the subcommand) when the binary is missing / fails.
 _bvk_fill_items() {
   local _fb="$1"; shift
-  local _f; _f="$(_bvk_tmp)" || return 1
+  local _f; _f="$(_bvk_tmp fill)" || return 1
   if _bvk_go_bin && "$_BVK_GO_BIN" "$@" >"$_f" 2>/dev/null; then
     _BVK_LOAD_SRC=c
   else
@@ -97,7 +106,7 @@ _bvk_fill_items() {
     "$_fb" "${@:2}" >"$_f" 2>/dev/null
   fi
   mapfile -t items <"$_f"
-  rm -f "$_f"
+  case "$_f" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$_f" ;; *) rm -f "$_f" ;; esac   # our re-used file: truncate (no process); a mktemp fallback file: remove
 }
 
 # ── Core arrays ───────────────────────────────────────────────────────────────
@@ -643,7 +652,7 @@ _load_window() {
     return
   fi
 
-  local tmp_in; tmp_in=$(mktemp)
+  local tmp_in; tmp_in=$(_bvk_tmp win_in)
   local i
   for (( i=lo; i<=hi; i++ )); do
     local f="${items[$((i-1))]}"
@@ -651,13 +660,13 @@ _load_window() {
   done > "$tmp_in"
 
   if [ ! -s "$tmp_in" ]; then
-    rm -f "$tmp_in"
+    case "$tmp_in" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) ;; *) rm -f "$tmp_in" ;; esac
     _win_lo=$lo; _win_hi=$hi
     _meta_loaded=true
     return
   fi
 
-  local tmp_out; tmp_out="$(_bvk_tmp)"
+  local tmp_out; tmp_out="$(_bvk_tmp win_out)"
   if _bvk_go_bin && "$_BVK_GO_BIN" meta "$tmp_in" >"$tmp_out" 2>/dev/null; then
     _BVK_META_SRC=c
   else
@@ -671,7 +680,7 @@ _load_window() {
     item_children["$fpath"]="$fchildren"
     item_icon["$fpath"]="$ftype"
   done <"$tmp_out"
-  rm -f "$tmp_in" "$tmp_out"
+  case "$tmp_in" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$tmp_in"; : >"$tmp_out" ;; *) rm -f "$tmp_in" "$tmp_out" ;; esac   # re-used files: truncate, no rm process
 
   local evict_lo=$(( lo - _BVK_WIN_RADIUS ))
   local evict_hi=$(( hi + _BVK_WIN_RADIUS ))

@@ -22,7 +22,16 @@ _vp_read_size() {
   return 1
 }
 
+_vp_probe_t=0
 _vp_probe_size() {
+  # stty is a process (~25 ms on a phone) and one paint asks for the size 3-4 times: a probe younger than 0.3 s is reused.
+  # A resize (_vp_on_resize, the WINCH trap) clears the stamp, so the next probe is always live. No EPOCHREALTIME (bash < 5): probe every time.
+  local _pt="${EPOCHREALTIME/[.,]/}"      # [.,]: a comma-decimal locale writes 1730000000,123456
+  if [ -n "$_pt" ] && [ "${_vp_rows_now:-0}" -gt 0 ] 2>/dev/null && [ "${_vp_cols_now:-0}" -gt 0 ] 2>/dev/null \
+     && (( _pt - _vp_probe_t < 300000 )); then
+    return 0
+  fi
+  _vp_probe_t="${_pt:-0}"
   if _vp_read_size; then
     _vp_rows_now="$_vp_pr"; _vp_cols_now="$_vp_pc"
   elif [ "$_vp_rows_now" -gt 0 ] 2>/dev/null; then
@@ -835,7 +844,7 @@ _vp_repaint_row() {
   return 0
 }
 
-_vp_on_resize() { _vp_resized=true; }
+_vp_on_resize() { _vp_resized=true; _vp_probe_t=0; }
 
 _vp_page_step="${BVK_PAGE_STEP:-10}"
 

@@ -98,7 +98,10 @@ _rf_page() {
 
 # _rf_is_elf <file>   0 when the first four bytes are the ELF magic (a compiled program)
 _rf_is_elf() {
-    [ -f "$1" ] && [ "$(head -c4 -- "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = 7f454c46 ]
+    local _m=""    # builtin read, no head | od | tr (3 processes, ~75 ms on a phone); the magic has no NUL byte, so read keeps it whole
+    [ -f "$1" ] && [ -r "$1" ] || return 1
+    LC_ALL=C read -r -N4 _m < "$1" 2>/dev/null
+    [ "$_m" = $'\x7fELF' ]
 }
 
 # _rf_shebang <file>   reads the first line (at most 256 bytes: a binary has no "line"; NUL and CR are dropped, so no bash warning and a CRLF script works)
@@ -107,7 +110,8 @@ _rf_shebang() {
     local first tok
     local -a parts=()
     _RF_EXE=""; _RF_ARGS=()
-    first=$(head -c 256 -- "$1" 2>/dev/null | head -n1 | tr -d '\0\r')
+    LC_ALL=C IFS= read -r -n 256 first < "$1" 2>/dev/null    # builtin: no head | head | tr (3 processes); stops at the first newline, drops NUL
+    first="${first//$'\r'/}"
     [[ "$first" == '#!'* ]] || return 1
     read -r -a parts <<< "${first#\#!}"
     [ "${#parts[@]}" -gt 0 ] || return 1

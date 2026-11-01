@@ -1038,11 +1038,12 @@ _bvk_wake_recents_daemon() {
     if [ -f "$_c" ]; then _daemon_script="$_c"; break; fi
   done
   [ -n "$_daemon_script" ] || return
-  local _pid
-  _pid=$(cat "$_BVK_RECENTS_PID_FILE" 2>/dev/null)
+  local _pid=""
+  [ -r "$_BVK_RECENTS_PID_FILE" ] && read -r _pid < "$_BVK_RECENTS_PID_FILE"     # read, not $(cat): no process
   # alive AND current version → nothing to do.  Alive but older (pre-upgrade) →
   # fall through: the daemon script itself replaces the old process.
-  local _ver; _ver=$(cat "${HOME}/.bashbasicsbyvk/daemon.version" 2>/dev/null)
+  local _ver=""
+  [ -r "${HOME}/.bashbasicsbyvk/daemon.version" ] && read -r _ver < "${HOME}/.bashbasicsbyvk/daemon.version"
   kill -0 "$_pid" 2>/dev/null && [ "$_ver" = "$_BVK_DAEMON_VERSION" ] && return
   if [ -x "$_daemon_script" ]; then
     "$_daemon_script" </dev/null >/dev/null 2>&1 &

@@ -6,7 +6,11 @@
 #   Android (bionic) cannot run the static glibc "linux" builds: its linker needs PT_PHDR, which a glibc static-pie binary
 #   does not have, and aborts ("Could not find a PHDR: broken executable?"). Android uses the NDK "android" builds.
 _bvk_engine_target() {
-  case "$(uname -m)" in
+  # $HOSTTYPE is bash's own CPU name: no process (a uname costs ~20 ms on a phone). Only the unambiguous 64-bit names are trusted:
+  # a 32-bit bash on a 64-bit kernel says "arm" here but uname -m says aarch64, so every other value still asks uname.
+  local _bet_cpu="$HOSTTYPE"
+  case "$_bet_cpu" in aarch64|arm64|x86_64|amd64) ;; *) _bet_cpu="$(uname -m)" ;; esac
+  case "$_bet_cpu" in
     aarch64|arm64) _bet_m=arm64 ;;
     x86_64|amd64)  _bet_m=amd64 ;;
     i[3-6]86)      _bet_m=386 ;;

@@ -42,6 +42,7 @@ _lt_e
 _lt_b "start: recents daemon check";  _bvk_wake_recents_daemon; _lt_e
 # the usage ping and the snapshot daemon start after the first paint: the @call lines of [bg] in bashbasicsbyvk_loadmap.list
 _lt_b "start: terminal colours + screen setup"; _disp_startup; _lt_e
+_lt_b "start: native engine probe"; _bvk_go_bin; _lt_e   # once, HERE in the main shell: inside a $(...) subshell its cache is lost and it would re-probe on every call
 _lt_b "start: engines fit this machine?"; _bvk_engine_heal "$@"; _lt_e   # install made on another CPU / OS: offer a reinstall
 
 trap '[ "${_GD_ACTIVE:-0}" = 1 ] && _gd_on_exit 2>/dev/null; _lt_cleanup; _bvk_paste_off 2>/dev/null; _bvk_mouse_off 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \

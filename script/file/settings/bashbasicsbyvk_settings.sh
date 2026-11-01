@@ -1,6 +1,6 @@
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk"
 SETTINGS_FILE="$CONFIG_DIR/config"
-mkdir -p "$CONFIG_DIR"
+[ -d "$CONFIG_DIR" ] || mkdir -p "$CONFIG_DIR"     # a process only on the very first run
 
 DEFAULT_SHOW_HIDDEN_FILES=false
 DEFAULT_INDEX_MODE_THRESHOLD=200

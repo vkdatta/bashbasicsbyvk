@@ -496,7 +496,7 @@ _st_run() {
   # Whatever WINCH trap the caller had (_multi_prompt_loop has one) is put back when we leave.
   local _st_old_winch; _st_old_winch=$(trap -p WINCH)
   _ST_SIZE_STALE=1
-  trap '_ST_SIZE_STALE=1' WINCH
+  trap '_ST_SIZE_STALE=1; _vp_probe_t=0' WINCH     # _vp_probe_t=0: the next _vp_probe_size is live, not the 0.3 s reuse
 
   while :; do
     # rows are rebuilt only when something changed (a choice, a filter edit) — never for plain
