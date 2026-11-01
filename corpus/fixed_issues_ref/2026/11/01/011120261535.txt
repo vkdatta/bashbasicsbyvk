@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+The file menu's Run asked up to two yes/no questions (run directly, run with the shebang interpreter) before running a file, although the person had already chosen Run and the file's own nature decides the way.
+
+HOW DID YOU DEBUG
+Read run_file and the two _bvk_yn prompts; checked that no test, README or llms file mentions the prompts; checked tests/smartload.sh, which requires every launch to go through _rf_go. Followed up BB-011120261435-1 to BB-011120261435-7 (same function). Ran a stub script for a shebang script (env and CRLF), a missing interpreter, an ELF with and without the executable bit, an executable text file with no extension, a plain text file and an unknown binary: no prompt in any case. Ran `bash tests/run.sh for` the changed files: smartload, archive, lint_waits, nav_back, rename_screen and loadmap pass; mouse, hints, settings_desc, delete_confirm and choose_plain are red and are red on the untouched project too. Running a real binary on a device, and the shared-storage hint for exit status 126, were verified by reading only.
+
+CAUSE
+The flow was built around questions instead of detection: for a script with a shebang, running it directly and running it with its interpreter give the same result, and for a binary the second question never applied.
+
+FIX
+bashbasicsbyvk_run.sh, run_file: no prompts. Order: archive extracts; a file with a usable shebang runs with that interpreter (falls back to the extension, with a warning, when the interpreter is missing); an ELF runs directly (a message when it lacks the executable bit, a hint when the status is 126); then the extension table; an executable text file with no known extension runs with bash. New helper _rf_is_elf; stubs regenerated. Lesson: decide from the file, do not ask when both answers lead to the same run.

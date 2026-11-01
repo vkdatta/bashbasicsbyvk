@@ -7,7 +7,7 @@ copy_to_clipboard() {
 }
 
 handle_file() {
-    local file="$1" lab_run lab_lock
+    local file="$1" lab_run lab_lock action
 
     while true; do
         lab_run="Run";       _arc_detect "$file" && lab_run="Extract"        # an archive is extracted, anything else is run
@@ -20,12 +20,12 @@ handle_file() {
                       "Copy File Path" "Go To Parent Folder"
         _mc_footer @file_menu
 
-        read -e -p "Select: " action
+        read -e -p "Select: " action || return 1          # EOF (the terminal closed): leave, never spin on "invalid"
 
         case "$action" in
             0) run_file "$file"; return 1 ;;
             1) force_open "$file"; return 1 ;;
-            2) nano "$file"; return 1 ;;
+            2) if command -v nano >/dev/null 2>&1; then nano "$file"; else "${EDITOR:-vi}" "$file"; fi; return 1 ;;
             3) bashbasicsbyvk_copy "$file"; return 1 ;;
             4) bashbasicsbyvk_delete "$file"; return 1 ;;
             5) bashbasicsbyvk_erase "$file"; return 1 ;;
@@ -73,21 +73,79 @@ determine_shared_dir() {
     fi
 }
 
+# _rf_mime <file>   the MIME type in _RF_MIME ("" when unknown); `file` is optional, so no tool = unknown
+_rf_mime() {
+    _RF_MIME=""
+    if command -v file >/dev/null 2>&1; then _RF_MIME=$(file --mime-type -b -- "$1" 2>/dev/null); fi
+    return 0
+}
+
+# _rf_is_text <file>   0 when the file is readable text (or empty): by its MIME type, else by looking for binary bytes (grep -I)
+_rf_is_text() {
+    _rf_mime "$1"
+    case "$_RF_MIME" in
+        text/*|inode/x-empty|application/x-empty|application/json|application/xml|application/javascript) return 0 ;;
+        ?*) return 1 ;;
+    esac
+    [ ! -s "$1" ] || LC_ALL=C grep -qIm1 '' -- "$1" 2>/dev/null
+}
+
+# _rf_page <file>   shows a text file in $PAGER (default less); plain cat when no pager is installed
+_rf_page() {
+    local p="${PAGER:-less}"
+    if command -v "${p%% *}" >/dev/null 2>&1; then $p "$1"; else cat -- "$1"; fi
+}
+
+# _rf_is_elf <file>   0 when the first four bytes are the ELF magic (a compiled program)
+_rf_is_elf() {
+    [ -f "$1" ] && [ "$(head -c4 -- "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = 7f454c46 ]
+}
+
+# _rf_shebang <file>   reads the first line (at most 256 bytes: a binary has no "line"; NUL and CR are dropped, so no bash warning and a CRLF script works)
+# and splits "#!/usr/bin/env -S python3 -u" into _RF_EXE=python3 and _RF_ARGS=(-u).  Returns 1 when there is no usable shebang.
+_rf_shebang() {
+    local first tok
+    local -a parts=()
+    _RF_EXE=""; _RF_ARGS=()
+    first=$(head -c 256 -- "$1" 2>/dev/null | head -n1 | tr -d '\0\r')
+    [[ "$first" == '#!'* ]] || return 1
+    read -r -a parts <<< "${first#\#!}"
+    [ "${#parts[@]}" -gt 0 ] || return 1
+    _RF_EXE="${parts[0]##*/}"
+    parts=("${parts[@]:1}")
+    if [ "$_RF_EXE" = env ]; then                   # "env" only looks the real program up: skip its options and NAME=value words
+        _RF_EXE=""
+        for tok in "${parts[@]}"; do
+            if [ -z "$_RF_EXE" ]; then
+                [[ "$tok" == -* || "$tok" == *=* ]] && continue
+                _RF_EXE="$tok"
+            else
+                _RF_ARGS+=("$tok")
+            fi
+        done
+    else
+        _RF_ARGS=("${parts[@]}")
+    fi
+    [ -n "$_RF_EXE" ]
+}
+
 # _copy_to_shared <file>   copies it into the shared Download folder as <timestamp>_<name>; the copy's path is left in _SHARED_COPY.
 # returns 1 (with a message) when the file is missing or the copy fails.  Used by force_open and force_share.
 _copy_to_shared() {
-    local src="$1"
+    local src="$1" shared_dir base ts dest
     if [ ! -e "$src" ]; then
         echo "❌ File not found: $src"
         return 1
     fi
-    local shared_dir
     shared_dir="$(determine_shared_dir)"
-    mkdir -p "$shared_dir"
-    local base ts dest
+    if ! mkdir -p -- "$shared_dir" 2>/dev/null || [ ! -w "$shared_dir" ]; then
+        echo "❌ Cannot write to $shared_dir (Termux: run termux-setup-storage)"
+        return 1
+    fi
     base=$(basename "$src")
     ts=$(date +%s)
     dest="$shared_dir/${ts}_$base"
+    [ -e "$dest" ] && dest="$shared_dir/${ts}_${RANDOM}_$base"          # two copies in the same second must not overwrite each other
     cp -f -- "$src" "$dest" || { echo "❌ Failed to copy to shared storage"; return 1; }
     _SHARED_COPY="$dest"
 }
@@ -100,14 +158,10 @@ force_open() {
         termux-open "$dest" && return 0
     fi
     if command -v am >/dev/null 2>&1; then
-        local mime
-        if command -v file >/dev/null 2>&1; then
-            mime=$(file --mime-type -b "$dest" 2>/dev/null || echo "application/octet-stream")
-        else
-            mime="application/octet-stream"
-        fi
-        am start -a android.intent.action.VIEW -d "file://$dest" -t "$mime" >/dev/null 2>&1 || echo "🔴 Open via am failed"
-        return 0
+        _rf_mime "$dest"
+        am start -a android.intent.action.VIEW -d "file://$dest" -t "${_RF_MIME:-application/octet-stream}" >/dev/null 2>&1 && return 0
+        echo "🔴 Open via am failed"
+        return 1
     fi
     echo "❌ No suitable open method available"
     return 1
@@ -118,20 +172,17 @@ force_share() {
     _copy_to_shared "$1" || return 1
     dest="$_SHARED_COPY"
     if command -v termux-share >/dev/null 2>&1; then
-        termux-share -a send -c file "$dest" 2>/dev/null || termux-share "$dest"
-        return 0
+        termux-share -a send "$dest" && return 0                         # one attempt: a second call would pop a second share sheet
+        echo "🔴 Share via termux-share failed"
     fi
     if command -v am >/dev/null 2>&1; then
-        local mime
-        if command -v file >/dev/null 2>&1; then
-            mime=$(file --mime-type -b "$dest" 2>/dev/null || echo "application/octet-stream")
-        else
-            mime="application/octet-stream"
-        fi
-        am start -a android.intent.action.SEND -t "$mime" --es android.intent.extra.SUBJECT "$(basename "$dest")" --stream "file://$dest" >/dev/null 2>&1 2>/dev/null || {
-            am start -a android.intent.action.SEND -t "$mime" --es android.intent.extra.STREAM "file://$dest" >/dev/null 2>&1 || echo "🔴 Share via am failed"
-        }
-        return 0
+        _rf_mime "$dest"
+        am start -a android.intent.action.SEND -t "${_RF_MIME:-application/octet-stream}" \
+            --eu android.intent.extra.STREAM "file://$dest" \
+            --es android.intent.extra.SUBJECT "${dest##*/}" \
+            --grant-read-uri-permission >/dev/null 2>&1 && return 0
+        echo "🔴 Share via am failed"
+        return 1
     fi
     echo "❌ No suitable share method available"
     return 1
@@ -143,39 +194,57 @@ _rf_go() {
     if declare -F _sl_launch >/dev/null 2>&1; then _sl_launch "${_RF_NAME:-}" "$@"; else "$@"; fi
 }
 
+# _rf_build_run <source> <compiler and its options...>   builds  "<compiler...> -o <temp> <source>", runs the result through _rf_go, always removes it,
+# and returns the program's status (a failed build returns the compiler's)
+_rf_build_run() {
+    local src="$1" tmp rc
+    shift
+    tmp=$(mktemp "${TMPDIR:-$HOME}/bvk_exec.XXXXXX") || { echo "❌ Cannot create a temporary file"; return 1; }
+    if "$@" -o "$tmp" "$src"; then
+        chmod +x "$tmp"
+        _rf_go "$tmp"; rc=$?
+    else
+        rc=$?
+    fi
+    rm -f -- "$tmp"
+    return $rc
+}
+
 run_file() {
     local file="$1" _RF_NAME="${1##*/}"          # _RF_NAME: the label of the start-up bar (_rf_go)
+    local rc name ext classname out
     if [ ! -e "$file" ]; then
         echo "❌ File not found: $file"
         return 1
     fi
+    [[ "$file" == */* ]] || file="./$file"       # a bare name would be looked up on PATH (and "-x.py" read as an option)
     if _arc_detect "$file"; then            # an archive is opened, never run: extracted next to itself
         local _ab="${file%/*}"; [ "$_ab" = "$file" ] && _ab="$PWD"; [ -n "$_ab" ] || _ab="/"
         _arc_dest_base="$_ab" _decompress_paths "$file"
         return $?
     fi
-    if [ -x "$file" ]; then
-        _bvk_yn yn "File is executable. Run directly?"
-        if [[ $yn =~ ^[Yy]$ ]]; then
-            _rf_go "$file"
+    # No questions: the person chose Run, so the file's own nature decides.
+    # 1) a script with a shebang runs with that interpreter (same result as running it directly, and it also works on shared storage, which cannot execute files)
+    if _rf_shebang "$file"; then
+        if command -v "$_RF_EXE" >/dev/null 2>&1; then
+            _rf_go "$_RF_EXE" "${_RF_ARGS[@]}" "$file"
             return $?
         fi
+        echo "⚠️ The shebang names '$_RF_EXE', which is not installed: trying the file's extension instead"
     fi
-    local firstline interpreter exe
-    firstline=$(head -n1 "$file" 2>/dev/null)
-    if [[ "$firstline" =~ ^\#! ]]; then
-        interpreter=$(echo "$firstline" | cut -c3- | awk '{print $1}')
-        exe=$(basename "$interpreter")
-        if command -v "$exe" >/dev/null 2>&1; then
-            _bvk_yn yn2 "Run with shebang interpreter ($exe)?"
-            if [[ $yn2 =~ ^[Yy]$ ]]; then
-                _rf_go "$exe" "$file"
-                return $?
-            fi
+    # 2) a compiled program (ELF) runs directly; without the executable bit it cannot run
+    if _rf_is_elf "$file"; then
+        if [ ! -x "$file" ]; then
+            echo "❌ '${file##*/}' is a program but is not executable (chmod +x it first)"
+            return 1
         fi
+        _rf_go "$file"; rc=$?
+        [ "$rc" = 126 ] && echo "❌ Cannot execute here (shared storage does not allow it): copy the file into your home folder first"
+        return $rc
     fi
-    local ext
-    ext="${file##*.}"
+    name="${file##*/}"; ext=""
+    [[ "$name" == *.* ]] && ext="${name##*.}"
+    ext="${ext,,}"                             # .PY .SH .JPG ...
     case "$ext" in
         py)
             if command -v python3 >/dev/null 2>&1; then _rf_go python3 -u "$file"; elif command -v python >/dev/null 2>&1; then _rf_go python -u "$file"; elif _dep_need -c "Running a .py file" python3; then _rf_go python3 -u "$file"; fi
@@ -183,7 +252,7 @@ run_file() {
         pyc)
             echo "❌ Cannot run .pyc directly in Termux without proper interpreter setup"
             ;;
-        js|mjs)
+        js|mjs|cjs)
             if command -v node >/dev/null 2>&1; then _rf_go node "$file"; elif command -v deno >/dev/null 2>&1; then _rf_go deno run "$file"; elif _dep_need -c "Running a JavaScript file" nodejs; then _rf_go node "$file"; fi
             ;;
         ts)
@@ -218,31 +287,17 @@ run_file() {
             fi
             ;;
         c)
-            if command -v gcc >/dev/null 2>&1; then
-                tmp="$HOME/tmp_exec_$RANDOM"
-                gcc "$file" -o "$tmp" && _rf_go "$tmp"
-                rm -f "$tmp"
-            else
-                echo "❌ gcc not found"
-            fi
+            if command -v gcc >/dev/null 2>&1; then _rf_build_run "$file" gcc; else echo "❌ gcc not found"; fi
             ;;
-        cpp|cc|cxx|c++|c\+\+)
-            if command -v g++ >/dev/null 2>&1; then
-                tmp="$HOME/tmp_exec_$RANDOM"
-                g++ "$file" -o "$tmp" && _rf_go "$tmp"
-                rm -f "$tmp"
-            else
-                echo "❌ g++ not found"
-            fi
+        cpp|cc|cxx|c++)
+            if command -v g++ >/dev/null 2>&1; then _rf_build_run "$file" g++; else echo "❌ g++ not found"; fi
             ;;
         go)
             if command -v go >/dev/null 2>&1; then _rf_go go run "$file"; else echo "❌ go not found"; fi
             ;;
         rs)
             if command -v rustc >/dev/null 2>&1; then
-                tmp="$HOME/tmp_exec_$RANDOM"
-                rustc "$file" -o "$tmp" && _rf_go "$tmp"
-                rm -f "$tmp"
+                _rf_build_run "$file" rustc
             elif command -v cargo >/dev/null 2>&1; then
                 echo "📜 For cargo projects use cargo run inside the project"
             else
@@ -250,13 +305,16 @@ run_file() {
             fi
             ;;
         swift)
-            if command -v swift >/dev/null 2>&1; then _rf_go swift "$file"; elif command -v swiftc >/dev/null 2>&1; then tmp="$HOME/tmp_exec_$RANDOM"; swiftc "$file" -o "$tmp" && _rf_go "$tmp"; else echo "❌ swift not found"; fi
+            if command -v swift >/dev/null 2>&1; then _rf_go swift "$file"; elif command -v swiftc >/dev/null 2>&1; then _rf_build_run "$file" swiftc; else echo "❌ swift not found"; fi
             ;;
-        kt|kts|kotlin)
+        kts)
+            if command -v kotlinc >/dev/null 2>&1; then _rf_go kotlinc -script "$file"; else echo "❌ kotlinc not found"; fi
+            ;;
+        kt|kotlin)
             if command -v kotlinc >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
-                out="$HOME/tmp_kt_$RANDOM.jar"
+                out=$(mktemp "${TMPDIR:-$HOME}/bvk_kt.XXXXXX.jar") || { echo "❌ Cannot create a temporary file"; return 1; }
                 kotlinc "$file" -include-runtime -d "$out" && _rf_go java -jar "$out"
-                rm -f "$out"
+                rm -f -- "$out"
             else
                 echo "❌ kotlinc/java not found"
             fi
@@ -271,22 +329,22 @@ run_file() {
             if command -v lua >/dev/null 2>&1; then _rf_go lua "$file"; else echo "❌ lua not found"; fi
             ;;
         hs)
-            if command -v runhaskell >/dev/null 2>&1; then _rf_go runhaskell "$file"; elif command -v ghc >/dev/null 2>&1; then tmp="$HOME/tmp_exec_$RANDOM"; ghc -o "$tmp" "$file" && _rf_go "$tmp"; else echo "❌ runhaskell/ghc not found"; fi
+            if command -v runhaskell >/dev/null 2>&1; then _rf_go runhaskell "$file"; elif command -v ghc >/dev/null 2>&1; then _rf_build_run "$file" ghc; else echo "❌ runhaskell/ghc not found"; fi
             ;;
         coffee)
             if command -v coffee >/dev/null 2>&1; then _rf_go coffee "$file"; else echo "❌ coffee not found"; fi
             ;;
         dart)
-            if command -v dart >/dev/null 2>&1; then _rf_go dart "$file" || _rf_go dart run "$file"; else echo "❌ dart not found"; fi
+            if command -v dart >/dev/null 2>&1; then _rf_go dart run "$file"; else echo "❌ dart not found"; fi
             ;;
         scala)
             if command -v scala >/dev/null 2>&1; then _rf_go scala "$file"; else echo "❌ scala not found"; fi
             ;;
         md|markdown)
-            if command -v glow >/dev/null 2>&1; then glow "$file"; elif command -v less >/dev/null 2>&1; then less "$file"; else cat "$file"; fi
+            if command -v glow >/dev/null 2>&1; then glow "$file"; else _rf_page "$file"; fi
             ;;
         txt|log|cfg|conf)
-            ${PAGER:-less} "$file"
+            _rf_page "$file"
             ;;
         zip|tar|gz|tgz|bz2|xz|7z|zst|lz4|skill)
             echo "📦 '${file##*/}' is not a readable archive ($_ARC_WHY) — nothing to extract."
@@ -301,19 +359,10 @@ run_file() {
             force_open "$file"
             ;;
         *)
-            if command -v file >/dev/null 2>&1; then
-                mimetype=$(file --mime-type -b "$file" 2>/dev/null || echo "")
+            if _rf_is_text "$file"; then
+                if [ -x "$file" ]; then _rf_go bash "$file"; else _rf_page "$file"; fi      # an executable text file with no shebang and no known extension is a shell script
             else
-                mimetype=""
-            fi
-            if [ -n "$mimetype" ] && [[ "$mimetype" == text/* ]]; then
-                ${PAGER:-less} "$file"
-            else
-                if command -v termux-open >/dev/null 2>&1; then
-                    force_open "$file"
-                else
-                    echo "❓ Unknown extension and no viewer available"
-                fi
+                force_open "$file"
             fi
             ;;
     esac

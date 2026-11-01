@@ -39,10 +39,16 @@ handle_file() { _lm_stub bashbasicsbyvk_run.sh handle_file "$@"; }
 _file_abs_path() { _lm_stub bashbasicsbyvk_run.sh _file_abs_path "$@"; }
 _file_goto_parent() { _lm_stub bashbasicsbyvk_run.sh _file_goto_parent "$@"; }
 determine_shared_dir() { _lm_stub bashbasicsbyvk_run.sh determine_shared_dir "$@"; }
+_rf_mime() { _lm_stub bashbasicsbyvk_run.sh _rf_mime "$@"; }
+_rf_is_text() { _lm_stub bashbasicsbyvk_run.sh _rf_is_text "$@"; }
+_rf_page() { _lm_stub bashbasicsbyvk_run.sh _rf_page "$@"; }
+_rf_is_elf() { _lm_stub bashbasicsbyvk_run.sh _rf_is_elf "$@"; }
+_rf_shebang() { _lm_stub bashbasicsbyvk_run.sh _rf_shebang "$@"; }
 _copy_to_shared() { _lm_stub bashbasicsbyvk_run.sh _copy_to_shared "$@"; }
 force_open() { _lm_stub bashbasicsbyvk_run.sh force_open "$@"; }
 force_share() { _lm_stub bashbasicsbyvk_run.sh force_share "$@"; }
 _rf_go() { _lm_stub bashbasicsbyvk_run.sh _rf_go "$@"; }
+_rf_build_run() { _lm_stub bashbasicsbyvk_run.sh _rf_build_run "$@"; }
 run_file() { _lm_stub bashbasicsbyvk_run.sh run_file "$@"; }
 _bc_can_draw() { _lm_stub bashbasicsbyvk_choose.sh _bc_can_draw "$@"; }
 _bc_build() { _lm_stub bashbasicsbyvk_choose.sh _bc_build "$@"; }

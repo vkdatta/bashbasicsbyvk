@@ -1,0 +1,86 @@
+1. ISSUE IN BRIEF
+run_file read the first line of any file into a bash variable, so a binary printed 'ignored null byte in input' when the person answered No to the executable prompt; and a No on an executable binary then copied it to Download and tried to open it in another app.
+
+1. HOW DID YOU DEBUG
+Read the first line of the file and the run flow in run.sh, reproduced the warning with a binary, and followed the fall-through to the `*)` branch (force_open).
+
+1. CAUSE
+`firstline=$(head -n1 file)` on a binary with NUL bytes and a missing text check; the `*)` branch opened anything that was not text.
+
+1. FIX
+New _rf_shebang reads at most 256 bytes and drops NUL and CR; new _rf_is_text (MIME, else grep -I); a refused executable that is not text now prints 'Not run.'
+
+2. ISSUE IN BRIEF
+Shebangs with env (#!/usr/bin/env python3, env -S, env NAME=value) ran 'env file'; CRLF shebangs named an interpreter with a trailing carriage return.
+
+2. HOW DID YOU DEBUG
+Traced the awk/basename parse of the shebang line and ran it by hand on the env and CRLF forms.
+
+2. CAUSE
+The interpreter was taken as the first word, which is env, and CR was never stripped.
+
+2. FIX
+_rf_shebang skips env, its options and NAME=value words and keeps the interpreter's own arguments; run_file passes them to _rf_go.
+
+3. ISSUE IN BRIEF
+run_file launched a bare file name from PATH instead of the current folder, and a file whose whole name was an extension word (a file called py) ran as that language.
+
+3. HOW DID YOU DEBUG
+Read how $file reaches _rf_go and how ext was cut with ${file##*.}.
+
+3. CAUSE
+No ./ prefix on a name without a slash; ${file##*.} returns the whole name when there is no dot; extensions were case sensitive.
+
+3. FIX
+run_file prefixes ./ to a bare name, takes ext only from a name that has a dot, lowercases it.
+
+4. ISSUE IN BRIEF
+dart ran the script twice when it exited non-zero, and .kts scripts were compiled to a jar like .kt files.
+
+4. HOW DID YOU DEBUG
+Read the dart and kt|kts|kotlin branches.
+
+4. CAUSE
+`dart file || dart run file` reruns on any failure; .kts shares the compile branch.
+
+4. FIX
+dart uses one `dart run`; .kts runs `kotlinc -script`.
+
+5. ISSUE IN BRIEF
+force_share built invalid commands (termux-share -c file, am --stream, a string STREAM extra) and a failed share popped a second share sheet; force_open reported success when am failed.
+
+5. HOW DID YOU DEBUG
+Read the termux-share and am usage in force_share / force_open against their options.
+
+5. CAUSE
+-c wants a MIME type, am has no --stream (a URI extra is --eu), the fallback call repeated the share, return 0 after a failed am.
+
+5. FIX
+One termux-share -a send call; am SEND with --eu android.intent.extra.STREAM and --grant-read-uri-permission; failures return 1. MIME lookup shared in _rf_mime.
+
+6. ISSUE IN BRIEF
+handle_file spun forever on 'invalid' when stdin closed; nano had no fallback; run_file ignored u/q on its yes/no questions; action, yn, classname, tmp, out and mimetype leaked as globals.
+
+6. HOW DID YOU DEBUG
+Read the read loop, the _bvk_yn contract in choose.sh (returns 1 on back-out) and the variable scopes.
+
+6. CAUSE
+`read` failure left action empty so the loop never ended; _bvk_yn's return value was not checked.
+
+6. FIX
+read ... || return 1; nano falls back to $EDITOR / vi; _bvk_yn ... || return 0; locals added.
+
+7. ISSUE IN BRIEF
+The compile-and-run branches (c, c++, rust, swift, haskell) each built a temp binary by hand, and two copies existed of the MIME lookup and the 'less or cat' pager choice.
+
+7. HOW DID YOU DEBUG
+Compared the branches side by side; checked tests/smartload.sh, which requires every launch to go through _rf_go.
+
+7. CAUSE
+Copied blocks that drifted: the status of rm was returned instead of the program's, $RANDOM temp names, no check that the temp file could be made.
+
+7. FIX
+_rf_build_run (mktemp, chmod, _rf_go, always rm, returns the program's status), _rf_mime, _rf_page. Shared copies in Download get a random part when a name collides, and a missing or read-only Download is reported.
+
+TESTS AND CHECKS (applies to every issue above)
+Ran `bash tests/run.sh for` the run.sh file: smartload, archive, lint_waits, nav_back, rename_screen and loadmap pass (loadmap after regenerating the stubs with bashbasicsbyvk_loadmap_gen --write: the new _rf_* helpers changed the stub list). mouse, hints, settings_desc, delete_confirm and choose_plain are red, and are red the same way on the untouched project, so they are not from this change. Behaviour of _rf_shebang, run_file (env / CRLF shebang, bare name, upper-case extension, dart, kts, binary with No) and the Download collision was checked with a small stub script, not with a device: termux-share, termux-open and am were verified by reading only. No test for run_file's prompts exists yet.
