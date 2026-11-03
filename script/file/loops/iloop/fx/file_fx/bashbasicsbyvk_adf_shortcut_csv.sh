@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_shortcut_csv.sh
-# adf-staging='file_fx/shortcut/shortcut.select.items.csv'
+# adf-staging='file/shortcut/shortcut.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — shortcut.select.items.csv
 #  CSV-driven shortcut: col1 = filename or absolute path.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_delete_common.sh
-# Shared helpers for the file_fx/delete/* ADF functions.
+# Shared helpers for the file/delete/* ADF functions.
 # (No registration here — this file only defines helpers.)
 #
 # Reuses from organise: _batch_stat, _ts_to_ymd

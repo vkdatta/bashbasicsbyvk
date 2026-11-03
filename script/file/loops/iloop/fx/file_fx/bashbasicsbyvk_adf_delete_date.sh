@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_delete_date.sh
-# adf-staging='file_fx/delete/delete.by.date'
+# adf-staging='file/delete/delete.by.date'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — delete.by.date
 #  Group the current folder's files by day / month / year / decade (file

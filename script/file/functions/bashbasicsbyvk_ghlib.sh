@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bashbasicsbyvk_ghlib.sh — the GitHub helpers that the upgrade loop (-u) and GitHub (fx → github_fx → open github) SHARE.
+# bashbasicsbyvk_ghlib.sh — the GitHub helpers that the upgrade loop (-u) and GitHub (fx → github → open github) SHARE.
 # ════════════════════════════════════════════════════════════════════════════
 #  Before this file the upgrade loop carried its own copy of each of these; now there is one:
 #

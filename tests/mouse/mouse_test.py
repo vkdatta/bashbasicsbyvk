@@ -285,7 +285,7 @@ def tab_click(a, label):                         # tap the middle of a tab label
     a.wait(lambda: cur_tab(a) == label, 6)       # a condition, not a guessed time: the app is silent while it loads the tab (no bar output to wait on)
     a.settle(0.3)                                # ...and the rest of the screen is painted: the next tap must see the final layout
 def cur_tab(a):
-    m = re.search(r'\[([^\]]+)\]', ''.join(l for l in a.lines() if 'tabs' in l or 'switch tab' in l))
+    m = re.search(r'\[([^\]]+)\]', ''.join(l for l in a.lines() if 'tabs' in l or 'switch tab' in l or ('🪄 ADF' in l and '🎃 UDF' in l)))
     return m.group(1) if m else None
 def t_sw_tabs(a):
     a.send(b'sw\r', 2.0)
@@ -298,8 +298,8 @@ def t_sw_tabs(a):
 case('sw: tap a tab -> that tab (also two steps in one tap)', t_sw_tabs, nfiles=20)
 def t_fx_tabs(a):
     a.send(b'fx\r', 2.0)
-    tab_click(a, '👤 UDF'); ok1 = cur_tab(a) == '👤 UDF'
-    tab_click(a, '🛠️  ADF'); ok2 = cur_tab(a) == '🛠️  ADF'
+    tab_click(a, '🎃 UDF'); ok1 = cur_tab(a) == '🎃 UDF'
+    tab_click(a, '🪄 ADF'); ok2 = cur_tab(a) == '🪄 ADF'
     return ok1 and ok2 and a.alive, 'fx tabs: %s %s (now %r)' % (ok1, ok2, cur_tab(a))
 case('fx: tap a tab -> that tab', t_fx_tabs, nfiles=20)
 def t_rules_tabs(a):

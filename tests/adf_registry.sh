@@ -2,7 +2,7 @@
 # ADF registry drift: what an ADF file registers, what the import file loads, and what the functions are.   bash tests/adf_registry.sh
 # (1) every file that registers an ADF function is listed in the load mapper (no exceptions: a dead adf file is deleted, not listed)
 # (2) every adf file the load mapper lists exists
-# (3) a file_fx action is registered with _fx_adf_register_fx (its tree path comes from the label), never with a typed file_fx/ path
+# (3) a file action is registered with _fx_adf_register_fx (its tree path comes from the label), never with a typed file/ path
 # (4) every registered function name is defined
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; S="$ROOT/script"
@@ -22,8 +22,8 @@ for b in $(grep -hoE 'bashbasicsbyvk_adf_[A-Za-z0-9_]+\.sh' "$S"/file/loadmap/ba
 done
 [ -z "$gone" ] && ok "every adf file the load mapper lists exists" || bad "the load mapper lists adf files that do not exist: $gone"
 
-typed="$(grep -rnE '^_fx_adf_register +"[^"]+" +"[^"]+" +"file_fx/' "$S" --include='*.sh' | head -3)"
-[ -z "$typed" ] && ok "no file_fx action types its own tree path (_fx_adf_register_fx derives it)" || bad "typed file_fx path, use _fx_adf_register_fx: $typed"
+typed="$(grep -rnE '^_fx_adf_register +"[^"]+" +"[^"]+" +"file/' "$S" --include='*.sh' | head -3)"
+[ -z "$typed" ] && ok "no file action types its own tree path (_fx_adf_register_fx derives it)" || bad "typed file path, use _fx_adf_register_fx: $typed"
 
 undef=""
 while IFS= read -r fn; do

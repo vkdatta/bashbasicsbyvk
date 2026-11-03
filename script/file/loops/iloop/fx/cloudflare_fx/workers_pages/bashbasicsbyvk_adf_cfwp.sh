@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_cfwp.sh
-# adf-staging='cloudflare_fx/workers and pages'
+# adf-staging='cloudflare/workers and pages'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — cloudflare workers and pages      (the ONE button; the work lives in bashbasicsbyvk_cfwp_* + bashbasicsbyvk_recover_*)
 #
-#  fx → cloudflare_fx → workers and pages  does, in the folder the navigator is showing (the "navigation path"):
+#  fx → cloudflare → workers and pages  does, in the folder the navigator is showing (the "navigation path"):
 #    1. finds CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID in that folder (.dev.vars, .env, …) — asks only if missing
 #    2. lists EVERY Worker and EVERY Pages project of the account:  name · type · latest deployment
 #       (deployment time is shown in the app timezone: Settings → Timezone)
@@ -160,4 +160,4 @@ _fx_adf_cfwp() {
   _xui_leave
   _cfw_forget
 }
-_fx_adf_register "cloudflare workers and pages" "_fx_adf_cfwp" "cloudflare_fx/workers and pages"
+_fx_adf_register "cloudflare workers and pages" "_fx_adf_cfwp" "cloudflare/workers and pages"

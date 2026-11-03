@@ -161,7 +161,7 @@ So before you create anything, work in this order:
      (`script/file/engine/bashbasicsbyvk_menuchrome.sh`). It is never written `key:Label`, in any spelling. A key that really means something else gets a NAMED variant in the same
      table (`u.up` = `u) Up`, `u.prefix`); the part after the dot is only a name. Menu-specific keys (`bk:Close`, `n:New profile`) stay `key:Label`. `tests/cmd_drift.sh` fails on a retyped
      generic label, on an undefined variant, and on a footer key no command map wires. There is no exceptions list: a new meaning is a new table entry.
-   - **ADF actions.** A `file_fx` action registers with `_fx_adf_register_fx LABEL FN` (the tree path comes from the label), never with a typed `file_fx/...` path. `tests/adf_registry.sh`.
+   - **ADF actions.** A `file` action registers with `_fx_adf_register_fx LABEL FN` (the tree path comes from the label), never with a typed `file/...` path. `tests/adf_registry.sh`.
    - **The command reference.** `o --map-doc` prints it from `cmd_def`; `llms-full.txt` section 9 holds the pasted copy between `cmd-ref:start` / `cmd-ref:end`.
      After adding or changing a command run `bash tests/cmd_docs.sh --write`. `tests/cmd_docs.sh`.
    - **The CPU-to-binary mapping** (`uname -m` -> arm64 / amd64 / arm / 386; android / linux / darwin / freebsd) lives only in `_bvk_engine_target` (`engine/bashbasicsbyvk_engine_target.sh`). `setup.py` asks that function (it runs it with bash) to decide which binaries a wheel carries; it never repeats the table. `tests/engine_target.sh`, `tests/wheel_target.sh`.
@@ -169,7 +169,7 @@ So before you create anything, work in this order:
 10. **No dead files.** A file that nothing loads (not in the load mapper, rule 13, and not run as a process) is deleted, not left "untouched" or listed as legacy: `tests/adf_registry.sh` has no allowlist, and a test with an exceptions list is where drift hides.
     A file that another file depends on loads that dependency itself or degrades without it (`settings_ui.sh` works without `settings_desc.sh`: stand-alone callers and tests source it alone).
 
-11. **GitHub talks through ONE engine and ONE helper file.** (`fx → github_fx → open github`, and the `-u` upgrade loop.)
+11. **GitHub talks through ONE engine and ONE helper file.** (`fx → github → open github`, and the `-u` upgrade loop.)
     - All GitHub API / git work lives in `script/file/loops/iloop/fx/github_fx/gh/bashbasicsbyvk_github` (python); the screens in `.../open_github/bashbasicsbyvk_adf_github.sh` only ask and show.
       Parsing releases / tags / commits, tag order and body printing live in `script/file/functions/bashbasicsbyvk_ghlib.sh`, shared by the GitHub screens and `bashbasicsbyvk_upgrade.sh`: never parse the GitHub JSON a second time.
     - The GitHub screens follow rules 6-9 like every other screen: no hand-wired loading bar (a `git clone` that prints its own progress is wrapped in `_sl_hold` / `_sl_release`), bare generic footer keys (`rf`, `u`), `-d none` on every delete question.

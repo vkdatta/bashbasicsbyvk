@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_zip_csv.sh
-# adf-staging='file_fx/zip/zip.select.items.csv'
+# adf-staging='file/zip/zip.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — zip.select.items.csv
 #  CSV-driven compress (same as z-): col1 = filename or absolute path.

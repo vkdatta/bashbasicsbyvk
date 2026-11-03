@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_gdrive.sh
-# adf-staging='google_drive_fx/open google drive'
+# adf-staging='google_drive/open google drive'
 # ════════════════════════════════════════════════════════════════════════════
-#  ADF — google_drive_fx → open google drive
+#  ADF — google_drive → open google drive
 #
 #  Shows the rclone profiles (remotes of type "drive") and opens the one you pick as the main screen:
 #  your files in Google Drive, listed like a local folder, with every native command working on them.
@@ -91,4 +91,4 @@ _fx_adf_gdrive() {
 
 gdrive_profiles_menu() { _fx_adf_gdrive; }
 
-_fx_adf_register "open google drive" "_fx_adf_gdrive" "google_drive_fx/open google drive"
+_fx_adf_register "open google drive" "_fx_adf_gdrive" "google_drive/open google drive"

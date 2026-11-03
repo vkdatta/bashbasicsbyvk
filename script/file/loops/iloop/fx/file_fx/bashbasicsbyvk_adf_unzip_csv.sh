@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_unzip_csv.sh
-# adf-staging='file_fx/unzip/unzip.select.items.csv'
+# adf-staging='file/unzip/unzip.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — unzip.select.items.csv
 #  CSV-driven extract (same as uz-): col1 = archive name or absolute path

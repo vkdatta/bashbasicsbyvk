@@ -450,6 +450,12 @@ Pending FileAPI actions|saved	Files you were saving online that did not finish. 
 Pending FileAPI actions|snapshot	Snapshots that were being taken in the background and were interrupted. Open it to continue one or to see what is still waiting.
 Pending FileAPI actions|all	Restarts every job on this computer that was interrupted, one after the other, so you do not have to open each group. It only resumes work you already started; it never starts new work and never deletes anything.
 Pending FileAPI actions|refresh	Asks the online server again which jobs are waiting and updates the numbers on this screen. Use it when the list looks out of date, for example after you finished something on another device.
+Functions|adf	Built-in tools. Open a folder, pick a function to run it here.
+Functions|adf:file	Work on files and folders: copy, move, zip, delete, upload.
+Functions|adf:github	Your GitHub repositories, releases and tags.
+Functions|adf:cloudflare	Cloudflare Workers and Pages: list and recover projects.
+Functions|adf:google_drive	Open a Google Drive here as a normal folder.
+Functions|udf	Your own scripts from the execute folder. Pick one to run it here.
 BVK_DESC_EOF
 }
 

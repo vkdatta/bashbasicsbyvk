@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_upload_text_csv.sh
-# adf-staging='file_fx/upload/upload.text.select.items.csv'
+# adf-staging='file/upload/upload.text.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — upload.text.select.items.csv
 #  CSV-driven merged-text upload (same as c2c-): the listed files are merged

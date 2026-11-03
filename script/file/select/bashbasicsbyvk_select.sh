@@ -187,7 +187,7 @@ LOGIC  space or &  = AND      |  = OR      !  = NOT      ( )  groups
  -r  at the end = search subfolders
 AFTER  .s.add EXPR  .s.sub EXPR  .s.show  .s.clr  .s.shown
        then fx → <action>/<action>.selected.items  (copy move shortcut bookmark
-       upload upload.text map zip unzip delete);  file_fx/selection = view only
+       upload upload.text map zip unzip delete);  file/selection = view only
 RULES  .r  opens the rule book:  c create · d delete · r rename · e-N edit · ←/→ tab "last used"
        .s.rule NAME runs a select rule (rules/select)
 DISPLAY  .d <same expressions>   .d.clr   .d.save   .d.run   (see .d)

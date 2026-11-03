@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_delete_ext.sh
-# adf-staging='file_fx/delete/delete.by.extension'
+# adf-staging='file/delete/delete.by.extension'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — delete.by.extension
 #  Lists the extensions found in the current folder (with counts). Pick one

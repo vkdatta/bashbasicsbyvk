@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_selection.sh
-# adf-staging='file_fx/selection/selection.view'
+# adf-staging='file/selection/selection.view'
 # ════════════════════════════════════════════════════════════════════════════
-#  ADF — selection.view   (the only entry in file_fx/selection/)
+#  ADF — selection.view   (the only entry in file/selection/)
 #
 #  Shows the items chosen with the  .s  commands.  Every ACTION on those items
 #  lives in its own folder as  <action>.selected.items , next to the CSV
 #  variant  <action>.select.items.csv  — e.g.
-#     file_fx/copy/copy.selected.items      file_fx/zip/zip.selected.items
-#     file_fx/upload/upload.selected.items  file_fx/delete/delete.selected.items
+#     file/copy/copy.selected.items      file/zip/zip.selected.items
+#     file/upload/upload.selected.items  file/delete/delete.selected.items
 #  (see bashbasicsbyvk_adf_selected.sh).  Clear the selection with  .s.clr
 #
 #  Also defines the helpers shared by the *.selected.items functions.

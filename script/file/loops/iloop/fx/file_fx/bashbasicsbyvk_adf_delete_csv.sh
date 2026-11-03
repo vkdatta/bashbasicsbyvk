@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_delete_csv.sh
-# adf-staging='file_fx/delete/delete.select.items.csv'
+# adf-staging='file/delete/delete.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — delete.select.items.csv
 #  CSV-driven delete: col1 = filename or absolute path. Shows a count + preview,

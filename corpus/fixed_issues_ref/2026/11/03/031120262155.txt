@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+The Functions screen (ADF and UDF tabs) had a different header and footer from the other menus, showed the old tab icons, and its Admin Defined folders carried an _fx suffix (file_fx, github_fx, cloudflare_fx, google_drive_fx). Wanted: a title, a tab row with the active tab in brackets, a one-line description, an "X out of N here, T total" line, an "ADF path:" / "UDF path:" line, and one shared footer (u up, q quit, h home, cc cheat codes); the folder names without the suffix.
+
+1. HOW DID YOU DEBUG
+Read functions_menu, _fx_menu_header, the two footer functions and the registry in bashbasicsbyvk_functions.sh; read _mc_footer / _MC_KEYLABEL (menuchrome) and the Settings description table (_st_desc_load, key Title|tag); checked that h and cc are already wired in bashbasicsbyvk_fx.map. Rendered the new header and footer for the ADF root, an ADF sub-folder and the UDF tab with stubbed viewport helpers. The full app was not driven by hand; the test tier is reported in the delivery status line.
+
+1. CAUSE
+Header and footers were written per tab with their own wording; tab names were typed in three places (register, label, tests); the folder names were typed as file_fx/ github_fx/ cloudflare_fx/ google_drive_fx/ in the registry call, adf-staging comments and messages.
+
+1. FIX
+bashbasicsbyvk_functions.sh: tab names in one pair of variables (_FX_TAB_ADF, _FX_TAB_UDF, 🪄 and 🎃) used by _bvk_tabs_register and _fx_tab_label; new _fx_desc_line (one line, cut with an ellipsis, text from the Settings description table: keys Functions|adf, Functions|adf:<folder path>, Functions|udf) and _fx_count_line (UDF total is counted once per list rebuild); _fx_menu_header rewritten; the two footer functions replaced by one _fx_menu_footer. bashbasicsbyvk_settings_desc.sh: six Functions| lines. Folder names: _fx suffix removed from every ADF tree path (_fx_adf_register_fx now registers file/<verb>/<label>; the three typed registrations, the adf-staging comments, user messages, README, AGENTS.md, tests/adf_registry.sh). On-disk directory names (fx/file_fx/ ...) were NOT renamed. tests/mouse/mouse_test.py: new tab labels, tab row found without the old "tabs" hint. Settings (s), Exit (fx), e-N, ux, ui left the footer but still work when typed. Lesson: a tab name that a test or the mouse reads lives in one variable.

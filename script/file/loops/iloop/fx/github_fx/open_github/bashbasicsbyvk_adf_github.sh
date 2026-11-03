@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_github.sh
-# adf-staging='github_fx/open github'
+# adf-staging='github/open github'
 # ════════════════════════════════════════════════════════════════════════════
-#  ADF — github_fx → open github        (the screens; the work lives in bashbasicsbyvk_github, helpers in bashbasicsbyvk_ghlib.sh)
+#  ADF — github → open github        (the screens; the work lives in bashbasicsbyvk_github, helpers in bashbasicsbyvk_ghlib.sh)
 #
-#  fx → github_fx → open github
+#  fx → github → open github
 #    1. finds your GitHub key on this machine (environment, ~/.bashrc and the secrets files it sources, gh CLI, git-credentials,
 #       netrc). None found → says so and tells you to put  export GITHUB_TOKEN="..."  in ~/.bashrc (or the secrets file it sources).
 #    2. shows ALL your repos.  Pick one → two tabs, like the upgrade loop:   📦 Stable   🔖 Tags      (←/→)
@@ -474,4 +474,4 @@ _fx_adf_github() {
   unset BVK_GH_PICK
 }
 
-_fx_adf_register "open github" "_fx_adf_github" "github_fx/open github"
+_fx_adf_register "open github" "_fx_adf_github" "github/open github"

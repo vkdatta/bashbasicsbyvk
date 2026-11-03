@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The GitHub screens in the REAL app (pty) against the local mock GitHub (no network).   python3 tests/github/ui_test.py
-fx -> github_fx -> open github: no key message · repos · Stable / Tags tabs · info · rename (conflict refused, then done) ·
+fx -> github -> open github: no key message · repos · Stable / Tags tabs · info · rename (conflict refused, then done) ·
 bulk edit · delete · download with depth.  Every step waits for what it needs on screen (AGENTS: no sleeps)."""
 import os, subprocess, sys, shutil
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))

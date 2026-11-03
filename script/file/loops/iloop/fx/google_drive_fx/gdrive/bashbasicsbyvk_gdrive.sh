@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_gdrive.sh — Google Drive inside the file manager (the session layer)
 # ════════════════════════════════════════════════════════════════════════════
-#  fx → google_drive_fx → open google drive   picks an rclone profile and opens it here.
+#  fx → google_drive → open google drive   picks an rclone profile and opens it here.
 #
 #  While a Drive is open the main screen shows it exactly like a local folder:
 #    • the Drive is mirrored into  ~/.bashbasicsbyvk/gdrive/<profile>/tree/
@@ -575,7 +575,7 @@ handle_gd_cmd() {
   local c="${1,,}" a
   c="${c%% *}"
   if [ "$_GD_ACTIVE" != 1 ]; then
-    echo "📜  No Google Drive is open — fx → google_drive_fx → open google drive"
+    echo "📜  No Google Drive is open — fx → google_drive → open google drive"
     return 0
   fi
   case "$c" in

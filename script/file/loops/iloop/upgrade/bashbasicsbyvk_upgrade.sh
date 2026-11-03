@@ -24,7 +24,7 @@
 #  Env:  BVK_UPG_REPO=owner/name   (default vkdatta/bashbasicsbyvk)
 #        BVK_UPG_MAX=40            how many versions per tab
 #
-#  Shared with the GitHub screens (fx → github_fx → open github): bashbasicsbyvk_ghlib.sh (parsing, tag order, body printing).
+#  Shared with the GitHub screens (fx → github → open github): bashbasicsbyvk_ghlib.sh (parsing, tag order, body printing).
 #
 #  Uses (from the main app): _vp_* viewport, _read_choice_filtered, _inner_run,
 #  _filter_reset_state, _bvk_quit, handle_staging_map

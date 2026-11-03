@@ -4,8 +4,8 @@
 #  FUNCTIONS (fx) — two-tab overlay inside the main file-manager loop
 #
 #  Tabs (← / → to cycle when input is empty):
-#    🛠️  ADF  Admin-Defined Functions  — built-in power tools
-#    👤  UDF  User-Defined Functions   — ~/.bashbasicsbyvk/execute/  scripts
+#    🪄  ADF  Admin-Defined Functions  — built-in power tools
+#    🎃  UDF  User-Defined Functions   — ~/.bashbasicsbyvk/execute/  scripts
 #
 #  All functions execute in the CURRENT path ($path) unless a function
 #  internally defines its own target path.
@@ -70,9 +70,9 @@ _fx_adf_register() {
   _fx_adf_names+=("$leaf")
 }
 
-# _fx_adf_register_fx "verb.what.ever" function_name — a file_fx/ action: its place in the tree is
-# file_fx/<first word of the label>/<label>, so the path can never disagree with the label.
-_fx_adf_register_fx() { _fx_adf_register "$1" "$2" "file_fx/${1%%.*}/$1"; }
+# _fx_adf_register_fx "verb.what.ever" function_name — a file/ action: its place in the tree is
+# file/<first word of the label>/<label>, so the path can never disagree with the label.
+_fx_adf_register_fx() { _fx_adf_register "$1" "$2" "file/${1%%.*}/$1"; }
 
 # ── ADF tree helpers ──────────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ _fx_adf_list_subfolders() {
     local child=""
     if [ -z "$cur" ]; then
       [ -z "$folder" ] && continue          # this fn is at root, no sub-folder
-      child="${folder%%/*}"                 # first path segment (e.g. "file_fx" from "file_fx/copy")
+      child="${folder%%/*}"                 # first path segment (e.g. "file" from "file/copy")
     else
       [[ "$folder" != "$cur/"* ]] && continue
       local rest="${folder#$cur/}"
@@ -163,28 +163,64 @@ _fx_tab_next() {
 # only two tabs, so "previous" is the same flip as "next"
 _fx_tab_prev() { _fx_tab_next; }
 
-_bvk_tabs_register "🛠️  ADF" "👤 UDF"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
+# Tab names live here once: the tab bar, the tap targets and the header all read them.
+_FX_TAB_ADF="🪄 ADF"; _FX_TAB_UDF="🎃 UDF"
+_bvk_tabs_register "$_FX_TAB_ADF" "$_FX_TAB_UDF"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
 _fx_tab_label() {
-  local ad="🛠️  ADF" ud="👤 UDF"
   case "$_fx_tab" in
-    adf) printf '[%s]   %s'  "$ad" "$ud" ;;
-    udf) printf ' %s  [%s]' "$ad" "$ud" ;;
+    adf) printf '[%s] %s'  "$_FX_TAB_ADF" "$_FX_TAB_UDF" ;;
+    udf) printf '%s [%s]' "$_FX_TAB_ADF" "$_FX_TAB_UDF" ;;
   esac
 }
 
 # ── Headers / footers ─────────────────────────────────────────────────────────
 
+# The plain-words line under the tabs. The text comes from the Settings description table
+# (bashbasicsbyvk_settings_desc.sh, the same table and format as every Settings screen):
+#   Functions|adf          the ADF root          Functions|adf:<folder path>   one ADF folder (the nearest parent wins)
+#   Functions|udf          the UDF tab
+# It is always ONE line (cut with …), so the header keeps one height while folders and tabs change.
+_fx_desc_line() {
+  local k txt="" cur
+  _st_desc_load 2>/dev/null
+  if [ "$_fx_tab" = "udf" ]; then
+    txt="${_ST_DESC[Functions|udf]:-}"
+  else
+    cur="$_fx_adf_cur_staging"
+    while [ -n "$cur" ]; do
+      k="Functions|adf:$cur"
+      [ -n "${_ST_DESC[$k]+x}" ] && { txt="${_ST_DESC[$k]}"; break; }
+      [[ "$cur" == */* ]] && cur="${cur%/*}" || cur=""
+    done
+    [ -z "$txt" ] && txt="${_ST_DESC[Functions|adf]:-}"
+  fi
+  _vp_usable
+  (( ${#txt} > _vp_usable_w )) && txt="${txt:0:_vp_usable_w-1}…"
+  printf '%s\n' "$txt"
+}
+
+# "X out of N here · T total": X shown now (after a filter), N in this folder, T everywhere (ADF: all functions; UDF: all scripts under execute/).
+_fx_count_line() {
+  local x="${#items[@]}" n="${#_all_items[@]}" t
+  (( n < x )) && n=$x
+  if [ "$_fx_tab" = "udf" ]; then t="${_fx_udf_total:-$n}"; else t="${#_fx_adf_labels[@]}"; fi
+  printf '%s out of %s here · %s total\n' "$x" "$n" "$t"
+}
+
 _fx_menu_header() {
   echo
-  printf '⚡ FUNCTIONS  %s   ←/→ tabs\n' "$(_fx_tab_label)"
+  printf '🎨 Functions\n\n'
+  printf '%s\n\n' "$(_fx_tab_label)"
+  _fx_desc_line
+  _fx_count_line
+  echo
   case "$_fx_tab" in
     adf)
-      printf '🛠️  ADF %s\n' "$(_fx_adf_breadcrumb)"
-      [ -n "$_fx_adf_cur_staging" ] && printf '  u) Up   (in: /%s)\n' "$_fx_adf_cur_staging"
+      printf '📂 ADF path: %s\n' "$(_fx_adf_breadcrumb)"
       ;;
     *)
       _bvk_src_tag_v
-      printf '📂 %s%s%s\n' "$path" "${group_prefix:+ [group: ${group_prefix^^}*]}" "$_bst_out"
+      printf '📂 UDF path: %s%s%s\n' "$path" "${group_prefix:+ [group: ${group_prefix^^}*]}" "$_bst_out"
       ;;
   esac
   _vp_filter_header_line
@@ -195,19 +231,10 @@ _fx_menu_header_imaginary() {
   echo "$_imag_banner"
 }
 
-_fx_menu_footer_adf() {
-  local total="${#_fx_adf_labels[@]}"
-  local here="${#items[@]}"
-  if [ -n "$_fx_adf_cur_staging" ]; then
-    _mc_footer "#[ADF — Admin Defined]  $here item(s) here  ($total total)" "#Select to open folder or run function" "u.up" "fx:Exit"
-  else
-    _mc_footer "#[ADF — Admin Defined]  $here item(s) here  ($total total)" "#Select to open folder or run function" "fx:Exit"
-  fi
-}
-
-_fx_menu_footer_udf() {
-  local -a _f=("#[UDF — User Defined]  Scripts in execute dir — run from current path" "u.up" "s:Settings" "fx:Exit" "|" "e-N:Edit item" "ux:Export all" "ui:Import all")
-  [ -n "$group_prefix" ] && _f+=("|" "u.prefix" "#Group prefix now: ${group_prefix^^}*")
+# One footer for both tabs: u up · q quit · h home · cc cheat codes. (Settings, Exit, e-N, ux, ui still work when typed; cc lists them.)
+_fx_menu_footer() {
+  local -a _f=("u.up" "q" "h:Home" "cc:Cheat codes")
+  [ "$_fx_tab" = "udf" ] && [ -n "$group_prefix" ] && _f+=("|" "u.prefix" "#Group prefix now: ${group_prefix^^}*")
   _mc_footer "${_f[@]}"
 }
 
@@ -229,11 +256,11 @@ _fx_set_viewport_for_tab() {
   local ftr
   case "$_fx_tab" in
     adf)
-      ftr=_fx_menu_footer_adf
+      ftr=_fx_menu_footer
       _vp_rowtext_fn=_fx_adf_rowtext   # bypass file-path displayer for ADF items
       ;;
     udf)
-      ftr=_fx_menu_footer_udf
+      ftr=_fx_menu_footer
       _vp_rowtext_fn=                   # clear so UDF uses the normal _item_line_text path
       ;;
   esac
@@ -275,6 +302,8 @@ _fx_build_items_for_tab() {
 
     udf)
       _bvk_build_path_items
+      _fx_udf_total=$(find "$_FX_EXEC_DIR" -type f 2>/dev/null | wc -l)   # once per rebuild, not per repaint
+      _fx_udf_total=${_fx_udf_total//[[:space:]]/}
       ;;
   esac
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_bookmark_csv.sh
-# adf-staging='file_fx/bookmark/bookmark.select.items.csv'
+# adf-staging='file/bookmark/bookmark.select.items.csv'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — bookmark.select.items.csv
 #  CSV-driven bookmark: col1 = filename or absolute path.
