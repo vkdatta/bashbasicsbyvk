@@ -75,8 +75,6 @@ bashbasicsbyvk_rules.sh|||.r rule book
 bashbasicsbyvk_daemon_cmd.sh|||.dm daemon commands
 bashbasicsbyvk_telemetry.sh|||the daily usage ping: started after the first paint (@call below)
 bashbasicsbyvk_switch.sh|||sw: recents and bookmarks
-bashbasicsbyvk_firstscreen.sh|||saves the finished screen of a folder so the next start of o shows it at once (@call below)
-@call _fs_save | first screen: save the screen just drawn (the later screens are saved by the main loop of o)
 @call _bvk_telemetry_start | usage ping: after the first paint (it was a start-up step before)
 @call _snap_daemon_start | snapshot daemon: after the first paint
 

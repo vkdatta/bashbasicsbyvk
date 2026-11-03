@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+The first-screen cache (BB-011120261900-4: o painted the last saved screen of the folder before the real first paint and replaced it) made the screen flicker at start, which the owner did not want, so it was removed.
+
+HOW DID YOU DEBUG
+The owner reported visible flicker with the preview. Checked every place the feature touched by grep (o, viewport.sh _vp_emit, engine_heal.sh, the load map list and stubs, tests.list, covers.map, the firstscreen test and library) and confirmed none is left. Ran loadmap_gen --check, the corpus check, tests/startup_spawns.sh, cell_width.sh and the fast tier. Not run on a device.
+
+CAUSE
+Design, not a coding slip: showing a saved screen and then erasing and redrawing it is two paints of the same screen; whenever the real screen differs in any cell (a changed hint row, selection, size of a file, a setting) the person sees the change, and terminals without synchronized output (?2026) show the erase before the redraw.
+
+FIX
+Removed _fs_replay, _pp_drop and the size seed from script/o, the one-write erase from viewport.sh _vp_emit, the _pp_drop call from engine_heal.sh, bashbasicsbyvk_firstscreen.sh and its load map line and @call (stubs regenerated), tests/firstscreen.sh and its tests.list / covers.map lines. Kept: every real speed-up (no-process start-up steps, engine probe cache, _bvk_pathfind, the stale temp folder fix, the faster _vp_cells). _vp_probe_ttl stays as a plain 0.3 s constant. Old files ~/.bashbasicsbyvk/firstscreen/ are no longer read and can be deleted. Lesson: a speed-up that changes what the person sees (a preview) needs their approval of the look, not only a test of the result.

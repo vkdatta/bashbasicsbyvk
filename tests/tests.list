@@ -31,7 +31,6 @@ buffer_sets|fast|40|bash tests/buffer_sets.sh|
 adf_registry|fast|20|bash tests/adf_registry.sh|
 cmd_docs|fast|30|bash tests/cmd_docs.sh|
 engine_target|fast|20|bash tests/engine_target.sh|
-firstscreen|fast|90|bash tests/firstscreen.sh|tmux
 startup_spawns|fast|30|bash tests/startup_spawns.sh|
 cell_width|fast|20|bash tests/cell_width.sh|
 wheel_target|fast|120|bash tests/wheel_target.sh|python3

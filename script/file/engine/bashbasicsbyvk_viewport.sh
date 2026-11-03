@@ -23,7 +23,7 @@ _vp_read_size() {
 }
 
 _vp_probe_t=0
-_vp_probe_ttl=300000        # µs a probe is reused; o raises it for the first paint when the preview just asked for the size
+_vp_probe_ttl=300000        # µs a probe is reused
 _vp_probe_size() {
   # stty is a process (~25 ms on a phone) and one paint asks for the size 3-4 times: a probe younger than 0.3 s is reused.
   # A resize (_vp_on_resize, the WINCH trap) clears the stamp, so the next probe is always live. No EPOCHREALTIME (bash < 5): probe every time.
@@ -758,12 +758,7 @@ _vp_emit() {
   if (( ${_vp_hint_row:-0} )); then local _hn; for (( _hn=0; _hn<${_vp_hint_n:-1}; _hn++ )); do _vp_el ""; done; _hint_cur="?"; fi   # the rows were just redrawn blank: the next sync repaints the suggestion
 
   # frame is complete — one write; ?2026 = synchronized output (terminals that lack it ignore it)
-  local _ppq=""
-  if [ -n "${_BVK_PP_H:-}" ]; then           # the preview of o (first screen): erased in the SAME write as the real frame, so nothing blinks
-    (( _BVK_PP_H > 1 )) && printf -v _ppq '\033[%dA' "$(( _BVK_PP_H - 1 ))"
-    _ppq=$'\033[?2026h'"$_ppq"$'\r\033[J'; _BVK_PP_H=""
-  fi
-  builtin printf '%s\033[?2026h%s\033[?2026l' "$_ppq" "$_vp_frame"
+  builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
   _BVK_SCR_RAW="$_vp_frame"; _BVK_SCR_EXTRA=""      # print: remember what was just drawn
   _vp_frame=""
   _set_available_above "$_blk_h"

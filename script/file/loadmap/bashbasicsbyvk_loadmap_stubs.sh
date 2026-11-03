@@ -546,7 +546,6 @@ _sw_recents_handle_selection() { _lm_stub bashbasicsbyvk_switch.sh _sw_recents_h
 _sw_tab_redraw() { _lm_stub bashbasicsbyvk_switch.sh _sw_tab_redraw "$@"; }
 _sw_perform_switch() { _lm_stub bashbasicsbyvk_switch.sh _sw_perform_switch "$@"; }
 switch_menu() { _lm_stub bashbasicsbyvk_switch.sh switch_menu "$@"; }
-_fs_save() { _lm_stub bashbasicsbyvk_firstscreen.sh _fs_save "$@"; }
 _svc_say() { _lm_stub bashbasicsbyvk_staging_svc.sh _svc_say "$@"; }
 _svc_upload() { _lm_stub bashbasicsbyvk_staging_svc.sh _svc_upload "$@"; }
 _svc_vault_key() { _lm_stub bashbasicsbyvk_staging_svc.sh _svc_vault_key "$@"; }
