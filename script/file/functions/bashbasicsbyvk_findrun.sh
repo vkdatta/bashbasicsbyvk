@@ -121,8 +121,8 @@ _fr_show() {
 # _fr_notes — one-line warnings the person must not miss (things that were skipped / failed)
 _fr_notes() {
   local n
-  n="${_FRS[skipped_binary]:-0}";  [ "$n" -gt 0 ] && echo "ℹ️  $n binary file(s) skipped (Settings → Find & replace → Binary files)"
-  n="${_FRS[skipped_large]:-0}";   [ "$n" -gt 0 ] && echo "ℹ️  $n file(s) over the size limit skipped (Settings → Find & replace → Big files)"
+  n="${_FRS[skipped_binary]:-0}";  [ "$n" -gt 0 ] && echo "📜  $n binary file(s) skipped (Settings → Find & replace → Binary files)"
+  n="${_FRS[skipped_large]:-0}";   [ "$n" -gt 0 ] && echo "📜  $n file(s) over the size limit skipped (Settings → Find & replace → Big files)"
   n="${_FRS[content_errors]:-0}";  [ "$n" -gt 0 ] && echo "⚠️  $n file(s) could not be read or edited (listed above with the reason)"
   n="${_FRS[unreadable]:-0}";      [ "$n" -gt 0 ] && echo "⚠️  $n folder(s) could not be opened (permission?)"
   return 0

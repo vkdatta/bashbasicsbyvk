@@ -86,11 +86,11 @@ handle_info() {
   local rows; rows="$(_fi_scan "${sp_files[@]}")"
   _fi_build <<< "$rows"
   echo
-  echo "ℹ️  File info"
+  echo "📜  File info"
   printf '%s\n' "$_EB_TEXT"
   echo
   local _EB_HEAD _EB_SHEET="file info" _EB_NUMS="5,7,8,9,10" _EB_BOLDLAST=0
   printf -v _EB_HEAD 'No.\tName\tPath\tBinary bytes\tDecimal bytes\tHuman readable\tWord count\tCharacters (with spaces)\tCharacters (no spaces)\tTotal lines\tExtension\tDate created\tDate modified'
-  _eb_finish "File info" "ℹ️" "file_info" "i-"
+  _eb_finish "File info" "📜" "file_info" "i-"
   return 0
 }

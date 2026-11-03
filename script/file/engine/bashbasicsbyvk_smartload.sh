@@ -211,6 +211,8 @@ _sl_anim() {
       P) paused=1; builtin printf '%s\n' "$drawn" >&"$afd"; (( drawn )) && _sl_dbg "animator: bar stopped for a write / wipe"; drawn=0 ;;      # the foreground wipes the row when it is 1
     esac
     kill -0 "$parent" 2>/dev/null || break  # the app is gone: end too
+    # the app exec'd another program (a shell: rf, cd, q, a restart): same PID, so kill -0 still succeeds, but it is no longer our app and nobody will ever send D
+    if [ -n "$_SL_PCMD" ]; then local -a _pcm=(); builtin mapfile -d '' -t _pcm <"/proc/$parent/cmdline" 2>/dev/null; [ "${#_pcm[@]}" -gt 0 ] && [ "${_pcm[*]}" != "$_SL_PCMD" ] && break; fi
     (( armed && ! paused )) || continue
     now=${EPOCHREALTIME/[.,]/}
     if (( launch )); then

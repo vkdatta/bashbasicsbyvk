@@ -43,6 +43,7 @@ _bvk_engine_heal() {
     echo "✅ Reinstalled for $_want. Restarting..."
     rm -f "$_mark" 2>/dev/null
     export BVK_HEALED=1
+    declare -F _lt_cleanup >/dev/null 2>&1 && _lt_cleanup     # exec keeps the PID and skips the EXIT trap: end the loading-bar animator first
     exec "$_o" "$@"
   fi
   echo "❌ The reinstall did not finish. The app keeps running on its fallbacks; run  health  for details."

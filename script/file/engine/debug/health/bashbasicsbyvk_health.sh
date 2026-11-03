@@ -280,15 +280,43 @@ _bvk_lang_fr_resolve() {
   if _fr_engine; then if [ "$_FR_KIND" = c ]; then _LANG_FR=C; else _LANG_FR=Python; fi; else _LANG_FR=none; fi
 }
 
+# the matrix: one row per engine; cells say PRIMARY / FALLBACK, and CURRENT under the language that is running now
+_bvk_lang_rule() {                              # _bvk_lang_rule <left> <mid> <right>
+  local line="$1" i seg
+  printf -v seg '%*s' 16 ''; line+="${seg// /─}"
+  for i in 1 2 3 4 5; do printf -v seg '%*s' 9 ''; line+="$2${seg// /─}"; done
+  printf '%s%s\n' "$line" "$3"
+}
+_bvk_lang_row() {                               # _bvk_lang_row <label> <primary> <fallback> <current or empty>
+  local label="$1" pri="${2^^}" fb="${3^^}" cur="${4^^}" col l1 l2 a1="" a2=""
+  for col in C BASH PYTHON GO NODE; do
+    l1=""; l2=""
+    if [ "$col" = "$pri" ]; then l1=PRIMARY; elif [ "$col" = "$fb" ]; then l1=FALLBACK; fi
+    [ -n "$l1" ] && [ "$col" = "$cur" ] && l2=CURRENT
+    printf -v l1 ' %-8s' "$l1"; printf -v l2 ' %-8s' "$l2"
+    a1+="│$l1"; a2+="│$l2"
+  done
+  printf '│ %-15s%s│\n' "$label" "$a1"
+  printf '│ %-15s%s│\n' "" "$a2"
+}
+
 bvk_lang() {
   _bvk_lang_resolve
   _bvk_lang_fr_resolve
-  printf 'Drill Engine: %s\n' "$_LANG_DRILL"
-  printf 'FileAPI Engine: %s\n' "$_LANG_FA"
+  local _fr_cur="$_LANG_FR"; case "$_fr_cur" in none|unknown) _fr_cur="" ;; esac
+  printf '\n                       ENGINE LANGUAGE MATRIX\n\n'
+  _bvk_lang_rule '┌' '┬' '┐'
+  printf '│ %-15s│ %-8s│ %-8s│ %-8s│ %-8s│ %-8s│\n' "ENGINE" C BASH PYTHON GO NODE
+  _bvk_lang_rule '├' '┼' '┤'
+  _bvk_lang_row "DRILL"          C Python "$_LANG_DRILL"
+  _bvk_lang_rule '├' '┼' '┤'
+  _bvk_lang_row "FILEAPI"        Go Node  "$_LANG_FA"
+  _bvk_lang_rule '├' '┼' '┤'
+  _bvk_lang_row "FIND & REPLACE" C Python "$_fr_cur"
+  _bvk_lang_rule '└' '┴' '┘'
   case "$_LANG_FR" in
-    unknown) printf 'Find & Replace Engine: unknown (the find & replace files are not loaded in this shell)\n' ;;
-    none)    printf 'Find & Replace Engine: none\n' ;;
-    *)       printf 'Find & Replace Engine: %s\n' "$_LANG_FR" ;;
+    unknown) printf 'Find & Replace: unknown (the find & replace files are not loaded in this shell)\n' ;;
+    none)    printf 'Find & Replace: no engine is usable right now\n' ;;
   esac
   if [ "$_LANG_DRILL" = Python ]; then
     printf '   ↳ Drill is on Python: %s\n' "${_BVK_GO_WHY:-the C engine could not be used}"

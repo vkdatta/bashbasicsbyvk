@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+The rf command (Refresh) on the main list and in the sw / fx screens left a loading bar on screen that kept animating over the new shell and could not be closed. The same hole existed for any other path that exec's a new program from the app.
+
+1. HOW DID YOU DEBUG
+Read corpus index (smartload / loading bar entries) and bashbasicsbyvk_smartload.sh. handle_refresh (script/cmd/bashbasicsbyvk_refresh.sh) ends in `exec bash -l ...`; the other exec sites (o q/cd, sw cd, viewport exit) call _lt_cleanup first, which calls _sl_shutdown. Listed every exec in script/: engine_heal's restart `exec "$_o"` also skipped it. Verified by reading only; tests not run (deliver first).
+
+1. CAUSE
+exec keeps the PID and skips the EXIT trap, so _sl_shutdown never ran. The animator's only exit test is kill -0 on the app PID, which still succeeds after exec, and it was armed and never sent D, so it drew its bar forever (one more per refresh).
+
+1. FIX
+refresh.sh handle_refresh and engine_heal.sh now call _lt_cleanup before exec (same as the other exec sites). Safety net in smartload.sh _sl_anim: the animator also ends when /proc/<app>/cmdline no longer equals the command line recorded at start (_SL_PCMD), i.e. the app exec'd something else, so a future exec site that forgets the cleanup cannot leave an immortal bar. Lesson: every new `exec` of a shell/app must call _lt_cleanup first.
+
+2. ISSUE IN BRIEF
+The lang command printed three plain lines (Drill, FileAPI, Find & Replace engine). It now shows an ENGINE LANGUAGE MATRIX box: one row per engine, columns C / BASH / PYTHON / GO / NODE, PRIMARY or FALLBACK in the cell and CURRENT under the language running now.
+
+2. HOW DID YOU DEBUG
+Read bvk_lang and its resolvers in engine/debug/health/bashbasicsbyvk_health.sh; ran the new printer with stubbed resolvers for three engine states and checked the box alignment by eye.
+
+2. CAUSE
+Style change requested by the owner (prototype layout).
+
+2. FIX
+health.sh: bvk_lang redrawn through _bvk_lang_rule / _bvk_lang_row; a NODE column was added because FileAPI's fallback is Node. The reason lines (↳) and the health hint are unchanged. Unknown / none Find & Replace states print a note under the box.
+
+3. ISSUE IN BRIEF
+The info emoji was replaced by the scroll emoji in the file info screen header and icon and in the two skipped-files notes of find & replace.
+
+3. HOW DID YOU DEBUG
+grep for the old emoji in script/, README and llms files: only fileinfo.sh and findrun.sh used it (the width test keeps it as a measured sample).
+
+3. CAUSE
+Style change requested by the owner.
+
+3. FIX
+bashbasicsbyvk_fileinfo.sh (header echo, _eb_finish icon) and bashbasicsbyvk_findrun.sh (two echo lines) now use the scroll emoji.
