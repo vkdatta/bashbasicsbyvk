@@ -19,6 +19,9 @@
 _BVK_AUTH_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/auth"
 _BVK_AUTH_URL="${BVK_AUTH_URL:-https://fileapi.bashbasics.workers.dev}"
 _BVK_PAY_URL="${BVK_PAY_URL:-https://payments.bashbasics.workers.dev}"
+# Money <-> credits: THE one place on the terminal side (backend twin: payments/src/pricing.js — keep them equal).
+#        1 US$  =  100 ₹  =  1,000 credits          <- change ONLY these three numbers
+_BVK_RATE_USD=1; _BVK_RATE_INR=100; _BVK_RATE_CREDITS=1000
 _BVK_SUPPORT_MAIL="vkd.codes@gmail.com"
 _BVK_DISEPS_N=27; _BVK_DINONS_N=29; _BVK_CODE_LEN=16
 
@@ -405,7 +408,7 @@ _au_list_build() {
 # ================================================================ billing · recharge · sponsorship
 # Payments go through a magic link (30 minutes, or until it is paid). Nothing is charged from here:
 # this only asks the payments worker for a link. Credits reach an account only after the payment
-# is confirmed server-side. US$1 = 1,000 credits, minimum US$1 per account.
+# is confirmed server-side. Rate: see _BVK_RATE_* above (US$ or ₹), minimum US$1 (= ₹100) per account.
 #
 # Billing details live on THIS device (per user, mode 600) and travel only when a link is created.
 _BVK_BILL_DIR="$_BVK_AUTH_DIR/billing"
@@ -437,6 +440,13 @@ _bvk_bill_valid() {  # $1=key $2=value ; prints the reason and returns 1 when in
     tax_id)  [ "$n" -eq 0 ] || [[ "$v" =~ ^[A-Za-z0-9][A-Za-z0-9\ ./-]{0,39}$ ]] || { echo "   TAX ID: letters, digits, space . / - (max 40)."; return 1; } ;;
   esac
 }
+_bvk_rate_per() { case "$1" in INR) echo "$_BVK_RATE_INR" ;; *) echo "$_BVK_RATE_USD" ;; esac; }   # major units of $1 per US$1
+_bvk_money_sym() { case "$1" in INR) printf '₹' ;; *) printf 'US$' ;; esac; }
+_bvk_money_fmt() { printf '%s%s' "$(_bvk_money_sym "$1")" "$2"; }                                  # $1=cur $2=amount
+_bvk_grp() { printf '%s' "$1" | sed -e :a -e 's/\([0-9]\)\([0-9]\{3\}\)\($\|,\)/\1,\2\3/;ta'; }
+_bvk_credits_for() { awk -v a="$2" -v p="$(_bvk_rate_per "$1")" -v c="$_BVK_RATE_CREDITS" 'BEGIN{printf "%d", a/p*c+0.5}'; }  # $1=cur $2=amount
+_bvk_rate_text() { printf 'US$%s = ₹%s = %s credits' "$_BVK_RATE_USD" "$_BVK_RATE_INR" "$(_bvk_grp "$_BVK_RATE_CREDITS")"; }
+_bvk_rate_min() { awk -v p="$(_bvk_rate_per "$1")" 'BEGIN{printf "%g", p}'; }                        # minimum = US$1 worth
 _au_pause() { :; }   # no stranded "press any key": the message stays on screen and the menu redraws below it
 _au_trunc() { local s="$1" n="$2"; [ "${#s}" -gt "$n" ] && s="${s:0:$((n-1))}…"; printf '%s' "$s"; }
 
@@ -444,7 +454,7 @@ _au_sub_header() {
   echo; echo "👤 Acting as: $_AU_MAIL"
   case "$_AU_SCREEN" in
     billing)  echo "🧾 Billing details — printed on your invoice (stored on this device)" ;;
-    recharge) echo "💳 Recharge — US\$1 = 1,000 credits · minimum US\$1 per account" ;;
+    recharge) echo "💳 Recharge — $(_bvk_rate_text) · minimum $(_bvk_money_fmt USD "$(_bvk_rate_min USD)") / $(_bvk_money_fmt INR "$(_bvk_rate_min INR)") per account" ;;
   esac
   _vp_filter_header_line
 }
@@ -484,13 +494,15 @@ _au_recharge_action() {  # $1 = 0-based slot
 }
 
 # ---- talking to the payments worker
-_bvk_pay_amount() {  # prompts; sets _PAY_AMOUNT (validated, >= 1) ; returns 1 on cancel
-  local a
+_bvk_pay_amount() {  # asks currency, then amount; sets _PAY_CUR (USD|INR) and _PAY_AMOUNT (>= US$1 worth) ; returns 1 on cancel
+  local a min
+  _bvk_menu _PAY_CUR -t "Pay in" -i "💳" -q "Which currency?" "USD:US dollars (US\$)" "INR:Indian rupees (₹, UPI via Razorpay)" || return 1
+  min=$(_bvk_rate_min "$_PAY_CUR")
   while :; do
-    read -e -r -p "   Amount in US\$ (min 1, blank = cancel): " a </dev/tty || return 1
+    read -e -r -p "   Amount in $_PAY_CUR (min $min, blank = cancel): " a </dev/tty || return 1
     [ -z "$a" ] && return 1
-    if [[ "$a" =~ ^[0-9]{1,5}(\.[0-9]{1,2})?$ ]] && awk "BEGIN{exit !($a>=1)}"; then _PAY_AMOUNT="$a"; return 0; fi
-    echo "   ❌ Enter a number of at least 1 (up to 2 decimals)."
+    if [[ "$a" =~ ^[0-9]{1,7}(\.[0-9]{1,2})?$ ]] && awk "BEGIN{exit !($a>=$min)}"; then _PAY_AMOUNT="$a"; return 0; fi
+    echo "   ❌ Enter a number of at least $min (up to 2 decimals)."
   done
 }
 _bvk_pay_accounts_json() {  # $1=file -> JSON array on stdout ; reasons on stderr ; rc 2 on bad file
@@ -509,10 +521,10 @@ _bvk_pay_accounts_json() {  # $1=file -> JSON array on stdout ; reasons on stder
     process.stdout.write(JSON.stringify(out));' "$1"
 }
 _bvk_pay_build() {  # $1=kind $2=amount $3=accounts-json-or-empty -> JSON body
-  B_NAME="$(_bvk_bill_get name)" B_ADDRESS="$(_bvk_bill_get address)" B_MOBILE="$(_bvk_bill_get mobile)" \
+  B_CUR="${_PAY_CUR:-USD}" B_NAME="$(_bvk_bill_get name)" B_ADDRESS="$(_bvk_bill_get address)" B_MOBILE="$(_bvk_bill_get mobile)" \
   B_EMAIL="$(_bvk_bill_get email)" B_TAXID="$(_bvk_bill_get tax_id)" \
   node -e '
-    const e = process.env, o = { kind: process.argv[1], amount: process.argv[2],
+    const e = process.env, o = { kind: process.argv[1], amount: process.argv[2], currency: e.B_CUR,
       bill_to: { name: e.B_NAME, address: e.B_ADDRESS, mobile: e.B_MOBILE, email: e.B_EMAIL, tax_id: e.B_TAXID } };
     if (process.argv[3]) o.accounts = JSON.parse(process.argv[3]);
     process.stdout.write(JSON.stringify(o));' "$1" "$2" "${3:-}"
@@ -524,7 +536,7 @@ _bvk_pay_open() {  # best-effort browser open
   else return 1; fi
 }
 _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary line
-  local kind="$1" amount="$2" accts="${3:-}" ans body link exp total
+  local kind="$1" amount="$2" accts="${3:-}" ans body link exp total cur
   [ -n "$(_bvk_bill_get name)" ] && [ -n "$(_bvk_bill_get email)" ] || {
     echo "   🔴  Fill Billing details first (at least NAME and EMAIL), then try again."; return 1; }
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
@@ -533,11 +545,12 @@ _bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary l
   [[ "${ans,,}" == y* ]] || { echo "   Cancelled."; return 1; }
   echo "   ⏳ Creating link…"
   if ! _bvk_auth_call POST /api/orders "$body" creds "$_BVK_PAY_URL"; then _bvk_auth_err; return 1; fi
-  link=$(_bb_json_get "$_AUTH_BODY" link); exp=$(_bb_json_get "$_AUTH_BODY" expires_at); total=$(_bb_json_get "$_AUTH_BODY" total)
+  link=$(_bb_json_get "$_AUTH_BODY" link); exp=$(_bb_json_get "$_AUTH_BODY" expires_at); total=$(_bb_json_get "$_AUTH_BODY" total); cur=$(_bb_json_get "$_AUTH_BODY" currency)
   [ -n "$link" ] || { echo "   ❌ Unexpected server response."; return 1; }
-  echo; echo "   💫 Payment link ready — total US\$$total · valid for 30 minutes, or until it is paid"
+  echo; echo "   💫 Payment link ready — total $(_bvk_money_fmt "${cur:-USD}" "$total") · valid for 30 minutes, or until it is paid"
   echo "   🔗 $link"
-  echo "   Open it, choose Razorpay or PayPal, and pay. Credits are added once the payment is confirmed."
+  if [ "$cur" = INR ]; then echo "   Open it and pay with Razorpay (UPI, cards, netbanking)."; else echo "   Open it, choose Razorpay or PayPal, and pay."; fi
+  echo "   Credits are added once the payment is confirmed."
   _bvk_yn ans "Open in browser now?" </dev/tty
   [[ "${ans,,}" == y* ]] && { _bvk_pay_open "$link" || echo "   (no browser opener found — copy the link)"; }
   return 0
@@ -549,7 +562,7 @@ _bvk_pay_recharge() {  # $1=self|others
   if [ "$1" = self ]; then
     echo "   Recharging: $P_MAIL"
     _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
-    _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "US\$$_PAY_AMOUNT → $(awk "BEGIN{printf \"%d\", $_PAY_AMOUNT*1000}") credits to $P_MAIL"
+    _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "$(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") → $(_bvk_grp "$(_bvk_credits_for "$_PAY_CUR" "$_PAY_AMOUNT")") credits to $P_MAIL"
   else
     echo "   File (.csv / .txt): one account per line, as  email,diseps"
     read -e -r -p "   Path (blank = cancel): " f </dev/tty; f="${f/#\~/$HOME}"
@@ -561,7 +574,7 @@ _bvk_pay_recharge() {  # $1=self|others
     echo "   Found $n account(s). The SAME amount is credited to each."
     _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
     n_ct=$(awk "BEGIN{printf \"%.2f\", $_PAY_AMOUNT*$n}")
-    _bvk_pay_create recharge_others "$_PAY_AMOUNT" "$accts" "$n account(s) × US\$$_PAY_AMOUNT = US\$$n_ct total ($(awk "BEGIN{printf \"%d\", $_PAY_AMOUNT*1000}") credits each)"
+    _bvk_pay_create recharge_others "$_PAY_AMOUNT" "$accts" "$n account(s) × $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") = $(_bvk_money_fmt "$_PAY_CUR" "$n_ct") total ($(_bvk_grp "$(_bvk_credits_for "$_PAY_CUR" "$_PAY_AMOUNT")") credits each)"
   fi
   _au_pause
 }
@@ -569,7 +582,7 @@ _bvk_pay_sponsorship() {
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 0
   echo; echo "   Sponsor bashbasicsbyvk. No account is recharged; you receive an invoice."
   _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
-  _bvk_pay_create sponsorship "$_PAY_AMOUNT" "" "Sponsorship of US\$$_PAY_AMOUNT"
+  _bvk_pay_create sponsorship "$_PAY_AMOUNT" "" "Sponsorship of $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT")"
   _au_pause
 }
 
@@ -593,7 +606,7 @@ _bvk_auth_sub_menu() {  # $1 = billing | recharge
 }
 
 # ---- user screen
-_AU_ACTIONS=("Change Mail ID" "Regenerate diseps" "Regenerate apikey" "Regenerate dinons" "Report Issue" "Billing details" "Recharge" "Sponsorship" "Set as active user")
+_AU_ACTIONS=("Change Mail ID" "Regenerate diseps" "Regenerate apikey" "Regenerate dinons" "Report Issue" "Billing details" "Recharge" "Sponsorship" "Set as active user" "View balance" "Download ledger")
 _au_user_rowtext() {
   _au_slot "$1"
   local mark=""
@@ -731,7 +744,46 @@ _au_user_action() {  # $1 = 0-based action slot
     6) _bvk_auth_sub_menu recharge ;;
     7) _bvk_pay_sponsorship ;;
     8) printf '%s' "$_AU_UID" > "$_BVK_AUTH_DIR/active"; echo "★ Active user set." ;;
+    9) _bvk_auth_balance ;;
+    10) _bvk_auth_ledger_download ;;
   esac
+}
+
+# ---- view balance / download ledger (both use the same ledger endpoint and renderer as  .ai -ledger)
+_bvk_auth_balance() {
+  local resp d; resp=$(mktemp) || return 0; d=$(date +%d%m%Y)
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || { rm -f "$resp"; return 0; }
+  echo
+  if _bvk_ai_ledger_fetch "$d" "$d" "$resp"; then
+    _bvk_ai_ledger_render "$resp" "" balance
+    local bal; bal=$(python3 -c 'import json,sys
+try: print(int(json.load(open(sys.argv[1])).get("balance")))
+except Exception: pass' "$resp")
+    [ -n "$bal" ] && echo "   = $(_bvk_money_fmt USD "$(awk -v b="$bal" -v c="$_BVK_RATE_CREDITS" -v u="$_BVK_RATE_USD" 'BEGIN{printf "%.2f", b/c*u}')") = $(_bvk_money_fmt INR "$(awk -v b="$bal" -v c="$_BVK_RATE_CREDITS" -v r="$_BVK_RATE_INR" 'BEGIN{printf "%.2f", b/c*r}')")  ($(_bvk_rate_text))"
+  else echo "❌ Could not reach the server."; fi
+  rm -f "$resp"
+}
+_bvk_auth_ledger_date() {  # $1=label -> _AU_DATE (ddmmyyyy, real date) ; 1 = cancelled
+  local v
+  while :; do
+    read -e -r -p "   $1 (DDMMYYYY, blank = cancel): " v </dev/tty || return 1
+    [ -z "$v" ] && return 1
+    if _bvk_ai_date_ok "$v"; then _AU_DATE="$v"; return 0; fi
+    echo "   ❌ Use DDMMYYYY, e.g. 01102026."
+  done
+}
+_bvk_auth_ledger_download() {
+  local from to resp out
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 0
+  echo
+  _bvk_auth_ledger_date "From period" || { echo "   Cancelled."; return 0; }; from="$_AU_DATE"
+  _bvk_auth_ledger_date "To period"   || { echo "   Cancelled."; return 0; }; to="$_AU_DATE"
+  [[ "${to:4:4}${to:2:2}${to:0:2}" < "${from:4:4}${from:2:2}${from:0:2}" ]] && { echo "   ❌ The To period is before the From period."; return 0; }
+  resp=$(mktemp) || return 0
+  out="${path:-$PWD}/ledger_${P_MAIL//[^A-Za-z0-9._@-]/_}_${from}_${to}.csv"
+  echo "   ⏳ Fetching ledger…"
+  if _bvk_ai_ledger_fetch "$from" "$to" "$resp"; then _bvk_ai_ledger_render "$resp" "$out"; else echo "❌ Could not reach the server."; fi
+  rm -f "$resp"
 }
 
 _bvk_auth_user_menu() {  # $1=profile id

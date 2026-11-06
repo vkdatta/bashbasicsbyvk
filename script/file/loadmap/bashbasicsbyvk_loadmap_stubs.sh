@@ -868,6 +868,13 @@ _au_list_build() { _lm_stub bashbasicsbyvk_auth.sh _au_list_build "$@"; }
 _bvk_bill_get() { _lm_stub bashbasicsbyvk_auth.sh _bvk_bill_get "$@"; }
 _bvk_bill_set() { _lm_stub bashbasicsbyvk_auth.sh _bvk_bill_set "$@"; }
 _bvk_bill_valid() { _lm_stub bashbasicsbyvk_auth.sh _bvk_bill_valid "$@"; }
+_bvk_rate_per() { _lm_stub bashbasicsbyvk_auth.sh _bvk_rate_per "$@"; }
+_bvk_money_sym() { _lm_stub bashbasicsbyvk_auth.sh _bvk_money_sym "$@"; }
+_bvk_money_fmt() { _lm_stub bashbasicsbyvk_auth.sh _bvk_money_fmt "$@"; }
+_bvk_grp() { _lm_stub bashbasicsbyvk_auth.sh _bvk_grp "$@"; }
+_bvk_credits_for() { _lm_stub bashbasicsbyvk_auth.sh _bvk_credits_for "$@"; }
+_bvk_rate_text() { _lm_stub bashbasicsbyvk_auth.sh _bvk_rate_text "$@"; }
+_bvk_rate_min() { _lm_stub bashbasicsbyvk_auth.sh _bvk_rate_min "$@"; }
 _au_pause() { _lm_stub bashbasicsbyvk_auth.sh _au_pause "$@"; }
 _au_trunc() { _lm_stub bashbasicsbyvk_auth.sh _au_trunc "$@"; }
 _au_sub_header() { _lm_stub bashbasicsbyvk_auth.sh _au_sub_header "$@"; }
@@ -900,6 +907,9 @@ _au_ids_of_sel() { _lm_stub bashbasicsbyvk_auth.sh _au_ids_of_sel "$@"; }
 _au_export_ids() { _lm_stub bashbasicsbyvk_auth.sh _au_export_ids "$@"; }
 _au_remove_ids() { _lm_stub bashbasicsbyvk_auth.sh _au_remove_ids "$@"; }
 _au_user_action() { _lm_stub bashbasicsbyvk_auth.sh _au_user_action "$@"; }
+_bvk_auth_balance() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_balance "$@"; }
+_bvk_auth_ledger_date() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_ledger_date "$@"; }
+_bvk_auth_ledger_download() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_ledger_download "$@"; }
 _bvk_auth_user_menu() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_user_menu "$@"; }
 auth_menu() { _lm_stub bashbasicsbyvk_auth.sh auth_menu "$@"; }
 _xui_enter() { _lm_stub bashbasicsbyvk_xui.sh _xui_enter "$@"; }
@@ -984,6 +994,7 @@ _bvk_ai_date_ok() { _lm_stub bashbasicsbyvk_ai.sh _bvk_ai_date_ok "$@"; }
 _bvk_ai_iso() { _lm_stub bashbasicsbyvk_ai.sh _bvk_ai_iso "$@"; }
 _bvk_ai_render() { _lm_stub bashbasicsbyvk_ai.sh _bvk_ai_render "$@"; }
 _bvk_ai_ledger_render() { _lm_stub bashbasicsbyvk_ai.sh _bvk_ai_ledger_render "$@"; }
+_bvk_ai_ledger_fetch() { _lm_stub bashbasicsbyvk_ai.sh _bvk_ai_ledger_fetch "$@"; }
 _bvk_ai_revenue_render() { _lm_stub bashbasicsbyvk_ai.sh _bvk_ai_revenue_render "$@"; }
 _bvk_ai_ext_summary() { _lm_stub bashbasicsbyvk_ai.sh _bvk_ai_ext_summary "$@"; }
 handle_ai_cmd() { _lm_stub bashbasicsbyvk_ai.sh handle_ai_cmd "$@"; }

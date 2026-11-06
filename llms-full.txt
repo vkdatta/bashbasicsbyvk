@@ -108,7 +108,7 @@ Command-aware help inside the tool, part of the paid tier.
 
 ### 3.8 Pricing mechanics (at time of writing; Drive "Pricing" is authoritative)
 
-- US$1 = 1,000 credits. Whole credits only. Rates may change.
+- US$1 = ₹100 = 1,000 credits (pay in US$ via Razorpay or PayPal, or in ₹ via Razorpay UPI). Whole credits only. Rates may change.
 - Base rate: 1 credit = 1 GB kept for 1 hour. Cost = size in MB ÷ 1,024 × hours kept, rounded up, with a minimum per size bucket: up to 5 MB, 1 credit per 30 days; over 5 MB to 50 MB, 1 credit per week; over 50 MB to 500 MB, 1 credit per day; over 500 MB, 1 credit per hour.
 - Minimum 1 credit per operation. Expiry shorter than 1 hour is billed as 1 hour. Full cost is checked before upload; if the balance is short, nothing is stored or charged.
 - Examples: any text paste or file up to 1 MB costs 1 credit for 1 hour, 1 day, 7 days or 30 days. A 1 GB file costs 24 credits for a day, 720 for 30 days.

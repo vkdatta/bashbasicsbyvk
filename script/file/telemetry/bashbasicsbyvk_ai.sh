@@ -104,21 +104,38 @@ PY
 }
 
 
-_bvk_ai_ledger_render() {  # $1=response file
-  python3 - "$1" <<'PY'
-import sys, json
+_bvk_ai_ledger_render() {  # $1=response file  [$2=csv file to also write]  [$3=balance: print only the balance]
+  python3 - "$1" "${2:-}" "${3:-}" <<'PY'
+import sys, json, csv
 try: d = json.load(open(sys.argv[1]))
 except Exception: print("❌ Unexpected response from the server."); sys.exit(2)
 if not d.get("ok"): print("❌", d.get("message") or d.get("error", "failed")); sys.exit(1)
 rows = d.get("rows", [])
 print(f"💳 Balance: {d.get('balance','?')} credits")
+if sys.argv[3] == "balance": sys.exit(0)
 if not rows: print("📜  No ledger entries in this period."); sys.exit(0)
 cols = ["date", "type", "credits", "balance", "note"]
+if sys.argv[2]:
+    with open(sys.argv[2], "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f); w.writerow(cols)
+        for r in rows: w.writerow([r.get(c, "") for c in cols])
+    print(f"💾 Saved {len(rows)} entries: {sys.argv[2]}")
 w = [max(len(c), *(len(str(r.get(c, ""))) for r in rows[:100])) for c in cols]
 print("  ".join(c.ljust(w[i]) for i, c in enumerate(cols))); print("  ".join("-"*x for x in w))
 for r in rows[:100]: print("  ".join(str(r.get(c, "")).ljust(w[i]) for i, c in enumerate(cols)))
-if len(rows) > 100: print(f"… {len(rows)-100} more entries")
+if len(rows) > 100: print(f"… {len(rows)-100} more entries" + (" (all are in the saved file)" if sys.argv[2] else ""))
 PY
+}
+
+# Ask the ledger endpoint as the profile already parsed into P_* (the -auth screens act as ANY user, not only the
+# active one).  $1/$2 = ddmmyyyy from / to.  Writes the JSON to $3.  Same endpoint and renderer as  .ai -ledger.
+_bvk_ai_ledger_fetch() {
+  local body; body=$(python3 -c 'import json,sys
+iso=lambda s: f"{s[4:8]}-{s[2:4]}-{s[0:2]}"
+print(json.dumps({"mode":"ledger","from":iso(sys.argv[1]),"to":iso(sys.argv[2])}))' "$1" "$2") || return 1
+  _bvk_auth_call POST /ai "$body" creds "${_BVK_AI_URL%/ai}"
+  printf '%s' "$_AUTH_BODY" > "$3"
+  [ "$_AUTH_HTTP" != 0 ]
 }
 
 _bvk_ai_revenue_render() {  # $1=response file

@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+The -auth user screen lacked View balance and Download ledger rows, and recharge accepted US dollars only. Wanted: both rows, INR payments (Razorpay UPI) with US$1 = 100 INR = 1,000 credits kept in one source of truth on each side.
+
+HOW DID YOU DEBUG
+Read bashbasicsbyvk_auth.sh (user screen, recharge), bashbasicsbyvk_ai.sh (.ai -ledger) and the payments / telemetry workers. Ran payments tests with node --test (11 pass, 3 new). Frontend shell code was only syntax-checked (bash -n) and its helpers run by hand; the menu screens and the live endpoints were not run. No tests/run.sh tier was run.
+
+CAUSE
+Rate and currency were hard-coded as USD / 1000 in index.js, auth.sh, the pay page and the revenue report.
+
+FIX
+Backend: new payments/src/pricing.js (RATE, per-currency limits, gateways, creditsFor, rateText); index.js uses it, accepts currency USD|INR (default USD), PayPal hidden for INR; telemetry handleRevenue groups by currency. Frontend: _BVK_RATE_* plus helpers at the top of bashbasicsbyvk_auth.sh; currency menu in _bvk_pay_amount; rows 10 View balance and 11 Download ledger; _bvk_ai_ledger_fetch and an extended _bvk_ai_ledger_render shared with .ai -ledger (CSV saved to the current folder). Lesson: a new rate lives only in pricing.js and _BVK_RATE_*.
