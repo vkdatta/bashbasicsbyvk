@@ -71,6 +71,7 @@ bashbasicsbyvk_findsettings.sh|||tool, run as its own process
 bashbasicsbyvk_renamesettings.sh|||tool, run as its own process (Settings > Rename)
 bashbasicsbyvk_deps.sh|||the central dependency installer (asked only when a program is missing)
 bashbasicsbyvk_health.sh|||the health check command
+bashbasicsbyvk_tabmenu.sh|||master template of every tabbed menu (rules, sw, upgrade, fx ...): they call _tm_define when their file loads, so it sits before the first of them
 bashbasicsbyvk_rules.sh|||.r rule book
 bashbasicsbyvk_daemon_cmd.sh|||.dm daemon commands
 bashbasicsbyvk_telemetry.sh|||the daily usage ping: started after the first paint (@call below)

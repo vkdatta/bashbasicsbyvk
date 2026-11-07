@@ -150,68 +150,29 @@ _fx_adf_breadcrumb() {
 # UDF tab extras (e-N edit item, ux / ui export / import all UDFs as a zip): bashbasicsbyvk_udf_io.sh, loaded through the load mapper
 
 # ════════════════════════════════════════════════════════════════════════════
-#  Tab cycle
+#  Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar, steps ←/→ and builds the footer.
+#  The tab names live here once: the tab bar, the tap targets and the header all read them.
 # ════════════════════════════════════════════════════════════════════════════
-
-_fx_tab_next() {
-  case "$_fx_tab" in
-    adf) _fx_tab=udf ;;
-    udf) _fx_tab=adf ;;
-  esac
-}
-
-# only two tabs, so "previous" is the same flip as "next"
-_fx_tab_prev() { _fx_tab_next; }
-
-# Tab names live here once: the tab bar, the tap targets and the header all read them.
 _FX_TAB_ADF="🪄 ADF"; _FX_TAB_UDF="🎃 UDF"
-_bvk_tabs_register "$_FX_TAB_ADF" "$_FX_TAB_UDF"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
-_fx_tab_label() {
-  case "$_fx_tab" in
-    adf) printf '[%s] %s'  "$_FX_TAB_ADF" "$_FX_TAB_UDF" ;;
-    udf) printf '%s [%s]' "$_FX_TAB_ADF" "$_FX_TAB_UDF" ;;
-  esac
-}
+_tm_define fx _fx_tab "🎨 Functions" "Functions" adf:"$_FX_TAB_ADF" udf:"$_FX_TAB_UDF"
 
 # ── Headers / footers ─────────────────────────────────────────────────────────
 
-# The plain-words line under the tabs. The text comes from the Settings description table
-# (bashbasicsbyvk_settings_desc.sh, the same table and format as every Settings screen):
+# The plain-words line under the tabs comes from the Settings description table through the template (_tm_desc_line):
 #   Functions|adf          the ADF root          Functions|adf:<folder path>   one ADF folder (the nearest parent wins)
 #   Functions|udf          the UDF tab
 # It is always ONE line (cut with …), so the header keeps one height while folders and tabs change.
-_fx_desc_line() {
-  local k txt="" cur
-  _st_desc_load 2>/dev/null
-  if [ "$_fx_tab" = "udf" ]; then
-    txt="${_ST_DESC[Functions|udf]:-}"
-  else
-    cur="$_fx_adf_cur_staging"
-    while [ -n "$cur" ]; do
-      k="Functions|adf:$cur"
-      [ -n "${_ST_DESC[$k]+x}" ] && { txt="${_ST_DESC[$k]}"; break; }
-      [[ "$cur" == */* ]] && cur="${cur%/*}" || cur=""
-    done
-    [ -z "$txt" ] && txt="${_ST_DESC[Functions|adf]:-}"
-  fi
-  _vp_usable
-  (( ${#txt} > _vp_usable_w )) && txt="${txt:0:_vp_usable_w-1}…"
-  printf '%s\n' "$txt"
-}
 
 # "X out of N here · T total": X shown now (after a filter), N in this folder, T everywhere (ADF: all functions; UDF: all scripts under execute/).
 _fx_count_line() {
-  local x="${#items[@]}" n="${#_all_items[@]}" t
-  (( n < x )) && n=$x
+  local n="${#_all_items[@]}" t
+  (( n < ${#items[@]} )) && n="${#items[@]}"
   if [ "$_fx_tab" = "udf" ]; then t="${_fx_udf_total:-$n}"; else t="${#_fx_adf_labels[@]}"; fi
-  printf '%s out of %s here · %s total\n' "$x" "$n" "$t"
+  _tm_count_line "$t"
 }
 
 _fx_menu_header() {
-  echo
-  printf '🎨 Functions\n\n'
-  printf '%s\n\n' "$(_fx_tab_label)"
-  _fx_desc_line
+  _tm_header fx "" "$_fx_adf_cur_staging"          # blank · title · tab bar · description (folder-specific on the ADF tab)
   _fx_count_line
   echo
   case "$_fx_tab" in
@@ -233,9 +194,9 @@ _fx_menu_header_imaginary() {
 
 # One footer for both tabs: u up · q quit · h home · cc cheat codes. (Settings, Exit, e-N, ux, ui still work when typed; cc lists them.)
 _fx_menu_footer() {
-  local -a _f=("u.up" "q" "h:Home" "cc:Cheat codes")
+  local -a _f=()
   [ "$_fx_tab" = "udf" ] && [ -n "$group_prefix" ] && _f+=("|" "u.prefix" "#Group prefix now: ${group_prefix^^}*")
-  _mc_footer "${_f[@]}"
+  _tm_footer "${_f[@]}"
 }
 
 # Custom row renderer for the ADF tab.
@@ -253,26 +214,14 @@ _fx_adf_rowtext() {
 }
 
 _fx_set_viewport_for_tab() {
-  local ftr
+  local rowtext=""
   case "$_fx_tab" in
-    adf)
-      ftr=_fx_menu_footer
-      _vp_rowtext_fn=_fx_adf_rowtext   # bypass file-path displayer for ADF items
-      ;;
-    udf)
-      ftr=_fx_menu_footer
-      _vp_rowtext_fn=                   # clear so UDF uses the normal _item_line_text path
-      ;;
+    adf) rowtext=_fx_adf_rowtext ;;   # bypass file-path displayer for ADF items
+    udf) rowtext="" ;;                # cleared so UDF uses the normal _item_line_text path
   esac
-  _vp_mode="items"
-  _vp_header_fn=_fx_menu_header
-  _vp_footer_fn="$ftr"
-  _vp_hl_fn=_vp_is_hl_single
-  _msel_set=()
-  _vp_input_fn=_print_input_line
-  # Always wipe the row cache here — _vp_rowtext_fn just changed, so any
+  # _tm_viewport also wipes the row cache — _vp_rowtext_fn just changed, so any
   # rows cached by _item_line_text (all 📄) must not survive into the next render.
-  _vp_cache_reset
+  _tm_viewport _fx_menu_header _fx_menu_footer "$rowtext"
 }
 
 # ── Item builder per tab ──────────────────────────────────────────────────────
@@ -374,13 +323,7 @@ _fx_udf_handle_selection() {
 
 # ── In-place tab redraw ───────────────────────────────────────────────────────
 
-_fx_tab_redraw() {
-  local _old_blk_h="${_blk_h:-0}"
-
-  _fx_build_items_for_tab
-  _fx_set_viewport_for_tab
-  _vp_tab_repaint "$_old_blk_h"
-}
+_fx_tab_redraw() { _tm_tab_redraw _fx_build_items_for_tab _fx_set_viewport_for_tab; }
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
@@ -418,14 +361,8 @@ functions_menu() {
     shopt -s nocasematch
 
     case "$_fx_choice" in
-      __sw_tab_right__)
-        _fx_tab_next
-        [ "$_fx_tab" = "adf" ] && _fx_adf_cur_staging=""
-        _fx_tab_redraw
-        shopt -u nocasematch; continue
-        ;;
-      __sw_tab_left__)
-        _fx_tab_prev
+      __sw_tab_right__|__sw_tab_left__)
+        _tm_key fx "$_fx_choice"
         [ "$_fx_tab" = "adf" ] && _fx_adf_cur_staging=""
         _fx_tab_redraw
         shopt -u nocasematch; continue

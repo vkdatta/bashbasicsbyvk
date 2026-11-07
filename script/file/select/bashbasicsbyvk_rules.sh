@@ -264,47 +264,24 @@ _rl_rowtext() {
   _vp_line="$line"
 }
 
-# ── tabs ──────────────────────────────────────────────────────────────────────
-_rl_tab_next() { if [ "$_rl_tab" = rules ]; then _rl_tab=last; else _rl_tab=rules; fi; }
-_bvk_tabs_register "🧩 Rules" "🕘 Last used"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
-_rl_tab_label() {
-  local a="🧩 Rules" b="🕘 Last used"
-  if [ "$_rl_tab" = rules ]; then printf '[%s]   %s' "$a" "$b"; else printf ' %s  [%s]' "$a" "$b"; fi
-}
+# ── tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh) ────────────────────────────────────
+_tm_define rules _rl_tab "📚 Rule Book" "Rule Book" rules:"🧩 Rules" last:"🕘 Last used"
 
+# header: the template's title · tab bar · description (Rule Book|rules, Rule Book|rules:select / :display, Rule Book|last), then the count and the folder
 _rl_menu_header() {
-  echo
-  printf '📚 RULE BOOK  %s   ←/→ tabs\n' "$(_rl_tab_label)"
+  _tm_header rules "" "$([ "$_rl_tab" = rules ] && printf '%s' "$_rl_cur")"
+  _tm_count_line
   if [ "$_rl_tab" = rules ]; then
-    printf '🗂️  /%s\n' "$_rl_cur"
-    [ -n "$_rl_cur" ] && printf '  u) Up   (in: /%s)\n' "$_rl_cur"
-  else
-    printf '🕘 Last %d expressions not in the rule book — type a number to save one\n' "$_RL_HIST_MAX"
+    echo
+    printf '📂 Rule book path: /%s\n' "$_rl_cur"
   fi
   _vp_filter_header_line
 }
 
-_rl_menu_footer() {
-  if [ "$_rl_tab" = last ]; then
-    _mc_footer "#[Last used]  ${#items[@]} unsaved expression(s)" "N:Save as rule" "clr:Clear list" "u" ".r:Close"
-  elif [ -z "$_rl_cur" ]; then
-    _mc_footer "#[Rules]  select = .s rules · display = .d rules  (built in — cannot be deleted)" "N:Open folder" "ux:Export all" "ui:Import all" "u" ".r:Close"
-  else
-    _mc_footer "#[$_rl_cur rules]  ${#items[@]} here" "N:Run" "c:Create" "d:Delete" "r:Rename" "u.up" "|" \
-      "e-N:Edit rule" "em-N:Edit description" "i-N:Info" ".r:Close" "|" "ux:Export all" "ui:Import all"
-  fi
-}
+# footer: the template's u q h cc — every rule command (c d r e-N em-N i-N ux ui .r …) is listed by cc, with its description
+_rl_menu_footer() { _tm_footer; }
 
-_rl_set_viewport() {
-  _vp_mode="items"
-  _vp_rowtext_fn=_rl_rowtext
-  _vp_header_fn=_rl_menu_header
-  _vp_footer_fn=_rl_menu_footer
-  _vp_hl_fn=_vp_is_hl_single
-  _msel_set=()
-  _vp_input_fn=_print_input_line
-  _vp_cache_reset
-}
+_rl_set_viewport() { _tm_viewport _rl_menu_header _rl_menu_footer _rl_rowtext; }
 
 _rl_build_items() {
   imaginary_mode=false
@@ -332,12 +309,7 @@ _rl_redraw_fresh() {
   _vp_render_from_top
 }
 
-_rl_tab_redraw() {
-  local _old_blk_h="${_blk_h:-0}"
-  _rl_build_items
-  _rl_set_viewport
-  _vp_tab_repaint "$_old_blk_h"
-}
+_rl_tab_redraw() { _tm_tab_redraw _rl_build_items _rl_set_viewport; }
 
 # ── helpers for commands that take a row number ──────────────────────────────
 # _rl_pick <N> → sets _rl_p (path) _rl_n (name) ; only valid inside select/ or display/
@@ -573,7 +545,7 @@ rules_menu() {
 
     case "$_rl_choice" in
       __sw_tab_right__|__sw_tab_left__)
-        _rl_tab_next; _rl_cur=""
+        _tm_key rules "$_rl_choice"; _rl_cur=""
         _rl_tab_redraw
         shopt -u nocasematch; continue ;;
     esac

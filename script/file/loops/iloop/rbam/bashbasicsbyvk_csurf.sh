@@ -91,20 +91,18 @@ cs_row() {
       "$(_xui_hsize "${_CR_BYTES[$k]}")" "$(_xui_left "${_CR_EXP[$k]}")" "$(_xui_trunc "${_CR_FROM[$k]}" 26)" "$tag"
   fi
 }
-_bvk_tabs_register "📤 Given" "📥 Received"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
+# ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar and builds the footer ──
+_tm_define cs _CS_TAB "☁️  Cloud Surf" "Cloud Surf" 0:"📤 Given" 1:"📥 Received"
 cs_header() {
-  local a=" 📤 Given " b=" 📥 Received "
-  [ "$_CS_TAB" = 0 ] && a="[📤 Given]" || b="[📥 Received]"
-  echo; printf '☁️  Cloud Surf   %s  %s     (←/→ switch tab)\n' "$a" "$b"
+  _tm_header cs                                    # blank · title · tab bar · description (Cloud Surf|0 · Cloud Surf|1)
+  _tm_count_line
+  echo
   if [ "${#items[@]}" -eq 0 ]; then
-    [ "$_CS_TAB" = 0 ] && echo "   Nothing shared yet — use  ux-<items>  in the file surf." || echo "   Nothing received yet."
+    [ "$_CS_TAB" = 0 ] && echo "Nothing shared yet — use  ux-<items>  in the file surf." || echo "Nothing received yet."
   fi
   _vp_filter_header_line
 }
-cs_footer() {
-  if [ "$_CS_TAB" = 0 ]; then _mc_footer "N:people" "x-N:nuke for everyone (refund)" "e-N [time]:nuke time" "rf" "u"
-  else                        _mc_footer "N:open" "r-N:drop from my list" "rf" "u"; fi
-}
+cs_footer() { _tm_footer -b; }                     # u q h cc: every other key (N x-N e-N r-N rf …) is listed by cc
 
 _cs_nuke() {                                 # x-LIST
   _xui_select_rows "NUKE" "💥 Nuke which shares — for EVERYONE?" "$1" || return 1
@@ -162,8 +160,7 @@ _cs_drop() {                                 # r-LIST on the received tab
 
 _cs_cmd() {
   case "$1" in
-    __sw_tab_right__) [ "$_CS_TAB" = 1 ] && return 1; _CS_TAB=1; _CS_LOADED=0; return 3 ;;
-    __sw_tab_left__)  [ "$_CS_TAB" = 0 ] && return 1; _CS_TAB=0; _CS_LOADED=0; return 3 ;;
+    __sw_tab_right__|__sw_tab_left__) _tm_key cs "$1" nowrap || return 1; _CS_LOADED=0; return 3 ;;
     cs) echo "↩️  Closing Cloud Surf"; return 2 ;;
     rf) _CS_LOADED=0; return 0 ;;
     x-*) [ "$_CS_TAB" = 0 ] || { echo "📜  Only the sender can nuke. Use r-N to drop it from your list."; return 1; }

@@ -134,11 +134,8 @@ _ghp_cmd() {
 }
 
 # ── repo screen: Stable / Tags ──────────────────────────────────────────────
-_bvk_tabs_register "📦 Stable" "🔖 Tags"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
-_ghx_tab_label() {
-  local a="📦 Stable" b="🔖 Tags"
-  if [ "$_GHX_TAB" = stable ]; then printf '[%s]   %s' "$a" "$b"; else printf ' %s  [%s]' "$a" "$b"; fi
-}
+# Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh); the title is the repo's name, so the header passes it
+_tm_define ghr _GHX_TAB "🐙 repo" "GitHub" stable:"📦 Stable" tags:"🔖 Tags"
 
 ghr_build() {
   local i rows=()
@@ -166,17 +163,16 @@ ghr_row() {
 }
 
 ghr_header() {
-  echo; printf '🐙 %s   %s   ←/→ tabs\n' "$_GHX_REPO" "$(_ghx_tab_label)"
+  _tm_header ghr "🐙 $_GHX_REPO"                   # blank · title (the repo) · tab bar · description (GitHub|stable · tags)
+  _tm_count_line
+  echo
   if [ "${#items[@]}" -eq 0 ]; then
-    if [ "$_GHX_TAB" = stable ]; then echo "   No stable releases yet — c creates one, or open the Tags tab."; else echo "   No tags yet — c creates one."; fi
+    if [ "$_GHX_TAB" = stable ]; then echo "No stable releases yet — c creates one, or open the Tags tab."; else echo "No tags yet — c creates one."; fi
   fi
   _vp_filter_header_line
 }
 
-ghr_footer() {
-  local what="release(s)"; [ "$_GHX_TAB" = tags ] && what="tag(s)"
-  _mc_footer "#${#items[@]} $what — select: N · 1,3-5 · a (all) · a-2 (all except 2)" "c:Create" "e:Edit" "r:Rename" "d:Delete" "g:Download" "|" "i-N:Info" "rf" "u"
-}
+ghr_footer() { _tm_footer -b; }                    # u q h cc: every other key (c e r d g i-N rf, N · 1,3-5 · a · a-2) is listed by cc
 
 # the picked display rows (_XUI_SEL) → tag names in _GHX_PICK
 _ghx_pick_names() {
@@ -437,7 +433,7 @@ _ghx_run_action() {
 _ghr_cmd() {
   case "$1" in
     __sw_tab_right__|__sw_tab_left__)
-      if [ "$_GHX_TAB" = stable ]; then _GHX_TAB=tags; else _GHX_TAB=stable; fi
+      _tm_key ghr "$1"
       return 3 ;;
     rf) _ghx_reload; return 0 ;;
     c)  _ghx_create; return 0 ;;

@@ -8,6 +8,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  Keys are  <screen title>|<row tag>  (the title and tags are the ones the screen gives _st_run / _st_add) and  <screen title>|*  for the screen.
 #  A key can be made specific with a prefix:  "<parent screen>›<title>|<tag>"  or, inside Menu specific,  "<menu name>›<title>|<tag>".
 #  A new setting needs ONE line here; without a line the screen simply shows no description (nothing breaks).
+#  Tabbed menus (bashbasicsbyvk_tabmenu.sh) read  <menu title>|<tab key>  and  <menu title>|<tab key>:<folder>  (fx, Rule Book, Switch, Upgrade, RBAM, Cloud Surf, GitHub).
 #  Lazy: the table is built the first time a Settings screen is drawn, never at start-up.
 # ════════════════════════════════════════════════════════════════════════════
 declare -gA _ST_DESC=()
@@ -456,6 +457,21 @@ Functions|adf:github	Your GitHub repositories, releases and tags.
 Functions|adf:cloudflare	Cloudflare Workers and Pages: list and recover projects.
 Functions|adf:google_drive	Open a Google Drive here as a normal folder.
 Functions|udf	Your own scripts from the execute folder. Pick one to run it here.
+Rule Book|rules	Saved rules for select (.s) and display (.d). Open a folder to use them.
+Rule Book|rules:select	Select rules: a number runs it, c creates one, d deletes, r renames.
+Rule Book|rules:display	Display rules: a number applies it, c creates one, d deletes, r renames.
+Rule Book|last	Expressions you used that are not saved yet. A number saves it as a rule.
+Switch|bookmarks	Folders you saved. A number jumps there; a adds this folder, b removes one.
+Switch|recents	Files you changed lately (read only). A number opens, edits or runs it.
+Switch|favourites	Starred files and folders. A number opens it; b removes, r renames, fa adds.
+Upgrade|stable	Released versions, newest first. A number installs it; m = latest main.
+Upgrade|tags	All tags, betas included. A number installs it; m = latest main.
+RBAM|0	People you give access to. ui adds someone, sd sends dinons, r-N removes.
+RBAM|1	People who give access to you. ui adds someone, r-N removes them.
+Cloud Surf|0	Shares you sent. A number shows who can open it; x-N nukes it, e-N sets its life.
+Cloud Surf|1	Shares sent to you. A number opens it; r-N drops it from your list.
+GitHub|stable	Releases of this repo. Pick rows with N, 1,3-5, a (all) or a-2 (all but 2).
+GitHub|tags	Tags of this repo. Pick rows with N, 1,3-5, a (all) or a-2 (all but 2).
 BVK_DESC_EOF
 }
 

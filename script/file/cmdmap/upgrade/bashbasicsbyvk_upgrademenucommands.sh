@@ -2,7 +2,7 @@
 # bashbasicsbyvk_upgrademenucommands.sh — commands that exist ONLY in the 'upgrade' menu (handler '-' = its own loop).
 # Edit the descriptions: they are the live suggestion text.
 cmd_def -u       exact   -  local  "Close"
-cmd_def u        exact   -  local  "Exit"
+cmd_def u        exact   -  local  "Back (close the upgrade screen)"
 cmd_def fx       exact   -  local  "Functions (fx) — CSV-driven actions"
 cmd_def sw       exact   -  local  "Switch — recents & tabs"
 cmd_def .r       exact   -  local  "Rule book"

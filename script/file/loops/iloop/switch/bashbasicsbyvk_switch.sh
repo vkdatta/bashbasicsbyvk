@@ -270,42 +270,18 @@ _sw_build_recents() {
   done < "$_SW_RECENTS_LIST"
 }
 
-# ── Tab cycle ─────────────────────────────────────────────────────────────────
-
-_sw_tab_next() {
-  case "$_sw_tab" in
-    bookmarks)  _sw_tab=recents ;;
-    recents)    _sw_tab=favourites ;;
-    favourites) _sw_tab=bookmarks ;;
-  esac
-}
-
-_sw_tab_prev() {
-  case "$_sw_tab" in
-    bookmarks)  _sw_tab=favourites ;;
-    recents)    _sw_tab=bookmarks ;;
-    favourites) _sw_tab=recents ;;
-  esac
-}
-
 # recents and favourites are "managed" tabs: the normal file commands are blocked
 _sw_is_ro() { [ "$_sw_tab" = "recents" ] || [ "$_sw_tab" = "favourites" ]; }
 
-_bvk_tabs_register "📌 Bookmarks" "🕐 Recents" "⭐ Favourites"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
-_sw_tab_label() {
-  local bm="📌 Bookmarks" rc="🕐 Recents" fv="⭐ Favourites"
-  case "$_sw_tab" in
-    bookmarks)  printf '[%s]   %s   %s'  "$bm" "$rc" "$fv" ;;
-    recents)    printf ' %s  [%s]   %s'  "$bm" "$rc" "$fv" ;;
-    favourites) printf ' %s   %s  [%s]'  "$bm" "$rc" "$fv" ;;
-  esac
-}
+# ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar, steps ←/→ and builds the footer ──
+_tm_define sw _sw_tab "🔀 Switch" "Switch" bookmarks:"📌 Bookmarks" recents:"🕐 Recents" favourites:"⭐ Favourites"
 
 # ── Headers / footers ─────────────────────────────────────────────────────────
 
 _sw_menu_header() {
+  _tm_header sw                                    # blank · title · tab bar · description (Switch|bookmarks · recents · favourites)
+  _tm_count_line
   echo
-  printf '🔀 SWITCH  %s   ←/→ tabs\n' "$(_sw_tab_label)"
   local _loc
   case "$_sw_tab" in
     recents) _loc="(recently modified — read only)" ;;
@@ -322,27 +298,14 @@ _sw_menu_header_imaginary() {
   echo "$_imag_banner"
 }
 
-_sw_menu_footer_bookmarks() {
-  local -a _f=("a:Add current path" "b:Remove (b-1,3)" "sw:Exit" "|" "u.up" "s:Settings" "|" "e-N:File actions on item N")
-  [ -n "$group_prefix" ] && _f+=("|" "u.prefix" "#Group prefix now: ${group_prefix^^}*")
-  _mc_footer "${_f[@]}"
-}
-
-_sw_menu_footer_favourites() {
-  _mc_footer "N:⭐ open / go" "b:Remove (b-1,3)" "r:Rename (alias)" "e:Edit file" "|" "sw:Exit switch mode" "#(add favourites in the file view:  fa)"
-}
-
-_sw_menu_footer_recents() {
-  _mc_footer "#[READ ONLY]   Select a file → open/edit/run/copy" "xe:Exclude list" "clr:Clear list" "sw:Exit switch mode"
+# one footer for all three tabs: u q h cc (+ the group prefix note on Bookmarks). Every other key (a b r e xe clr e-N …) is listed by cc.
+_sw_menu_footer() {
+  local -a _f=()
+  [ "$_sw_tab" = bookmarks ] && [ -n "$group_prefix" ] && _f+=("|" "u.prefix" "#Group prefix now: ${group_prefix^^}*")
+  _tm_footer "${_f[@]}"
 }
 
 _sw_set_viewport_for_tab() {
-  local ftr
-  case "$_sw_tab" in
-    bookmarks) ftr=_sw_menu_footer_bookmarks ;;
-    recents)   ftr=_sw_menu_footer_recents   ;;
-    favourites) ftr=_sw_menu_footer_favourites ;;
-  esac
   if $imaginary_mode; then
     _vp_mode="imaginary"
     _vp_header_fn=_sw_menu_header_imaginary
@@ -350,7 +313,7 @@ _sw_set_viewport_for_tab() {
     _vp_mode="items"
     _vp_header_fn=_sw_menu_header
   fi
-  _vp_footer_fn="$ftr"
+  _vp_footer_fn=_sw_menu_footer
   _vp_hl_fn=_vp_is_hl_single
   _msel_set=()
   _vp_input_fn=_print_input_line
@@ -502,14 +465,8 @@ _sw_recents_handle_selection() {
 # Rebuilds items + chrome, then repaints the existing terminal block.
 # Does NOT scroll or emit a new block.
 
-_sw_tab_redraw() {
-  # Snapshot _blk_h NOW — before geometry changes with the new tab's chrome.
-  # _vp_redraw_in_place recalculates _blk_h internally which causes drift when
-  # header/footer line counts differ between tabs. We do the cursor-up ourselves
-  # with the old value, then let _vp_render_fresh compute fresh geometry cleanly.
-  local _old_blk_h="${_blk_h:-0}"
-
-  # Switch path context to new tab
+# Switch path context to the new tab, then rebuild its rows (the template snapshots the old block height BEFORE this runs)
+_sw_tab_prepare() {
   case "$_sw_tab" in
     bookmarks) path="$_SW_DIR" ;;
     recents)   : ;;
@@ -517,11 +474,9 @@ _sw_tab_redraw() {
   esac
   group_prefix=""
   force_show=false
-
   _sw_build_items_for_tab
-  _sw_set_viewport_for_tab
-  _vp_tab_repaint "$_old_blk_h"
 }
+_sw_tab_redraw() { _tm_tab_redraw _sw_tab_prepare _sw_set_viewport_for_tab; }
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
@@ -574,14 +529,9 @@ switch_menu() {
 
     # ── Tab-switch sentinels ─────────────────────────────────────────────────
     case "$_sw_choice" in
-      __sw_tab_right__)
-        local _prev="$_sw_tab"; _sw_tab_next
-        _sw_tab_redraw "$_prev"
-        shopt -u nocasematch; continue
-        ;;
-      __sw_tab_left__)
-        local _prev="$_sw_tab"; _sw_tab_prev
-        _sw_tab_redraw "$_prev"
+      __sw_tab_right__|__sw_tab_left__)
+        _tm_key sw "$_sw_choice"
+        _sw_tab_redraw
         shopt -u nocasematch; continue
         ;;
     esac

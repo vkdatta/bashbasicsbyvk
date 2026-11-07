@@ -65,21 +65,16 @@ rb_row() {
   _rb_state "$k"
   printf -v _vp_line ' %2d) 👤 %-28s [%s…]  %s' "$1" "$(_xui_trunc "${_RB_MAIL[$k]}" 28)" "${_RB_D30[$k]:0:6}" "$_RB_S"
 }
-_bvk_tabs_register "📤 Give access" "📥 Receive access"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
-_rb_tabbar() {
-  local a=" 📤 Give access " b=" 📥 Receive access "
-  [ "$_RB_TAB" = 0 ] && a="[📤 Give access]" || b="[📥 Receive access]"
-  printf '%s  %s' "$a" "$b"
-}
+# ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar and builds the footer ──
+_tm_define rb _RB_TAB "🤝 RBAM" "RBAM" 0:"📤 Give access" 1:"📥 Receive access"
 rb_header() {
-  echo; printf '🤝 RBAM   %s     (←/→ switch tab)\n' "$(_rb_tabbar)"
-  [ "${#items[@]}" -eq 0 ] && echo "   Nobody here yet — type  ui  to add someone."
+  _tm_header rb                                    # blank · title · tab bar · description (RBAM|0 · RBAM|1)
+  _tm_count_line
+  echo
+  [ "${#items[@]}" -eq 0 ] && echo "Nobody here yet — type  ui  to add someone."
   _vp_filter_header_line
 }
-rb_footer() {
-  if [ "$_RB_TAB" = 0 ]; then _mc_footer "ui:import user" "ux:export my card" "r-N:remove" "sd:send dinons" "N:open" "u"
-  else                        _mc_footer "ui:import user" "ux:export my card" "r-N:remove" "N:open" "u"; fi
-}
+rb_footer() { _tm_footer -b; }                     # u q h cc: every other key (ui ux r-N sd N …) is listed by cc
 
 # ── commands ─────────────────────────────────────────────────────────────────
 _rb_mail_ok() { [[ "$1" =~ ^[^[:space:]\"\\]+@[^[:space:]\"\\]+$ ]] && [ "${#1}" -le 256 ]; }
@@ -183,8 +178,7 @@ _rb_answer() {
 
 _rb_cmd() {
   case "$1" in
-    __sw_tab_right__) [ "$_RB_TAB" = 1 ] && return 1; _RB_TAB=1; _RB_LOADED=0; return 3 ;;
-    __sw_tab_left__)  [ "$_RB_TAB" = 0 ] && return 1; _RB_TAB=0; _RB_LOADED=0; return 3 ;;
+    __sw_tab_right__|__sw_tab_left__) _tm_key rb "$1" nowrap || return 1; _RB_LOADED=0; return 3 ;;
     rbam) echo "↩️  Closing RBAM"; return 2 ;;
     ui|ui\ *) _rb_import "${1#ui}"; _RB_LOADED=0; return 0 ;;
     ux)  _rb_export; return 1 ;;

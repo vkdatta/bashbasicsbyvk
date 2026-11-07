@@ -129,43 +129,28 @@ _upg_rowtext() {
   _vp_line="$line"
 }
 
-_bvk_tabs_register "📦 Stable" "🧪 Tags (beta)"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
-_upg_tab_label() {
-  local a="📦 Stable" b="🧪 Tags (beta)"
-  if [ "$_upg_tab" = stable ]; then printf '[%s]   %s' "$a" "$b"; else printf ' %s  [%s]' "$a" "$b"; fi
-}
+# ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar, steps ←/→ and builds the footer ──
+_tm_define upg _upg_tab "🔼 Upgrade" "Upgrade" stable:"📦 Stable" tags:"🧪 Tags (beta)"
 
 _upg_menu_header() {
+  _tm_header upg                                   # blank · title · tab bar · description (Upgrade|stable · tags)
+  _tm_count_line
   echo
-  printf '🔼  UPGRADE  %s   ←/→ tabs\n' "$(_upg_tab_label)"
   local inst; inst="$(_upg_installed)"
-  if [ -n "$inst" ]; then printf '   installed: %s\n' "$inst"
-  else printf '   installed: (not recorded yet — install once from here and it will be)\n'; fi
-  if [ "$_upg_tab" = stable ] && [ -n "$_UPG_S_ERR" ]; then printf '   🔴  %s — rf to retry\n' "$_UPG_S_ERR"; fi
-  if [ "$_upg_tab" = tags ]   && [ -n "$_UPG_T_ERR" ]; then printf '   🔴  %s — rf to retry\n' "$_UPG_T_ERR"; fi
+  if [ -n "$inst" ]; then printf '📦 Installed: %s\n' "$inst"
+  else printf '📦 Installed: (not recorded yet — install once from here and it will be)\n'; fi
+  if [ "$_upg_tab" = stable ] && [ -n "$_UPG_S_ERR" ]; then printf '🔴  %s — rf to retry\n' "$_UPG_S_ERR"; fi
+  if [ "$_upg_tab" = tags ]   && [ -n "$_UPG_T_ERR" ]; then printf '🔴  %s — rf to retry\n' "$_UPG_T_ERR"; fi
   if [ "$_upg_tab" = stable ] && [ -z "$_UPG_S_ERR" ] && [ "${#items[@]}" -eq 0 ]; then
-    printf '   No stable releases are published yet — try the Tags tab, or m for the latest main.\n'
+    printf 'No stable releases are published yet — try the Tags tab, or m for the latest main.\n'
   fi
   _vp_filter_header_line
 }
 
-_upg_menu_footer() {
-  local _uh
-  if [ "$_upg_tab" = stable ]; then _uh="[Stable]  ${#items[@]} release(s)"
-  else _uh="[Tags]  ${#items[@]} tag(s) — betas included, newest first"; fi
-  _mc_footer "#$_uh" "N:Install version N" "i-N:Info" "m:Latest main" "|" "rf" "u" "-u:Close"
-}
+# footer: the template's u q h cc (u = Back: this screen has no folders). Every other key (N i-N m rf -u …) is listed by cc.
+_upg_menu_footer() { _tm_footer -b; }
 
-_upg_set_viewport() {
-  _vp_mode="items"
-  _vp_rowtext_fn=_upg_rowtext
-  _vp_header_fn=_upg_menu_header
-  _vp_footer_fn=_upg_menu_footer
-  _vp_hl_fn=_vp_is_hl_single
-  _msel_set=()
-  _vp_input_fn=_print_input_line
-  _vp_cache_reset
-}
+_upg_set_viewport() { _tm_viewport _upg_menu_header _upg_menu_footer _upg_rowtext; }
 
 _upg_build_items() {
   imaginary_mode=false
@@ -190,12 +175,7 @@ _upg_redraw_fresh() {
   _vp_render_from_top
 }
 
-_upg_tab_redraw() {
-  local _old_blk_h="${_blk_h:-0}"
-  _upg_build_items
-  _upg_set_viewport
-  _vp_tab_repaint "$_old_blk_h"
-}
+_upg_tab_redraw() { _tm_tab_redraw _upg_build_items _upg_set_viewport; }
 
 # ── commands ──────────────────────────────────────────────────────────────────
 _upg_pick() {                    # _upg_pick <N>  → _upg_ref
@@ -319,7 +299,7 @@ upgrade_menu() {
 
     case "$_up_choice" in
       __sw_tab_right__|__sw_tab_left__)
-        if [ "$_upg_tab" = stable ]; then _upg_tab=tags; else _upg_tab=stable; fi
+        _tm_key upg "$_up_choice"
         _upg_tab_redraw
         shopt -u nocasematch; continue ;;
     esac

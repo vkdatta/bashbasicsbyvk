@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Menus with tabs (sw, rule book, upgrade, rbam, cloud surf, a GitHub repo) still used the old header (title and tab bar on one line with a "←/→ tabs" hint, a long footer of command keys), while fx had the newer layout. Each menu also kept its own copy of the tab bar, tab stepping, in-place redraw and viewport setup, so a look change meant editing seven files.
+
+HOW DID YOU DEBUG
+Read fx (bashbasicsbyvk_functions.sh), menuchrome.sh and the viewport chrome builder, then every file that calls _bvk_tabs_register. Captured the screens of fx, sw, .r and -u in a pty (tests/paste_input/ptyapp.py) before and after: fx is byte-identical, the others follow its layout. tests/tabmenu.sh (new) covers the template; mouse tab cases and tests/github/ui_test.py were updated for the new bar row and count line. Cloud Surf, RBAM and the GitHub repo screen need an account or network: verified by reading and by the template test (no private tab code left), not by running them.
+
+CAUSE
+The fx layout lived inside fx. The other menus had copied an older version of it and then drifted.
+
+FIX
+New engine/bashbasicsbyvk_tabmenu.sh (the master template: _tm_define, _tm_header, _tm_footer, _tm_key, _tm_tab_redraw, _tm_viewport, _tm_count_line) taken from fx's spacing. fx, switch, rules, upgrade, rbam, csurf and adf_github build from it; footers are now u/q/h/cc (other keys are listed by cc); one description line per tab in settings_desc.sh (key "<menu>|<tab>"). Stale cc descriptions fixed (rules r and u, upgrade u). Load mapper line added. Lesson: helper locals use a _tm_ prefix because the caller's state variable can have any name.

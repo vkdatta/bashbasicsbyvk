@@ -276,17 +276,28 @@ case('Item numbers picker: status-row taps are ignored inside a flow', t_picker_
 import unicodedata
 def dispw(t):                                    # display cells, as the app counts them: wide / emoji = 2, variation selector = 0
     return sum(0 if c == '\ufe0f' else (2 if unicodedata.east_asian_width(c) in 'WF' else 1) for c in t)
-TABROW = r'tabs|switch tab|SWITCH|FUNCTIONS|UPGRADE|RULE BOOK'
+# the tab bar is its own row now (bashbasicsbyvk_tabmenu.sh, the layout fx set): "[A] B C", the current tab in [ ]. It is found by its labels, never by the title.
+TABSETS = (('📌 Bookmarks', '🕐 Recents', '⭐ Favourites'), ('🪄 ADF', '🎃 UDF'), ('🧩 Rules', '🕘 Last used'), ('📦 Stable', '🧪 Tags (beta)'))
+def bar_row(a, label):                           # 1-based screen row of the tab bar that holds this label (searching from the bottom)
+    labs = next(t for t in TABSETS if label in t)
+    L = a.lines()
+    for i in range(len(L) - 1, -1, -1):
+        if all(l in L[i] for l in labs): return i + 1
+    return None
 def tab_click(a, label):                         # tap the middle of a tab label on the tab bar row, then WAIT until that tab is the current one
-    a.wait(lambda: a.row_of(TABROW) and label in a.lines()[a.row_of(TABROW) - 1], 8)     # the tab bar is up (a screen that fetches takes a moment; the app prints nothing meanwhile)
-    r = a.row_of(TABROW)
+    a.wait(lambda: bar_row(a, label) and label in a.lines()[bar_row(a, label) - 1], 8)     # the tab bar is up (a screen that fetches takes a moment; the app prints nothing meanwhile)
+    r = bar_row(a, label)
     L = a.lines()[r - 1]; i = L.index(label)
     a.click(r, col=dispw(L[:i]) + max(1, dispw(label) // 2) + 1, t=0.35)
     a.wait(lambda: cur_tab(a) == label, 6)       # a condition, not a guessed time: the app is silent while it loads the tab (no bar output to wait on)
     a.settle(0.3)                                # ...and the rest of the screen is painted: the next tap must see the final layout
-def cur_tab(a):
-    m = re.search(r'\[([^\]]+)\]', ''.join(l for l in a.lines() if 'tabs' in l or 'switch tab' in l or ('🪄 ADF' in l and '🎃 UDF' in l)))
-    return m.group(1) if m else None
+def cur_tab(a):                                  # the bracketed label of the lowest tab bar on the screen
+    L = a.lines()
+    for i in range(len(L) - 1, -1, -1):
+        if any(all(l in L[i] for l in t) for t in TABSETS):
+            m = re.search(r'\[([^\]]+)\]', L[i])
+            if m: return m.group(1)
+    return None
 def t_sw_tabs(a):
     a.send(b'sw\r', 2.0)
     if cur_tab(a) != '📌 Bookmarks': return False, 'sw did not open on Bookmarks (%r)' % cur_tab(a)
@@ -316,8 +327,8 @@ def t_upg_tabs(a):
 case('-u: tap a tab -> that tab', t_upg_tabs, nfiles=20)
 def t_tab_title_cur(a):
     a.send(b'sw\r', 2.0)
-    r = a.row_of(r'SWITCH'); L = a.lines()[r - 1]
-    a.click(r, col=dispw(L[:L.index('SWITCH')]) + 3, t=1.0)                      # the title: not a tab
+    r = a.row_of(r'🔀 Switch'); L = a.lines()[r - 1]
+    a.click(r, col=dispw(L[:L.index('Switch')]) + 3, t=1.0)                      # the title: not a tab
     ok1 = cur_tab(a) == '📌 Bookmarks'
     tab_click(a, '📌 Bookmarks'); ok2 = cur_tab(a) == '📌 Bookmarks'               # the current tab: nothing
     return ok1 and ok2 and a.alive, 'title / current tab taps must change nothing'
@@ -333,14 +344,15 @@ def hit(line, x, labels):
     return subprocess.run(['bash', '-c', sh, 'x', line], capture_output=True, text=True).stdout.strip()
 def t_xui_tabs(a):
     src = open(find_script(root, 'bashbasicsbyvk_csurf.sh')).read() + open(find_script(root, 'bashbasicsbyvk_rbam.sh')).read()
-    reg = '_bvk_tabs_register "📤 Given" "📥 Received"' in src and '_bvk_tabs_register "📤 Give access" "📥 Receive access"' in src
-    cs0 = '☁️  Cloud Surf   [📤 Given]   📥 Received      (←/→ switch tab)'
-    cs1 = '☁️  Cloud Surf    📤 Given   [📥 Received]     (←/→ switch tab)'
-    rb0 = '🤝 RBAM   [📤 Give access]   📥 Receive access     (←/→ switch tab)'
-    xs = [hit(cs0, 33, ['📤 Given', '📥 Received']) == 'delta=1',            # on "Received"
-          hit(cs1, 20, ['📤 Given', '📥 Received']) == 'delta=-1',           # on "Given"
-          hit(cs0, 3,  ['📤 Given', '📥 Received']) == 'none',               # on the title
-          hit(rb0, 30, ['📤 Give access', '📥 Receive access']) == 'delta=1']
+    reg = ('_tm_define cs _CS_TAB' in src and '0:"📤 Given" 1:"📥 Received"' in src
+           and '_tm_define rb _RB_TAB' in src and '0:"📤 Give access" 1:"📥 Receive access"' in src)
+    cs0 = '[📤 Given] 📥 Received'                # the exact bars the template prints for these two screens
+    cs1 = '📤 Given [📥 Received]'
+    rb0 = '[📤 Give access] 📥 Receive access'
+    xs = [hit(cs0, 18, ['📤 Given', '📥 Received']) == 'delta=1',            # on "Received"
+          hit(cs1, 4,  ['📤 Given', '📥 Received']) == 'delta=-1',           # on "Given"
+          hit('☁️  Cloud Surf', 3, ['📤 Given', '📥 Received']) == 'none',   # on the title row: not a tab bar
+          hit(rb0, 25, ['📤 Give access', '📥 Receive access']) == 'delta=1']
     return reg and all(xs) and a.alive, 'cs / rbam tab bars: registered=%s hits=%s' % (reg, xs)
 case('cs / rbam: tab bar hit-test on their real header lines', t_xui_tabs, nfiles=20)
 
