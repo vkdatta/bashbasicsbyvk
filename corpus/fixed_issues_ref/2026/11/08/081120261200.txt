@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Upload and other transfer receipts each had their own long layout (many lines, abuse/privacy notes, 'gone at' dates). Separately, in headless terminals the upload link was not reaching the clipboard via OSC52, and the 'up-' action felt slow with most of the time hidden from loadtime.
+
+HOW DID YOU DEBUG
+Ran _announce_link in a pty four ways (bare, with the smartmenu printf shim, through the real loadmap loader, with the smartload animator running): the OSC52 sequence was always intact, so the loss was in how it was sent, not in what was built. Old code wrote it to stdout through the printf shim (stdout can be captured or redirected; the shim also records it into the screen replay buffer) and chose the tmux/screen wrapper from $TERM only. For the slowness read the loadtime timeline: the 2.9 s untimed block ends where the go-timing note and cleanup begin, i.e. it is the Go pack + send child processes, which loadtime did not time. Go send is already one request (init + blob 0 + commit).
+
+CAUSE
+OSC52 was emitted to stdout via the printf shim with a TERM-only wrapper decision (not reproduced in the sandbox; hardened against the tmux allow-passthrough / $TMUX-not-forwarded / GNU screen / captured-stdout cases). Receipts were hand-written in each flow. Go engine time was invisible to loadtime.
+
+FIX
+fileapi_lib: new _bb_osc52_copy (one write to /dev/tty via builtin printf; wrapper by $TMUX / $STY / screen*|tmux* $TERM; inside tmux also tmux load-buffer -w), used by _announce_link and bashbasicsbyvk_copy. New shared receipt helpers _bb_done_head, _bb_link_block, _bb_credits, _bb_goto and a simplified _bb_print_expiry, used by up-, c2c-, ux-, backup, save and Pending. Progress lines shortened (Scanning... / Packing... / Encrypting...; pack.go text changed, needs a rebuild of bvk-xfer). Go pack and send are now loadtime steps.

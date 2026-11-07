@@ -246,17 +246,18 @@ _pn_report() {
     upload)
       _BB_LINK_ALIAS="$alias"; _BB_TTL_OVERRIDE="$ttl"; _BB_SVC=""
       _announce_link "${_PN_URL}#k=${_PN_KEY}"
-      [ -n "$_PN_DEDUCTED" ] && echo "💳 Credits deducted: $_PN_DEDUCTED   |   Balance: $_PN_BALANCE"
+      [ -n "$_PN_DEDUCTED" ] && _bb_credits "$_PN_DEDUCTED" "$_PN_BALANCE"
       _bb_print_expiry "$_PN_EXPIRES"
       _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE="" ;;
-    backup) echo "🗄️  Backed up as '$alias' — kept $(_bb_fmt_duration "$ttl")  ·  Home → Backup (bk) to restore." ;;
-    saved)  echo "💾 Saved as '$alias' — no link exists. Open it from any device: Home → Saved Surf (sv)." ;;
-    snapshot) echo "📸 Snapshot finished  ·  Home → Snapshots (sn)." ;;
-    ux)     echo "💫 Shared with ${extra:-the chosen} person(s). No link exists — each of them gets a notification and accepts it into their Cloud Surf." ;;
+    backup)   _bb_done_head "Backup"; echo; echo "🗄️  $alias" ;;
+    saved)    _bb_done_head "Save"; echo; echo "💾 $alias" ;;
+    snapshot) _bb_done_head "Snapshot" ;;
+    ux)       _bb_done_head "Share"; echo; echo "👥 ${extra:-the chosen} person(s)" ;;
   esac
   case "$kind" in backup|saved|snapshot|ux)
-    [ -n "$_PN_DEDUCTED" ] && echo "💳 Credits deducted: $_PN_DEDUCTED   |   Balance: $_PN_BALANCE"
-    [ -n "$_PN_EXPIRES" ] && echo "🕐 Gone at $(_bb_fmt_when "$_PN_EXPIRES")" ;;
+    [ -n "$_PN_DEDUCTED" ] && _bb_credits "$_PN_DEDUCTED" "$_PN_BALANCE"
+    [ -n "$_PN_EXPIRES" ] && echo "🕐 Nuke time: $(_bb_fmt_duration "${ttl:-$(_bb_svc_ttl "$kind")}")"
+    case "$kind" in backup) _bb_goto "Home → Backup (bk)" ;; saved) _bb_goto "Home → Saved Surf (sv)" ;; snapshot) _bb_goto "Home → Snapshots (sn)" ;; ux) _bb_goto "Home → Cloud Surf (cs)" ;; esac ;;
   esac
 }
 

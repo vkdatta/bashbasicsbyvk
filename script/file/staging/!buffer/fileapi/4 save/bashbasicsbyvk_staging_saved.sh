@@ -28,9 +28,9 @@ handle_save_upload() {
   _SVC_INC_HIDDEN=true
   case $rc in
     0)
-      echo "💾 Saved as '$alias' — no link exists. Open it from any device: Home → Saved Surf (sv)."
-      [ -n "$_SVC_DEDUCTED" ] && echo "💳 Credits deducted: $_SVC_DEDUCTED   |   Balance: $_SVC_BALANCE"
-      echo "🕐 Nuke time: $(_bb_fmt_duration "$_SVC_TTL")  →  gone at $(_bb_fmt_when "$_SVC_EXPIRES")   (change or extend it in Saved Surf)"
+      _bb_done_head "Save"; echo; echo "💾 $alias"
+      [ -n "$_SVC_DEDUCTED" ] && _bb_credits "$_SVC_DEDUCTED" "$_SVC_BALANCE"
+      echo "🕐 Nuke time: $(_bb_fmt_duration "$_SVC_TTL")"; _bb_goto "Home → Saved Surf (sv)"
       return 0 ;;
     2) return 1 ;;
     *) return 1 ;;

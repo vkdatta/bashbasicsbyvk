@@ -79,13 +79,7 @@ if [[ "$COPY_CMD" != "osc52-direct" && "$COPY_CMD" != "worker-bridge" ]]; then
 
 elif [ "$COPY_CMD" == "osc52-direct" ]; then
 
-    PAYLOAD=$(base64 < "$FILE" | tr -d '[:space:]')
-
-    if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
-        printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$PAYLOAD"
-    else
-        printf "\033]52;c;%s\a" "$PAYLOAD"
-    fi
+    _bb_osc52_copy < "$FILE"
 
     echo "💫 Success: Small file (<1KB) copied via OSC52."
 
@@ -176,20 +170,14 @@ else
     FINAL_URL="${RAW_URL}#k=${KEY}"
     _bb_key_remember "$FINAL_URL"     # lets the api loop copy this link again later
 
-    URL_PAYLOAD=$(printf "%s" "$FINAL_URL" | base64 | tr -d '\n')
-
-    if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
-        printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$URL_PAYLOAD"
-    else
-        printf "\033]52;c;%s\a" "$URL_PAYLOAD"
-    fi
+    _bb_osc52_copy "$FINAL_URL"
 
     clear
 
     echo "💫 Success: Sync link copied to clipboard (key embedded after #)."
     echo "-------------------------------------------"
     echo "Link: $FINAL_URL"
-    [ -n "$CREDITS_DEDUCTED" ] && echo "💳 Credits deducted: $CREDITS_DEDUCTED   |   Balance: $CREDITS_BALANCE"
+    [ -n "$CREDITS_DEDUCTED" ] && _bb_credits "$CREDITS_DEDUCTED" "$CREDITS_BALANCE"
     _bb_print_expiry "$LINK_EXPIRES"
     echo "-------------------------------------------"
 

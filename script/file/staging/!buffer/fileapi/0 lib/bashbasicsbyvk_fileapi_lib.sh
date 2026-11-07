@@ -238,15 +238,44 @@ _bb_link_cfg() {
   true
 }
 
+# ── the ONE receipt layout (up-, c2c-, ux-, backup, save, Pending): done line → link block → credits → nuke time → where to go next ──
+#   _bb_done_head <Action>   _bb_link_block <url>   _bb_credits <deducted> <balance>   _bb_print_expiry <expires-ms>   _bb_goto <where>
+_bb_done_head() { echo; echo "💫 ${1:-Upload} Success"; }
+_bb_link_block() { echo; echo "-------------------------------------------"; echo "Link: $1"; echo "-------------------------------------------"; echo; }
+_bb_credits() { [ -n "$1" ] || return 0; echo "💳 Credits deducted: $1"; [ -n "$2" ] && echo "🪙 Balance: $2"; return 0; }
+_bb_goto() { echo; echo "Go to ${1} for further actions"; }
 # After a successful upload: when it will be nuked.   _bb_print_expiry <expires-ms-or-empty>
 _bb_print_expiry() {
-  local ms="$1" secs; secs=$(_bb_svc_ttl "${_BB_SVC:-}")
+  local secs; secs=$(_bb_svc_ttl "${_BB_SVC:-}")
   local label="🕐 Nuke time: $(_bb_fmt_duration "$secs")"
-  [ "$secs" -lt 3600 ] && label+=" (billed as 1 hour)"
-  [ -n "$ms" ] && label+="  →  gone at $(_bb_fmt_when "$ms")"
   [ -n "$_BB_LINK_ALIAS" ] && label+="   |   alias: $_BB_LINK_ALIAS"
   echo "$label"
-  echo "   Change or nuke it early from  api  (Home → Links)."
+  _bb_goto "Home → Links (api)"
+}
+
+# ── OSC 52: put text on the clipboard of the machine the person SITS at, through the terminal (the only way on a headless box) ──
+# _bb_osc52_copy <text>   or   ... | _bb_osc52_copy      Used by the upload link announcement and by bashbasicsbyvk_copy (ONE copy of this logic).
+# The whole sequence goes out in ONE write to /dev/tty with the builtin printf: not through the printf shim (which records it into the screen
+# buffer and sends it to a stdout that may be captured / redirected), and the loading-bar animator cannot cut into it.
+# Wrapper by what we are inside: tmux ($TMUX) · GNU screen ($STY) · a tmux/screen $TERM seen over ssh ($TMUX is not forwarded) · plain terminal.
+# Inside tmux the text is also loaded into tmux's own buffer with -w (tmux 3.2+ forwards it to the terminal clipboard): that needs no allow-passthrough.
+_bb_osc52_copy() {
+  local pl seq inner
+  if [ $# -gt 0 ]; then pl=$(builtin printf '%s' "$1" | base64 | tr -d '[:space:]'); else pl=$(base64 | tr -d '[:space:]'); fi
+  [ -n "$pl" ] || return 1
+  inner=$'\033]52;c;'"$pl"$'\a'
+  if [ -n "${TMUX:-}" ]; then
+    command -v tmux >/dev/null 2>&1 && builtin printf '%s' "$pl" | base64 -d 2>/dev/null | tmux load-buffer -w - >/dev/null 2>&1
+    seq=$'\033Ptmux;'"${inner//$'\033'/$'\033\033'}"$'\033\\'
+  elif [ -n "${STY:-}" ]; then
+    seq=$'\033P'"$inner"$'\033\\'
+  elif [[ "${TERM:-}" == screen* || "${TERM:-}" == tmux* ]]; then
+    seq=$'\033Ptmux;'"${inner//$'\033'/$'\033\033'}"$'\033\\'
+  else
+    seq="$inner"
+  fi
+  { builtin printf '%s' "$seq" >/dev/tty; } 2>/dev/null || builtin printf '%s' "$seq"
+  return 0
 }
 
 

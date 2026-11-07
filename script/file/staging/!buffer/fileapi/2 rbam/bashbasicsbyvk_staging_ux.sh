@@ -295,7 +295,7 @@ _ux_do_share() {
   _dep_need -c "Encrypting for ux-" fileapi.pack || return 1
   local -a gz; local lvl; _bb_gzip_setup
 
-  echo "🔎 Scanning selection..."
+  echo "🔎 Scanning..."
   local stage tmpdir rcfile errfile
   stage=$(mktemp -d) && tmpdir=$(_pn_mkpack) && rcfile=$(mktemp) && errfile=$(mktemp) \
     || { echo "❌ Could not create temp files."; return 1; }
@@ -315,7 +315,7 @@ _ux_do_share() {
   arcname=$(printf '%s' "$arcname" | LC_ALL=C tr -c 'A-Za-z0-9._ -' '_' | cut -c1-120)
 
   # 3) pack tar.gz → encrypt, streamed (plaintext archive never touches the disk) — exactly like up-
-  echo "📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)"
+  echo "📦 Packing..."
   local packout
   _bb_progress_begin      # the pack bar owns the screen
   packout=$(
@@ -375,15 +375,11 @@ _ux_do_share() {
   fi
   local deducted="$_PN_DEDUCTED" balance="$_PN_BALANCE" expires="$_PN_EXPIRES"
 
-  echo "💫 Shared with ${#rids[@]} person(s). No link exists — each of them gets a notification and accepts it into their Cloud Surf."
-  [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
-  local secs; secs=$(_bb_ux_nuke_seconds)
-  local label="🕐 Nuke time: $(_bb_fmt_duration "$secs")"
-  [ "$secs" -lt 3600 ] && label+=" (billed as 1 hour)"
-  [ -n "$expires" ] && label+="  →  gone at $(_bb_fmt_when "$expires")"
+  _bb_done_head "Share"; echo; echo "👥 ${#rids[@]} person(s) — each gets a notification and accepts it into their Cloud Surf."
+  [ -n "$deducted" ] && _bb_credits "$deducted" "$balance"
+  local label="🕐 Nuke time: $(_bb_fmt_duration "$(_bb_ux_nuke_seconds)")"
   [ -n "$_BB_LINK_ALIAS" ] && label+="   |   alias: $_BB_LINK_ALIAS"
-  echo "$label"
-  echo "   Manage who can see what — or nuke it for everyone — in  cs  (Home → Cloud Surf)."
+  echo "$label"; _bb_goto "Home → Cloud Surf (cs)"
   return 0
 }
 

@@ -142,53 +142,29 @@ _crypto_decrypt_stdin() {
   '
 }
 
-# After a new link: keep it (encrypted, for any device) and tell the sender what recipients will see.
+# After a new link: keep it (encrypted, for any device) in the background.  Nothing is printed unless it fails.
 _bb_link_store_and_explain() {
-  local url="$1" base id d30 mail="${FILEAPI_BASHBASICS_EMAIL:-}"
-  if [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" != "0" ]; then
-    base="${url%%#*}"; base="${base%/}"; id="${base##*/}"
-    if [ "${FILEAPI_BASHBASICS_LINK_SYNC:-0}" = 1 ]; then
-      if _bb_link_secret_put "$id" "$url"; then
-        echo "☁️  Kept (encrypted — the server cannot read it) in Home → Links: copy it again with  c-N  from any device."
-      else
-        echo "📜  Not kept in the cloud (needs your dinons on this computer, or the server was unreachable). It is still saved on this computer."
-      fi
-    else
-      # fetching the key chain + storing the encrypted link takes a few round trips: do it in the background, nothing to wait for
-      ( _bb_link_secret_put "$id" "$url" >/dev/null 2>&1 ) >/dev/null 2>&1 &
-      disown 2>/dev/null
-      echo "☁️  Saving it (encrypted — the server cannot read it) to Home → Links in the background: copy it again with  c-N  from any device."
-    fi
+  local url="$1" base id
+  [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" != "0" ] || return 0
+  base="${url%%#*}"; base="${base%/}"; id="${base##*/}"
+  if [ "${FILEAPI_BASHBASICS_LINK_SYNC:-0}" = 1 ]; then
+    _bb_link_secret_put "$id" "$url" || echo "📜  Not kept in the cloud (needs your dinons on this computer, or the server was unreachable). It is still saved on this computer."
+  else
+    ( _bb_link_secret_put "$id" "$url" >/dev/null 2>&1 ) >/dev/null 2>&1 &
+    disown 2>/dev/null
   fi
-  d30=$(_bb_d30 "${FILEAPI_BASHBASICS_DISEPS:-}")
-  echo "🪪 Anyone who opens this link sees WHO shared it:  ${mail:-?}${d30:+  ·  $d30}   (+ Copy and Report-abuse → ${WORKER_URL%/}/help)"
-  echo "   Links are encrypted so nobody can look inside; reports about pirated, adult or illegal content go to the admin and can"
-  echo "   restrict the link and suspend the account. Only share what you may share."
+  return 0
 }
 
 _announce_link() {
   local final_url="$1"
-  local url_payload
   _bb_key_remember "$final_url"          # so the api loop can copy / rebuild this link later (no re-upload)
-  url_payload=$(printf "%s" "$final_url" | base64 | tr -d '\n')
-
-  if [[ "$TERM" == "screen"* ]] || [[ "$TERM" == "tmux"* ]]; then
-    printf "\033Ptmux;\033\033]52;c;%s\a\033\\" "$url_payload"
-  else
-    printf "\033]52;c;%s\a" "$url_payload"
-  fi
-
-  echo "💫 Link copied to clipboard (best effort). Key is embedded after # — keep the whole link intact."
-  echo "-------------------------------------------"
-  echo "Link: $final_url"
-  echo "-------------------------------------------"
+  _bb_osc52_copy "$final_url"
+  _bb_done_head "${_BB_ACTION:-Upload}"
+  _bb_link_block "$final_url"
   _bb_link_store_and_explain "$final_url"
-
   if [ "${FILEAPI_BASHBASICS_OPEN:-0}" = "1" ]; then
     ( open "$final_url" || xdg-open "$final_url" || termux-open-url "$final_url" ) &> /dev/null &
-  else
-    echo "📜  Not auto-opened: the browser viewer runs code delivered by the server, which could in theory read the key."
-    echo "   Use 'do-' (decrypts on your machine) for the strongest protection, or export FILEAPI_BASHBASICS_OPEN=1 to auto-open."
   fi
 }
 
@@ -551,8 +527,10 @@ _bb_fast_send() {
   [ -t 2 ] || [ "${_SVC_QUIET:-0}" = 1 ] || echo "☁️  Uploading $nb encrypted blob(s)..."
   local fout fverdict tline
   _bb_progress_begin      # the send bar owns the screen: no loading bar until it is done
+  _lt_b "Go engine: send (network + server)"
   fout=$("$_BVK_XFER_BIN" send --dir "$dir" --url "$WORKER_URL" --est "$est" --n "$nb" --conc "$fconc" --handover-over "$((fmax * 1048576))" <<<"$fcfg")
   _bb_progress_end
+  _lt_e
   fverdict=$(printf '%s\n' "$fout" | sed -n '1p')
   tline=$(printf '%s\n' "$fout" | grep -m1 $'^TIME\t')
   _bb_xfer_note go-timing "pack=${pack_ms}ms ${tline#TIME$'\t'}"
@@ -593,7 +571,7 @@ _up_do_multipart_upload() {
   fi
   local -a gz; local lvl; _bb_gzip_setup
 
-  echo "🔎 Scanning selection..."
+  echo "🔎 Scanning..."
   # Stage the selection by name as symlinks so the archive holds "<name>/..." entries relative
   # to nothing absolute (same layout the old per-file upload produced).
   local stage tmpdir rcfile errfile
@@ -615,17 +593,19 @@ _up_do_multipart_upload() {
   [ ${#rel_items[@]} -eq 1 ] && arcname="${rel_items[0]#./}.tar.gz"
   arcname=$(printf '%s' "$arcname" | LC_ALL=C tr -c 'A-Za-z0-9._ -' '_' | cut -c1-120)
 
-  echo "📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)"
+  echo "📦 Packing..."
   # find lists regular files + folders only (symlinks inside the tree are skipped, as before);
   # tar -h resolves the staging symlinks at the top level.  tar's exit status goes to $rcfile.
   local packout _tp0=${EPOCHREALTIME/./} _tp1; _tp0=${_tp0:-0}
   _bb_progress_begin      # the pack bar owns the screen
   if [ $use_go = 1 ]; then
+    _lt_b "Go engine: pack + encrypt"
     packout=$(
       cd "$stage" || exit 1
       _hid_find0 "$hid_inc" 1 "${rel_items[@]}" 2>> "$errfile" \
         | "$_BVK_XFER_BIN" pack --out "$tmpdir" --name "$arcname" --level "$lvl" --chunk "$_BB_PACK_BYTES" --rc "$rcfile" --warn "$errfile"
     )
+    _lt_e
   else
     packout=$(
       cd "$stage" || exit 1
@@ -658,7 +638,6 @@ _up_do_multipart_upload() {
     echo "🔴  Some files changed or were unreadable while packing (they may be missing/partial):"
     head -n 3 "$errfile" | sed 's/^/   /'
   fi
-  echo "   $((total_size/1024/1024)) MB after tar.gz + encryption, in $nblobs blob(s)."
 
   if [ "$total_size" -gt "$_SP_HARD_LIMIT_BYTES" ]; then
     echo "❌ Packed size is $((total_size/1024/1024/1024))GB — exceeds the absolute upload ceiling"
@@ -679,7 +658,7 @@ _up_do_multipart_upload() {
       0) _up_cleanup
          _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
          _announce_link "${_FS_URL}#k=${key}"
-         [ -n "$_FS_DEDUCTED" ] && echo "💳 Credits deducted: $_FS_DEDUCTED   |   Balance: $_FS_BALANCE"
+         [ -n "$_FS_DEDUCTED" ] && _bb_credits "$_FS_DEDUCTED" "$_FS_BALANCE"
          _bb_print_expiry "$_FS_EXPIRES"
          return 0 ;;
       1) _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1 ;;
@@ -719,7 +698,7 @@ _up_do_multipart_upload() {
   local final_url="$_PN_URL" deducted="$_PN_DEDUCTED" balance="$_PN_BALANCE" expires="$_PN_EXPIRES"
 
   _announce_link "${final_url}#k=${key}"
-  [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
+  [ -n "$deducted" ] && _bb_credits "$deducted" "$balance"
   _bb_print_expiry "$expires"
 }
 
@@ -770,7 +749,7 @@ _c2c_paths() {
     return 1
   fi
 
-  echo "🔐 Encrypting merged text locally (key never leaves this machine)..."
+  echo "🔐 Encrypting..."
   local key
   key=$(_crypto_new_key)
   if [[ ! "$key" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
@@ -808,7 +787,7 @@ _c2c_paths() {
   expires=$(echo "$result" | sed -n '4p')
 
   _announce_link "${final_url}#k=${key}"
-  [ -n "$deducted" ] && echo "💳 Credits deducted: $deducted   |   Balance: $balance"
+  [ -n "$deducted" ] && _bb_credits "$deducted" "$balance"
   _bb_print_expiry "$expires"
 }
 

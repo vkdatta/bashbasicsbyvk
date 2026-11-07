@@ -61,7 +61,7 @@ _svc_upload() {
   [ ${#rel_items[@]} -eq 1 ] && arcname="${rel_items[0]#./}.tar.gz"
   arcname=$(printf '%s' "$arcname" | LC_ALL=C tr -c 'A-Za-z0-9._ -' '_' | cut -c1-120)
 
-  _svc_say "📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)"
+  _svc_say "📦 Packing..."
   local packout r
   _bb_progress_begin      # the pack bar owns the screen
   packout=$(

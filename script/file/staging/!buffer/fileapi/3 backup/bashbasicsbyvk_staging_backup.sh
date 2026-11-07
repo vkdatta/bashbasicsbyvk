@@ -56,8 +56,9 @@ _bk_before_delete() {
   _svc_upload backup "$alias" "${real[@]}"
   case $? in
     0)
-      echo "🗄️  Backed up as '$alias' — kept $(_bb_fmt_duration "$_SVC_TTL")  ·  Home → Backup (bk) to restore."
-      [ -n "$_SVC_DEDUCTED" ] && echo "💳 Credits deducted: $_SVC_DEDUCTED   |   Balance: $_SVC_BALANCE"
+      _bb_done_head "Backup"; echo; echo "🗄️  $alias"
+      [ -n "$_SVC_DEDUCTED" ] && _bb_credits "$_SVC_DEDUCTED" "$_SVC_BALANCE"
+      echo "🕐 Nuke time: $(_bb_fmt_duration "$_SVC_TTL")"; _bb_goto "Home → Backup (bk)"
       return 0 ;;
     2) echo "🔴  No backup was made (you stopped it)." ;;
     4) echo "⏸  The backup was interrupted. It is KEPT — finish it from Pending (pn). Nothing is deleted yet." ;;

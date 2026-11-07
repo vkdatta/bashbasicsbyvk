@@ -90,7 +90,7 @@ func (c *chunker) status(final bool) {
 		return
 	}
 	c.lastDraw = now
-	fmt.Fprintf(os.Stderr, "\x1b[?7l\r\x1b[K\x1b[36m📦→🔐 %.1f MB (%ds)\x1b[0m\x1b[?7h", float64(c.seen)/1048576, int(now.Sub(c.t0).Seconds()))
+	fmt.Fprintf(os.Stderr, "\x1b[?7l\r\x1b[K\x1b[36m🔐 Encrypting... %.1f MB (%ds)\x1b[0m\x1b[?7h", float64(c.seen)/1048576, int(now.Sub(c.t0).Seconds()))
 	if final {
 		fmt.Fprint(os.Stderr, "\n")
 	}
