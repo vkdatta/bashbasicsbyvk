@@ -6,9 +6,9 @@
 #
 # Credentials per profile:
 #   MAIL    e-mail (max 256 chars)
-#   DISEPS  27 unique codes x 16 chars, joined with "-"   (sent with every request, shareable with admin)
+#   DISEPS  270 unique codes x 16 chars, joined with "-"   (sent with every request, shareable with admin)
 #   APIKEY  secret, never shared; only its SHA-256 is sent to the server at creation / regeneration
-#   DINONS  29 unique codes x 16 chars, joined with "-"   (NEVER sent to the server; wraps the FEK)
+#   DINONS  290 unique codes x 16 chars, joined with "-"   (NEVER sent to the server; wraps the FEK)
 #   SEALKEY private X25519 key (base64url), made on first use of rbam / ux-. Its public half is registered on the
 #           server so a sender can SEAL their dinons for you; only this private half can open them.
 # The 64-hex file-encryption-key (FEK) is created locally, wrapped with DINONS (scrypt + AES-256-GCM)
@@ -23,7 +23,13 @@ _BVK_PAY_URL="${BVK_PAY_URL:-https://payments.bashbasics.workers.dev}"
 #        1 US$  =  100 ₹  =  1,000 credits          <- change ONLY these three numbers
 _BVK_RATE_USD=1; _BVK_RATE_INR=100; _BVK_RATE_CREDITS=1000
 _BVK_SUPPORT_MAIL="vkd.codes@gmail.com"
-_BVK_DISEPS_N=27; _BVK_DINONS_N=29; _BVK_CODE_LEN=16
+# Identity sizes: THE one place on the terminal side (server twin: DISEPS_N / SHARE_N / APIKEY_LEN in fileapi/src/users.js).
+_BVK_DISEPS_N=270; _BVK_DINONS_N=290; _BVK_CODE_LEN=16; _BVK_APIKEY_LEN=512
+_BVK_SHARE_N=30; _BVK_SHARE_STEP=97        # the d30: SHARE_N diseps codes at positions (k * STEP) mod DISEPS_N + 1, k = 1..SHARE_N
+_bvk_share_spec() {  # "DISEPS_N pos1 pos2 ... posN" (1-based) — the one definition of the d30, used by _bb_d30 and RBAM
+  local k; printf '%d' "$_BVK_DISEPS_N"
+  for ((k=1; k<=_BVK_SHARE_N; k++)); do printf ' %d' $(( (k * _BVK_SHARE_STEP) % _BVK_DISEPS_N + 1 )); done
+}
 
 # ---------------------------------------------------------------- storage helpers
 _bvk_auth_init() {
@@ -45,7 +51,7 @@ _bvk_auth_parse() {  # $1=file ; sets P_MAIL P_DISEPS P_APIKEY P_DINONS P_SEALKE
       MAIL)    _bvk_auth_mail_ok "$v"   && P_MAIL="$v" ;;
       DISEPS)  _bvk_auth_codes_ok "$v" "$_BVK_DISEPS_N" && P_DISEPS="$v" ;;
       DINONS)  _bvk_auth_codes_ok "$v" "$_BVK_DINONS_N" && P_DINONS="$v" ;;
-      APIKEY)  [[ "$v" =~ ^[A-Za-z0-9_-]{32,128}$ ]] && P_APIKEY="$v" ;;
+      APIKEY)  [ "${#v}" -eq "$_BVK_APIKEY_LEN" ] && [[ "$v" =~ ^[A-Za-z0-9_-]+$ ]] && P_APIKEY="$v" ;;
       SEALKEY) [[ "$v" =~ ^[A-Za-z0-9_-]{40,120}$ ]] && P_SEALKEY="$v" ;;
       CREATED) [[ "$v" =~ ^[0-9T:Z-]{8,32}$ ]] && P_CREATED="$v" ;;
     esac
@@ -91,7 +97,7 @@ _bvk_auth_gen_codes() {  # $1=count -> joined by '-'
     while(s.size<n){let x="";for(let i=0;i<L;i++)x+=A[c.randomInt(A.length)];s.add(x);}
     process.stdout.write([...s].join("-"));' "$1" "$_BVK_CODE_LEN"
 }
-_bvk_auth_gen_apikey() { node -e 'process.stdout.write(require("crypto").randomBytes(36).toString("base64url"))'; }
+_bvk_auth_gen_apikey() { node -e 'const n=+process.argv[1];process.stdout.write(require("crypto").randomBytes(Math.ceil(n*3/4)).toString("base64url").slice(0,n))' "$_BVK_APIKEY_LEN"; }
 _bvk_auth_gen_fek()    { node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))'; }
 _bvk_auth_sha256()     { printf '%s' "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(require("crypto").createHash("sha256").update(d).digest("hex")))'; }
 
@@ -296,26 +302,6 @@ _bvk_auth_import() {
 }
 
 
-# ---------------------------------------------------------------- link an existing (pre-diseps) account
-_bvk_auth_link() {
-  echo; echo "🔗 Link existing account (one-time upgrade)"
-  echo "   Use the e-mail and API key you used before this update. A diseps + dinons will be added to it."
-  local mail key; read -e -r -p "   Email: " mail; builtin read -r -s -p "   API key: " key; echo
-  _bvk_auth_mail_ok "$mail" && [ -n "$key" ] || { echo "❌ Invalid input."; return; }
-  P_MAIL="$mail"; P_APIKEY="$key"; P_DISEPS=""                      # no diseps yet => server treats it as legacy login
-  P_DINONS=$(_bvk_auth_gen_codes $_BVK_DINONS_N); local nd fek wrapped
-  nd=$(_bvk_auth_gen_codes $_BVK_DISEPS_N); fek=$(_bvk_auth_gen_fek); wrapped=$(_bvk_auth_fek_wrap "$fek" "$P_DINONS"); fek=""
-  [ -n "$wrapped" ] || { echo "❌ Local key generation failed."; return; }
-  local json; json=$(printf '{"diseps":%s,"fek_wrapped":"%s"}' "$(_bvk_auth_jstr "$nd")" "$wrapped")
-  if ! _bvk_auth_call POST /auth/upgrade "$json" creds; then _bvk_auth_err; return; fi
-  P_DISEPS="$nd"; P_CREATED=$(date -u +%FT%TZ); local id; id=$(_bvk_auth_new_id)
-  _bvk_auth_write "$_BVK_AUTH_DIR/profiles/$id"; printf '%s' "$id" > "$_BVK_AUTH_DIR/active"
-  local out="${path:-$PWD}/bashbasicsbyvk_credentials_$(date +%Y%m%d_%H%M%S).txt"
-  ( umask 077; printf 'bashbasicsbyvk credentials — KEEP SECRET\n\nmail=%s\ndiseps=%s\ndinons=%s\napikey=%s\n' "$P_MAIL" "$P_DISEPS" "$P_DINONS" "$P_APIKEY" > "$out" )
-  echo "💫 Account linked and set active (credits and history are unchanged)."
-  echo "📄 Credentials saved to: $out  — SAVE IT NOW (it holds your new diseps and dinons)."
-}
-
 # ---------------------------------------------------------------- acting as a user
 _bvk_auth_mailto() {  # $1=subject $2=body
   local url="mailto:$_BVK_SUPPORT_MAIL?subject=$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$1")&body=$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$2")"
@@ -396,7 +382,7 @@ _au_list_header() {
   _vp_filter_header_line
 }
 _au_list_footer() {
-  _mc_footer "c:Create user" "r:Remove user" "l:Link old account" "|" "ux:Export users" "ui:Import users" "=:Filter" "|" "u" "q"
+  _mc_footer "c:Create user" "r:Remove user" "|" "ux:Export users" "ui:Import users" "=:Filter" "|" "u" "q"
 }
 _au_list_build() {
   _bvk_auth_list
@@ -508,17 +494,17 @@ _bvk_pay_amount() {  # asks currency, then amount; sets _PAY_CUR (USD|INR) and _
 _bvk_pay_accounts_json() {  # $1=file -> JSON array on stdout ; reasons on stderr ; rc 2 on bad file
   node -e '
     const fs = require("fs"); const out = []; const seen = new Set();
-    const mailRe = /^[^\s@<>"\x27`$\\;|&(){}\/]+@[^\s@]+\.[^\s@]+$/, dRe = /^[A-Za-z0-9]{16}(-[A-Za-z0-9]{16}){26}$/;
+    const mailRe = /^[^\s@<>"\x27`$\\;|&(){}\/]+@[^\s@]+\.[^\s@]+$/, N = +process.argv[2], dRe = new RegExp("^[A-Za-z0-9]{16}(-[A-Za-z0-9]{16}){" + (N - 1) + "}$");
     fs.readFileSync(process.argv[1], "utf8").split(/\r?\n/).forEach((raw, i) => {
       const l = raw.replace(/#.*$/, "").trim(); if (!l || /^"?e?-?mail"?[\s,;]+"?diseps/i.test(l)) return;
       const p = l.split(/[\s,;]+/).filter(Boolean).map((x) => x.replace(/^"|"$/g, ""));
-      if (p.length !== 2 || !mailRe.test(p[0]) || !dRe.test(p[1]) || new Set(p[1].split("-")).size !== 27) { console.error("line " + (i + 1) + ": expected  email,diseps  (27 codes)"); process.exit(2); }
+      if (p.length !== 2 || !mailRe.test(p[0]) || !dRe.test(p[1]) || new Set(p[1].split("-")).size !== N) { console.error("line " + (i + 1) + ": expected  email,diseps  (" + N + " codes)"); process.exit(2); }
       const k = p[0].toLowerCase() + "|" + p[1]; if (seen.has(k)) { console.error("line " + (i + 1) + ": listed twice"); process.exit(2); }
       seen.add(k); out.push({ mail: p[0].toLowerCase(), diseps: p[1] });
     });
     if (!out.length) { console.error("no accounts found in the file"); process.exit(2); }
     if (out.length > 100) { console.error("at most 100 accounts per link (found " + out.length + ")"); process.exit(2); }
-    process.stdout.write(JSON.stringify(out));' "$1"
+    process.stdout.write(JSON.stringify(out));' "$1" "$_BVK_DISEPS_N"
 }
 _bvk_pay_build() {  # $1=kind $2=amount $3=accounts-json-or-empty -> JSON body
   B_CUR="${_PAY_CUR:-USD}" B_NAME="$(_bvk_bill_get name)" B_ADDRESS="$(_bvk_bill_get address)" B_MOBILE="$(_bvk_bill_get mobile)" \
@@ -832,7 +818,6 @@ auth_menu() {
       q)   _bvk_quit; break ;;                 # q closes to the main loop (u only goes back one screen)
       "")  ;;
       c)   _bvk_auth_create ;;
-      l)   _bvk_auth_link ;;
       ui)  _bvk_auth_import ;;
       r|r-*)
         if _au_select_rows "REMOVE" "🗑️  Remove users — which ones?" "$choice"; then

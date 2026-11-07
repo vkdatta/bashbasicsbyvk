@@ -20,7 +20,7 @@ class App(PtyApp):
         pid = 'p_0123456789abcdef'
         open(os.path.join(d, 'active'), 'w').write(pid)
         open(os.path.join(d, 'profiles', pid), 'w').write('MAIL=test@example.com\nDISEPS=%s\nDINONS=%s\nAPIKEY=%s\nSEALKEY=%s\nCREATED=2026-10-21T00:00:00Z\n' % (
-            codes(27), codes(29), 'k' * 40, 's' * 50))
+            codes(270), codes(290), 'k' * 512, 's' * 50))
     def __init__(self, user=True):
         def populate(home, work):
             for n in ('alpha.txt', 'beta.txt'): open(os.path.join(work, n), 'w').write('x')

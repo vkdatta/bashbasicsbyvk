@@ -386,15 +386,15 @@ const CMD = {
     const c = (v) => String(v ?? '').replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ');
     const row = (a) => console.log(a.map(c).join('\x1f'));
     const flag = (v) => (v ? 1 : 0);
-    if (kind === 'gives') for (const r of d.gives || []) row([r.rid, r.mail, r.d3, r.status, flag(r.mine), flag(r.dinons), flag(r.sealReady), flag(r.held)]);
-    else if (kind === 'receives') for (const r of d.receives || []) row([r.rid, r.mail, r.d3, r.status, flag(r.mine), flag(r.dinons)]);
+    if (kind === 'gives') for (const r of d.gives || []) row([r.rid, r.mail, r.d30, r.status, flag(r.mine), flag(r.dinons), flag(r.sealReady), flag(r.held)]);
+    else if (kind === 'receives') for (const r of d.receives || []) row([r.rid, r.mail, r.d30, r.status, flag(r.mine), flag(r.dinons)]);
     else if (kind === 'notifs') for (const n of d.notifications || []) {
       const p = n.payload || {};
-      row([n.id, n.kind, n.ref ?? '', n.createdAt, p.mail || p.from_mail || '', p.d3 || p.from_d3 || '', p.alias || '', p.bytes ?? '', p.files ?? '', flag(p.nuked), p.role || '']);
+      row([n.id, n.kind, n.ref ?? '', n.createdAt, p.mail || p.from_mail || '', p.d30 || p.from_d30 || '', p.alias || '', p.bytes ?? '', p.files ?? '', flag(p.nuked), p.role || '']);
     }
     else if (kind === 'given') for (const s of d.given || []) row([s.id, s.alias || '', s.bytes, s.createdAt, s.expiresAt, s.accepted, s.offered, s.nukeRefund, s.nukeRefundDays, s.paidHours]);
-    else if (kind === 'received') for (const s of d.received || []) row([s.id, s.alias || '', s.bytes, s.expiresAt, s.offer, s.from, s.fromD3, s.rid ?? '']);
-    else if (kind === 'people') for (const p of d.people || []) row([p.rid ?? '', p.mail, p.d3, p.status]);
+    else if (kind === 'received') for (const s of d.received || []) row([s.id, s.alias || '', s.bytes, s.expiresAt, s.offer, s.from, s.fromD30, s.rid ?? '']);
+    else if (kind === 'people') for (const p of d.people || []) row([p.rid ?? '', p.mail, p.d30, p.status]);
     else process.exit(2);
   },
 

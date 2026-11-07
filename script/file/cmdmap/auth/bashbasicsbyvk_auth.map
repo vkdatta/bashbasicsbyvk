@@ -8,7 +8,6 @@
 u          .mapto()  u          from bashbasicsbyvk_authmenucommands.sh
 q          .mapto()  q          from bashbasicsbyvk_authmenucommands.sh
 c          .mapto()  c          from bashbasicsbyvk_authmenucommands.sh
-l          .mapto()  l          from bashbasicsbyvk_authmenucommands.sh
 ui         .mapto()  ui         from bashbasicsbyvk_authmenucommands.sh
 r          .mapto()  r          from bashbasicsbyvk_authmenucommands.sh
 r-         .mapto()  r-         from bashbasicsbyvk_authmenucommands.sh

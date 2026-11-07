@@ -638,5 +638,6 @@ _bb_link_secret_put() {
   _BB_LAST_SECRET_ENC="$enc"
 }
 
-# the three codes other people see next to your mail (positions 13, 24 and 7 of the diseps) — same as RBAM's d3
-_bb_d3() { printf '%s' "$1" | awk -F- 'NF==27 { printf "%s-%s-%s", $13, $24, $7 }'; }
+# the d30: the 30 diseps codes other people see next to your mail — same as RBAM's d30. Positions come from
+# _bvk_share_spec (auth.sh), the one definition on the terminal side.
+_bb_d30() { printf '%s' "$1" | awk -F- -v spec="$(_bvk_share_spec)" 'BEGIN{m=split(spec,P," ")} NF==P[1] { for(i=2;i<=m;i++) printf "%s%s", (i>2?"-":""), $(P[i]) }'; }

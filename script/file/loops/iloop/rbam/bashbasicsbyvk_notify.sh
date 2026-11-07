@@ -11,7 +11,7 @@
 #    N     open / answer      r-N   dismiss (1,3-5 · a)      u   back
 # ════════════════════════════════════════════════════════════════════════════
 
-declare -ga _NF_ID=() _NF_KIND=() _NF_REF=() _NF_AT=() _NF_MAIL=() _NF_D3=() _NF_ALIAS=() _NF_BYTES=() _NF_FILES=() _NF_NUKED=() _NF_ROLE=()
+declare -ga _NF_ID=() _NF_KIND=() _NF_REF=() _NF_AT=() _NF_MAIL=() _NF_D30=() _NF_ALIAS=() _NF_BYTES=() _NF_FILES=() _NF_NUKED=() _NF_ROLE=()
 _NF_LOADED=0
 
 # ── the notification COUNT for the header row (⏰ N) ───────────────────────────────────────────────────────────
@@ -43,13 +43,13 @@ _nf_cnt_get() {   # -> _NF_CNT  (number, or "–" while nothing is known yet)
 }
 
 _nf_load() {
-  _NF_ID=(); _NF_KIND=(); _NF_REF=(); _NF_AT=(); _NF_MAIL=(); _NF_D3=(); _NF_ALIAS=(); _NF_BYTES=(); _NF_FILES=(); _NF_NUKED=(); _NF_ROLE=()
+  _NF_ID=(); _NF_KIND=(); _NF_REF=(); _NF_AT=(); _NF_MAIL=(); _NF_D30=(); _NF_ALIAS=(); _NF_BYTES=(); _NF_FILES=(); _NF_NUKED=(); _NF_ROLE=()
   _ux_http GET /notifications || return 1
   if ! _ux_ok; then _ux_fail >&2; return 1; fi
-  local id kind ref at mail d3 alias bytes files nuked role
-  while IFS=$'\x1f' read -r id kind ref at mail d3 alias bytes files nuked role; do
+  local id kind ref at mail d30 alias bytes files nuked role
+  while IFS=$'\x1f' read -r id kind ref at mail d30 alias bytes files nuked role; do
     [ -n "$id" ] || continue
-    _NF_ID+=("$id"); _NF_KIND+=("$kind"); _NF_REF+=("$ref"); _NF_AT+=("$at"); _NF_MAIL+=("$mail"); _NF_D3+=("$d3")
+    _NF_ID+=("$id"); _NF_KIND+=("$kind"); _NF_REF+=("$ref"); _NF_AT+=("$at"); _NF_MAIL+=("$mail"); _NF_D30+=("$d30")
     _NF_ALIAS+=("$alias"); _NF_BYTES+=("$bytes"); _NF_FILES+=("$files"); _NF_NUKED+=("$nuked"); _NF_ROLE+=("$role")
   done < <(_ux_core tsv notifs <<<"$_UX_BODY")
   _NF_LOADED=1
@@ -59,15 +59,15 @@ _nf_load() {
 # slot -> _NF_T (the sentence)  _NF_ACT (1 = needs an answer)
 _nf_text() {
   local k="$1" who nm
-  who="a person with mail ${_NF_MAIL[$k]} and diseps ${_NF_D3[$k]}"
+  who="a person with mail ${_NF_MAIL[$k]} and diseps ${_NF_D30[$k]}"
   nm="“${_NF_ALIAS[$k]:-a share}”"
   _NF_ACT=0
   case "${_NF_KIND[$k]}" in
     rbam_give)     _NF_T="$who has given you receive access to their cloud environment. Do you want to become receiver?"; _NF_ACT=1 ;;
     rbam_ask)      _NF_T="$who is asking to receive access to your cloud environment. Do you want to become their sender (your dinons are sent to them, sealed)?"; _NF_ACT=1 ;;
-    rbam_accepted) _NF_T="${_NF_MAIL[$k]} (${_NF_D3[$k]}) accepted — the link is active." ;;
-    rbam_rejected) _NF_T="${_NF_MAIL[$k]} (${_NF_D3[$k]}) declined." ;;
-    rbam_removed)  _NF_T="${_NF_MAIL[$k]} (${_NF_D3[$k]}) ended the link; access between you is gone." ;;
+    rbam_accepted) _NF_T="${_NF_MAIL[$k]} (${_NF_D30[$k]}) accepted — the link is active." ;;
+    rbam_rejected) _NF_T="${_NF_MAIL[$k]} (${_NF_D30[$k]}) declined." ;;
+    rbam_removed)  _NF_T="${_NF_MAIL[$k]} (${_NF_D30[$k]}) ended the link; access between you is gone." ;;
     share_offer)   _NF_T="$who has shared $nm with you (${_NF_FILES[$k]:-?} files, $(_xui_hsize "${_NF_BYTES[$k]:-0}")). Do you want to accept it into your Cloud Surf?"; _NF_ACT=1 ;;
     share_revoked) if [ "${_NF_NUKED[$k]}" = 1 ]; then _NF_T="${_NF_MAIL[$k]} nuked $nm — it is gone for everyone."
                    else _NF_T="${_NF_MAIL[$k]} took your access to $nm away."; fi ;;

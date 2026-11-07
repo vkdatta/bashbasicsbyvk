@@ -836,6 +836,7 @@ _fx_udf_export() { _lm_stub bashbasicsbyvk_udf_io.sh _fx_udf_export "$@"; }
 _fx_udf_import() { _lm_stub bashbasicsbyvk_udf_io.sh _fx_udf_import "$@"; }
 _infinity_warning() { _lm_stub bashbasicsbyvk_infinity.sh _infinity_warning "$@"; }
 infinity_stones_menu() { _lm_stub bashbasicsbyvk_infinity.sh infinity_stones_menu "$@"; }
+_bvk_share_spec() { _lm_stub bashbasicsbyvk_auth.sh _bvk_share_spec "$@"; }
 _bvk_auth_init() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_init "$@"; }
 _bvk_auth_parse() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_parse "$@"; }
 _bvk_auth_write() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_write "$@"; }
@@ -857,7 +858,6 @@ _bvk_auth_create() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_create "$@"; }
 _bvk_auth_export() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_export "$@"; }
 _bvk_auth_merge_file() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_merge_file "$@"; }
 _bvk_auth_import() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_import "$@"; }
-_bvk_auth_link() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_link "$@"; }
 _bvk_auth_mailto() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_mailto "$@"; }
 _bvk_auth_regen() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_regen "$@"; }
 _au_slot() { _lm_stub bashbasicsbyvk_auth.sh _au_slot "$@"; }
@@ -938,7 +938,7 @@ _rb_tabbar() { _lm_stub bashbasicsbyvk_rbam.sh _rb_tabbar "$@"; }
 rb_header() { _lm_stub bashbasicsbyvk_rbam.sh rb_header "$@"; }
 rb_footer() { _lm_stub bashbasicsbyvk_rbam.sh rb_footer "$@"; }
 _rb_mail_ok() { _lm_stub bashbasicsbyvk_rbam.sh _rb_mail_ok "$@"; }
-_rb_d3_ok() { _lm_stub bashbasicsbyvk_rbam.sh _rb_d3_ok "$@"; }
+_rb_d30_ok() { _lm_stub bashbasicsbyvk_rbam.sh _rb_d30_ok "$@"; }
 _rb_request_one() { _lm_stub bashbasicsbyvk_rbam.sh _rb_request_one "$@"; }
 _rb_import() { _lm_stub bashbasicsbyvk_rbam.sh _rb_import "$@"; }
 _rb_export() { _lm_stub bashbasicsbyvk_rbam.sh _rb_export "$@"; }

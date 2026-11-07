@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+All accounts are migrated, so the legacy (no-diseps) account path was dead weight. Also wanted for security: diseps 270 codes (was 27), dinons 290 (was 29), API key 512 characters, special diseps d3 -> d30 (30 codes). No compatibility with existing users wanted.
+
+HOW DID YOU DEBUG
+Grepped both trees for legacy / diseps / dinons / d3 / size literals. Backend tests: secrets, payments (11), fileapi backend (13 groups), pending, viewer_download all pass. Terminal side: bash -n, generators and _bb_d30 checked by hand, tests/run.sh cmd_drift + cmd_docs pass; loadmap timed out at 60s in this sandbox and was not re-run; e2e/mouse/nav tests were updated but not run.
+
+CAUSE
+Sizes were literals spread over three workers (users.js x3), invoices admin, secrets.mjs, the terminal app and docs.
+
+FIX
+Removed handleUpgrade, /auth/upgrade, the auth.legacy guards, the ALLOW_LEGACY_AUTH branch, and the Link old account screen and command. Server sizes now live in fileapi/src/users.js (DISEPS_N, SHARE_N, APIKEY_LEN; copies in telemetry/payments/invoices-admin/secrets.mjs), terminal sizes in _BVK_* at the top of bashbasicsbyvk_auth.sh. d30 = codes at positions (k*97) mod 270 + 1, k=1..30, defined once per side (rbam.js SHARE_POSITIONS, _bvk_share_spec). Login now requires exactly 512-char key and 270-code diseps; JSON body limit raised to 16 KB. Renamed d3 -> d30 everywhere. Lesson: keep every identity size in the constants above.

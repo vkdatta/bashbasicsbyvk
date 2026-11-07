@@ -110,7 +110,7 @@ out=$( HOME="$T/otherdev" XDG_CONFIG_HOME="$T/otherdev/.config" _UX_FEK_SELF="" 
 [ "$(cat "$T/restore2/tax/t.txt" 2>/dev/null)" = "secret numbers" ] && ok "restored on a device that holds no key (credentials + dinons)" || bad "restore from other device failed: $out"
 # same device credentials but WRONG dinons: the server hands over kdk, it stays shut
 rm -rf "$T/restore3"; mkdir -p "$T/restore3"
-out=$( DINONS_SAVE="$DINONS"; DINONS=$(_bvk_auth_gen_codes 29); _UX_FEK_SELF=""; _svc_restore saved "$sid" "tax papers" "$T/restore3" 2>&1 ); rc=$?
+out=$( DINONS_SAVE="$DINONS"; DINONS=$(_bvk_auth_gen_codes 290); _UX_FEK_SELF=""; _svc_restore saved "$sid" "tax papers" "$T/restore3" 2>&1 ); rc=$?
 chk "wrong dinons cannot open a saved item" "$rc" "1"; [ -e "$T/restore3/tax" ] && bad "files appeared with wrong dinons" || ok "…nothing was written"
 # wrong credentials cannot even get kdk (the permission layer)
 out=$(_bb_get_credentials() { FILEAPI_BASHBASICS_EMAIL="$EMAIL"; FILEAPI_BASHBASICS_DISEPS="$DISEPS"; FILEAPI_BASHBASICS_KEY="wrongkey"; P_DINONS="$DINONS"; return 0; }; _UX_FEK_SELF=""; _svc_vault_key "$sid" 2>&1); rc=$?
@@ -297,9 +297,9 @@ _BB_LK=""; _BB_LK_FOR=""; _UX_FEK_SELF=""; _UX_FEK_SELF_FOR=""; _UX_FEK=""      
 _BB_LINK_ALIAS="secret name"; _bb_alias_prepare 2>/dev/null; chk "no dinons: a name is NOT sent in clear" "$_BB_LINK_ALIAS_WIRE" ""; _BB_LINK_ALIAS=""
 HAVE_DINONS=1
 # the identity recipients will see
-d3=$(_bb_d3 "$DISEPS"); chk "d3 = codes 13, 24, 7 of the diseps" "$d3" "$(printf '%s' "$DISEPS" | cut -d- -f13,24,7 --output-delimiter=- | awk -F- -v d="$DISEPS" 'BEGIN{split(d,p,"-")}{printf "%s-%s-%s",p[13],p[24],p[7]}')"
+d30=$(_bb_d30 "$DISEPS"); chk "d30 = the 30 codes at positions (k*97) mod 270 + 1" "$d30" "$(node -e 'const p=process.argv[1].split("-");process.stdout.write(Array.from({length:30},(_,i)=>p[((i+1)*97)%270]).join("-"))' "$DISEPS")"; chk "d30 has 30 codes" "$(printf '%s' "$d30" | awk -F- '{print NF}')" "30"
 out=$(FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" _bb_link_store_and_explain "$LINK" 2>&1)
-has "after up-: tells who recipients will see (mail)" "$out" "$EMAIL"; has "…the d3" "$out" "$d3"; has "…and where to report" "$out" "/help"
+has "after up-: tells who recipients will see (mail)" "$out" "$EMAIL"; has "…the d30" "$out" "$d30"; has "…and where to report" "$out" "/help"
 hasnt "…never the full diseps" "$out" "$DISEPS"
 
 echo "── 8. commands: save- and snap- ──"

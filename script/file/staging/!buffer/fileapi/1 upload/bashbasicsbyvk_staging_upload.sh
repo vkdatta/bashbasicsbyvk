@@ -144,7 +144,7 @@ _crypto_decrypt_stdin() {
 
 # After a new link: keep it (encrypted, for any device) and tell the sender what recipients will see.
 _bb_link_store_and_explain() {
-  local url="$1" base id d3 mail="${FILEAPI_BASHBASICS_EMAIL:-}"
+  local url="$1" base id d30 mail="${FILEAPI_BASHBASICS_EMAIL:-}"
   if [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" != "0" ]; then
     base="${url%%#*}"; base="${base%/}"; id="${base##*/}"
     if [ "${FILEAPI_BASHBASICS_LINK_SYNC:-0}" = 1 ]; then
@@ -160,8 +160,8 @@ _bb_link_store_and_explain() {
       echo "☁️  Saving it (encrypted — the server cannot read it) to Home → Links in the background: copy it again with  c-N  from any device."
     fi
   fi
-  d3=$(_bb_d3 "${FILEAPI_BASHBASICS_DISEPS:-}")
-  echo "🪪 Anyone who opens this link sees WHO shared it:  ${mail:-?}${d3:+  ·  $d3}   (+ Copy and Report-abuse → ${WORKER_URL%/}/help)"
+  d30=$(_bb_d30 "${FILEAPI_BASHBASICS_DISEPS:-}")
+  echo "🪪 Anyone who opens this link sees WHO shared it:  ${mail:-?}${d30:+  ·  $d30}   (+ Copy and Report-abuse → ${WORKER_URL%/}/help)"
   echo "   Links are encrypted so nobody can look inside; reports about pirated, adult or illegal content go to the admin and can"
   echo "   restrict the link and suspend the account. Only share what you may share."
 }

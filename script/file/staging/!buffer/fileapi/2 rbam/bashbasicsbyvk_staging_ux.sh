@@ -9,7 +9,7 @@
 #    • you choose WHO gets it; they get a notification and accept it into their Cloud Surf (cs)
 #
 #  Crypto (see bashbasicsbyvk_staging_ux_crypto):
-#    FEK      256-bit key made when the user was created. The server only ever stores it encrypted with your 29 dinons.
+#    FEK      256-bit key made when the user was created. The server only ever stores it encrypted with your 290 dinons.
 #    K        a fresh random key for every share. Encrypts every file chunk and every file NAME.
 #    kdk      K encrypted with your FEK — the only thing about K the server keeps.
 #  A receiver who holds your dinons (sent to them SEALED, so the server cannot read them) opens your FEK, then K.
@@ -113,9 +113,9 @@ _ux_sync_dinons() {
   [ -n "$P_DINONS" ] || return 0
   _ux_http GET /rbam/rels || return 1
   if ! _ux_ok; then _ux_fail >&2; return 1; fi
-  local rows rid mail d3 st mine din seal held pub sealed sent=0 skipped=0 want
+  local rows rid mail d30 st mine din seal held pub sealed sent=0 skipped=0 want
   rows=$(_ux_core tsv gives <<<"$_UX_BODY")
-  while IFS=$'\x1f' read -r rid mail d3 st mine din seal held; do
+  while IFS=$'\x1f' read -r rid mail d30 st mine din seal held; do
     [ -n "$rid" ] || continue
     [ "$st" = active ] && [ "$din" = 0 ] || continue
     if [ "${#only[@]}" -gt 0 ]; then
@@ -178,24 +178,24 @@ _ux_K_of() {
 }
 
 # ── people picker (the "with whom to share" menu) ────────────────────────────
-declare -ga _UX_PK_RID=() _UX_PK_MAIL=() _UX_PK_D3=()
+declare -ga _UX_PK_RID=() _UX_PK_MAIL=() _UX_PK_D30=()
 declare -ga _UX_PICKED=()
 
 ux_pk_build() { _xui_begin_items "${_UX_PK_MAIL[@]}"; }
-ux_pk_row() { _xui_slot "$1"; printf -v _vp_line ' %2d) 👤 %s   [%s…]' "$1" "${_UX_PK_MAIL[$_XUI_SLOT]}" "${_UX_PK_D3[$_XUI_SLOT]:0:6}"; }
+ux_pk_row() { _xui_slot "$1"; printf -v _vp_line ' %2d) 👤 %s   [%s…]' "$1" "${_UX_PK_MAIL[$_XUI_SLOT]}" "${_UX_PK_D30[$_XUI_SLOT]:0:6}"; }
 ux_pk_header() { echo; echo "📨 Share with whom?   (only people you linked in rbam → Give access)"; _vp_filter_header_line; }
 ux_pk_footer() { _mc_footer "1,3-5:several" "a:everyone" "Enter:send" "u"; }
 
 # active receivers -> arrays ; returns 1 when there is nobody
 _ux_load_people() {
-  _UX_PK_RID=(); _UX_PK_MAIL=(); _UX_PK_D3=()
+  _UX_PK_RID=(); _UX_PK_MAIL=(); _UX_PK_D30=()
   _ux_http GET /rbam/rels || return 1
   if ! _ux_ok; then _ux_fail >&2; return 1; fi
-  local rows rid mail d3 st mine din seal held
+  local rows rid mail d30 st mine din seal held
   rows=$(_ux_core tsv gives <<<"$_UX_BODY")
-  while IFS=$'\x1f' read -r rid mail d3 st mine din seal held; do
+  while IFS=$'\x1f' read -r rid mail d30 st mine din seal held; do
     [ "$st" = active ] || continue
-    _UX_PK_RID+=("$rid"); _UX_PK_MAIL+=("$mail"); _UX_PK_D3+=("$d3")
+    _UX_PK_RID+=("$rid"); _UX_PK_MAIL+=("$mail"); _UX_PK_D30+=("$d30")
   done <<<"$rows"
   [ "${#_UX_PK_RID[@]}" -gt 0 ]
 }

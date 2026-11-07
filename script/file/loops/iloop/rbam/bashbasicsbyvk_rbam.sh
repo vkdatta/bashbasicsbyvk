@@ -7,16 +7,16 @@
 #    Receive access   people whose files I may receive  (I am their receiver)
 #
 #  Commands (same on both tabs)
-#    ui [file]   import a user: paste their card (mail + 3 diseps). From a file: one card per line.
+#    ui [file]   import a user: paste their card (mail + d30). From a file: one card per line.
 #                On Give access it says "I give you receive access"; on Receive access it says "please give me access".
-#    ux          export MY card (mail + the 3 diseps at positions 13, 24, 7) to hand to someone
+#    ux          export MY card (mail + my d30, the 30 shareable diseps codes) to hand to someone
 #    r-N         remove users  (r-1,3 · r-a · r-a-2). Removing a receiver ends their access to my whole cloud;
 #                removing a sender ends my access to theirs.
-#    sd | sd-N   (Give access) send my 29 dinons, sealed, to receivers who do not have them (needed after -auth regenerates them)
+#    sd | sd-N   (Give access) send my 290 dinons, sealed, to receivers who do not have them (needed after -auth regenerates them)
 #    N           open a user: the shares they can reach, with removal (r-N) and a drill-down into files/folders
 #
 #  The other side is asked in their Notifications (nf):  "a person with mail … and diseps … has given you receive access …
-#  Do you want to become receiver? 1. Yes 2. No".   The SENDER shares all 29 dinons with the receiver — never the reverse.
+#  Do you want to become receiver? 1. Yes 2. No".   The SENDER shares all 290 dinons with the receiver — never the reverse.
 #  Dinons travel sealed to the receiver's own sealing key: the server only ever holds blobs it cannot open.
 #
 #  Uses: bashbasicsbyvk_xui.sh (screens), bashbasicsbyvk_staging_ux.sh (_ux_*), bashbasicsbyvk_csurf.sh (_cs_*)
@@ -24,17 +24,17 @@
 
 _RB_TAB=0
 _RB_LOADED=0
-declare -ga _RB_RID=() _RB_MAIL=() _RB_D3=() _RB_ST=() _RB_MINE=() _RB_DIN=() _RB_SEAL=() _RB_HELD=()
+declare -ga _RB_RID=() _RB_MAIL=() _RB_D30=() _RB_ST=() _RB_MINE=() _RB_DIN=() _RB_SEAL=() _RB_HELD=()
 
 _rb_load() {
-  _RB_RID=(); _RB_MAIL=(); _RB_D3=(); _RB_ST=(); _RB_MINE=(); _RB_DIN=(); _RB_SEAL=(); _RB_HELD=()
+  _RB_RID=(); _RB_MAIL=(); _RB_D30=(); _RB_ST=(); _RB_MINE=(); _RB_DIN=(); _RB_SEAL=(); _RB_HELD=()
   _ux_http GET /rbam/rels || return 1
   if ! _ux_ok; then _ux_fail >&2; return 1; fi
-  local kind=gives rid mail d3 st mine din seal held
+  local kind=gives rid mail d30 st mine din seal held
   [ "$_RB_TAB" = 1 ] && kind=receives
-  while IFS=$'\x1f' read -r rid mail d3 st mine din seal held; do
+  while IFS=$'\x1f' read -r rid mail d30 st mine din seal held; do
     [ -n "$rid" ] || continue
-    _RB_RID+=("$rid"); _RB_MAIL+=("$mail"); _RB_D3+=("$d3"); _RB_ST+=("$st")
+    _RB_RID+=("$rid"); _RB_MAIL+=("$mail"); _RB_D30+=("$d30"); _RB_ST+=("$st")
     _RB_MINE+=("$mine"); _RB_DIN+=("$din"); _RB_SEAL+=("$seal"); _RB_HELD+=("$held")
   done < <(_ux_core tsv "$kind" <<<"$_UX_BODY")
   _RB_LOADED=1
@@ -63,7 +63,7 @@ rb_build() {
 rb_row() {
   _xui_slot "$1"; local k=$_XUI_SLOT
   _rb_state "$k"
-  printf -v _vp_line ' %2d) 👤 %-28s [%s…]  %s' "$1" "$(_xui_trunc "${_RB_MAIL[$k]}" 28)" "${_RB_D3[$k]:0:6}" "$_RB_S"
+  printf -v _vp_line ' %2d) 👤 %-28s [%s…]  %s' "$1" "$(_xui_trunc "${_RB_MAIL[$k]}" 28)" "${_RB_D30[$k]:0:6}" "$_RB_S"
 }
 _bvk_tabs_register "📤 Give access" "📥 Receive access"   # tab bar: tappable (bashbasicsbyvk_mouse.sh)
 _rb_tabbar() {
@@ -83,14 +83,14 @@ rb_footer() {
 
 # ── commands ─────────────────────────────────────────────────────────────────
 _rb_mail_ok() { [[ "$1" =~ ^[^[:space:]\"\\]+@[^[:space:]\"\\]+$ ]] && [ "${#1}" -le 256 ]; }
-_rb_d3_ok()   { [[ "$1" =~ ^[A-Za-z0-9]{16}-[A-Za-z0-9]{16}-[A-Za-z0-9]{16}$ ]]; }
+_rb_d30_ok()   { local s; read -ra s <<<"$(_bvk_share_spec)"; [[ "$1" =~ ^[A-Za-z0-9]{16}(-[A-Za-z0-9]{16})*$ ]] && [ "$(awk -F- '{print NF}' <<<"$1")" -eq $(( ${#s[@]} - 1 )) ]; }
 
-_rb_request_one() {                          # mail d3
-  local mail="$1" d3="$2" role=give note
+_rb_request_one() {                          # mail d30
+  local mail="$1" d30="$2" role=give note
   [ "$_RB_TAB" = 1 ] && role=ask
   _rb_mail_ok "$mail" || { echo "🔴  '$mail' is not a valid mail." >&2; return 1; }
-  _rb_d3_ok "$d3"     || { echo "🔴  The diseps must be three 16-character codes joined with '-' (positions 13, 24, 7 of their diseps)." >&2; return 1; }
-  _ux_http POST /rbam/request "{\"role\":\"$role\",\"mail\":\"$mail\",\"d3\":\"$d3\"}" || return 1
+  _rb_d30_ok "$d30"     || { echo "🔴  The d30 must be their 30 shareable diseps codes (16 characters each) joined with '-', exactly as printed on their RBAM card." >&2; return 1; }
+  _ux_http POST /rbam/request "{\"role\":\"$role\",\"mail\":\"$mail\",\"d30\":\"$d30\"}" || return 1
   if ! _ux_ok; then echo "   ❌ $mail — $(_bb_json_get "$_UX_BODY" message)"; return 1; fi
   note=$(_bb_json_get "$_UX_BODY" note)
   if [ -n "$note" ]; then echo "   💫 $mail — $note"
@@ -100,46 +100,45 @@ _rb_request_one() {                          # mail d3
 }
 
 _rb_import() {
-  local arg="${1# }" mail d3 junk n=0 bad=0
+  local arg="${1# }" mail d30 junk n=0 bad=0
   _ux_ensure_seal || return 1
   if [ -n "$arg" ] && [ -f "$arg" ]; then
-    while read -r mail d3 junk; do
+    while read -r mail d30 junk; do
       case "$mail" in ''|\#*) continue ;; esac
-      if _rb_request_one "$mail" "$d3"; then n=$((n+1)); else bad=$((bad+1)); fi
+      if _rb_request_one "$mail" "$d30"; then n=$((n+1)); else bad=$((bad+1)); fi
     done < "$arg"
     echo "   Done: $n sent, $bad failed."
     return 0
   fi
-  if [ -n "$arg" ]; then read -r mail d3 junk <<<"$arg"
+  if [ -n "$arg" ]; then read -r mail d30 junk <<<"$arg"
   else
     echo "   Paste their card:  <mail> <diseps 13-24-7>     (they get it from  rbam → ux)"
     _xui_ask "Their card, or just their mail" || return 1
-    read -r mail d3 junk <<<"$_XUI_IN"
+    read -r mail d30 junk <<<"$_XUI_IN"
   fi
-  if [ -z "$d3" ]; then
-    _xui_ask "Their 3 diseps (positions 13, 24, 7), joined with -" || return 1
-    d3="$_XUI_IN"
+  if [ -z "$d30" ]; then
+    _xui_ask "Their d30 (30 codes joined with -)" || return 1
+    d30="$_XUI_IN"
   fi
-  _rb_request_one "$mail" "$d3"
+  _rb_request_one "$mail" "$d30"
 }
 
 _rb_export() {
   _ux_need || return 1
-  local -a p; IFS=- read -ra p <<<"$P_DISEPS"
-  [ "${#p[@]}" -eq 27 ] || { echo "❌ The active user has no usable diseps."; return 1; }
-  local d3="${p[12]}-${p[23]}-${p[6]}"
+  local d30; d30=$(_bb_d30 "$P_DISEPS")
+  [ -n "$d30" ] || { echo "❌ The active user has no usable diseps."; return 1; }
   echo
   echo "📇 Your RBAM card — give it to the people you want to link with."
-  echo "   (your mail + diseps at positions 13, 24 and 7, in that order; everything else stays secret)"
+  echo "   (your mail + your d30, the shareable part of your diseps; everything else stays secret)"
   echo
-  echo "   $P_MAIL $d3"
+  echo "   $P_MAIL $d30"
   echo
   local ans f
   _bvk_yn ans "Save it to a file in this folder too?"
   case "$ans" in [yY]*)
     f="$PWD/rbam-card.txt"
     [ -e "$f" ] && f="$PWD/rbam-card-$(date +%s).txt"
-    ( umask 077; printf '%s %s\n' "$P_MAIL" "$d3" > "$f" ) && echo "   💾 Saved: $f" ;;
+    ( umask 077; printf '%s %s\n' "$P_MAIL" "$d30" > "$f" ) && echo "   💾 Saved: $f" ;;
   esac
 }
 
@@ -176,7 +175,7 @@ _rb_answer() {
   local k="$1" q
   if [ "$_RB_TAB" = 0 ]; then q="has asked to receive your files. Become their sender and share your dinons with them?"
   else q="has offered to give you receive access. Become their receiver?"; fi
-  echo "   📨 ${_RB_MAIL[$k]} [${_RB_D3[$k]}] $q"
+  echo "   📨 ${_RB_MAIL[$k]} [${_RB_D30[$k]}] $q"
   echo "      1. Yes   2. No"
   local a; read -e -r -p "   Select: " a
   case "$a" in 1|y|Y) _nf_rbam_respond "${_RB_RID[$k]}" true ;; 2|n|N) _nf_rbam_respond "${_RB_RID[$k]}" false ;; *) echo "🚫 No answer given." ;; esac

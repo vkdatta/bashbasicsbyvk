@@ -80,7 +80,7 @@ To report **unlawful content** shared through a relay link, email the link's ran
 | **Link sharing (`up-`)** | The key travels in the URL fragment (`#k=`). Fragments are not sent to servers in HTTP requests. Whoever holds the full link can decrypt that one upload. |
 | **Direct sharing (`ux-`, RBAM)** | Client-side encryption with a per-share File Encryption Key (FEK) protected by sender-issued DINONs. No public link. Access is approved by the receiver and revocable by the sender. |
 | **Streaming** | Archives are streamed through pack, encrypt and upload, so the unencrypted archive does not touch disk. |
-| **Account identity** | An email address alone does not identify or open an account. Accounts are distinguished by DISEPs (27 random identifiers), which limits enumeration, brute force and email-based takeover. API keys are stored server-side only as one-way SHA-256 hashes. |
+| **Account identity** | An email address alone does not identify or open an account. Accounts are distinguished by DISEPs (270 random identifiers), which limits enumeration, brute force and email-based takeover. API keys are stored server-side only as one-way SHA-256 hashes. |
 | **Local secrets** | Keys live in an environment variable loaded from a mode-600 file, never on a command line (shell history) and never in Git. |
 | **Rotation** | `-auth` regenerates keys. Old keys stop working immediately. |
 | **Metadata minimisation** | Telemetry is limited to a random ID, a country code and a date. No IP address, file name, path or command is stored in telemetry records. |
@@ -91,9 +91,9 @@ To report **unlawful content** shared through a relay link, email the link's ran
 | Secret | Purpose | Share it? |
 |---|---|---|
 | API key | Authenticates you to FileAPI | **Never** |
-| DISEPs (27) | Account identifiers | Only with the maintainer when you need account help |
+| DISEPs (270) | Account identifiers | Only with the maintainer when you need account help |
 | Special DISEPs (3) | Identify you to someone you approve for RBAM sharing | Yes, to people you know, for the handshake only |
-| DINONs (29) | Protect FEKs for `ux-` shares | Sender to each approved receiver only |
+| DINONs (290) | Protect FEKs for `ux-` shares | Sender to each approved receiver only |
 | FEK | Encrypts one `ux-` share | **Never**; exists unwrapped only in memory |
 | Link key (`#k=`) | Decrypts one `up-` upload | Yes, deliberately; treat the whole link as a password |
 

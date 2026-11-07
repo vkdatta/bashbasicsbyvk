@@ -22,14 +22,14 @@
 _CS_TAB=0
 _CS_LOADED=0
 declare -ga _CG_ID=() _CG_ALIAS=() _CG_BYTES=() _CG_CREATED=() _CG_EXP=() _CG_ACC=() _CG_OFF=() _CG_REF=() _CG_REFD=() _CG_PAID=()
-declare -ga _CR_ID=() _CR_ALIAS=() _CR_BYTES=() _CR_EXP=() _CR_OFFER=() _CR_FROM=() _CR_FROMD3=() _CR_RID=()
+declare -ga _CR_ID=() _CR_ALIAS=() _CR_BYTES=() _CR_EXP=() _CR_OFFER=() _CR_FROM=() _CR_FROMD30=() _CR_RID=()
 
 _cs_idjson() { local o="" i; for i in "$@"; do o+="${o:+,}\"$i\""; done; printf '[%s]' "$o"; }
 _cs_name() { printf '%s' "${1:-$2}"; }
 
 _cs_load() {
   _CG_ID=(); _CG_ALIAS=(); _CG_BYTES=(); _CG_CREATED=(); _CG_EXP=(); _CG_ACC=(); _CG_OFF=(); _CG_REF=(); _CG_REFD=(); _CG_PAID=()
-  _CR_ID=(); _CR_ALIAS=(); _CR_BYTES=(); _CR_EXP=(); _CR_OFFER=(); _CR_FROM=(); _CR_FROMD3=(); _CR_RID=()
+  _CR_ID=(); _CR_ALIAS=(); _CR_BYTES=(); _CR_EXP=(); _CR_OFFER=(); _CR_FROM=(); _CR_FROMD30=(); _CR_RID=()
   _ux_http GET /ux/shares || return 1
   if ! _ux_ok; then _ux_fail >&2; return 1; fi
   local list="$_UX_BODY" id al by cr ex ac of rf rd pd offer from fd rid
@@ -40,7 +40,7 @@ _cs_load() {
   done < <(_ux_core tsv given <<<"$list")
   while IFS=$'\x1f' read -r id al by ex offer from fd rid; do
     [ -n "$id" ] || continue
-    _CR_ID+=("$id"); _CR_ALIAS+=("$al"); _CR_BYTES+=("$by"); _CR_EXP+=("$ex"); _CR_OFFER+=("$offer"); _CR_FROM+=("$from"); _CR_FROMD3+=("$fd"); _CR_RID+=("$rid")
+    _CR_ID+=("$id"); _CR_ALIAS+=("$al"); _CR_BYTES+=("$by"); _CR_EXP+=("$ex"); _CR_OFFER+=("$offer"); _CR_FROM+=("$from"); _CR_FROMD30+=("$fd"); _CR_RID+=("$rid")
   done < <(_ux_core tsv received <<<"$list")
   _CS_LOADED=1
 }
@@ -67,7 +67,7 @@ _cs_sort() {
   else
     n=${#_CR_ID[@]}; local -a _k=(); for (( i=0; i<n; i++ )); do _k[$i]="${_CR_ALIAS[$i]:-${_CR_ID[$i]}}"; done
     _ms_perm shares_recv "$n" name=_k from=_CR_FROM size=_CR_BYTES expiry=_CR_EXP
-    _ms_reorder _CR_ID _CR_ALIAS _CR_BYTES _CR_EXP _CR_OFFER _CR_FROM _CR_FROMD3 _CR_RID
+    _ms_reorder _CR_ID _CR_ALIAS _CR_BYTES _CR_EXP _CR_OFFER _CR_FROM _CR_FROMD30 _CR_RID
   fi
 }
 
@@ -185,16 +185,16 @@ _cs_cmd() {
 
 # ═════════════════════════ people of one share (sender) ══════════════════════
 _PP_ID=""; _PP_ALIAS=""; _PP_LOADED=0
-declare -ga _PP_RID=() _PP_MAIL=() _PP_D3=() _PP_ST=()
+declare -ga _PP_RID=() _PP_MAIL=() _PP_D30=() _PP_ST=()
 
 _pp_load() {
-  _PP_RID=(); _PP_MAIL=(); _PP_D3=(); _PP_ST=()
+  _PP_RID=(); _PP_MAIL=(); _PP_D30=(); _PP_ST=()
   _ux_http GET "/ux/$_PP_ID" || return 1
   if ! _ux_ok; then _ux_fail >&2; return 1; fi
-  local rid mail d3 st
-  while IFS=$'\x1f' read -r rid mail d3 st; do
+  local rid mail d30 st
+  while IFS=$'\x1f' read -r rid mail d30 st; do
     [ -n "$mail" ] || continue
-    _PP_RID+=("$rid"); _PP_MAIL+=("$mail"); _PP_D3+=("$d3"); _PP_ST+=("$st")
+    _PP_RID+=("$rid"); _PP_MAIL+=("$mail"); _PP_D30+=("$d30"); _PP_ST+=("$st")
   done < <(_ux_core tsv people <<<"$_UX_BODY")
   _PP_LOADED=1
 }
@@ -203,7 +203,7 @@ cs_pp_row() {
   _xui_slot "$1"; local k=$_XUI_SLOT tag="💫 accepted"
   [ "${_PP_ST[$k]}" = offered ] && tag="⏳ not accepted yet"
   [ -n "${_PP_RID[$k]}" ] || tag="🔴 link removed"
-  printf -v _vp_line ' %2d) 👤 %-28s [%s…]  %s' "$1" "$(_xui_trunc "${_PP_MAIL[$k]}" 28)" "${_PP_D3[$k]:0:6}" "$tag"
+  printf -v _vp_line ' %2d) 👤 %-28s [%s…]  %s' "$1" "$(_xui_trunc "${_PP_MAIL[$k]}" 28)" "${_PP_D30[$k]:0:6}" "$tag"
 }
 cs_pp_header() {
   echo; echo "📦 “${_PP_ALIAS:-$_PP_ID}” — who can see it"

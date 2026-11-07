@@ -9,7 +9,7 @@ source "bashbasicsbyvk_auth.sh"
 source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_pending.sh"; source "bashbasicsbyvk_staging_upload.sh"; source "bashbasicsbyvk_staging_ux.sh"
 source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_hidefiles.sh" 2>/dev/null; source "bashbasicsbyvk_settings_ui.sh" 2>/dev/null; source "bashbasicsbyvk_pending.sh"
 WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")
-DINONS=$(_bvk_auth_gen_codes 29); FEK_HEX=$(_bvk_auth_gen_fek)
+DINONS=$(_bvk_auth_gen_codes 290); FEK_HEX=$(_bvk_auth_gen_fek)
 sql "update users set fek_wrapped='$(_bvk_auth_fek_wrap "$FEK_HEX" "$DINONS")'" >/dev/null
 _bb_get_credentials() { export FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" FILEAPI_BASHBASICS_KEY="$APIKEY"; P_DINONS="$DINONS"; return 0; }
 export FILEAPI_BASHBASICS_PACK_MB=1 FILEAPI_BASHBASICS_PARALLEL=2 FILEAPI_BASHBASICS_RETRY_MIN=2

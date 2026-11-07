@@ -111,7 +111,7 @@ Pricing is pay-as-you-go: US$1 buys credits, and cost scales with data size and 
 
 - Encryption happens **on your device**. The service stores ciphertext it has no key for.
 - Per-transfer random 256-bit key, AES-256-GCM, TLS in transit.
-- Account identity is not your email address. It is an email plus 27 random identifiers (DISEPs); API keys are stored server-side only as hashes.
+- Account identity is not your email address. It is an email plus 270 random identifiers (DISEPs); API keys are stored server-side only as hashes.
 - Keys are kept in a mode-600 environment file, never on a command line, never in Git. `-auth` rotates them and the old ones stop working immediately.
 
 - No ads, no cookies, no tracking, no sale of data.

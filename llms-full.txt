@@ -86,7 +86,7 @@ Merges selected text files into one encrypted paste (about 1 MB) that you open o
 
 ### 3.3 Direct user-to-user sharing: `ux-` (RBAM)
 
-Both parties use bashbasicsbyvk. Handshake: A enters B's email and B's three shareable identifiers (Special DISEPs); B sees a notification and accepts or rejects; on acceptance A releases 29 DINONs that protect each share's file encryption key. Either side can initiate. No public link is created. Receivers fetch through "Cloud Surf" and can download to local storage. The sender can remove a user (all permissions vanish), remove individual folders or files, or revoke before acceptance. Default share lifetime is longer than links (at time of writing 30 days). Revocation cannot recall a copy already downloaded.
+Both parties use bashbasicsbyvk. Handshake: A enters B's email and B's 30 shareable identifiers (the d30, Special DISEPs); B sees a notification and accepts or rejects; on acceptance A releases 290 DINONs that protect each share's file encryption key. Either side can initiate. No public link is created. Receivers fetch through "Cloud Surf" and can download to local storage. The sender can remove a user (all permissions vanish), remove individual folders or files, or revoke before acceptance. Default share lifetime is longer than links (at time of writing 30 days). Revocation cannot recall a copy already downloaded.
 
 Use for: recurring transfers inside a trusted group, permissioned collaboration without link-pasting.
 
@@ -131,8 +131,8 @@ Full model: SECURITY.md and the Security Architecture document.
 
 - End-to-end for uploads and Client-side encryption for all other FileAPI operations.
 - The operator stores ciphertext and cannot read file content, file names or folder structure. The operator can see account email, a SHA-256 hash of the API key, credit ledger, IDs, sizes and expiry times.
-- An email alone does not identify an account; each account has 27 random DISEPs. Three Special DISEPs may be shared for RBAM handshakes. Keys are stored in a mode-600 environment file, never on a command line. `-auth` rotates all keys immediately. DINONs (29 random keys) are used for file sharing. 
-- DISEPs and APIKEY shall not be shared with anyone. While d3 (special DISEPs), DINONs can be shared for secure  handshake and decryption.
+- An email alone does not identify an account; each account has 270 random DISEPs and a 512-character API key. The 30 Special DISEPs (d30) may be shared for RBAM handshakes. Keys are stored in a mode-600 environment file, never on a command line. `-auth` rotates all keys immediately. DINONs (29 random keys) are used for file sharing. 
+- DISEPs and APIKEY shall not be shared with anyone. While d30 (special DISEPs), DINONs can be shared for secure  handshake and decryption.
 - Relay, telemetry, and all other file data are processed outside the EU/EEA. GDPR rights are described in the GDPR Notice.
 - Limits: no unconditional guarantee; security depends on endpoint hygiene and key confidentiality; downloaded copies cannot be revoked.
 - Vulnerability reports: private email to vkd.codes@gmail.com; see SECURITY.md.

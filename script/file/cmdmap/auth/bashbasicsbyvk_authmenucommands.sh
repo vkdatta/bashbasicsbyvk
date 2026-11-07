@@ -4,7 +4,6 @@
 cmd_def u        exact   -  local  "Back"
 cmd_def q        exact   -  local  "Close"
 cmd_def c        exact   -  local  "Create user"
-cmd_def l        exact   -  local  "Link old account"
 cmd_def ui       exact   -  local  "Import users"
 cmd_def r        exact   -  local  "Remove user"
 cmd_def r-       prefix  -  local  "Remove user"
