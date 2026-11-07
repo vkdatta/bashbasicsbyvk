@@ -49,9 +49,9 @@ _bvk_auth_parse() {  # $1=file ; sets P_MAIL P_DISEPS P_APIKEY P_DINONS P_SEALKE
     k="${k^^}"; k="${k//[[:space:]]/}"
     case "$k" in
       MAIL)    _bvk_auth_mail_ok "$v"   && P_MAIL="$v" ;;
-      DISEPS)  _bvk_auth_codes_ok "$v" "$_BVK_DISEPS_N" && P_DISEPS="$v" ;;
-      DINONS)  _bvk_auth_codes_ok "$v" "$_BVK_DINONS_N" && P_DINONS="$v" ;;
-      APIKEY)  [ "${#v}" -eq "$_BVK_APIKEY_LEN" ] && [[ "$v" =~ ^[A-Za-z0-9_-]+$ ]] && P_APIKEY="$v" ;;
+      DISEPS)  _bvk_auth_codes_ok "$v" && P_DISEPS="$v" ;;     # format only: the server compares the value, not its size
+      DINONS)  _bvk_auth_codes_ok "$v" && P_DINONS="$v" ;;
+      APIKEY)  [[ "$v" =~ ^[A-Za-z0-9_-]+$ ]] && P_APIKEY="$v" ;;
       SEALKEY) [[ "$v" =~ ^[A-Za-z0-9_-]{40,120}$ ]] && P_SEALKEY="$v" ;;
       CREATED) [[ "$v" =~ ^[0-9T:Z-]{8,32}$ ]] && P_CREATED="$v" ;;
     esac
@@ -79,14 +79,14 @@ _bvk_auth_mail_ok() {
   case "$m" in *[\<\>\"\'\`\$\\\;\|\&\(\)\{\}/]*) return 1 ;; esac
   return 0
 }
-_bvk_auth_codes_ok() {  # $1=value $2=count : N unique codes of 16 [A-Za-z0-9] joined by '-'
+_bvk_auth_codes_ok() {  # $1=value [$2=count] : unique codes of 16 [A-Za-z0-9] joined by '-'; count checked only when given (new users)
   local IFS='-' c n=0; local -A seen=()
   for c in $1; do
     [[ "$c" =~ ^[A-Za-z0-9]{16}$ ]] || return 1
     [ -n "${seen[$c]:-}" ] && return 1
     seen[$c]=1; n=$((n+1))
   done
-  [ "$n" -eq "$2" ]
+  [ "$n" -ge 1 ] && { [ -z "${2:-}" ] || [ "$n" -eq "$2" ]; }
 }
 
 # ---------------------------------------------------------------- crypto (node; already a dependency)
@@ -494,17 +494,17 @@ _bvk_pay_amount() {  # asks currency, then amount; sets _PAY_CUR (USD|INR) and _
 _bvk_pay_accounts_json() {  # $1=file -> JSON array on stdout ; reasons on stderr ; rc 2 on bad file
   node -e '
     const fs = require("fs"); const out = []; const seen = new Set();
-    const mailRe = /^[^\s@<>"\x27`$\\;|&(){}\/]+@[^\s@]+\.[^\s@]+$/, N = +process.argv[2], dRe = new RegExp("^[A-Za-z0-9]{16}(-[A-Za-z0-9]{16}){" + (N - 1) + "}$");
+    const mailRe = /^[^\s@<>"\x27`$\\;|&(){}\/]+@[^\s@]+\.[^\s@]+$/, dRe = /^[A-Za-z0-9]{16}(-[A-Za-z0-9]{16})*$/;
     fs.readFileSync(process.argv[1], "utf8").split(/\r?\n/).forEach((raw, i) => {
       const l = raw.replace(/#.*$/, "").trim(); if (!l || /^"?e?-?mail"?[\s,;]+"?diseps/i.test(l)) return;
       const p = l.split(/[\s,;]+/).filter(Boolean).map((x) => x.replace(/^"|"$/g, ""));
-      if (p.length !== 2 || !mailRe.test(p[0]) || !dRe.test(p[1]) || new Set(p[1].split("-")).size !== N) { console.error("line " + (i + 1) + ": expected  email,diseps  (" + N + " codes)"); process.exit(2); }
+      if (p.length !== 2 || !mailRe.test(p[0]) || !dRe.test(p[1]) || new Set(p[1].split("-")).size !== p[1].split("-").length) { console.error("line " + (i + 1) + ": expected  email,diseps"); process.exit(2); }
       const k = p[0].toLowerCase() + "|" + p[1]; if (seen.has(k)) { console.error("line " + (i + 1) + ": listed twice"); process.exit(2); }
       seen.add(k); out.push({ mail: p[0].toLowerCase(), diseps: p[1] });
     });
     if (!out.length) { console.error("no accounts found in the file"); process.exit(2); }
     if (out.length > 100) { console.error("at most 100 accounts per link (found " + out.length + ")"); process.exit(2); }
-    process.stdout.write(JSON.stringify(out));' "$1" "$_BVK_DISEPS_N"
+    process.stdout.write(JSON.stringify(out));' "$1"
 }
 _bvk_pay_build() {  # $1=kind $2=amount $3=accounts-json-or-empty -> JSON body
   B_CUR="${_PAY_CUR:-USD}" B_NAME="$(_bvk_bill_get name)" B_ADDRESS="$(_bvk_bill_get address)" B_MOBILE="$(_bvk_bill_get mobile)" \

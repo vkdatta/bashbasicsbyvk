@@ -935,6 +935,7 @@ _build_suffix() { local _bs_out; _build_suffix_v "$1"; printf '%s' "$_bs_out"; }
 _resolve_display_parts_v() {
   local f="$1"
   _rdp_bn="${f##*/}"
+  [ "${_disp_relnames:-false}" = true ] && _rdp_bn="${f#"${path%/}/"}"      # .d ... -r : show where under this folder it is
   _resolve_display_parts_core "$f"
   # 🔒 suffix for items locked with l-N (never 🔐 — that is only in the unlock message)
   if [ "${#_LK_SET[@]}" -gt 0 ] && declare -F _lk_suffix_v >/dev/null; then

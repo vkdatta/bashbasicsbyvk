@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+.d.ext py -r printed "-r is ignored for display" and only looked at the current folder. Wanted: .d supports -r like .s.
+
+HOW DID YOU DEBUG
+Read bashbasicsbyvk_display_filter.sh, o (item build), displayer row labels and select_expr. The engine already recurses; the display filter forced BVK_NO_RECURSIVE=1 and only narrowed the folder's own item list. Tested in a temp tree through handle_display_cmd: .d.ext py -> 1 hit, .d.ext py -r -> 3 hits incl. a/b/deep.py, clear works. tests/run.sh for the two files: loadmap, rename_screen, smartload, buffer_sets etc pass; settings_desc and delete_confirm fail the same way on the untouched original upload (no tty in this sandbox).
+
+CAUSE
+Display filter never passed -r to the engine and could only keep or drop items already in the folder listing.
+
+FIX
+-r now stored as REC=1 in the active filter file. With REC=1 the engine's hits (this folder and below) replace the item list as one flat list, sorted as usual; rows show the path relative to the folder (_disp_relnames hook in _resolve_display_parts_v); banner and status say "with subfolders". BVK_NO_RECURSIVE is no longer set by anyone. Lesson: when a filter must show items from other folders, replace items, do not narrow them.

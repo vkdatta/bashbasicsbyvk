@@ -9,12 +9,14 @@
 #  .d.refresh           re-scan (filters are cached per folder until it changes)
 #
 #  Same grammar / engine as  .s  (see .s help) — just  .d.ext csv & .d.size <3mb
-#  -r is ignored: the display only ever looks at the folder you are in.
+#  -r works like in .s:  .d.ext py -r  shows every .py in this folder AND all folders below it, as one flat list
+#  (rows show the path relative to this folder). Without -r only this folder is looked at.
 #
 #  Active filter is one small file (edit it by hand if you like):
 #    ~/.bashbasicsbyvk/display/active
 #        DIR=/folder/it/was/set/in
 #        EXPR=.d.ext.csv & .d.size <3mb
+#        REC=1                            ← only when the expression has -r (results come from subfolders too)
 #        CSV=/path/to/exts.csv            ← one line per .csv clause, in order
 #  Presets are display rules:  ~/.bashbasicsbyvk/rules/display/NAME/NAME.rule  (manage them in  .r)
 #
@@ -38,22 +40,27 @@ _disp_on=false
 _disp_expr=""
 _disp_dir=""
 declare -ga _disp_csvs=()
+_disp_rec=0                         # 1 = the active filter is recursive (-r)
+_disp_relnames=false                # rows show the path relative to the folder (recursive results)
+declare -ga _DISP_LIST=()           # recursive hits, in engine order
+_disp_rec_new=0                     # recursive flag of the filter being set (read by _disp_store)
 
 _disp_startup() {                  # call once when the app starts
   [ "${display_filter_persist:-false}" = "true" ] || [ ! -e "$_DISP_ACTIVE" ] || rm -f "$_DISP_ACTIVE" 2>/dev/null   # no rm process when there is nothing to remove
 }
 
-_disp_cache_reset() { _disp_cache_key=""; _DISP_HIT=(); }
+_disp_cache_reset() { _disp_cache_key=""; _DISP_HIT=(); _DISP_LIST=(); }
 
 # Read the active file into _disp_expr / _disp_csvs. Returns 1 if none.
 _disp_load() {
-  _disp_expr=""; _disp_csvs=(); _disp_dir=""
+  _disp_expr=""; _disp_csvs=(); _disp_dir=""; _disp_rec=0
   [ -f "$_DISP_ACTIVE" ] || return 1
   local line
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       DIR=*)  _disp_dir="${line#DIR=}" ;;
       EXPR=*) _disp_expr="${line#EXPR=}" ;;
+      REC=*)  _disp_rec="${line#REC=}" ;;
       CSV=*)  _disp_csvs+=("${line#CSV=}") ;;
     esac
   done < "$_DISP_ACTIVE"
@@ -63,11 +70,11 @@ _disp_load() {
 _disp_store() {                    # _disp_store <expr> [csv ...]
   mkdir -p "$_DISP_DIR" 2>/dev/null
   local expr="$1"; shift
-  { printf 'DIR=%s\n' "$path"; printf 'EXPR=%s\n' "$expr"; local c; for c in "$@"; do printf 'CSV=%s\n' "$c"; done; } > "$_DISP_ACTIVE"
+  { printf 'DIR=%s\n' "$path"; printf 'EXPR=%s\n' "$expr"; [ "$_disp_rec_new" = 1 ] && printf 'REC=1\n'; local c; for c in "$@"; do printf 'CSV=%s\n' "$c"; done; } > "$_DISP_ACTIVE"
   _disp_cache_reset
 }
 
-_disp_clear() { rm -f "$_DISP_ACTIVE" 2>/dev/null; _disp_cache_reset; _disp_banner=""; }
+_disp_clear() { rm -f "$_DISP_ACTIVE" 2>/dev/null; _disp_cache_reset; _disp_banner=""; _disp_rec=0; _disp_relnames=false; }
 
 _disp_mtime() { [ -e "$1" ] || [ -L "$1" ] || { echo 0; return; }   # missing file: no stat process (the usual case when no filter is set)
   stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
@@ -78,18 +85,18 @@ _disp_err=""
 _disp_run() {
   local hidden=0 errf key
   [ "${show_hidden_files:-false}" = "true" ] && hidden=1
-  key="$path|$(_disp_mtime "$path")|$(_disp_mtime "$_DISP_ACTIVE")|$hidden"
+  key="$path|$(_disp_mtime "$path")|$(_disp_mtime "$_DISP_ACTIVE")|$hidden|$_disp_rec"
   if [ "$key" = "$_disp_cache_key" ]; then return 0; fi
   errf=$(mktemp) || return 1
   local -a found=()
-  mapfile -d '' -t found < <(BVK_NO_RECURSIVE=1 _sel_core run "$_disp_expr" "$path" "$hidden" "${_disp_csvs[@]}" 2>"$errf")
+  mapfile -d '' -t found < <(_sel_core run "$_disp_expr" "$path" "$hidden" "${_disp_csvs[@]}" 2>"$errf")      # -r in the expression = recurse
   if [ -s "$errf" ]; then
     _disp_err="$(sed 's/^ERR: //' "$errf")"
     rm -f "$errf"
     return 1
   fi
   rm -f "$errf"
-  _DISP_HIT=()
+  _DISP_HIT=(); _DISP_LIST=("${found[@]}")
   local p
   for p in "${found[@]}"; do _DISP_HIT["$p"]=1; done
   _disp_cache_key="$key"
@@ -116,18 +123,29 @@ _disp_apply() {
     _disp_banner="🔴  Display filter error: ${_disp_err} — showing everything  (.d.clr to clear)"
     return 0
   fi
-  local -a kept=()
-  local f
-  for f in "${items[@]}"; do
-    [ -n "${_DISP_HIT[$f]+x}" ] && kept+=("$f")
-  done
-  items=("${kept[@]}")
+  if [ "$_disp_rec" = 1 ]; then
+    # recursive: the result is a flat list of matches from this folder and everything below it
+    items=("${_DISP_LIST[@]}")
+    item_size=(); item_mtime=(); item_icon=(); item_children=()
+    _items_presorted=false
+    _disp_relnames=true
+    apply_sort
+  else
+    _disp_relnames=false
+    local -a kept=()
+    local f
+    for f in "${items[@]}"; do
+      [ -n "${_DISP_HIT[$f]+x}" ] && kept+=("$f")
+    done
+    items=("${kept[@]}")
+  fi
   _win_lo=0; _win_hi=0
   _meta_loaded=false
   local shown_expr="$_disp_expr"
   [ ${#shown_expr} -gt 60 ] && shown_expr="${shown_expr:0:57}..."
-  _disp_banner="🔎 Display filter: ${shown_expr}  — ${#items[@]} shown  (.d.clr to clear)"
-  [ "${#items[@]}" -eq 0 ] && _disp_banner="🔎 Display filter: ${shown_expr}  — nothing matches here  (.d.clr to clear)"
+  local _rt=""; [ "$_disp_rec" = 1 ] && _rt=" (with subfolders)"
+  _disp_banner="🔎 Display filter: ${shown_expr}  — ${#items[@]} shown${_rt}  (.d.clr to clear)"
+  [ "${#items[@]}" -eq 0 ] && _disp_banner="🔎 Display filter: ${shown_expr}  — nothing matches here${_rt}  (.d.clr to clear)"
 }
 
 # ── commands ──────────────────────────────────────────────────────────────────
@@ -140,13 +158,14 @@ _disp_help() {
  .d.clr                        show everything again
  .d.save NAME [expr]           keep as preset   .d.run NAME  applies it
  .d.refresh                    re-scan this folder
+ .d.ext py -r                  add -r to include every folder below (one flat list, paths relative to here)
 Applies only in the folder where it was set (other folders show everything). Settings → Display filter for presets/persistence.
 HLP
 }
 
 _disp_status() {
   if _disp_load; then
-    echo "🔎 Display filter ON: $_disp_expr   (folder: ${_disp_dir:-any})"
+    echo "🔎 Display filter ON: $_disp_expr   (folder: ${_disp_dir:-any})$([ "$_disp_rec" = 1 ] && echo "  — recursive")"
     local i; for i in "${!_disp_csvs[@]}"; do echo "   CSV $((i+1)): ${_disp_csvs[$i]}"; done
     echo "   .d.clr to clear   .d.save NAME to keep it"
   else
@@ -163,11 +182,11 @@ _disp_set() {
     echo "❌ $(sed 's/^ERR: //' "$errf")"; rm -f "$errf" "$scanf"; return 1
   fi
   local -a labels=() csvs=()
-  local line
+  local line rec=0
   while IFS= read -r line; do
     case "$line" in
       CSV$'\t'*) labels+=("${line#CSV$'\t'}") ;;
-      RECURSIVE=1) echo "📜  -r is ignored for display (one folder at a time)" ;;
+      RECURSIVE=1) rec=1 ;;
     esac
   done < "$scanf"
   rm -f "$scanf"
@@ -184,15 +203,16 @@ _disp_set() {
   local hidden=0 cnt=0
   [ "${show_hidden_files:-false}" = "true" ] && hidden=1
   local -a found=()
-  mapfile -d '' -t found < <(BVK_NO_RECURSIVE=1 _sel_core run "$expr" "$path" "$hidden" "${csvs[@]}" 2>"$errf")
+  mapfile -d '' -t found < <(_sel_core run "$expr" "$path" "$hidden" "${csvs[@]}" 2>"$errf")
   if [ -s "$errf" ]; then
     echo "❌ $(sed 's/^ERR: //' "$errf")"; rm -f "$errf"; return 1
   fi
   rm -f "$errf"
   cnt=${#found[@]}
+  _disp_rec_new=$rec
   _disp_store "$expr" "${csvs[@]}"
   [ -z "${_DISP_NOHIST:-}" ] && _rule_hist_add "$expr"        # → .r › Last used
-  echo "🔎 Display filter set — $cnt item(s) match here"
+  if [ "$rec" = 1 ]; then echo "🔎 Display filter set — $cnt item(s) match in this folder and below"; else echo "🔎 Display filter set — $cnt item(s) match here"; fi
   [ "$cnt" -eq 0 ] && echo "📜  Nothing matches in this folder (filter stays on; .d.clr to clear)"
   return 0
 }

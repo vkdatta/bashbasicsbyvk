@@ -37,7 +37,7 @@ Rule store (BVK_RULES_DIR)
 
 Environment
   BVK_RULES_DIR      root holding the select/ and display/ rule folders
-  BVK_NO_RECURSIVE   1 = ignore -r (display filters only ever look at one folder)
+  BVK_NO_RECURSIVE   1 = ignore -r (nothing sets it any more: .d now honours -r too)
 
 Headers may start with .s (select) or .d (display) — identical grammar.
 
