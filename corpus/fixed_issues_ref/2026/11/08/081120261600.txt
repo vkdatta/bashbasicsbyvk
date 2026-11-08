@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+Selection-review menu of the transfer navigator drew its c/x/u/q footer inside the body, and q redrew the navigator (slow listing, repeated prompt) instead of leaving. Find & replace settings were inline one-line questions instead of numbered menus.
+
+1. HOW DID YOU DEBUG
+Read menuchrome, smartmenu (_sm_detect), cmdmap gates and the transfer/find loops. Confirmed by reading: a one-row list plus a lettered footer line counts as two rows; _view_selections_menu returned 1 for back and quit; loops ignored a failed read while the command layer swallows prompts. Ran tests/menu_templates.sh and the fast tier; six failures also fail on the untouched original. Nothing verified in a real terminal.
+
+1. CAUSE
+No shared selection/footer/return contract: each menu hand-built its footer, prompt and q handling.
+
+1. FIX
+menuchrome.sh: _mc_select, _mc_text, _mc_review, _mc_footer_std, _mc_nav, _mc_std_key, std_nav profiles, return codes 0/1/2/3 and _mc_unwind. smartmenu.sh: footer line of a one-row list is not a row. transfer, find, organise, create, rules, delete_date, staging_map, shortcut_registry, adf_selection, csv, buffer, auth, rbam, csurf, notify, github, gdrive migrated. Lesson: every loop must check the read rc and _mc_unwind before drawing again.

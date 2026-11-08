@@ -150,6 +150,14 @@ _sm_is_option() {
   return 1
 }
 
+# A FOOTER line is several "key) Label" cells on one line ("c) Confirm   x) Remove   u) Back   q) Quit").  One lettered option
+# per line is a row; a line of cells is never a row.  Only used to tell the footer of a ONE-row list from its rows.
+_sm_is_footer_line() {
+  local plain
+  if declare -F _vp_strip_ansi >/dev/null 2>&1; then _vp_strip_ansi "$1"; plain="$_vp_plain"; else plain="$1"; fi
+  [[ "$plain" =~ ^[[:space:]]{0,4}[A-Za-z0-9_-]{1,4}\)[[:space:]].*[[:space:]]{2,}[A-Za-z0-9_-]{1,4}\)[[:space:]] ]]
+}
+
 _sm_plain_len() {
   if declare -F _vp_strip_ansi >/dev/null 2>&1; then
     _vp_strip_ansi "$1"; _sm_len=${#_vp_plain}
@@ -217,8 +225,20 @@ _sm_detect() {
     if [[ "$t" =~ ^[0-9]+$ ]]; then numc=$(( numc + 1 )); else altc=$(( altc + 1 )); fi
   done
 
+  # ONE numbered row + a footer line of cells ("1) askclaude" / "c) Confirm   x) Remove   u) Back ...") is a one-row list with a
+  # footer, not a two-row menu: without this the footer was drawn INSIDE the body.
+  local _ftr_only=0 _fi
+  if (( numc == 1 && altc >= 1 )); then
+    _ftr_only=1
+    for ((_fi=0; _fi<${#blk_tok[@]}; _fi++)); do
+      t="${blk_tok[$_fi]}"
+      [ -z "$t" ] || [[ "$t" =~ ^[0-9]+$ ]] && continue
+      _sm_is_footer_line "${blk_text[$_fi]}" || { _ftr_only=0; break; }
+    done
+  fi
+
   local cut=${#blk_tok[@]}   # index (exclusive) where rows end
-  if (( numc >= 2 && numc >= altc )); then
+  if (( (numc >= 2 && numc >= altc) || _ftr_only )); then
     # walk back over any trailing lettered/blank lines
     local j
     for ((j=${#blk_tok[@]}-1; j>=0; j--)); do

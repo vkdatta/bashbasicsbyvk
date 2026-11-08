@@ -15,6 +15,7 @@ done
 eval "$(sed -n '/^_nav_parse_select()/,/^}/p;/^_nav_index_ok()/,/^}/p' "$(bvk_need bashbasicsbyvk_transfer.sh)")"
 # ---- stubs: the screen and the answers
 _mc_header() { echo "$@"; }; _mc_options() { local n="$1"; shift; local l; for l in "$@"; do echo "${n}) $l"; n=$((n+1)); done; }; _mc_footer() { :; }
+_mc_footer_std() { :; }; _mc_unwind() { return 1; }; _mc_std_key() { :; }; _mc_read() { read -e -r -p "$2" "$1"; }   # the shared templates (menuchrome.sh), screen only
 _bvk_quit() { :; }; _bvk_invalid() { echo "INVALID"; }
 parse_selection() { local spec="$1" max="$2" p i; for p in ${spec//,/ }; do if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then for ((i=BASH_REMATCH[1]; i<=BASH_REMATCH[2]; i++)); do [ "$i" -le "$max" ] && echo "$i"; done; elif [[ "$p" =~ ^[0-9]+$ ]] && [ "$p" -le "$max" ]; then echo "$p"; fi; done; }
 ANS=(); read() { case " $* " in *" -p "*) local v="${@: -1}"; builtin printf -v "$v" '%s' "${ANS[0]:-}"; ANS=("${ANS[@]:1}") ;; *) builtin read "$@" ;; esac; }   # prompts take the next answer; file reads stay real

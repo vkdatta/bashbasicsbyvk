@@ -131,6 +131,7 @@ _gcloud_init_master() { _lm_stub bashbasicsbyvk_transfer.sh _gcloud_init_master 
 _gcloud_cmd() { _lm_stub bashbasicsbyvk_transfer.sh _gcloud_cmd "$@"; }
 _in_selection() { _lm_stub bashbasicsbyvk_transfer.sh _in_selection "$@"; }
 _view_selections_menu() { _lm_stub bashbasicsbyvk_transfer.sh _view_selections_menu "$@"; }
+_nav_review_leave() { _lm_stub bashbasicsbyvk_transfer.sh _nav_review_leave "$@"; }
 _nav_parse_select() { _lm_stub bashbasicsbyvk_transfer.sh _nav_parse_select "$@"; }
 _nav_index_ok() { _lm_stub bashbasicsbyvk_transfer.sh _nav_index_ok "$@"; }
 _nav_add_range() { _lm_stub bashbasicsbyvk_transfer.sh _nav_add_range "$@"; }

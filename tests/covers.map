@@ -41,3 +41,4 @@ functions/bashbasicsbyvk_(fileinfo|extract|exactbytes)|staging/buffer!/bashbasic
 engine/bashbasicsbyvk_(displayer|engine_heal|viewport)|^o$	startup_spawns
 engine/bashbasicsbyvk_viewport	cell_width
 engine/bashbasicsbyvk_(tabmenu|menuchrome)|select/bashbasicsbyvk_rules|settings/bashbasicsbyvk_settings_desc	tabmenu
+engine/bashbasicsbyvk_(menuchrome|smartmenu|tabmenu)|functions/bashbasicsbyvk_(transfer|find|organise|create|bundle_io)|select/bashbasicsbyvk_rules|loops/iloop/(auth|rbam|fx)/|staging/	menu_templates

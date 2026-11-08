@@ -243,8 +243,8 @@ ru_header() {
   _vp_filter_header_line
 }
 ru_footer() {
-  if [ "$_RB_TAB" = 0 ]; then _mc_footer "N:files" "r-N:revoke this person from a share" "u"
-  else                        _mc_footer "N:files" "r-N:drop a share from my Cloud Surf" "u"; fi
+  if [ "$_RB_TAB" = 0 ]; then _mc_footer_std -b "N:files" "r-N:revoke this person from a share"
+  else                        _mc_footer_std -b "N:files" "r-N:drop a share from my Cloud Surf"; fi
 }
 
 _ru_remove() {

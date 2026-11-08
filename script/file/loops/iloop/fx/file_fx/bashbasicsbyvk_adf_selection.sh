@@ -106,16 +106,17 @@ _fx_sel_browse() {
     done
     _mc_header "🎯 $title (${#its[@]}):"
     if [ ${#its[@]} -eq 0 ]; then echo "  (empty)"; else _mc_options 1 "${rows[@]}"; fi
-    _mc_footer "u" "v:Review chosen" "c:Take chosen" "z" "q" "#tip: use prefix 'w' to select a folder (w1,3 · 2-4 · wa)"
-    read -e -p "Pick: " ch
+    _mc_footer_std "v:Review chosen" "c:Take chosen" "z" "#tip: use prefix 'w' to select a folder (w1,3 · 2-4 · wa)"
+    _mc_read ch "Select: " || { _mc_unwind; return 1; }          # rc != 0: the flow was cancelled → leave at once
     case "$ch" in
       u|U|"") return 0 ;;
       z|Z) echo "🚫 Cancelled"; return 1 ;;
       q|Q) _bvk_quit; return 1 ;;
+      h|H|cc|CC) _mc_std_key "$ch"; _mc_unwind && return 1 ;;
       c|C) [ ${#_PK_CHOSEN[@]} -gt 0 ] && return 2; echo "🔴  Nothing chosen yet" ;;
       v|V) _view_selections_menu _PK_CHOSEN; rc=$?
            _PK_HAVE=(); for p in "${_PK_CHOSEN[@]}"; do _PK_HAVE["$p"]=1; done
-           [ $rc -eq 0 ] && return 2 ;;
+           case $rc in 0) return 2 ;; 2|3) return 1 ;; esac ;;       # confirmed · q / cancelled: leave, never draw this list again
       wa|WA|a|A) _fx_sel_pick_add "${its[@]}" ;;
       *)
         _nav_parse_select "$ch"
@@ -153,15 +154,16 @@ _fx_sel_pick() {
     done
     _mc_header "🎯 Selected items — pick what this action works on:"
     _mc_options 1 "${rows[@]}"
-    _mc_footer "v:Review chosen" "c:Take chosen" "z" "q" "#tip: N opens a set · use prefix 'w' to take a whole set (w1,2 · wa)"
-    read -e -p "Selected items: " ch
+    _mc_footer_std -b "v:Review chosen" "c:Take chosen" "z" "#tip: N opens a set · use prefix 'w' to take a whole set (w1,2 · wa)"
+    _mc_read ch "Select: " || { _mc_unwind; return 1; }
     case "$ch" in
       z|Z|u|U|"") echo "🚫 Cancelled"; return 1 ;;
       q|Q) _bvk_quit; return 1 ;;
+      h|H|cc|CC) _mc_std_key "$ch"; _mc_unwind && return 1 ;;
       c|C) [ ${#_PK_CHOSEN[@]} -gt 0 ] && break; echo "🔴  Nothing chosen yet" ;;
       v|V) _view_selections_menu _PK_CHOSEN; rc=$?
            _PK_HAVE=(); for p in "${_PK_CHOSEN[@]}"; do _PK_HAVE["$p"]=1; done
-           [ $rc -eq 0 ] && break ;;
+           case $rc in 0) break ;; 2|3) return 1 ;; esac ;;
       *)
         [[ "$ch" == [aA] || "$ch" == [wW][aA] ]] && ch="w1-${#_k_n[@]}"
         _nav_parse_select "$ch"
@@ -178,6 +180,7 @@ _fx_sel_pick() {
             _fx_sel_browse "${_k_n[$i]:-flat items}" "${part[@]}"; rc=$?
             [ $rc -eq 2 ] && break
             [ $rc -eq 1 ] && return 1
+            _mc_unwind && return 1
           fi
         else _bvk_invalid; fi ;;
     esac

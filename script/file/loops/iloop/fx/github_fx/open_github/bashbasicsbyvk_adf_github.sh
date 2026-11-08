@@ -114,7 +114,7 @@ ghp_header() {
   _vp_filter_header_line
 }
 
-ghp_footer() { _mc_footer "#Select a number to open that repo" "=:filter" "rf" "u"; }
+ghp_footer() { _mc_std_items -b; _mc_footer "#Select a number to open that repo" "=:filter" "rf" "${_MC_STD[@]}"; }
 
 _ghp_cmd() {
   case "$1" in

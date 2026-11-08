@@ -13,12 +13,9 @@ _fx_adf_delete_by_date() {
   _fxdel_list_files files
   [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
 
-  _mc_menu "🗑️  Delete by date in $path (file modified date):" -- "Day     (e.g. 2024-03-15)" \
-    "Month   (e.g. 2024-03)" "Year    (e.g. 2024)" "Decade  (e.g. 2020s)" -- @back_quit
   local lvl
-  read -e -p "Select: " lvl
-  case "${lvl,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit; return 1 ;; esac
-  case "$lvl" in 1|2|3|4) ;; *) _bvk_invalid; return ;; esac
+  _mc_select lvl "🗑️  Delete by date in $path (file modified date):" "Day     (e.g. 2024-03-15)" \
+    "Month   (e.g. 2024-03)" "Year    (e.g. 2024)" "Decade  (e.g. 2020s)" || { local _rc=$?; (( _rc == 2 )) && return 1; echo "↩️  Back"; return; }
 
   _batch_stat "$path"
   local -A count=() key_of=()
@@ -42,11 +39,10 @@ _fx_adf_delete_by_date() {
   for i in "${!keys[@]}"; do
     printf '%d) %s  (%d file(s))\n' $((i+1)) "${keys[$i]}" "${count[${keys[$i]}]}"
   done
-  echo "Pick one or more: numbers/ranges (1,3 or 2-4), or a = all"
   local reply
-  read -e -p "Choice: " reply
+  _mc_text reply "Select: " "Pick one or more: numbers/ranges (1,3 or 2-4), or a = all"
+  case $? in 0) ;; 1) echo "↩️  Back"; return ;; 2) return 1 ;; *) return ;; esac
   [ -z "$reply" ] && { echo "🚫 Cancelled"; return; }
-  case "${reply,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit; return 1 ;; esac
 
   local -A chosen=()
   local idx

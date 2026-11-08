@@ -100,72 +100,19 @@ _in_selection() {
 
 nav_last_browsed_path=""
 
-_view_selections_menu() {
-  local -n _sel_ref="$1"
-  local -a _view_history=()
+# The selection review is the shared MC-04 template (menuchrome.sh: _mc_review): title, rows in the body, c) Confirm / x) Remove
+# + the standard u q h cc in the FOOTER, prompt "Select:".   Returns  0 confirmed · 1 back · 2 quit (_BVK_TO_MAIN is up) · 3 cancelled.
+# The caller MUST look at the status: q used to come back as a plain 1 ("back"), the navigator drew itself again and the
+# smart-loading bar ran for the whole redraw.
+_view_selections_menu() { _mc_review "$1"; }
 
-  while true; do
-    echo
-    if [ ${#_sel_ref[@]} -eq 0 ]; then
-      echo "📋 No items selected yet."
-    else
-      echo "📋 Current selections (${#_sel_ref[@]}):"
-      local i=1
-      for s in "${_sel_ref[@]}"; do
-        printf "  %2d) %s\n" "$i" "$(basename "$s")"
-        i=$((i+1))
-      done
-    fi
-    _mc_footer "c:Confirm" "x:Remove" "u" "q"
-    read -e -p "Selection view: " sv_choice
-
-    case "$sv_choice" in
-      c|C)
-        if [ ${#_sel_ref[@]} -eq 0 ]; then
-          echo "🔴  Nothing selected — add items before confirming."
-        else
-          echo "💫 Selections confirmed (${#_sel_ref[@]} item(s))"
-          return 0
-        fi
-        ;;
-      x|X)
-        if [ ${#_sel_ref[@]} -eq 0 ]; then
-          echo "🔴  Nothing to remove."
-          continue
-        fi
-        echo "Enter item number(s) to remove (e.g. 1,3 or 2-5):"
-        read -e -p "Remove: " rm_input
-        local rm_indices
-        rm_indices=($(parse_selection "$rm_input" "${#_sel_ref[@]}"))
-        if [ ${#rm_indices[@]} -eq 0 ]; then
-          echo "❌ No valid numbers entered"
-          continue
-        fi
-        local -A _to_remove=()
-        for ri in "${rm_indices[@]}"; do
-          _to_remove["$ri"]=1
-        done
-        local new_sel=()
-        local j=1
-        for s in "${_sel_ref[@]}"; do
-          [ -z "${_to_remove[$j]+x}" ] && new_sel+=("$s")
-          j=$((j+1))
-        done
-        _sel_ref=("${new_sel[@]}")
-        echo "💫 Removed ${#rm_indices[@]} item(s). Remaining: ${#_sel_ref[@]}"
-        ;;
-      u|U)
-        echo "↩️  Back to navigation"
-        return 1
-        ;;
-      q|Q)
-        _bvk_quit; return 1
-        ;;
-      *)
-        _bvk_invalid
-        ;;
-    esac
-  done
+# _nav_review_leave <rc of _view_selections_menu>  → 0 = the navigator must return now (rc for the caller in $_nav_leave_rc)
+_nav_review_leave() {
+  case "$1" in
+    0) _nav_leave_rc=0; return 0 ;;     # confirmed
+    2|3) _nav_leave_rc=1; return 0 ;;   # quit / cancelled: unwind, never draw the navigator again
+  esac
+  return 1                              # back: stay in the navigator
 }
 
 # ── input helpers shared by the local and the gcloud navigator ────────────────────────────────────────────
@@ -272,15 +219,16 @@ local_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer "u.up" "v:View selections" "z" "q" "#tip: use prefix 'w' to select a folder"
+      _mc_footer_std "v:View selections" "z" "#tip: use prefix 'w' to select a folder"
     else
-      _mc_footer "u.up" "n:New folder" "c:Confirm destination" "z" "q"
+      _mc_footer_std "n:New folder" "c:Confirm destination" "z"
     fi
 
-    read -e -p "Nav: " nav_choice
+    _mc_read nav_choice "Select: " || { _mc_unwind; return 1; }       # rc != 0: the flow was cancelled → leave at once
 
     case "$nav_choice" in
-      q|Q) _bvk_quit; return 1 ;;
+      q|Q) nav_selected_items=(); _bvk_quit; return 1 ;;
+      h|H|cc|CC) _mc_std_key "$nav_choice"; _mc_unwind && return 1 ;;
       z|Z)
         echo "🚫 Navigation cancelled"
         return 1
@@ -309,7 +257,7 @@ local_navigator() {
       v|V)
         if [ "$mode" == "source" ]; then
           _view_selections_menu nav_selected_items
-          [ $? -eq 0 ] && return 0
+          _nav_review_leave $? && return "$_nav_leave_rc"
         else
           _bvk_invalid
         fi
@@ -437,19 +385,16 @@ gcloud_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer "u.up" "v:View selections" "z" "q" "#tip: use prefix 'w' to select a folder"
+      _mc_footer_std "v:View selections" "z" "#tip: use prefix 'w' to select a folder"
     else
-      _mc_footer "u.up" "n:New folder" "c:Confirm destination" "z" "q"
+      _mc_footer_std "n:New folder" "c:Confirm destination" "z"
     fi
 
-    read -e -p "GCloud Nav: " gnav_choice
+    _mc_read gnav_choice "Select: " || { _mc_unwind; return 1; }
 
     case "$gnav_choice" in
-      q|Q)
-        gcloud_nav_selected_items=()
-        echo "🗑️  All selections cleared. Closing."
-        _bvk_quit; return 1
-        ;;
+      q|Q) gcloud_nav_selected_items=(); _bvk_quit; return 1 ;;      # the SAME quit as the local navigator
+      h|H|cc|CC) _mc_std_key "$gnav_choice"; _mc_unwind && return 1 ;;
       z|Z)
         echo "🚫 GCloud navigation cancelled"
         return 1
@@ -472,7 +417,7 @@ gcloud_navigator() {
       v|V)
         if [ "$mode" == "source" ]; then
           _view_selections_menu gcloud_nav_selected_items
-          [ $? -eq 0 ] && return 0
+          _nav_review_leave $? && return "$_nav_leave_rc"
         else
           _bvk_invalid
         fi
@@ -789,36 +734,26 @@ _get_mime_type() {
 }
 
 transfer_menu() {
-  _mc_menu "📦 TRANSFER — Step 1: Choose mode" -- \
+  _mc_select t_mode "📦 TRANSFER — Step 1: Choose mode" \
     "Intra-location (Current CLI → Current CLI [Up Down])" \
     "Intra-location (Current CLI → Current CLI [Down Up])" \
     "Current CLI To Drive (Via rclone)" \
     "Local To GCloud (Run from Local)" \
-    "GCloud To Local (Run from Local)" -- @back_quit
-  read -e -p "Select: " t_mode
-
-  case "$t_mode" in
-  u|U) return ;;
-  q|Q) _bvk_quit; return 1 ;;
-    1|2|3|4|5) ;;
-    *)
-      echo "❌ Invalid mode"
-      return
-      ;;
-  esac
+    "GCloud To Local (Run from Local)" || return $(( $? == 2 ? 1 : 0 ))
 
   echo
   echo "📦 TRANSFER — Step 2: Select source items"
 
-  local step2_ok=false
+  local step2_ok=false _t_nrc
 
   if [ "$t_mode" == "5" ]; then
     if ! command -v gcloud >/dev/null 2>&1; then
       echo "❌ gcloud not found in PATH."
       return
     fi
-    gcloud_navigator "source"
-    if [ $? -ne 0 ] || [ ${#gcloud_nav_selected_items[@]} -eq 0 ]; then
+    gcloud_navigator "source"; _t_nrc=$?
+    _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
+    if [ $_t_nrc -ne 0 ] || [ ${#gcloud_nav_selected_items[@]} -eq 0 ]; then
       echo "🚫 Transfer cancelled"
       return
     fi
@@ -827,8 +762,9 @@ transfer_menu() {
     if $imaginary_mode; then
       select_imaginary_items_common "$path" "$group_prefix" && step2_ok=true
     else
-      local_navigator "source" "$path"
-      if [ $? -eq 0 ] && [ ${#nav_selected_items[@]} -gt 0 ]; then
+      local_navigator "source" "$path"; _t_nrc=$?
+      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
+      if [ $_t_nrc -eq 0 ] && [ ${#nav_selected_items[@]} -gt 0 ]; then
         selected_items=("${nav_selected_items[@]}")
         step2_ok=true
       fi
@@ -847,18 +783,18 @@ transfer_menu() {
   local final_dest=""
 
   case "$t_mode" in
-  u|U) return ;;
-  q|Q) _bvk_quit; return 1 ;;
     1)
-      local_navigator "dest" "$HOME"
-      if [ $? -eq 0 ]; then
+      local_navigator "dest" "$HOME"; _t_nrc=$?
+      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
+      if [ $_t_nrc -eq 0 ]; then
         final_dest="$nav_result_path"
         dest_ok=true
       fi
       ;;
     2)
-      local_navigator "dest" "${nav_last_browsed_path:-$path}"
-      if [ $? -eq 0 ]; then
+      local_navigator "dest" "${nav_last_browsed_path:-$path}"; _t_nrc=$?
+      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
+      if [ $_t_nrc -eq 0 ]; then
         final_dest="$nav_result_path"
         dest_ok=true
       fi
@@ -871,15 +807,17 @@ transfer_menu() {
       ;;
     4)
       _dep_need -c "Transfer to Google Cloud Storage" gcloud || return
-      gcloud_navigator "dest"
-      if [ $? -eq 0 ]; then
+      gcloud_navigator "dest"; _t_nrc=$?
+      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
+      if [ $_t_nrc -eq 0 ]; then
         final_dest="$gcloud_nav_result_path"
         dest_ok=true
       fi
       ;;
     5)
-      local_navigator "dest" "$HOME"
-      if [ $? -eq 0 ]; then
+      local_navigator "dest" "$HOME"; _t_nrc=$?
+      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
+      if [ $_t_nrc -eq 0 ]; then
         final_dest="$nav_result_path"
         dest_ok=true
       fi
@@ -891,19 +829,12 @@ transfer_menu() {
     return
   fi
 
-  _mc_header "📦 TRANSFER — Step 4: Action"
-  if [[ "$t_mode" == "1" || "$t_mode" == "2" ]]; then
-    _mc_keyed "c:Copy" "m:Move" "s:Shortcut"
-  else
-    _mc_keyed "c:Copy" "m:Move"
-  fi
-  _mc_footer "u" "q"
-  read -e -p "Select: " t_action
+  local -a _t_rows=("c|Copy|c" "m|Move|m")
+  [[ "$t_mode" == "1" || "$t_mode" == "2" ]] && _t_rows+=("s|Shortcut|s")
+  _mc_select -k t_action "📦 TRANSFER — Step 4: Action" "${_t_rows[@]}" || return $(( $? == 2 ? 1 : 0 ))
 
   local t_op
   case "$t_action" in
-  u|U) return ;;
-  q|Q) _bvk_quit; return 1 ;;
     c|C) t_op="copy" ;;
     m|M) t_op="move" ;;
     s|S)

@@ -30,11 +30,10 @@ _fx_adf_delete_by_ext() {
     lbl=".${exts[$i]}"; [ "${exts[$i]}" = "noext" ] && lbl="(no extension)"
     printf '%d) %s  (%d file(s))\n' $((i+1)) "$lbl" "${count[${exts[$i]}]}"
   done
-  echo "Pick one or more: numbers/ranges (1,3 or 2-4), extension names (py,txt), or a = all"
   local reply
-  read -e -p "Choice: " reply
+  _mc_text reply "Select: " "Pick one or more: numbers/ranges (1,3 or 2-4), extension names (py,txt), or a = all"
+  case $? in 0) ;; 1) echo "↩️  Back"; return ;; 2) return 1 ;; *) return ;; esac
   [ -z "$reply" ] && { echo "🚫 Cancelled"; return; }
-  case "${reply,,}" in u) echo "↩️  Back"; return ;; q) _bvk_quit; return 1 ;; esac
 
   local -A chosen=()
   local tok idx

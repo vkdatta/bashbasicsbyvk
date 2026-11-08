@@ -88,14 +88,10 @@ handle_staging_map() {
 _map_deliver() {
   local map_output="$1" suggest="${2:-}"
   echo
-  _mc_menu -- "Copy to clipboard" "Save to txt file" -- @back_quit
-
   local choice
-  read -e -p "Select: " choice
+  _mc_select choice "" "Copy to clipboard" "Save to txt file" || return $(( $? == 2 ? 1 : 0 ))
 
   case "$choice" in
-  u|U) return ;;
-  q|Q) _bvk_quit; return 1 ;;
     1)
       printf "%s" "$map_output" | bashbasicsbyvk_copy
       if [ -n "$suggest" ]; then echo "💫 Copied to clipboard"; else echo "💫 Map copied to clipboard"; fi

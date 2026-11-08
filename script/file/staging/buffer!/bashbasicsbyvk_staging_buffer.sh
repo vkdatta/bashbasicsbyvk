@@ -118,13 +118,13 @@ _sp_view_set() {
     fi
 
     if [ -n "$name" ]; then
-      _mc_footer "x:Remove item(s)" "n:Rename set" "clr:Clear set $name" "u" "q"
+      _mc_footer_std -b "x:Remove item(s)" "n:Rename set" "clr:Clear set $name"
     elif [ "$grouped" = 1 ]; then
-      _mc_footer "x:Remove item(s)" "n:Name these items" "clr:Clear the flat items" "u" "q"
+      _mc_footer_std -b "x:Remove item(s)" "n:Name these items" "clr:Clear the flat items"
     else
-      _mc_footer "x:Remove item(s)" "clr:Clear entire $label buffer" "u" "q"
+      _mc_footer_std -b "x:Remove item(s)" "clr:Clear entire $label buffer"
     fi
-    read -e -p "$label buffer${where}: " bv_choice
+    _mc_read bv_choice "$label buffer${where}: " || { _mc_unwind; return 0; }      # rc != 0: the flow was cancelled → leave at once
 
     case "$bv_choice" in
       x|X)
@@ -167,6 +167,7 @@ _sp_view_set() {
       u|U|"")
         return 0
         ;;
+      h|H|cc|CC) _mc_std_key "$bv_choice"; _mc_unwind && return 0 ;;
       q|Q)
         _bvk_quit; return 0
         ;;
@@ -220,13 +221,14 @@ _sp_view_one_buffer() {
 
     _mc_header "📋 $label buffer ($(_sp_count "$file")):"
     _mc_options 1 "${rows[@]}"
-    _mc_footer "x:Remove item(s)" "n:Rename set" "clr:Clear entire $label buffer" "u" "q"
-    read -e -p "$label buffer: " bv_choice
+    _mc_footer_std -b "x:Remove item(s)" "n:Rename set" "clr:Clear entire $label buffer"
+    _mc_read bv_choice "$label buffer: " || { _mc_unwind; return 0; }      # rc != 0: the flow was cancelled → leave at once
 
     case "$bv_choice" in
       [0-9]*)
         if [[ "$bv_choice" =~ ^[0-9]+$ ]] && [ "$bv_choice" -ge 1 ] && [ "$bv_choice" -le ${#rows[@]} ]; then
           _sp_view_set "$label" "$file" "$op" "${rowname[$((bv_choice-1))]}" 1
+          _mc_unwind && return 0                # q in the set view: close up, do not draw this list again
         else
           _bvk_invalid
         fi
@@ -267,6 +269,7 @@ _sp_view_one_buffer() {
       u|U|"")
         return 0
         ;;
+      h|H|cc|CC) _mc_std_key "$bv_choice"; _mc_unwind && return 0 ;;
       q|Q)
         _bvk_quit; return 0
         ;;
@@ -299,14 +302,15 @@ handle_staging_view() {
 
     _mc_header "🗂️  Shortpath buffers"
     _mc_options 1 "${rows[@]}"
-    _mc_footer "clr:Clear ALL buffers" "u" "q"
-    read -e -p "View buffer: " v_choice
+    _mc_footer_std -b "clr:Clear ALL buffers"
+    _mc_read v_choice "View buffer: " || { _mc_unwind; return 0; }      # rc != 0: the flow was cancelled → leave at once
 
     case "$v_choice" in
       [0-9]|10)
         if [ "$v_choice" -ge 1 ] && [ "$v_choice" -le ${#_SP_VIEW_ROWS[@]} ]; then
           r="${_SP_VIEW_ROWS[$((v_choice-1))]}"; op="${r% *}"; persistent="${r#* }"
           _sp_view_one_buffer "$(_sp_op_label "$op") ($([ "$persistent" = true ] && echo persistent || echo once))" "$(_sp_file_for "$op" "$persistent")" "$op"
+          _mc_unwind && return 0
         else
           _bvk_invalid
         fi
@@ -323,6 +327,7 @@ handle_staging_view() {
       u|U|"")
         return 0
         ;;
+      h|H|cc|CC) _mc_std_key "$v_choice"; _mc_unwind && return 0 ;;
       q|Q)
         _bvk_quit; return 0
         ;;

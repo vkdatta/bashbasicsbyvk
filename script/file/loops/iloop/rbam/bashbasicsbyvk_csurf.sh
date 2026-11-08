@@ -207,7 +207,7 @@ cs_pp_header() {
   [ "${#items[@]}" -eq 0 ] && echo "   Nobody (everyone was revoked)."
   _vp_filter_header_line
 }
-cs_pp_footer() { _mc_footer "N:their files" "r-N:revoke person" "g:offer to more people" "t:all my files" "u"; }
+cs_pp_footer() { _mc_footer_std -b "N:their files" "r-N:revoke person" "g:offer to more people" "t:all my files"; }
 
 _pp_revoke() {
   _xui_select_rows "REVOKE" "🚫 Revoke which people from this share?" "$1" || return 1
@@ -319,8 +319,8 @@ ct_footer() {
   [ "$_CT_ROLE" = owner ] && [ -z "$_CT_RID" ] && rv=""
   local -a _f=("N:open" "d-N:download here")
   [ -n "$rv" ] && _f+=("$rv")
-  _f+=("rf" "u.up")
-  _mc_footer "${_f[@]}"
+  _f+=("rf")
+  _mc_footer_std "${_f[@]}"
 }
 
 _ct_dest() { local d="${path:-$PWD}"; [ -d "$d" ] && [ -w "$d" ] || d="$PWD"; printf '%s' "$d"; }

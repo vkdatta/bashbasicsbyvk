@@ -44,12 +44,9 @@ create_dirs() {
 }
 
 handle_create() {
-  _mc_menu "Create:" -- "New folders" "New files" -- @back_quit
-  read -e -r -p "Select: " cr
+  _mc_select cr "Create:" "New folders" "New files" || return $(( $? == 2 ? 1 : 0 ))
 
   case "$cr" in
-  u|U) return ;;
-  q|Q) _bvk_quit; return 1 ;;
     1) create_dirs ;;
     2) create_files ;;
     *) _bvk_invalid ;;

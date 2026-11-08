@@ -94,8 +94,8 @@ _file_picker() {
                 _i=$((_i + 1))
             done
         fi
-        _mc_footer "u.up" "z" "q"
-        read -e -p "${_fp_lbl} Nav: " _fp_choice
+        _mc_footer_std "z"
+        _mc_read _fp_choice "Select: " || { _mc_unwind; _fp_out=""; return 1; }       # rc != 0: the flow was cancelled
 
         # strip surrounding whitespace
         _fp_choice="${_fp_choice#"${_fp_choice%%[![:space:]]*}"}"
@@ -103,6 +103,7 @@ _file_picker() {
 
         case "$_fp_choice" in
             q|Q) _bvk_quit; _fp_out=""; return 1 ;;
+            h|H|cc|CC) _mc_std_key "$_fp_choice"; _mc_unwind && { _fp_out=""; return 1; } ;;
 
             z|Z)
                 echo "🚫 ${_fp_lbl} selection cancelled."

@@ -41,52 +41,40 @@ _find_csv_write_counts() {
 # ════════════════════════════════════════════════════════════════════════════
 
 # _find_ask <outvar> <question> <default-value> <key> <value> <label> [<key> <value> <label>]...
-#   rc 0 answered · 1 back (u) · 2 quit (q)
+#   One question of the Find & replace settings = the shared two-option template (menuchrome.sh, MC-01/02): numbered rows,
+#   the standard footer, "Select:".  <key> stays accepted as a typed alias; Enter picks <default-value>.
+#   rc 0 answered · 1 back (u) · 2 quit (q: the unwind flag is up) · 3 cancelled
 _find_ask() {
-  local out="$1" q="$2" def="$3" a i opts=""
-  local -a ks=() vs=()
-  shift 3
-  while [ $# -ge 3 ]; do ks+=("$1"); vs+=("$2"); opts+="${opts:+ · }$1) $3"; shift 3; done
-  while true; do
-    echo "$q   $opts   (Enter = default · u) back   q) quit)"
-    read -e -r -p "Choice: " a || return 1
-    a="${a,,}"; a="${a%$'\r'}"
-    case "$a" in
-      u) return 1 ;;
-      q) _bvk_quit; return 2 ;;
-      "") printf -v "$out" '%s' "$def"; return 0 ;;
-    esac
-    for i in "${!ks[@]}"; do
-      [ "$a" = "${ks[$i]}" ] && { printf -v "$out" '%s' "${vs[$i]}"; return 0; }
-    done
-    echo "🔴  Invalid answer"
-  done
+  local out="$1" q="$2" def="$3"; shift 3
+  local -a rows=()
+  while [ $# -ge 3 ]; do rows+=("$2|$3|$1"); shift 3; done
+  _mc_select -d "$def" "$out" "$q" "${rows[@]}"
 }
 
 # _find_resolve_options <names|contents|both>
 #   Turns the Find & replace settings into this run's options (_fo_*), asking only about the ones set to "ask every time".
-#   rc 0 ready · 1 back / quit
+#   rc 0 ready · 1 back · 2 quit (q was pressed: nothing may be drawn again)
 _find_resolve_options() {
   local scope="$1" rc=0 mb
   _fr_scope="$scope"
   case "$find_depth_mode" in
     flat) _fo_depth=flat ;;
     recursive) _fo_depth=rec ;;
-    *) _find_ask _fo_depth "📂 Where?" rec f flat "this folder only" r rec "all sub-folders too" || return 1 ;;
+    *) _find_ask _fo_depth "📂 Where?" rec f flat "this folder only" r rec "all sub-folders too" || return $(( $? == 2 ? 2 : 1 )) ;;
   esac
   case "$find_case_mode" in
     exact|any) _fo_case="$find_case_mode" ;;
-    *) _find_ask _fo_case "🔠 Match case?" exact e exact "exact case" a any "any case" || return 1 ;;
+    *) _find_ask _fo_case "🔠 Match case?" exact e exact "exact case" a any "any case" || return $(( $? == 2 ? 2 : 1 )) ;;
   esac
   case "$find_regex_mode" in
     on) _fo_regex=1 ;;
     off) _fo_regex=0 ;;
-    *) _find_ask _fo_regex "🧩 Pattern type?" 0 t 0 "plain text" r 1 "regex" || return 1 ;;
+    *) _find_ask _fo_regex "🧩 Pattern type?" 0 t 0 "plain text" r 1 "regex" || return $(( $? == 2 ? 2 : 1 )) ;;
   esac
   case "$find_word_mode" in
     on) _fo_word=1 ;;
     off) _fo_word=0 ;;
-    *) _find_ask _fo_word "🔤 Whole words only?" 0 n 0 "no" w 1 "yes" || return 1 ;;
+    *) _find_ask _fo_word "🔤 Whole words only?" 0 n 0 "no" w 1 "yes" || return $(( $? == 2 ? 2 : 1 )) ;;
   esac
   case "$find_hidden_mode" in
     include) _fo_hidden=1 ;;
@@ -147,7 +135,7 @@ _find_apply_report() {
 # rc 0 done (leave the menu) · 3 back to the Find menu · 1 quit
 _find_search() {
   local scope="$1" pat act target n
-  _find_resolve_options "$scope" || return 3
+  _find_resolve_options "$scope" || return $(( $? == 2 ? 1 : 3 ))
   _find_options_line
   read -e -r -p "$(_find_what "$scope")" pat || return 3
   [ -z "$pat" ] && { echo "Nothing entered."; return 0; }
@@ -160,31 +148,24 @@ _find_search() {
   echo "📋 Found ${_FRS[listed]} result(s):"
   _fr_show
   _fr_notes
-  echo "Enter item number to navigate"
-  echo "u) Back   q) Quit"
   while true; do
-    # rc!=0 = the command layer cancelled this flow (blocked command): leave at once
-    read -e -p "Action: " act || return 0
-    case "$act" in
-      u|U) return 3 ;;
-      q|Q) _bvk_quit; return 1 ;;
-      [0-9]*)
-        if [[ $act =~ ^[0-9]+$ ]] && (( act >= 1 && act <= ${#_FR_LIST[@]} )); then
-          target="${_FR_LIST[$((act-1))]}"
-          if [ -d "$target" ]; then path="$target"
-          elif [ -f "$target" ]; then handle_file "$target"; fi
-          return 0
-        fi
-        echo "Invalid. Use a number or q." ;;
-      *) echo "Invalid. Use a number or q." ;;
-    esac
+    # rc != 0 = back / quit / the command layer cancelled this flow: leave at once
+    _mc_text -x "#Enter item number to navigate" act "Select: "
+    case $? in 1) return 3 ;; 2) return 1 ;; 3) return 0 ;; esac
+    if [[ $act =~ ^[0-9]+$ ]] && (( act >= 1 && act <= ${#_FR_LIST[@]} )); then
+      target="${_FR_LIST[$((act-1))]}"
+      if [ -d "$target" ]; then path="$target"
+      elif [ -f "$target" ]; then handle_file "$target"; fi
+      return 0
+    fi
+    echo "Invalid. Use a number or q."
   done
 }
 
 # ── 4-6  Find & replace, one pattern ─────────────────────────────────────────
 _find_replace_single() {
   local scope="$1" pat rep act what="" idx
-  _find_resolve_options "$scope" || return 3
+  _find_resolve_options "$scope" || return $(( $? == 2 ? 1 : 3 ))
   _find_options_line
   read -e -r -p "$(_find_what "$scope")" pat || return 3
   [ -z "$pat" ] && { echo "Nothing entered."; return 0; }
@@ -197,11 +178,10 @@ _find_replace_single() {
     echo "📋 Preview — $(_find_preview_summary):"
     _fr_show
     _fr_notes
-    _mc_footer "a:Apply to ALL" "#Enter a number to apply to just that item" "u" "q"
-    read -e -r -p "Action: " act || return 0
+    # MC-06: the preview rows ARE the numbered choices; the footer adds a) Apply to ALL to the standard keys
+    _mc_text -x "a:Apply to ALL" -x "#Enter a number to apply to just that item" act "Select: "
+    case $? in 1) return 3 ;; 2) return 1 ;; 3) return 0 ;; esac
     case "$act" in
-      u|U) return 3 ;;
-      q|Q) _bvk_quit; return 1 ;;
       a|A) ;;
       [0-9]*)
         if [[ $act =~ ^[0-9]+$ ]] && (( act >= 1 && act <= ${#_FR_LIST[@]} )); then
@@ -252,7 +232,7 @@ _find_replace_csv() {
   local -a csv_finds=() csv_reps=() csv_counts=()
   open_csv_menu || return 0
   [ -z "$csv_file" ] && return 0
-  _find_resolve_options "$scope" || return 3
+  _find_resolve_options "$scope" || return $(( $? == 2 ? 1 : 3 ))
   echo ""
   echo "🔄 Reading rows from: $(basename "$csv_file")"
   _find_csv_read "$csv_file" csv_finds csv_reps
@@ -296,40 +276,31 @@ _find_replace() {
   case "$find_input_mode" in
     single) how=1 ;;
     csv)    how=2 ;;
-    *)
-      _mc_menu "$title" -- "Single Mutation" "Multi Mutation (CSV)" -- @back_quit
-      read -e -p "Select: " how || return 0
-      ;;
+    *) _mc_select how "$title" "Single Mutation" "Multi Mutation (CSV)" || return $(( $? == 2 ? 1 : 3 )) ;;
   esac
   case "$how" in
-    u|U) return 3 ;;
-    q|Q) _bvk_quit; return 1 ;;
     1) _find_replace_single "$scope" ;;
     2) _find_replace_csv "$scope" ;;
-    *) echo "❌ Invalid mode."; return 0 ;;
   esac
 }
 
 find_menu() {
   local ftype rc
   while true; do
-    _mc_menu "🔍 Find mode in: $path" -- \
+    _mc_select ftype "🔍 Find mode in: $path" \
       "Find file/folder names" "Find inside file contents" "Find in names and contents" \
-      "Find & replace in file/folder names" "Find & replace inside file contents" "Find & replace in names and contents" \
-      -- @back_quit
-    read -e -p "Select: " ftype || return
+      "Find & replace in file/folder names" "Find & replace inside file contents" "Find & replace in names and contents"
+    case $? in 0) ;; 2) return 1 ;; *) return 0 ;; esac          # u = back · q = quit (flag up) · cancelled
     case "$ftype" in
-      u|U) return ;;
-      q|Q) _bvk_quit; return 1 ;;
       1) _find_search names ;;
       2) _find_search contents ;;
       3) _find_search both ;;
       4) _find_replace names ;;
       5) _find_replace contents ;;
       6) _find_replace both ;;
-      *) return ;;
     esac
     rc=$?
+    _mc_unwind && { _fr_cleanup; return 1; }                      # q anywhere below: never draw the Find menu again
     [ "$rc" -eq 3 ] && continue          # u inside a flow: back to this menu
     _fr_cleanup
     return "$rc"

@@ -40,14 +40,11 @@ done
 }
 
 organise_by_ext() {
-_mc_menu "📁 Organise by extension:" -- "All files by ext" "Selected extension" -- @back_quit
-read -e -p "Select: " ech
+_mc_select ech "📁 Organise by extension:" "All files by ext" "Selected extension" || return $(( $? == 2 ? 1 : 0 ))
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
 case "$ech" in
-u|U) return ;;
-q|Q) _bvk_quit; return 1 ;;
 1)
 declare -A ext_buckets=()
 for f in "${files[@]}"; do
@@ -205,12 +202,7 @@ echo "💫 Organised by year(s) > month(s) > date(s)"
 }
 
 unorganise() {
-_mc_menu "🔄 Unorganise and bring to current location:" -- "Unorganise all" "Unorganise selected folders" -- @back_quit
-read -e -p "Select: " uch
-case "$uch" in
-u|U) return ;;
-q|Q) _bvk_quit; return 1 ;;
-esac
+_mc_select uch "🔄 Unorganise and bring to current location:" "Unorganise all" "Unorganise selected folders" || return $(( $? == 2 ? 1 : 0 ))
 if [ "$uch" = "1" ]; then
 _carry_flatten_into "$path" "$path" 2   # locks + shortcuts follow; a locked empty folder is kept
 echo "💫 All files brought to current location. Empty folders removed."
@@ -264,13 +256,10 @@ echo "💫 Organised A-Z"
 }
 
 organise_menu() {
-_mc_menu "🗂️ Organise files in current location ($path):" -- "Organise by ext" "Organise by year(s) (metadata)" \
+_mc_select och "🗂️ Organise files in current location ($path):" "Organise by ext" "Organise by year(s) (metadata)" \
   "Organise by year(s) > month(s) (metadata)" "Organise by year(s) > month(s) > date(s) (metadata)" \
-  "Unorganise and bring it to current location" "Organise A-Z" -- @back_quit
-read -e -p "Select: " och
+  "Unorganise and bring it to current location" "Organise A-Z" || return $(( $? == 2 ? 1 : 0 ))
 case "$och" in
-u|U) return ;;
-q|Q) _bvk_quit; return 1 ;;
 1) organise_by_ext ;;
 2) organise_by_year ;;
 3) organise_by_year_month ;;

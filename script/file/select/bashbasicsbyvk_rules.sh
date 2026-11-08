@@ -354,15 +354,8 @@ _rl_cmd_run() {                  # N inside select/ or display/ → apply the ru
 _rl_cmd_create() {
   local kind="$_rl_cur" ans name raw expr desc
   if [ -z "$kind" ]; then
-    _mc_menu "Create a rule:" -- "select rule  (.s ...)" "display rule (.d ...)" -- @back_quit
-    read -e -r -p "Select: " ans
-    case "$ans" in
-      u|U) return 1 ;;
-      q|Q) _bvk_quit; return 1 ;;
-      1) kind=select ;;
-      2) kind=display ;;
-      *) _bvk_invalid; return 1 ;;
-    esac
+    _mc_select ans "Create a rule:" "select|select rule  (.s ...)" "display|display rule (.d ...)" || return 1
+    kind="$ans"
   fi
   local head=.s; [ "$kind" = display ] && head=.d
   read -e -r -p "Rule name (e.g. mango or mango.txt): " raw

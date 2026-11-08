@@ -43,8 +43,8 @@ declare -g  _TM_I=0                         # _tm_idx result: the 0-based positi
 _TM_TAB_SEP=" "                             # what sits between two tab labels (the tap hit-test measures it, so it can be changed here)
 
 # the ONE footer every tabbed menu shows (generic keys take their label from _MC_KEYLABEL in menuchrome.sh)
-_mc_footer_register tabmenu      u.up q h:Home cc:Cheat_codes
-_mc_footer_register tabmenu_back u    q h:Home cc:Cheat_codes
+_mc_footer_register tabmenu      "${_MC_FOOTERS[std_nav]}"          # = the standard footer of menuchrome.sh (FOOTER-01): one copy
+_mc_footer_register tabmenu_back "${_MC_FOOTERS[std_nav_back]}"
 
 # _tm_define NAME STATEVAR TITLE DESC_SCREEN key:Label...      (see the header of this file)
 _tm_define() {

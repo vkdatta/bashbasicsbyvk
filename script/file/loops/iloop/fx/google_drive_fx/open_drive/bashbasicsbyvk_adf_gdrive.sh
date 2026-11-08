@@ -49,7 +49,7 @@ gdp_header() {
 }
 
 gdp_footer() {
-  _mc_footer "#Select a number to open that Google Drive" "n:New profile (rclone config)" "rf" "u"
+  _mc_std_items -b; _mc_footer "#Select a number to open that Google Drive" "n:New profile (rclone config)" "rf" "${_MC_STD[@]}"
 }
 
 _gdp_cmd() {
