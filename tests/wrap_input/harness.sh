@@ -3,7 +3,7 @@
 ROOT="$1"; ED="$2"; F="$ROOT/script/file"
 export HOME="$(mktemp -d)"; SCRIPT_DIR="$F"
 declare -F _lt_b >/dev/null || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }
-source "$F/engine/bashbasicsbyvk_viewport.sh"
+source "$F/engine/bashbasicsbyvk_viewport.sh"; source "$F/engine/bashbasicsbyvk_textedit.sh"
 source "$F/engine/bashbasicsbyvk_cmdmap.sh"; _vp_probe_size
 case "$ED" in
   cm)

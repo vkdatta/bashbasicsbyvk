@@ -8,13 +8,13 @@
 #  5. a long run of mouse release reports does not nest function calls (FUNCNEST would stop a recursion)      (BB-251020261341-5)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; fail=0
 source "$ROOT/tests/wait_lib.sh"
-UI="$(bvk_need bashbasicsbyvk_settings_ui.sh)"; VP="$(bvk_need bashbasicsbyvk_viewport.sh)"; MS="$(bvk_need bashbasicsbyvk_mouse.sh)"
+UI="$(bvk_need bashbasicsbyvk_settings_ui.sh)"; VP="$(bvk_need bashbasicsbyvk_viewport.sh)"; MS="$(bvk_need bashbasicsbyvk_mouse.sh)"; TE="$(bvk_need bashbasicsbyvk_textedit.sh)"
 ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 
 # the harness: 12 toggle rows; _st_draw prints  D cur=<row index> buf=[<line>] ; an activated row prints  ACT <row index> <key>
 # stub for _bvk_paste_burst: $BURST = "N:TEXT:ENTER" -> on the Nth key read it answers "that key began a paste of TEXT (+ Enter if ENTER=1)"
 read -r -d '' HARNESS <<'EOF'
-source "$UI"; source "$VP"; source "$MS"
+source "$UI"; source "$VP"; source "$MS"; source "$TE"
 _st_draw() { echo "D cur=$cur buf=[$buf]"; }
 _bvk_paste_on() { :; }; _bvk_paste_off() { :; }; _bvk_mouse_rearm() { :; }; _BVK_MOUSE_ON=1
 _N=0
@@ -33,7 +33,7 @@ rc=$?; echo; echo "RC=$rc QUIT=$_st_quit"
 EOF
 
 # run <input as printf %b> [VAR=value ...]  -> the harness output (5 s hard limit: a loop that never ends shows up as RC=124)
-run() { local in="$1"; shift; printf '%b' "$in" | env UI="$UI" VP="$VP" MS="$MS" "$@" timeout 5 bash -c "$HARNESS" 2>&1; echo "TIMEOUT_RC=${PIPESTATUS[1]}"; }
+run() { local in="$1"; shift; printf '%b' "$in" | env UI="$UI" VP="$VP" MS="$MS" TE="$TE" "$@" timeout 5 bash -c "$HARNESS" 2>&1; echo "TIMEOUT_RC=${PIPESTATUS[1]}"; }
 last_d() { grep '^D ' <<<"$1" | tail -1; }
 acts() { grep -c '^ACT' <<<"$1"; }
 chk() { local what="$1"; shift; if "$@"; then ok "$what"; else bad "$what"; echo "$OUT" | tail -6 | sed 's/^/        /'; fi; }

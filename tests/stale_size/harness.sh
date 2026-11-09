@@ -3,6 +3,7 @@
 R="$1"; STALE="$2"
 _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }
 source "$R/file/engine/bashbasicsbyvk_viewport.sh"
+source "$R/file/engine/bashbasicsbyvk_textedit.sh"
 source "$R/file/settings/bashbasicsbyvk_settings_ui.sh"
 # the cache goes stale: the real terminal is smaller than what the app last measured
 _vp_rows_now=$STALE; _vp_cols_now=80

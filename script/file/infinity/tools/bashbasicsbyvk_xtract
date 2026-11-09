@@ -558,7 +558,11 @@ def main():
     recursion_depth = 0
     link_cap = RECURSION_LINK_CAP
     if content_type == 'links':
-        recurse_input = input("\nDo you need recursive link extraction? (y/n): ").strip().lower()
+        try:
+            import bashbasicsbyvk_yn as _yn      # THE native yes/no menu
+            recurse_input = 'y' if _yn.ask("Do you need recursive link extraction?", title="xtract", icon="🔗") else 'n'
+        except ImportError:
+            recurse_input = input("\nDo you need recursive link extraction? (y/n): ").strip().lower()
         if recurse_input == 'y':
             try:
                 recursion_depth = int(

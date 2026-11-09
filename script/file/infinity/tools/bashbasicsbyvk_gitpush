@@ -129,7 +129,16 @@ Run:
 # Asks whether the new GitHub repository is private (default) or public; sets VISIBILITY for  gh repo create.
 # A yes/no question has NO default: it asks again until the answer is y or n (a bare Enter is not an answer).  Sets ANS to y | n.
 ask_yn() {
-    local a
+    local a rc=3
+    # THE native yes/no menu (bashbasicsbyvk_yn); the plain question below is only the fallback of a broken install
+    if command -v bashbasicsbyvk_yn >/dev/null 2>&1; then
+        bashbasicsbyvk_yn "$1" -t "Git push" -i "🚀" && rc=0 || rc=$?
+        case "$rc" in
+            0) ANS=y; return 0 ;;
+            1) ANS=n; return 0 ;;
+            2) die "No answer." ;;
+        esac
+    fi
     while :; do
         read -e -r -p "$1 [y/n]: " a || die "No answer (input closed)."
         case "${a,,}" in

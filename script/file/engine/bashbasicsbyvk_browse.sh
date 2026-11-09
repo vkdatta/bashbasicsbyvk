@@ -770,33 +770,48 @@ _rc_type_key() {
   local key="$1"
   _is_ctrl_char "$key" && return 0
   _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _print_input_line; return 0; }
+  _rc_drop_sel                                       # typing over a selection replaces it
   if ! _filter_on_char "$key"; then
-    _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-    _pos=$(( _pos + 1 ))
+    _te_insert _buf _pos "$key"
     _print_input_line
     _sync_highlight_from_buf
   fi
   return 0
+}
+# a selected text is deleted before anything is typed / pasted over it; the live "=" filter follows the shorter text
+_rc_drop_sel() {
+  (( ${_TE_ANC:--1} >= 0 )) || return 0
+  local _w=0; [[ "$_buf" == =* ]] && _w=1
+  _te_del_sel _buf _pos || return 0
+  (( _w )) && _filter_resync
+  return 0
+}
+# an editing key changed the text (Backspace, Delete, cut, word delete, paste of the clipboard, undo ...): the live filter or the
+# highlighted number follows it.  _rc_wasf = the line was a "=" filter BEFORE the key (set by the loop).
+_rc_edited() {
+  if [ "${_rc_wasf:-0}" = 1 ] || [[ "$_buf" == =* ]] || ${_imag_filter_active:-false}; then _filter_resync; return 0; fi
+  _print_input_line
+  _sync_highlight_from_buf
 }
 # a pasted text: ONE insert, ONE redraw (never key by key). "=" starts the live filter, which also gets the text in one piece.
 _rc_paste_text() {
   local t="$1"
   [ -z "$t" ] && return 0
   _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _print_input_line drain; return 0; }   # over 512 characters: refused, redrawn
+  _rc_drop_sel                                       # a paste over a selection replaces it
   if [ -z "$_buf" ] && [ "${t:0:1}" = "=" ]; then
     if _filter_on_char "="; then t="${t:1}"; fi   # the filter starts (snapshot, hint) ... (if it did not: "=" stays part of the text)
     [ -z "$t" ] && return 0
-    _filter_on_char "$t" || { _buf="${_buf:0:_pos}${t}${_buf:_pos}"; _pos=$(( _pos + ${#t} )); }   # ... and takes the rest at once
+    _filter_on_char "$t" || _te_insert _buf _pos "$t"   # ... and takes the rest at once
     _print_input_line
     return 0
   fi
   if [[ "$_buf" == =* ]]; then
-    _filter_on_char "$t" || { _buf="${_buf:0:_pos}${t}${_buf:_pos}"; _pos=$(( _pos + ${#t} )); }
+    _filter_on_char "$t" || _te_insert _buf _pos "$t"
     _print_input_line
     return 0
   fi
-  _buf="${_buf:0:_pos}${t}${_buf:_pos}"
-  _pos=$(( _pos + ${#t} ))
+  _te_insert _buf _pos "$t"
   _print_input_line
   _sync_highlight_from_buf
 }
@@ -866,14 +881,14 @@ _read_choice_raw() {
     _hl_index=0
   fi
 
-  stty -icanon -echo min 1 time 0 2>/dev/null
+  _te_begin _buf _pos list _print_input_line _rc_edited _rc_paste_text
   trap '_vp_on_resize' WINCH
   _bvk_paste_on
   declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
 
   _buf=""
   _pos=0
-  local key seq _rc
+  local key seq _rc _rc_wasf=0
   _print_input_line
   _lt_ready menu
   # cc: the command picked from the cheat-code list is typed in for you (it does not run until Enter)
@@ -925,6 +940,9 @@ _read_choice_raw() {
         esac
         continue
       fi
+      # the shared editing keys (← → Shift/Ctrl+arrows, Delete, copy / cut / paste, undo ...): bashbasicsbyvk_textedit.sh
+      _rc_wasf=0; [[ "$_buf" == =* ]] && _rc_wasf=1
+      _te_esc "$_esc" list _buf _pos _print_input_line _rc_edited _rc_paste_text && continue
       _key_name "$_esc"
       case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
       case "$_kname" in
@@ -954,18 +972,8 @@ _read_choice_raw() {
         pgdn)   _nav_jump_to $(( _hl_index + _vp_page_step )) ;;
         home)   _nav_jump_to 1 ;;
         end)    _nav_jump_to "$_vp_n" ;;
-        right)
-          if [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ]; then
-            choice="__sw_tab_right__"; break
-          elif [ "$_pos" -lt "${#_buf}" ]; then
-            _bvk_cursor_to $(( _pos + 1 )) _print_input_line
-          fi ;;
-        left)
-          if [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ]; then
-            choice="__sw_tab_left__"; break
-          elif [ "$_pos" -gt 0 ]; then
-            _bvk_cursor_to $(( _pos - 1 )) _print_input_line
-          fi ;;
+        right) [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ] && { choice="__sw_tab_right__"; break; } ;;
+        left)  [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ] && { choice="__sw_tab_left__"; break; } ;;
         *) : ;;
       esac
       case "$_kname" in up|down|pgup|pgdn|home|end) (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line ;; esac
@@ -981,19 +989,12 @@ _read_choice_raw() {
       fi
     fi
 
+    _rc_wasf=0; [[ "$_buf" == =* ]] && _rc_wasf=1
+    _te_byte "$key" list _buf _pos _print_input_line _rc_edited _rc_paste_text && continue
     case "$key" in
       ""|$'\r') break ;;
-      $'\x7f'|$'\x08')
-        if ! _filter_on_backspace; then
-          if [ "$_pos" -gt 0 ]; then
-            _buf="${_buf:0:_pos-1}${_buf:_pos}"
-            _pos=$(( _pos - 1 ))
-            _print_input_line
-            _sync_highlight_from_buf
-          fi
-        fi ;;
-      $'\x01') _nav_jump_to 1 ;;
-      $'\x05') _nav_jump_to "$_vp_n" ;;
+      $'\x01') _nav_jump_to 1 ;;                 # Ctrl-A on an empty line (with text it selects all: bashbasicsbyvk_textedit.sh)
+      $'\x05') _nav_jump_to "$_vp_n" ;;          # Ctrl-E on an empty line
       *)
         _rc_type_key "$key" ;;
     esac
@@ -1002,6 +1003,7 @@ _read_choice_raw() {
   trap - WINCH
   _bvk_paste_off
   declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
+  _te_end
   stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
   # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)

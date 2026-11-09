@@ -703,7 +703,9 @@ _CE_ROW=0     # rows between the first row of the prompt and the row the cursor 
 _cm_edit_draw() {   # redraw the whole prompt + text; long text WRAPS onto the next rows like `read -e` does
   local lastp="${_ce_prompt##*$'\n'}" W pw bw T tp erow ecol trow tcol hint="${_CM_HINT_SHOW:-}"
   if ! declare -F _bvk_dispw >/dev/null 2>&1; then          # helper not loaded: old single-row redraw
-    builtin printf '\r\033[K%s%s' "$lastp" "$_ce_buf"
+    local shown0="$_ce_buf"
+    (( ${_TE_ANC:--1} >= 0 )) && { _te_hl "$_ce_buf" "$_ce_pos" 0 "${#_ce_buf}"; shown0="$_TE_OUT"; }
+    builtin printf '\r\033[K%s%s' "$lastp" "$shown0"
     local back=$(( ${#_ce_buf} - _ce_pos )); [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
     return 0
   fi
@@ -724,7 +726,9 @@ _cm_edit_draw() {   # redraw the whole prompt + text; long text WRAPS onto the n
   _bvk_dispw "${_ce_buf:0:_ce_pos}"; tp=$(( pw + _BVK_W ))
   # 1. back to the first row of the prompt, wipe everything from there down (old text, old hint row)
   builtin printf '\r'; [ "$_CE_ROW" -gt 0 ] && builtin printf '\033[%dA' "$_CE_ROW"
-  builtin printf '\033[J%s%s' "$lastp" "$_ce_buf"
+  local shown="$_ce_buf"
+  (( ${_TE_ANC:--1} >= 0 )) && { _te_hl "$_ce_buf" "$_ce_pos" 0 "${#_ce_buf}"; shown="$_TE_OUT"; }     # the selected part, in reverse video
+  builtin printf '\033[J%s%s' "$lastp" "$shown"
   # text that ends exactly at the right edge leaves the cursor in the "pending wrap" state: force it onto the next row
   (( T > 0 && T % W == 0 )) && builtin printf ' \r'
   erow=$(( T / W )); ecol=$(( T % W )); trow=$(( tp / W )); tcol=$(( tp % W ))
@@ -756,13 +760,21 @@ _cm_edit_leave() {
 _cm_edit_paste() {   # insert a pasted text at the cursor (the caller's _ce_buf/_ce_pos)
   local t="$1"
   [ -z "$t" ] && return 0
-  if (( ${#_ce_buf} + ${#t} > ${_BVK_MAX_INPUT:-512} )); then
-    _ce_deny="Too large: $(( ${#_ce_buf} + ${#t} )) characters (limit ${_BVK_MAX_INPUT:-512}). Not accepted; nothing was changed."
+  _te_sel_len "$_ce_buf" "$_ce_pos"                    # a selected text is replaced by the paste: it does not count
+  if (( ${#_ce_buf} - _TE_N + ${#t} > ${_BVK_MAX_INPUT:-512} )); then
+    _ce_deny="Too large: $(( ${#_ce_buf} - _TE_N + ${#t} )) characters (limit ${_BVK_MAX_INPUT:-512}). Not accepted; nothing was changed."
     _bvk_paste_drain
     return 0
   fi
   t="${t//$'\n'/ }"                                   # a typed-line prompt is one logical line: its line breaks become spaces
-  _ce_buf="${_ce_buf:0:_ce_pos}${t}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos + ${#t} ))
+  _te_insert _ce_buf _ce_pos "$t"
+}
+
+# hint row + the line, drawn again (after every key; also what Ctrl-C / Ctrl-Z of the template call, see bashbasicsbyvk_textedit.sh)
+_cm_edit_refresh() {
+  if [ "$no_cmds" = 0 ]; then _cm_hint "$_ce_buf" text; else _hint_want=""; fi
+  _CM_HINT_SHOW="$_hint_want"; [ -n "$_ce_deny" ] && { _CM_HINT_SHOW="$_ce_deny"; _ce_deny=""; }
+  _cm_edit_draw
 }
 
 # _cm_line_edit PROMPT INITIAL VAR EDIT(1|0)   ->  0 ok · 1 EOF/aborted
@@ -773,7 +785,7 @@ _cm_line_edit() {
   _cm_prompt_has_choices "$_ce_prompt" && no_cmds=1
   _CM_HINT_CUR=""
   stty_orig=$(stty -g 2>/dev/null)
-  stty -icanon -echo min 1 time 0 2>/dev/null
+  _te_begin _ce_buf _ce_pos text _cm_edit_refresh _cm_edit_refresh _cm_edit_paste   # raw keys, a clean selection / undo, Ctrl-C / Ctrl-Z (bashbasicsbyvk_textedit.sh)
   _BVK_SCR_PROMPT="${_ce_prompt##*$'\n'}"
   _CE_ROW=0; _CM_HINT_SHOW=""
   # lines above the prompt row are printed once; the prompt row + text are (re)drawn by _cm_edit_draw, which counts wrapped rows
@@ -803,11 +815,9 @@ _cm_line_edit() {
         '[<'*) if [ -n "${_CE_FILL:-}" ] && declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$seq" && [ "$_MS_ACT" = press ] && _bvk_mouse_prow; then
                  (( _BVK_CROW - _MS_Y == _CE_ROW + 1 )) && { _ce_buf="$_CE_FILL"; _ce_pos=${#_ce_buf}; }
                fi ;;
-        '[D') [ "$_ce_pos" -gt 0 ] && _ce_pos=$(( _ce_pos - 1 )) ;;
-        '[C') [ "$_ce_pos" -lt "${#_ce_buf}" ] && _ce_pos=$(( _ce_pos + 1 )) ;;
-        '[H'|'[1~'|OH) _ce_pos=0 ;;
-        '[F'|'[4~'|OF) _ce_pos=${#_ce_buf} ;;
-        '[3~') [ "$_ce_pos" -lt "${#_ce_buf}" ] && _ce_buf="${_ce_buf:0:_ce_pos}${_ce_buf:_ce_pos+1}" ;;
+        # the shared editing keys (← → Home End Delete, Shift / Ctrl variants, copy / cut / paste, undo ...): bashbasicsbyvk_textedit.sh.
+        # The hint and the line are redrawn below after every key, so REDRAW / EDIT are no-ops here.
+        *) _te_esc "$seq" text _ce_buf _ce_pos : : _cm_edit_paste ;;
       esac
     else
       # a paste that came without the bracketed-paste markers: the bytes already waiting are part of it (see viewport.sh)
@@ -815,34 +825,31 @@ _cm_line_edit() {
         if _bvk_paste_burst "${key:-$'\n'}"; then
           _cm_edit_paste "$_BVK_PASTE"
           [ "$_BVK_PASTE_ENTER" = 1 ] && break
-          if [ "$no_cmds" = 0 ]; then _cm_hint "$_ce_buf" text; else _hint_want=""; fi
-          _CM_HINT_SHOW="$_hint_want"; [ -n "$_ce_deny" ] && { _CM_HINT_SHOW="$_ce_deny"; _ce_deny=""; }; _cm_edit_draw
+          _cm_edit_refresh
           continue
         fi
       fi
+      # a single-byte editing key (Ctrl-A select all, Ctrl-C / X / V, Backspace, Ctrl-W / U / K / D / Z / Y ...): bashbasicsbyvk_textedit.sh
+      if ! _te_byte "$key" text _ce_buf _ce_pos : : _cm_edit_paste; then
       case "$key" in
         ""|$'\r'|$'\n') break ;;
-        $'\x7f'|$'\x08') [ "$_ce_pos" -gt 0 ] && { _ce_buf="${_ce_buf:0:_ce_pos-1}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos - 1 )); } ;;
-        $'\x01') _ce_pos=0 ;;
-        $'\x05') _ce_pos=${#_ce_buf} ;;
-        $'\x15') _ce_buf="${_ce_buf:_ce_pos}"; _ce_pos=0 ;;
-        $'\x0b') _ce_buf="${_ce_buf:0:_ce_pos}" ;;
-        $'\x04') [ -z "$_ce_buf" ] && { _CM_OUT=""; rc=1; break; } ;;
+        $'\x04') { _CM_OUT=""; rc=1; break; } ;;                  # Ctrl-D on an empty line: end of input
         $'\t') [ "$can_complete" = 1 ] && _cm_complete ;;
         [[:cntrl:]]) : ;;
-        *) if (( ${#_ce_buf} >= ${_BVK_MAX_INPUT:-512} )); then _ce_deny="Too large: over ${_BVK_MAX_INPUT:-512} characters. Not accepted."
-           else _ce_buf="${_ce_buf:0:_ce_pos}${key}${_ce_buf:_ce_pos}"; _ce_pos=$(( _ce_pos + 1 )); fi ;;
+        *) _te_sel_len "$_ce_buf" "$_ce_pos"                       # a selected text is replaced by what is typed
+           if (( ${#_ce_buf} - _TE_N >= ${_BVK_MAX_INPUT:-512} )); then _ce_deny="Too large: over ${_BVK_MAX_INPUT:-512} characters. Not accepted."
+           else _te_insert _ce_buf _ce_pos "$key"; fi ;;
       esac
+      fi
     fi
-    if [ "$no_cmds" = 0 ]; then _cm_hint "$_ce_buf" text; else _hint_want=""; fi
-    _CM_HINT_SHOW="$_hint_want"; [ -n "$_ce_deny" ] && { _CM_HINT_SHOW="$_ce_deny"; _ce_deny=""; }
-    _cm_edit_draw
+    _cm_edit_refresh
   done
   # leave: wipe the hint row, put the cursor after the text, newline
   _bvk_paste_off
   declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
   _CM_HINT_SHOW=""
   _cm_edit_leave
+  _te_end
   [ -n "$stty_orig" ] && stty "$stty_orig" 2>/dev/null
   if [ "$rc" -ne 0 ]; then return 1; fi
   _CM_OUT="$_ce_buf"

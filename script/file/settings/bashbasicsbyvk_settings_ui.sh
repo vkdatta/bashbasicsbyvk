@@ -154,7 +154,7 @@ _st_move() {
 _st_tty_raw() {
   [ -t 0 ] || return 0
   [ -n "$_st_stty" ] || _st_stty=$(stty -g 2>/dev/null)
-  stty -icanon -echo min 1 time 0 2>/dev/null
+  _te_begin                                   # raw keys + a clean selection / undo (bashbasicsbyvk_textedit.sh)
   _bvk_paste_on
   declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
 }
@@ -166,7 +166,18 @@ _st_tty_cooked() {
   return 0
 }
 
-# read one key → _st_k = up down left right home end pgup pgdn space enter bksp
+# Which chords of the shared template this engine takes as editing: everything except the plain keys that move the highlight.
+# (← → change a value on a row while nothing is typed; with text on the line they move the cursor in it.)
+_st_edit_chord() {
+  case "$1" in
+    left|right) [ -n "$buf" ]; return ;;                  # ← → move in the typed text; on an empty line they stay the row's
+    up|down|home|end|pgup|pgdn|insert) return 1 ;;
+  esac
+  return 0
+}
+
+# read one key → _st_k = up down left right home end pgup pgdn space enter
+#                        edit (an editing key of bashbasicsbyvk_textedit.sh: its chord is in _st_d)
 #                        char (the character is in _st_d) other
 #                        eof (input is gone: the tty closed, the SSH link dropped, the pane was killed)
 _st_readkey() {
@@ -186,7 +197,6 @@ _st_readkey() {
     case "$c" in
       "")            _st_k=enter ;;
       " ")           _st_k=space ;;
-      $'\177'|$'\b') _st_k=bksp ;;
       $'\033')
         if _read_key_seq; then
           if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _st_k=paste; _st_d="$_BVK_PASTE"; return; fi
@@ -198,6 +208,7 @@ _st_readkey() {
               *) continue ;;                 # a button release / drag: nothing to do, wait for the next key (no redraw)
             esac
           fi
+          if _te_decode_esc "$_esc" && _st_edit_chord "$_TE_CH"; then _st_k=edit; _st_d="$_TE_CH"; return; fi
           _key_name "$_esc"
           case "$_kname" in
             up|down|left|right|home|end|pgup|pgdn) _st_k="$_kname" ;;
@@ -205,6 +216,7 @@ _st_readkey() {
           esac
         fi ;;                           # bare Esc does nothing (like the main menu)
       [[:print:]])   _st_k=char; _st_d="$c" ;;
+      *) if _te_decode_byte "$c" && _st_edit_chord "$_TE_CH"; then _st_k=edit; _st_d="$_TE_CH"; return; fi ;;   # Backspace, Ctrl-A / C / X / V / W / U / K / Z / Y
     esac
     # a paste without the bracketed-paste markers: the bytes already waiting are part of it (see viewport.sh)
     if [ "$_st_k" = char ] || [ "$_st_k" = space ] || [ "$_st_k" = enter ]; then
@@ -310,8 +322,9 @@ _st_draw() {
     out+="$nl"$'\n'; _ST_TAIL=$(( _ST_HINT_N + 1 ))     # the suggestion rows + a blank line, only while there is a suggestion
   fi
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
-  if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "${_st_msg:+$_st_msg  }Select: " "$buf" "${#buf}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
+  if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "${_st_msg:+$_st_msg  }Select: " "$buf" "${pos:-${#buf}}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
   else out+="${nl}Select: $buf"$'\033[J'; fi
+  (( ${_BVK_FIT_BACK:-0} > 0 )) && out+=$'\033['"$_BVK_FIT_BACK"D           # the cursor sits at pos (the text can be edited in the middle), not at its end
   builtin printf '\033[?2026h%s\033[?2026l' "$out"
   prev=$(( vis + 9 + _ST_DESC_N + _ST_TAIL ))
 }
@@ -480,11 +493,48 @@ _st_cm_gate() {   # $1 = typed text, lower case
   return 1
 }
 
+# The typed line of a screen is edited by the shared template (bashbasicsbyvk_textedit.sh).  These are the small callbacks it
+# needs; they run inside _st_run and use its locals (buf pos posb navbuf cur top fq need typed).
+#   pos  = the cursor in buf.  posb = the text pos belongs to: a text set by hand elsewhere in _st_run (buf="" / buf="=" / the number
+#   an arrow echoes ...) is not the text pos was set for, so the cursor simply goes to its end.
+_st_type() {            # type / paste TEXT at the cursor (a selection is replaced)
+  [ "$buf" = "$posb" ] || pos=${#buf}
+  _te_insert buf pos "$1"; posb="$buf"
+}
+_st_drop_sel() {        # typing or pasting over a selected text: the selection goes first
+  (( ${_TE_ANC:--1} >= 0 )) || return 0
+  [ "$buf" = "$posb" ] || pos=${#buf}
+  _te_del_sel buf pos || return 0
+  posb="$buf"; navbuf=0
+  return 0
+}
+_st_cursor() { need=0; posb="$buf"; }              # the cursor / selection moved: nothing else changed
+# Ctrl-C / Ctrl-Z reach the template as signals, while the loop waits in its key read: nothing redraws unless these do
+_st_sig_cursor() { _st_cursor; _st_draw; }
+_st_sig_edited() { _st_edited; _st_draw; }
+_st_edited() {          # an editing key changed buf (Backspace, Delete, cut, a word delete, undo): the =filter / the typed row follow it
+  navbuf=0; posb="$buf"
+  if [[ "$buf" == =* ]]; then _st_fq_sync; cur=-1; top=0
+  elif [ "${_st_wasf:-0}" = 1 ]; then fq=""; cur=-1; top=0         # the =filter text is gone: the filter ends
+  else _st_follow; need=0; fi
+}
+_st_paste_text() {      # a pasted text goes into the row in ONE step; it is accepted only by the user's own Enter
+  _st_d="$1"
+  (( navbuf )) && { buf=""; navbuf=0; }
+  _st_drop_sel
+  if (( ${#buf} + ${#_st_d} > ${_BVK_MAX_INPUT:-512} )); then _st_msg="[too large: $(( ${#buf} + ${#_st_d} )) chars, max ${_BVK_MAX_INPUT:-512}, not accepted]"; _st_d=""; fi
+  _st_d="${_st_d//$'\n'/ }"                                   # this row is one line: line breaks become spaces
+  if [ -z "$_st_d" ]; then _st_k=paste           # refused (too large) or empty: its Enter must not run what was typed before it
+  elif [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; _st_fq_sync; cur=-1; top=0
+  elif [[ "$buf" == =* ]]; then _st_type "$_st_d"; _st_fq_sync; cur=-1; top=0
+  else _st_type "$_st_d"; _st_follow; need=0; fi
+}
+
 # _st_run "Title" build_fn act_fn ["legacy hint"] [cmd_fn]
 #   cmd_fn BUF — optional: gets typed text before the number/command rules; return 0 = handled
 _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}" cmdfn="${5:-}"
-  local cur=-1 top=0 prev=0 n buf="" num path_title fq="" _sdq="" need=1 page="${_vp_page_step:-10}" navbuf=0 typed=0
+  local cur=-1 top=0 prev=0 n buf="" pos=0 posb="" _st_wasf=0 num path_title fq="" _sdq="" need=1 page="${_vp_page_step:-10}" navbuf=0 typed=0
   local parent_title="${_st_title_now:-}"
   _st_depth=$(( _st_depth + 1 ))
   # a sub screen shows its way in ("Settings › Sort order"); _st_crumb="" drops the prefix (cc)
@@ -492,6 +542,7 @@ _st_run() {
   _st_title_now="$path_title"
   _st_quit=0
   _st_tty_raw
+  _te_ctx_push buf pos list _st_sig_cursor _st_sig_edited _st_paste_text      # Ctrl-C / Ctrl-Z of this screen' typed line
   # terminal resized while this screen is open (keyboard, extra keys, rotation): re-measure on the next draw.
   # Whatever WINCH trap the caller had (_multi_prompt_loop has one) is put back when we leave.
   local _st_old_winch; _st_old_winch=$(trap -p WINCH)
@@ -520,6 +571,7 @@ _st_run() {
     fi
     (( cur >= n )) && cur=$(( n - 1 ))
     (( cur < 0 && n == 0 )) && cur=-1
+    [ "$buf" = "$posb" ] || { pos=${#buf}; posb="$buf"; }      # a text set elsewhere: the cursor is at its end
     _lt_b "settings: draw the screen"
     _st_draw
     _lt_e
@@ -538,35 +590,33 @@ _st_run() {
       wheeldown) need=0; _st_wheel 1 ;;
       home)  need=0; cur=-1; _st_move 1;  _st_navbuf ;;
       end)   need=0; cur=-1; _st_move -1; _st_navbuf ;;
-      bksp)
-        navbuf=0; buf="${buf%?}"
-        if [[ "$buf" == =* ]]; then _st_fq_sync; cur=-1; top=0
-        else _st_follow; need=0; fi ;;
+      edit)
+        # an editing key (Backspace, Delete, ← → with Shift / Ctrl, Ctrl+A / C / X / V / W / Z ...): bashbasicsbyvk_textedit.sh
+        [ "$buf" = "$posb" ] || { pos=${#buf}; posb="$buf"; }
+        _st_wasf=0; [[ "$buf" == =* ]] && _st_wasf=1
+        _te_dispatch "$_st_d" buf pos list _st_cursor _st_edited _st_paste_text
+        [ "$_st_k" = pasteenter ] && _ST_PEND_ENTER=1
+        ;;
       char)
-        (( navbuf )) && [ "$_st_d" != "?" ] && { buf=""; navbuf=0; }        # the number an arrow put on the line is replaced by what is typed
+        (( navbuf )) && [ "$_st_d" != "?" ] && { buf=""; navbuf=0; }
+        _st_drop_sel        # the number an arrow put on the line is replaced by what is typed
         if (( ${#buf} >= ${_BVK_MAX_INPUT:-512} )); then _st_msg="[too large: max ${_BVK_MAX_INPUT:-512}]"
         elif [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
         elif [ "$_st_d" = "?" ] && [[ "$buf" =~ ^[0-9]*$ ]]; then          # ?  = read the whole explanation of the highlighted row (no Enter needed)
           _st_wipe; _st_tty_cooked; declare -F _st_desc_show >/dev/null 2>&1 && _st_desc_show; _st_tty_raw
-        elif [[ "$buf" == =* ]]; then buf+="$_st_d"; _st_fq_sync; cur=-1; top=0
-        else buf+="$_st_d"; _st_follow; need=0; fi ;;
+        elif [[ "$buf" == =* ]]; then _st_type "$_st_d"; _st_fq_sync; cur=-1; top=0
+        else _st_type "$_st_d"; _st_follow; need=0; fi ;;
       paste|pasteenter)
-        # a pasted text goes into the row in ONE step; it is accepted only by the user's own Enter
-        (( navbuf )) && { buf=""; navbuf=0; }
-        if (( ${#buf} + ${#_st_d} > ${_BVK_MAX_INPUT:-512} )); then _st_msg="[too large: $(( ${#buf} + ${#_st_d} )) chars, max ${_BVK_MAX_INPUT:-512}, not accepted]"; _st_d=""; fi
-        _st_d="${_st_d//$'\n'/ }"                                   # this row is one line: line breaks become spaces
-        if [ -z "$_st_d" ]; then _st_k=paste           # refused (too large) or empty: its Enter must not run what was typed before it
-        elif [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; _st_fq_sync; cur=-1; top=0
-        elif [[ "$buf" == =* ]]; then buf+="$_st_d"; _st_fq_sync; cur=-1; top=0
-        else buf+="$_st_d"; _st_follow; need=0; fi
+        _st_paste_text "$_st_d"
         [ "$_st_k" = pasteenter ] && _ST_PEND_ENTER=1 ;;    # typed text + Enter that arrived together: the Enter comes next
       left|right)
         (( cur >= 0 )) && _st_selectable "$cur" && { _lt_enter "$_st_k" "${_st_lbl[$cur]}"; "$act" "$cur" "$_st_k"; }
         ;;
       space)
         navbuf=0; typed=0
-        if [[ "$buf" == =* ]]; then buf+=" "; _st_fq_sync; cur=-1; top=0     # a space inside =text is part of the search
-        elif [ -n "$buf" ] && [[ "$buf" == [a-z]* ]]; then buf+=" "            # a command being typed (loadtime 2)
+        _st_drop_sel
+        if [[ "$buf" == =* ]]; then _st_type " "; _st_fq_sync; cur=-1; top=0     # a space inside =text is part of the search
+        elif [ -n "$buf" ] && [[ "$buf" == [a-z]* ]]; then _st_type " "            # a command being typed (loadtime 2)
         elif (( cur >= 0 )) && _st_selectable "$cur"; then buf=""; _lt_enter "space" "${_st_lbl[$cur]}"; _st_activate; fi
         ;;
       enter)
@@ -646,6 +696,8 @@ _st_run() {
   # leave tidy: a sub screen erases itself so its parent redraws in the same
   # place; the top screen stays on screen with  Select: u  /  Select: q  as typed.
   if (( prev > 0 )); then
+    _TE_ANC=-1                                    # the line is left: no selection mark on it
+    _te_end
     if (( _st_depth > 1 )); then _st_wipe; else
       if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "Select: " "$buf" "${#buf}"; builtin printf '\r\033[2K%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"
       else builtin printf '\r\033[2KSelect: %s' "$buf"; fi

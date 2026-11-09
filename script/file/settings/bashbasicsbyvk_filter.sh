@@ -443,40 +443,28 @@ _imag_filter_restore() {
 
 # ── Input handlers ────────────────────────────────────────────────────────────
 
-_filter_on_backspace() {
+# The line (_buf) was changed by an editing key (Backspace, Delete, cut, a word delete, a paste, undo ...): the live "=" filter follows
+# the new text.  An emptied line, or a text that no longer starts with "=", ends the filter and brings the list back
+# (a lone "=" stays a filter with no text, as Backspace from "=a" always did).
+# (A recursive query only edits the text: the search runs on Enter.)
+_filter_resync() {
   # ── Imaginary-origin filter ─────────────────────────────────────────────
   if ${_imag_filter_active:-false}; then
     if [[ "$_buf" != =* ]]; then
       _imag_filter_active=false
       _imag_filter_query=""
-      return 1
-    fi
-    if [ "$_buf" = "=" ]; then
-      _imag_filter_active=false
-      _imag_filter_query=""
-      _buf=""; _pos=0
       _imag_filter_restore
       return 0
     fi
-    if [ "$_pos" -gt 0 ]; then
-      _buf="${_buf:0:_pos-1}${_buf:_pos}"
-      _pos=$(( _pos - 1 ))
-      _imag_filter_query="${_buf:1}"
-      # recursive query: only edit the text, the search runs on Enter
-      if _filter_deferred_buf; then _print_input_line; return 0; fi
-      _filter_force_rec=false
-      _imag_filter_apply
-      return 0
-    fi
-    return 1
+    _imag_filter_query="${_buf:1}"
+    if _filter_deferred_buf; then _print_input_line; return 0; fi
+    _filter_force_rec=false
+    _imag_filter_apply
+    return 0
   fi
 
   # ── Flat filter ─────────────────────────────────────────────────────────
-  if [[ "$_buf" == =?* ]]; then
-    [ "$_pos" -gt 0 ] || return 0
-    _buf="${_buf:0:_pos-1}${_buf:_pos}"
-    _pos=$(( _pos - 1 ))
-    # recursive query: only edit the text, the search runs on Enter
+  if [[ "$_buf" == =* ]]; then
     if _filter_deferred_buf; then _print_input_line; return 0; fi
     _filter_force_rec=false
     _filter_query="${_buf:1}"
@@ -487,16 +475,14 @@ _filter_on_backspace() {
     _vp_prime_rows
     _vp_redraw_in_place
     return 0
-  elif [[ "$_buf" == = ]]; then
-    _filter_clear
-    _buf=""; _pos=0; _hl_index=0
-    _vp_count
-    _vp_cache_reset
-    _vp_prime_rows
-    _vp_redraw_in_place
-    return 0
   fi
-  return 1
+  _filter_clear
+  _hl_index=0
+  _vp_count
+  _vp_cache_reset
+  _vp_prime_rows
+  _vp_redraw_in_place
+  return 0
 }
 
 _filter_on_char() {

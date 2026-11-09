@@ -703,7 +703,7 @@ _sm_wheel() {   # $1 = -1 up · 1 down
 _sm_type_key() {
   local key="$1"
   _is_ctrl_char "$key" && return 0
-  _buf="${_buf:0:_pos}${key}${_buf:_pos}"; _pos=$(( _pos + 1 )); _sm_after_edit
+  _te_insert _buf _pos "$key"; _sm_after_edit
 }
 _sm_type_text() { _buf="$1"; _pos=${#_buf}; _sm_after_edit; }
 # a paste: ONE insert, ONE redraw
@@ -711,7 +711,7 @@ _sm_paste_text() {
   local t="$1"
   [ -z "$t" ] && return 0
   _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _sm_input_fn drain; return 0; }
-  _buf="${_buf:0:_pos}${t}${_buf:_pos}"; _pos=$(( _pos + ${#t} )); _sm_after_edit
+  _te_insert _buf _pos "$t"; _sm_after_edit
 }
 
 _sm_run() {
@@ -762,7 +762,7 @@ _sm_run() {
     _sm_input_fn
   fi
 
-  stty -icanon -echo min 1 time 0 2>/dev/null
+  _te_begin _buf _pos list _sm_input_fn _sm_after_edit _sm_paste_text
   _bvk_paste_on
   declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
   _lt_ready smart
@@ -793,6 +793,8 @@ _sm_run() {
         esac
         continue
       fi
+      # the shared editing keys (← → Shift/Ctrl+arrows, Delete, copy / cut / paste, undo ...): bashbasicsbyvk_textedit.sh
+      _te_esc "$_esc" list _buf _pos _sm_input_fn _sm_after_edit _sm_paste_text && continue
       _key_name "$_esc"
       case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
       if $multi; then
@@ -804,10 +806,6 @@ _sm_run() {
           pgdn) _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-0} + ${_vp_page_step:-10} > n ? n : _hl_index + _vp_page_step )) -1)" ;;
           home) _sm_move_cursor "$(_sm_next_selectable 1 1)" ;;
           end)  _sm_move_cursor "$(_sm_next_selectable "$n" -1)" ;;
-          right)
-            if [ "$_pos" -lt "${#_buf}" ]; then _bvk_cursor_to $(( _pos + 1 )) _sm_input_fn; fi ;;
-          left)
-            if [ "$_pos" -gt 0 ]; then _bvk_cursor_to $(( _pos - 1 )) _sm_input_fn; fi ;;
           *) : ;;
         esac
       else
@@ -818,10 +816,6 @@ _sm_run() {
           pgdn) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-0} + ${_vp_page_step:-10} > n ? n : _hl_index + _vp_page_step )) -1)" ;;
           home) _sm_set_index "$(_sm_next_selectable 1 1)" ;;
           end)  _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
-          right)
-            if [ "$_pos" -lt "${#_buf}" ]; then _bvk_cursor_to $(( _pos + 1 )) _sm_input_fn; fi ;;
-          left)
-            if [ "$_pos" -gt 0 ]; then _bvk_cursor_to $(( _pos - 1 )) _sm_input_fn; fi ;;
           *) : ;;
         esac
       fi
@@ -837,6 +831,7 @@ _sm_run() {
       fi
     fi
 
+    _te_byte "$key" list _buf _pos _sm_input_fn _sm_after_edit _sm_paste_text && continue
     case "$key" in
       "") break ;;                                 # Enter — accept
       ' ')
@@ -844,17 +839,10 @@ _sm_run() {
         else
           _is_ctrl_char " " && continue
           _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _sm_input_fn; continue; }
-          _buf="${_buf:0:_pos} ${_buf:_pos}"; _pos=$(( _pos + 1 )); _sm_after_edit
+          _te_insert _buf _pos " "; _sm_after_edit
         fi
         ;;
-      $'\x7f'|$'\x08')
-        if [ "$_pos" -gt 0 ]; then
-          _buf="${_buf:0:_pos-1}${_buf:_pos}"
-          _pos=$(( _pos - 1 ))
-          _sm_after_edit
-        fi
-        ;;
-      $'\x01')  # Ctrl-A — first item (single) / select-all (multi)
+      $'\x01')  # Ctrl-A on an empty line — first item (single) / select-all rows (multi); with text it selects all of it
         if $multi; then
           local __i
           _msel_set=()
@@ -871,8 +859,7 @@ _sm_run() {
       *)
         _is_ctrl_char "$key" && continue
         _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _sm_input_fn; continue; }
-        _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-        _pos=$(( _pos + 1 ))
+        _te_insert _buf _pos "$key"
         _sm_after_edit
         ;;
     esac
@@ -880,6 +867,7 @@ _sm_run() {
 
   _bvk_paste_off
   declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
+  _te_end
   [ -n "${_orig_stty:-}" ] && stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; _bvk_hint_leave; fi

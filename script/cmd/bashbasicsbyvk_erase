@@ -4,8 +4,16 @@ if [ -z "$1" ]; then
   exit 1
 fi
 if [ -f "$1" ]; then
-  echo -n "Erase all contents of '$1'? (yes/no): "
-  read -e confirm
+  _yn=3
+  if command -v bashbasicsbyvk_yn >/dev/null 2>&1; then      # THE native yes/no menu; the typed question below is only the fallback of a broken install
+    bashbasicsbyvk_yn "Erase all contents of '$1'?" -t "Confirm erase" -i "🧹"; _yn=$?
+  fi
+  case "$_yn" in
+    0) confirm=yes ;;
+    1|2) confirm=no ;;
+    *) echo -n "Erase all contents of '$1'? (yes/no): "
+       read -e confirm ;;
+  esac
   if [ "$confirm" = "yes" ]; then
     > "$1"
     echo "Contents of $1 erased."

@@ -28,6 +28,9 @@ e2e_pending|slow|300|bash tests/e2e_pending.sh|fileapi
 e2e_services|slow|300|bash tests/e2e_services.sh|fileapi
 findrep_full|slow|600|bash tests/findrep/findrep_run.sh full|python3
 buffer_sets|fast|40|bash tests/buffer_sets.sh|
+textedit_unit|fast|30|bash tests/textedit/textedit_unit.sh|
+yn_tools|slow|120|python3 tests/yn/yn_test.py|python3
+textedit|slow|180|python3 tests/textedit/textedit_pty_test.py|python3
 adf_registry|fast|20|bash tests/adf_registry.sh|
 cmd_docs|fast|30|bash tests/cmd_docs.sh|
 engine_target|fast|20|bash tests/engine_target.sh|

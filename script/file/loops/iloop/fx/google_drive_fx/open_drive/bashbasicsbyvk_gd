@@ -254,7 +254,13 @@ def say(msg):
 
 
 def ask_yes(prompt):
-    """y/n on the terminal (works while stdin/stdout are pipes).  No default: asks again until y or n.  No terminal -> no."""
+    """y/n: THE native yes/no menu (bashbasicsbyvk_yn), drawn on the terminal even while stdin/stdout are pipes.  No default.  No answer / no terminal -> no.
+    Only when the menu is not installed: one plain y/n line on the terminal that asks again until y or n."""
+    try:
+        import bashbasicsbyvk_yn as _yn
+        return _yn.ask(prompt, title="Google Drive", icon="☁️") is True
+    except ImportError:
+        pass
     try:
         with open("/dev/tty", "r+") as tty:
             while True:

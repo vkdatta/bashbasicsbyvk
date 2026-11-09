@@ -21,8 +21,16 @@ _bvk_delete_main() {
   fi
 
   _lk_load
-  echo "Are you sure you want to delete '$target'? You may not recover this."
-  read -e -p "Type 'yes' to confirm: " confirm
+  local _yn=3
+  if command -v bashbasicsbyvk_yn >/dev/null 2>&1; then      # THE native yes/no menu; the typed question below is only the fallback of a broken install
+    bashbasicsbyvk_yn "Are you sure you want to delete '$target'? You may not recover this." -t "Confirm delete" -i "🗑️"; _yn=$?
+  fi
+  case "$_yn" in
+    0) confirm=yes ;;
+    1|2) confirm=no ;;
+    *) echo "Are you sure you want to delete '$target'? You may not recover this."
+       read -e -p "Type 'yes' to confirm: " confirm ;;
+  esac
   if [ "$confirm" != "yes" ]; then
     echo "Deletion cancelled."
     return 0

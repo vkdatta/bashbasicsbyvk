@@ -199,6 +199,7 @@ _bvk_fit_input() {
   _BVK_FIT_S=$s
   tc=$avail; (( s > 0 )) && tc=$(( avail - 1 ))
   vis="${b:s:tc}"
+  (( ${_TE_ANC:--1} >= 0 )) && { _te_hl "$b" "$pos" "$s" "$tc"; vis="$_TE_OUT"; }      # the selected part, in reverse video (bashbasicsbyvk_textedit.sh)
   t="$vis"; (( s > 0 )) && t="<$vis"
   _BVK_FIT="$t"
   t="${b:pos:$(( s + tc - pos > 0 ? s + tc - pos : 0 ))}"
@@ -965,7 +966,7 @@ _bvk_row_multi() {
   for (( k=top; k<top+nvis; k++ )); do
     (( k > top )) && out+=$'\r\n'
     (( k == 0 )) && out+="$p"
-    out+="${b:rs[k]:rl[k]}"
+    if (( ${_TE_ANC:--1} >= 0 )); then _te_hl "$b" "$pos" "${rs[k]}" "${rl[k]}"; out+="$_TE_OUT"; else out+="${b:rs[k]:rl[k]}"; fi
   done
   up=$(( nvis - 1 - (crow - top) )); (( up > 0 )) && out+=$'\033['"$up"A
   out+=$'\r'; (( ccol > 0 )) && out+=$'\033['"$ccol"C
@@ -986,7 +987,8 @@ _bvk_cursor_to() {
 }
 
 # the limit: _bvk_room N = N more characters still fit into _buf
-_bvk_room() { (( ${#_buf} + $1 <= _BVK_MAX_INPUT )); }
+# (a selected text is replaced by what is typed, so it does not count: see bashbasicsbyvk_textedit.sh)
+_bvk_room() { local _rm_n=0; (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$_buf" "$_pos"; _rm_n=$_TE_N; }; (( ${#_buf} - _rm_n + $1 <= _BVK_MAX_INPUT )); }
 # a one-line red notice on the row under the input (it stays until the next key); the cursor is put back where it was
 # ── the suggestion row ─────────────────────────────────────────────────────────────────────────────────────
 # ONE row directly above the "Select:" line (between the footer and the prompt):
@@ -1426,8 +1428,7 @@ _multi_prompt_loop() {
 _multi_type_key() {
   local key="$1"
   _is_ctrl_char "$key" && return 0
-  _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-  _pos=$(( _pos + 1 ))
+  _te_insert _buf _pos "$key"
   _multi_sync
 }
 _multi_type_text() { _buf="$1"; _pos=${#_buf}; _multi_sync; }
@@ -1436,8 +1437,7 @@ _multi_paste_text() {
   local t="$1"
   [ -z "$t" ] && return 0
   _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _multi_print_input_line drain; return 0; }
-  _buf="${_buf:0:_pos}${t}${_buf:_pos}"
-  _pos=$(( _pos + ${#t} ))
+  _te_insert _buf _pos "$t"
   _multi_sync
 }
 
@@ -1446,7 +1446,7 @@ _multi_prompt_loop_raw() {
   _buf=""
   _pos=0
 
-  stty -icanon -echo min 1 time 0 2>/dev/null
+  _te_begin _buf _pos list _multi_print_input_line _multi_sync _multi_paste_text
   trap '_vp_on_resize' WINCH
   _bvk_paste_on
   declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
@@ -1475,6 +1475,8 @@ _multi_prompt_loop_raw() {
         esac
         continue
       fi
+      # the shared editing keys (← → Shift/Ctrl+arrows, Delete, copy / cut / paste, undo ...): bashbasicsbyvk_textedit.sh
+      _te_esc "$_esc" list _buf _pos _multi_print_input_line _multi_sync _multi_paste_text && continue
       _key_name "$_esc"
       case "$_kname" in
         up)   _multi_adjust_number_at_cursor up ;;
@@ -1483,16 +1485,6 @@ _multi_prompt_loop_raw() {
         pgdn) _multi_adjust_number_at_cursor pgdn ;;
         home) _multi_adjust_number_at_cursor home ;;
         end)  _multi_adjust_number_at_cursor end ;;
-        right)
-          if [ "$_pos" -lt "${#_buf}" ]; then
-            _bvk_cursor_to $(( _pos + 1 )) _multi_print_input_line
-          fi
-          ;;
-        left)
-          if [ "$_pos" -gt 0 ]; then
-            _bvk_cursor_to $(( _pos - 1 )) _multi_print_input_line
-          fi
-          ;;
         *) : ;;
       esac
       continue
@@ -1506,25 +1498,18 @@ _multi_prompt_loop_raw() {
       fi
     fi
 
+    _te_byte "$key" list _buf _pos _multi_print_input_line _multi_sync _multi_paste_text && continue
     case "$key" in
       "")
         break
         ;;
-      $'\x7f'|$'\x08')
-        if [ "$_pos" -gt 0 ]; then
-          _buf="${_buf:0:_pos-1}${_buf:_pos}"
-          _pos=$(( _pos - 1 ))
-          _multi_sync
-        fi
-        ;;
-      $'\x01') _multi_adjust_number_at_cursor home ;;   # Ctrl-A
-      $'\x05') _multi_adjust_number_at_cursor end ;;    # Ctrl-E
+      $'\x01') _multi_adjust_number_at_cursor home ;;   # Ctrl-A on an empty line (with text it selects all: bashbasicsbyvk_textedit.sh)
+      $'\x05') _multi_adjust_number_at_cursor end ;;    # Ctrl-E on an empty line
       *)
         # never let stray control bytes into the buffer
         _is_ctrl_char "$key" && continue
         _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _multi_print_input_line; continue; }
-        _buf="${_buf:0:_pos}${key}${_buf:_pos}"
-        _pos=$(( _pos + 1 ))
+        _te_insert _buf _pos "$key"
         _multi_sync
         ;;
     esac
@@ -1533,6 +1518,7 @@ _multi_prompt_loop_raw() {
   trap - WINCH
   _bvk_paste_off
   declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
+  _te_end
   stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; _bvk_hint_leave; fi

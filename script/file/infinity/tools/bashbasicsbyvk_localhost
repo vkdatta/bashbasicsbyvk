@@ -52,6 +52,17 @@ if ((PORT < 1 || PORT > 65535)); then
     exit 1
 fi
 
+# THE yes/no question: the app's native menu (bashbasicsbyvk_yn).  rc 0 = yes · 1 = no or no answer.  A plain line only if the menu is not installed.
+ask_yes() {
+    local rc=3 a
+    if command -v bashbasicsbyvk_yn >/dev/null 2>&1; then
+        bashbasicsbyvk_yn "$1" -t "Localhost" -i "🌐"; rc=$?
+        case "$rc" in 0) return 0 ;; 1|2) return 1 ;; esac
+    fi
+    read -e -rp "$1 (y/n): " a
+    [[ "$a" == [Yy]* ]]
+}
+
 port_busy() {
 
     if command -v lsof >/dev/null 2>&1; then
@@ -117,7 +128,7 @@ kill_port() {
 if port_busy "$PORT"; then
 
     echo
-    read -e -rp "Port $PORT is already in use. Force it? (Y/N): " ANS
+    ANS=n; ask_yes "Port $PORT is already in use. Force it?" && ANS=y
 
     case "$ANS" in
 
@@ -164,7 +175,7 @@ start_server() {
         echo
         echo "Python reports port already in use."
 
-        read -e -rp "Force terminate process and retry? (Y/N): " AGAIN
+        AGAIN=n; ask_yes "Force terminate process and retry?" && AGAIN=y
 
         case "$AGAIN" in
 

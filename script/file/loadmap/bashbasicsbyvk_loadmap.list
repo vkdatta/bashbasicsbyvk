@@ -28,6 +28,7 @@ bashbasicsbyvk_notify.sh|||notification count in the header
 [bg]
 bashbasicsbyvk_loadmap_stubs.sh|||GENERATED lazy-load stubs and needs table (bashbasicsbyvk_loadmap_gen --write); sourced by the loader at the end of [fg], before the first paint (an [fg] function may call a [bg] / [no] one)
 bashbasicsbyvk_run.sh|||opens / runs a file (Enter on a file); first background file because the first Enter may need it
+bashbasicsbyvk_textedit.sh|||the shared text-edit template (selection, word / line moves, cut / copy / paste, undo): every key loop calls it from its first key, the first background file after the run file
 bashbasicsbyvk_choose.sh|||the shared choice menu (_bvk_yn / _bvk_menu): most questions use it
 bashbasicsbyvk_help.sh|||tool, run as its own process
 bashbasicsbyvk_home.sh|||tool, run as its own process
@@ -147,6 +148,7 @@ _3bvk_import_cmd_copy.sh|||import file of a stand-alone tool (its own process, n
 _3bvk_import_cmd_delete.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_deps.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_gitpush.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+_3bvk_import_yn.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 bashbasicsbyvk_api.map|||command-map wiring, read as data
 bashbasicsbyvk_auth.map|||command-map wiring, read as data
 bashbasicsbyvk_auth_sub.map|||command-map wiring, read as data
@@ -187,6 +189,8 @@ bashbasicsbyvk_loadmap.list|||data
 bashbasicsbyvk_loadmap_gen|||tool, run as its own process
 bashbasicsbyvk_loadtime_report|||tool, run as its own process
 bashbasicsbyvk_localhost|||tool, run as its own process
+bashbasicsbyvk_yn|||tool, run as its own process: THE yes/no question (native menu) for every stand-alone tool
+bashbasicsbyvk_yn.py|||python helper, run as a process
 bashbasicsbyvk_lt.py|||python helper, run as a process
 bashbasicsbyvk_main.map|||command-map wiring, read as data
 bashbasicsbyvk_mapgen|||tool, run as its own process
