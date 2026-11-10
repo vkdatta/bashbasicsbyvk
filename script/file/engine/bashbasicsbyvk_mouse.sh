@@ -39,7 +39,10 @@ _BVK_DBL_MS="${BVK_DBLCLICK_MS:-500}"        # two clicks on the same item withi
 _BVK_WHEEL_STEP=3
 _BVK_MOUSE_PASS=0            # 1 = reports are switched off on purpose for a while, the terminal gets scroll / tap back (_bvk_mouse_pass)
 _BVK_PASS_UNTIL=0
-_BVK_PASS_SCROLL_MS=1500     # how long after the last wheel event that was handed back the reports come on again
+_BVK_PASS_SCROLL_MS="${BVK_PASS_SCROLL_MS:-0}"   # a swipe / wheel handed back to the terminal: 0 = NO timer, the reports stay off until a key is typed.
+                             # (A timer cannot work here: the terminal swallows its own scroll gestures, so the app never sees the person
+                             #  still scrolling.  Re-arming = writing ESC[?1000h to the terminal, which snaps a scrolled-back terminal to the
+                             #  bottom and takes the next swipe away again — the "pushed back to the bottom" bug.)  > 0 = old timed behaviour.
 _BVK_PASS_TAP_MS=8000        # ... after a tap on the prompt row (long enough to tap again and get the keyboard)
 
 _bvk_mouse_enabled() {
@@ -186,7 +189,8 @@ _bvk_mouse_scroll() {
 _bvk_mouse_pass() {
   (( _BVK_MOUSE_ON )) || return 0
   _bvk_mouse_off; _BVK_MOUSE_PASS=1
-  _bvk_now_ms; _BVK_PASS_UNTIL=$(( _BVK_MS + ${1:-$_BVK_PASS_SCROLL_MS} ))
+  local ms="${1:-$_BVK_PASS_SCROLL_MS}"
+  if (( ms > 0 )); then _bvk_now_ms; _BVK_PASS_UNTIL=$(( _BVK_MS + ms )); else _BVK_PASS_UNTIL=999999999999999; fi   # 0 = until a key
   return 0
 }
 _bvk_mouse_rearm() {    # [force]

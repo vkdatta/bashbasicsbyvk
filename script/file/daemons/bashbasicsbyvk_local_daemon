@@ -1,0 +1,644 @@
+#!/usr/bin/env python3
+"""
+bashbasicsbyvk_local_daemon
+───────────────────────────
+Self-bootstrapping persistent daemon: the OBSERVER of everything that points at a file or folder on THIS computer.
+(Its sibling, the alien daemon, takes snapshots that leave the computer. Both consume bashbasicsbyvk_planetary_resources.)
+
+What it keeps in step when something is renamed, moved or deleted OUTSIDE the app (the app does the same for its own changes):
+  • bookmarks   (~/.bashbasicsbyvk/switch/*.swlink)   follow the item; a vanished target is searched by inode
+  • recents     (~/.bashbasicsbyvk/recents.tsv)       the row follows the item, a deleted item's row goes
+  • favourites  (~/.bashbasicsbyvk/favourites/)       follow the item (bashbasicsbyvk_fav_lib.py); never deleted
+  • locks       (~/.bashbasicsbyvk/locks.list)        follow the item; the lock of a vanished item is kept for a day
+  • shortcuts   (~/.bashbasicsbyvk/shortcut.registry) follow the item
+  • the folder-size / duplicate-hash index            is invalidated and pre-warmed (bashbasicsbyvk_index_lib.py)
+The daemon does NOT decide what is in Recents: the app does (a folder entered with cd, a file edited in the run loop).
+
+How events are handled
+  Every move / delete the watcher sees goes into a queue. A worker waits until the burst is over (a 50-file folder move is 50
+  events), then applies the WHOLE batch under one lock: every registry is read once and written once. The app's own state and
+  cache folders (and so the snapshot copies of the alien daemon) never produce an event. A delete that is followed by a
+  re-create (a checkout, a build) is not treated as a delete.
+
+Watcher backends
+  • watchdog (inotify) — preferred, instant. If the observer dies it is restarted (3 times), then the daemon polls.
+  • no watchdog        — the periodic reconcile (every minute) finds what moved unseen, by inode, for ALL pointer kinds.
+
+Self-install
+  If watchdog is missing, the daemon asks the central dependency installer (bashbasicsbyvk_deps, quiet mode: no menu, user-space pip
+  only, once a day) in the background. Success is logged and picked up on the next restart.
+
+One daemon only: a flock held for the life of the process. A second one exits at once. A recycled pid never counts as "running".
+
+Files (all under ~/.bashbasicsbyvk/daemons/):
+  local.pid · local.log (trimmed) · local.version · local.status (counters shown by .dm) · local.instance (flock)
+"""
+
+import collections
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+
+# ── the shared helper: planetary resources (sits next to this file, or on PATH) ──────────────────
+def _load_planetary():
+    name = "bashbasicsbyvk_planetary_resources"
+    here = os.path.dirname(os.path.realpath(__file__))
+    for d in [here] + [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]:
+        f = os.path.join(d, name + ".py")
+        if os.path.isfile(f):
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(name, f)
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[name] = mod                    # the libs `import` it by name
+            spec.loader.exec_module(mod)
+            return mod
+    sys.stderr.write("bashbasicsbyvk_local_daemon: %s.py not found (reinstall bashbasicsbyvk)\n" % name)
+    sys.exit(1)
+
+
+pr = _load_planetary()
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+HOME = pr.HOME
+BVK_DIR = pr.BVK_DIR
+THIS_FILE = Path(os.path.abspath(__file__))
+SERVICE_NAME = "bashbasicsbyvk-local"
+LEGACY_SERVICE = "bashbasicsbyvk-recents"
+BASHRC_MARKER = "# bashbasicsbyvk-local-daemon"
+LEGACY_BASHRC_MARKER = "# bashbasicsbyvk-recents-daemon"
+
+DAEMON_VERSION = pr.daemon_version("local")        # the ONE number: bashbasicsbyvk_planetary_versions.list
+SVC = pr.Service("local", "bashbasicsbyvk_local_daemon", legacy_pid_files=[BVK_DIR / "recents.pid"])
+_log = SVC.log
+_STOP = threading.Event()                          # set by SIGTERM / SIGINT: every loop looks at it
+
+# ── Self-bootstrap (service persistence) ───────────────────────────────────────
+
+def bootstrap():
+    BVK_DIR.mkdir(parents=True, exist_ok=True)
+    if pr.is_termux():
+        pr.ensure_bashrc_hook(BASHRC_MARKER, THIS_FILE, legacy_markers=(LEGACY_BASHRC_MARKER,))
+        _start_background()
+        sys.exit(0)
+    if pr.has_systemd_user():
+        pr.remove_legacy_systemd(LEGACY_SERVICE)
+        if pr.install_systemd(SERVICE_NAME, "bashbasicsbyvk local file watcher", THIS_FILE):
+            sys.exit(0)
+    _start_background()
+    sys.exit(0)
+
+def _start_background():
+    subprocess.Popen(
+        [sys.executable, str(THIS_FILE), "--daemon"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+# ── watchdog import / self-install ─────────────────────────────────────────────
+
+def _deps():
+    """The python door to the central dependency installer (bashbasicsbyvk_deps, installed next to this script). None if it cannot
+    be imported, so the daemon still runs - on the periodic reconcile."""
+    try:
+        import bashbasicsbyvk_deps
+        return bashbasicsbyvk_deps
+    except ImportError:
+        mod = pr.load_module("bashbasicsbyvk_deps")
+        if mod is not None:
+            sys.modules["bashbasicsbyvk_deps"] = mod
+        return mod
+
+def _refresh_import_paths():
+    """Make sure user site-packages is on sys.path and Python's import caches are invalidated. Needed after a fresh user-space install."""
+    d = _deps()
+    if d is not None:
+        d.refresh_import_paths()
+
+def _try_import_watchdog():
+    _refresh_import_paths()
+    try:
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+        return Observer, FileSystemEventHandler
+    except ImportError as e:
+        _log(f"watchdog import failed: {e}")
+        return None, None
+
+def _try_install_watchdog():
+    """Ask the central installer for watchdog in QUIET mode: no menu (the daemon has no terminal); the registry marks watchdog `auto`
+    (user-space pip only), and the engine keeps the once-a-day retry rule. Never blocks the watcher; picked up on the next restart."""
+    _log("watchdog missing — asking the central dependency installer (quiet)")
+    pr.apply_app_timezone()
+    _deps().ensure("watchdog", quiet=True)
+    _refresh_import_paths()
+    try:
+        import importlib
+        if "watchdog" in sys.modules:
+            importlib.reload(sys.modules["watchdog"])
+        from watchdog.observers import Observer  # noqa: F401
+        _log("watchdog now importable")
+        return True
+    except Exception as e:
+        _log(f"watchdog still not importable after install: {e}")
+        return False
+
+# ══ tuning ═════════════════════════════════════════════════════════════════════
+FAV_RECONCILE_EVERY = 600     # seconds
+TRACK_RECONCILE_EVERY   = 600  # all pointers: full reconcile with inotify running
+TRACK_RECONCILE_POLLING = 60   # ... and without it (nothing else sees a move)
+WARM_START_DELAY    = int(os.environ.get("BVK_WARM_DELAY", "20"))   # seconds after start before the first warm
+WARM_EVERY          = 1800    # seconds between warm cycles
+WARM_BUDGET         = 120     # max seconds spent on ONE root per cycle
+INVALIDATE_DELAY    = 2.0     # debounce for folder-size invalidation
+EVENT_QUIET         = 0.3     # a burst of events is handled once it has been quiet this long ...
+EVENT_MAX_WAIT      = 2.0     # ... or after this long at the latest
+EVENT_QUEUE_MAX     = 200000  # beyond this the oldest events are dropped (the periodic reconcile finds what they were)
+STATUS_EVERY        = 15
+SHUTDOWN_LOCK_WAIT  = 1.5     # seconds a stop waits for the index lock before leaving without it
+
+_fav_lib = None
+_track_lib = None
+_idx_lib = None
+_idx = None                       # shared Index connection (guarded by _idx_lock)
+_idx_lock = threading.Lock()
+_p4_lock  = threading.Lock()
+_stats = {
+    "backend": "starting", "started": 0, "fav_followed": 0, "fav_reconciles": 0,
+    "fav_located": 0, "last_fav_reconcile": 0, "last_warm": [], "last_warm_at": 0,
+    "invalidations": 0, "followed": {}, "bookmarks_located": 0, "last_track_reconcile": 0,
+    "event_batches": 0, "events_seen": 0, "events_dropped": 0,
+}
+_fav_dirs = set()                 # folders that have a favourites file
+_fav_moved_targets = set()        # where #moved= entries point
+_fav_snapshot_dirty = threading.Event()
+_track_now = threading.Event()        # SIGUSR2  (.dm.sync)  → pointers reconcile immediately (and look again for what was not found)
+_warm_now = threading.Event()         # SIGUSR1  (.dm.warm)  → warm immediately
+_fav_sync_now = threading.Event()     # SIGUSR2  (.dm.sync)  → favourites reconcile immediately
+_inval_changed = set()
+_inval_drop = set()
+_inval_event = threading.Event()
+_events = collections.deque()         # (kind, src, dest, is_dir) of moves and deletes, in order
+_events_cv = threading.Condition()
+_APP_DIRS = pr.app_dirs()             # ~/.bashbasicsbyvk, the app's config and cache folders (snapshot copies live there)
+_HOME_S = str(HOME)
+
+def _is_app_path(p):
+    return any(p == d or p.startswith(d + "/") for d in _APP_DIRS)
+
+def _p4_skip_dir(path):
+    return _is_app_path(path) or "/." in path[len(_HOME_S):]
+
+def _refresh_fav_snapshot():
+    global _fav_dirs, _fav_moved_targets
+    if _fav_lib is None:
+        return
+    try:
+        favs = _fav_lib.load_all()
+        with _p4_lock:
+            _fav_dirs = {f.dirpath for f in favs}
+            _fav_moved_targets = {it.moved for f in favs for it in f.items if it.moved}
+    except Exception as e:
+        _log(f"fav snapshot failed: {type(e).__name__}: {e}")
+
+# ══ events: cheap in the watcher thread, applied in batches by one worker ═════════════════════
+
+def _p4_event(kind, src, dest, is_dir):
+    """Called for EVERY filesystem event, in the watcher's thread: it only sorts the event (never takes a registry lock)."""
+    if _is_app_path(src) or (dest and _is_app_path(dest)):
+        # our own state files; a change in favourites/ means the snapshot is stale
+        if "/favourites/" in src or (dest and "/favourites/" in dest):
+            _fav_snapshot_dirty.set()
+        return
+    # ── index: forget cached folder sizes of every ancestor ──────────────────
+    if _idx_lib is not None and not (is_dir and kind == "modified"):
+        with _p4_lock:
+            _inval_changed.add(src)
+            if dest:
+                _inval_changed.add(dest)
+            if is_dir and kind in ("deleted", "moved"):
+                _inval_drop.add(src)
+        _inval_event.set()
+    # ── pointers: a move or a delete goes to the worker ──────────────────────
+    if kind in ("moved", "deleted"):
+        with _events_cv:
+            _stats["events_seen"] += 1
+            if len(_events) >= EVENT_QUEUE_MAX:
+                _events.popleft()
+                _stats["events_dropped"] += 1
+            _events.append((kind, src, dest if kind == "moved" else "", is_dir))
+            _events_cv.notify()
+
+def _fav_relevant(src, dest, is_dir, fav_dirs, targets):
+    sdir, ddir = os.path.dirname(src), os.path.dirname(dest)
+    if is_dir and (any(d == src or d.startswith(src + "/") for d in fav_dirs)
+                   or any(t == src or t.startswith(src + "/") for t in targets)):
+        return True
+    return sdir in fav_dirs or ddir in fav_dirs or src in targets
+
+def _process_batch(batch):
+    """One burst of events: bookmarks, recents, locks and shortcuts in ONE locked pass; favourites in another."""
+    _stats["event_batches"] += 1
+    if _track_lib is not None:
+        events = [(k, s, d) for k, s, d, _ in batch]
+        done = None
+        for attempt in range(4):
+            try:
+                done = _track_lib.apply_batch(events, strict=attempt < 3)
+                break
+            except _track_lib.LockBusy:
+                _log("track lock busy — retrying the batch")
+                if _STOP.wait(1.5):
+                    return
+            except Exception as e:
+                _log(f"track batch failed: {type(e).__name__}: {e}")
+                break
+        if done and any(done.values()):
+            with _p4_lock:
+                for k, v in done.items():
+                    _stats["followed"][k] = _stats["followed"].get(k, 0) + v
+            _log(f"{len(batch)} event(s) followed: {done}  (first: {batch[0][0]} {batch[0][1]}" + (f" -> {batch[0][2]}" if batch[0][2] else "") + ")")
+    if _fav_lib is not None:
+        with _p4_lock:
+            fav_dirs, targets = list(_fav_dirs), set(_fav_moved_targets)
+        moves = [(s, d, isd) for k, s, d, isd in batch if k == "moved" and d and _fav_relevant(s, d, isd, fav_dirs, targets)]
+        if moves:
+            try:
+                n = _fav_lib.apply_moves(moves)
+                if n:
+                    _stats["fav_followed"] += n
+                    _log(f"favourites followed: {len(moves)} move(s), {n} file(s) updated")
+                _fav_snapshot_dirty.set()
+            except Exception as e:
+                _log(f"favourite follow failed: {type(e).__name__}: {e}")
+
+def _event_worker():
+    """Wait for a burst of events to end, then apply it as one batch."""
+    while not _STOP.is_set():
+        with _events_cv:
+            while not _events and not _STOP.is_set():
+                _events_cv.wait(timeout=1)
+        if _STOP.is_set():
+            return
+        t0, last = time.time(), len(_events)
+        while time.time() - t0 < EVENT_MAX_WAIT:        # still arriving? wait for a quiet moment (a folder move = one batch)
+            time.sleep(EVENT_QUIET)
+            n = len(_events)
+            if n == last:
+                break
+            last = n
+        with _events_cv:
+            batch = list(_events)
+            _events.clear()
+        if batch:
+            try:
+                _process_batch(batch)
+            except Exception as e:
+                _log(f"event batch failed: {type(e).__name__}: {e}")
+
+# ══ the other services: favourites upkeep, pointers reconcile, index ════════════════════════════
+
+def _invalidator():
+    """Debounced: drop cached folder sizes for everything that changed."""
+    while not _STOP.is_set():
+        _inval_event.wait()
+        _inval_event.clear()
+        time.sleep(INVALIDATE_DELAY)
+        with _p4_lock:
+            changed, drop = list(_inval_changed), list(_inval_drop)
+            _inval_changed.clear(); _inval_drop.clear()
+        if not (changed or drop) or _idx is None:
+            continue
+        if not _idx_lock.acquire(timeout=5):             # the warmer holds the index: keep the work for the next round
+            with _p4_lock:
+                _inval_changed.update(changed); _inval_drop.update(drop)
+            _inval_event.set()
+            continue
+        try:
+            _idx.dir_invalidate(changed, drop)
+            _stats["invalidations"] += 1
+        except Exception as e:
+            _log(f"invalidate failed: {type(e).__name__}: {e}")
+        finally:
+            _idx_lock.release()
+
+def _fav_maintainer():
+    """Snapshot refresh on demand + a full reconcile at start and periodically."""
+    last_full = 0.0
+    time.sleep(3)
+    while not _STOP.is_set():
+        if _fav_snapshot_dirty.is_set():
+            _fav_snapshot_dirty.clear()
+            _refresh_fav_snapshot()
+        if _fav_lib is not None and (time.time() - last_full > FAV_RECONCILE_EVERY or _fav_sync_now.is_set()):
+            _fav_sync_now.clear()
+            last_full = time.time()
+            try:
+                st = _fav_lib.reconcile_all(search_roots=[_HOME_S], budget=60, skip=_p4_skip_dir)
+                _stats["fav_reconciles"] += 1
+                _stats["fav_located"] += st.get("located", 0)
+                _stats["last_fav_reconcile"] = int(time.time())
+                if st.get("changed") or st.get("located"):
+                    _log(f"favourites reconcile: {st}")
+                _refresh_fav_snapshot()
+            except Exception as e:
+                _log(f"fav reconcile failed: {type(e).__name__}: {e}")
+        _fav_snapshot_dirty.wait(timeout=5)
+
+def _track_maintainer():
+    """A full reconcile of bookmarks, recents, locks and shortcuts at start, on .dm.sync (SIGUSR2) and periodically: gives every
+    pointer its inode and finds the target of one that moved while no event was seen (the daemon was off, or there is no inotify).
+    The directory walk runs WITHOUT the track lock."""
+    time.sleep(2)
+    force = False
+    while not _STOP.is_set():
+        if _track_lib is not None:
+            try:
+                st = _track_lib.reconcile_all([_HOME_S], budget=30, skip=_p4_skip_dir, force=force)
+                _stats["bookmarks_located"] += st.get("bookmarks_located", 0)
+                _stats["last_track_reconcile"] = int(time.time())
+                if st.get("bookmarks_located") or st.get("found"):
+                    _log(f"pointers reconcile: {st}")
+            except Exception as e:
+                _log(f"track reconcile failed: {type(e).__name__}: {e}")
+        every = TRACK_RECONCILE_EVERY if _stats.get("backend") == "watchdog" else TRACK_RECONCILE_POLLING
+        force = _track_now.wait(timeout=every)           # woken by .dm.sync → look again even for what was not found before
+        _track_now.clear()
+
+def _warmer():
+    """Throttled background pre-computation of hashes + folder sizes."""
+    if _STOP.wait(WARM_START_DELAY):
+        return
+    while not _STOP.is_set():
+        if _idx_lib is not None and _idx is not None:
+            try:
+                with _p4_lock:
+                    favd = list(_fav_dirs)
+                roots = _idx_lib.read_roots(favd)
+                results = []
+                for root, rec in roots:
+                    if _STOP.is_set():
+                        return
+                    if _p4_skip_dir(root):
+                        continue
+                    with _idx_lock:
+                        res = _idx_lib.warm_root(_idx, root, rec, budget=WARM_BUDGET)
+                    results.append(res)
+                    time.sleep(1)
+                _stats["last_warm"] = results[-10:]
+                _stats["last_warm_at"] = int(time.time())
+                _write_status()
+                if results:
+                    _log("warm cycle: " + ", ".join(f"{r['root']}({r['files']}f,{r['seconds']}s)" for r in results))
+            except Exception as e:
+                import traceback
+                _log(f"warm failed: {type(e).__name__}: {e}")
+                _log(traceback.format_exc())
+        _warm_now.wait(timeout=WARM_EVERY)
+        _warm_now.clear()
+
+_last_idx_stats = {}
+
+def _write_status():
+    """The counters .dm shows. Never waits long for the index (the warmer can hold it for minutes): it shows the last numbers then."""
+    global _last_idx_stats
+    if _idx is not None and _idx_lock.acquire(timeout=0.5):
+        try:
+            _last_idx_stats = _idx.stats()
+        except Exception:
+            pass
+        finally:
+            _idx_lock.release()
+    with _p4_lock:
+        favn = len(_fav_dirs)
+    try:
+        recents = _track_lib.recents_count() if _track_lib is not None else 0
+    except Exception:
+        recents = 0
+    doc = {
+        "version": DAEMON_VERSION, "pid": os.getpid(), "updated": int(time.time()),
+        "recents": recents, "fav_folders": favn, "index": _last_idx_stats if _idx is not None else {},
+        **{k: v for k, v in _stats.items()},
+    }
+    SVC.write_status(doc)
+
+def _status_loop():
+    while not _STOP.is_set():
+        try:
+            _write_status()
+        except Exception as e:
+            _log(f"status failed: {type(e).__name__}: {e}")
+        _STOP.wait(STATUS_EVERY)
+
+def _write_roots_template():
+    conf = BVK_DIR / "index_roots.conf"
+    if conf.exists():
+        return
+    try:
+        conf.write_text(
+            "# Folders the daemon keeps \"warm\" so .s.dup / .s.size answer instantly.\n"
+            "# One folder per line (whole tree).  Add  \"  shallow\"  after a path to skip subfolders.\n"
+            "# Folders you run .s.dup / .s.size in are added automatically (index/hot.list),\n"
+            "# and so are folders that have favourites.  Lines starting with # are ignored.\n"
+            "#\n"
+            "#   /data/data/com.termux/files/home/icons\n"
+            "#   /data/data/com.termux/files/home/downloads  shallow\n")
+    except OSError:
+        pass
+
+def _p4_start():
+    """Open the index, load libs, start the helper threads."""
+    global _fav_lib, _track_lib, _idx_lib, _idx
+    _stats["started"] = int(time.time())
+    try:
+        os.nice(10)                      # never compete with the user's work
+    except (OSError, AttributeError):
+        pass
+    def lib(name):
+        try:
+            return pr.load_module(name)
+        except Exception as e:
+            _log(f"could not load {name}: {type(e).__name__}: {e}")
+            return None
+    _fav_lib = lib("bashbasicsbyvk_fav_lib")
+    _track_lib = lib("bashbasicsbyvk_track_lib")
+    _idx_lib = lib("bashbasicsbyvk_index_lib")
+    if _idx_lib is not None:
+        try:
+            _idx = _idx_lib.Index()
+            _idx.bump_epoch()            # restarted daemon → every cached folder size is untrusted
+            _idx.meta_set("daemon_pid", os.getpid())
+            _idx.meta_set("events_ok", "0")   # becomes 1 only once inotify is running
+        except Exception as e:
+            _log(f"index unavailable: {type(e).__name__}: {e}")
+            _idx = None
+    SVC.write_version(DAEMON_VERSION)
+    _write_roots_template()
+    try:
+        signal.signal(signal.SIGUSR1, lambda s, f: _warm_now.set())
+        signal.signal(signal.SIGUSR2, lambda s, f: (_fav_sync_now.set(), _track_now.set()))
+    except (ValueError, AttributeError):
+        pass
+    _refresh_fav_snapshot()
+    for target, name in ((_event_worker, "events"), (_invalidator, "invalidator"), (_fav_maintainer, "fav-maintainer"),
+                         (_track_maintainer, "track-maintainer"), (_warmer, "warmer"), (_status_loop, "status")):
+        threading.Thread(target=target, name=name, daemon=True).start()
+    _log(f"services up: favourites={'on' if _fav_lib else 'off'} pointers={'on' if _track_lib else 'off'} index={'on' if _idx else 'off'}")
+
+def _p4_events_flowing(flag):
+    _stats["backend"] = "watchdog" if flag else "polling"
+    if _idx is not None and _idx_lock.acquire(timeout=SHUTDOWN_LOCK_WAIT):
+        try:
+            _idx.meta_set("events_ok", "1" if flag else "0")
+        except Exception:
+            pass
+        finally:
+            _idx_lock.release()
+    _write_status()
+
+def _p4_stop():
+    """Tell the index this daemon is gone. A warm in progress holds the index for minutes: do not wait for it (the next start bumps the epoch)."""
+    if _idx is not None and _idx_lock.acquire(timeout=SHUTDOWN_LOCK_WAIT):
+        try:
+            _idx.meta_set("daemon_pid", 0)
+            _idx.meta_set("events_ok", "0")
+        except Exception:
+            pass
+        finally:
+            _idx_lock.release()
+    _write_status()
+
+# ── Watchers ───────────────────────────────────────────────────────────────────
+
+def _run_watchdog_watcher(Observer, FileSystemEventHandler):
+    """Returns True when the observer died by itself (the caller restarts it), False after a requested stop."""
+    class _Handler(FileSystemEventHandler):
+        def on_any_event(self, e):
+            try:
+                if e.event_type in ("created", "deleted", "moved", "modified"):
+                    _p4_event(e.event_type, e.src_path, getattr(e, "dest_path", "") or "", e.is_directory)
+            except Exception as ex:
+                _log(f"event error: {type(ex).__name__}: {ex}")
+
+    observer = Observer()
+    handler = _Handler()
+    if os.path.isdir(_HOME_S):
+        observer.schedule(handler, _HOME_S, recursive=True)
+    observer.start()
+    _log(f"observer started watching {[_HOME_S]}")
+    _p4_events_flowing(True)
+    try:
+        while observer.is_alive() and not _STOP.is_set():
+            _STOP.wait(1)
+    finally:
+        try:
+            observer.stop()
+            observer.join(timeout=3)
+        except Exception:
+            pass
+    return not _STOP.is_set()
+
+def _run_idle_watcher():
+    """No events: the periodic reconcile (_track_maintainer, _fav_maintainer) does the work."""
+    _log(f"no event watcher — reconciling every {TRACK_RECONCILE_POLLING}s")
+    while not _STOP.wait(60):
+        pass
+
+def _run_watcher():
+    Observer, FileSystemEventHandler = _try_import_watchdog()
+
+    # Not available? Try a one-shot install — but never block the watcher
+    # on pip. If pip succeeds, watchdog gets picked up on the next restart.
+    if Observer is None and _deps() is not None:
+        threading.Thread(target=_try_install_watchdog, name="pip-install-watchdog", daemon=True).start()
+
+    if Observer is not None:
+        _log("using watchdog (inotify) watcher")
+        for attempt in range(1, 4):
+            try:
+                died = _run_watchdog_watcher(Observer, FileSystemEventHandler)
+            except Exception as e:
+                import traceback
+                _log(f"watchdog watcher failed: {type(e).__name__}: {e}")
+                _log(traceback.format_exc())
+                died = True
+            if not died:
+                return
+            _log(f"observer died unexpectedly (attempt {attempt} of 3)")
+            _p4_events_flowing(False)
+            if _STOP.wait(5):
+                return
+        _log("falling back to the periodic reconcile")
+    else:
+        _log("watchdog unavailable — no event watcher")
+
+    _p4_events_flowing(False)
+    _run_idle_watcher()
+
+# ── Daemon loop ────────────────────────────────────────────────────────────────
+
+def _on_signal(signum, frame):
+    _STOP.set()
+    with _events_cv:
+        _events_cv.notify_all()
+
+def _shutdown():
+    try:
+        _p4_stop()
+    except Exception:
+        pass
+    SVC.remove_pid()
+
+def run_daemon():
+    BVK_DIR.mkdir(parents=True, exist_ok=True)
+    if not SVC.acquire_instance():                 # the flock: two shells that start the daemon at once cannot both run
+        sys.exit(0)
+    if SVC.is_alive():                             # we hold the flock, so any live copy is an older daemon (the old name): retire it
+        SVC.stop_running()
+    SVC.write_pid()
+    signal.signal(signal.SIGTERM, _on_signal)
+    signal.signal(signal.SIGINT, _on_signal)
+    _log(f"daemon started pid={os.getpid()} v{DAEMON_VERSION}")
+    for stale in (BVK_DIR / "recents.list", BVK_DIR / "recents.pid", BVK_DIR / "daemon.version", BVK_DIR / "daemon.status", BVK_DIR / "recents.log"):
+        try:                                       # the old "recently modified files" list and the files of the daemon's old name
+            stale.unlink()
+        except OSError:
+            pass
+    _p4_start()                  # bookmarks / recents / favourites / locks / shortcuts upkeep + background index
+    try:
+        _run_watcher()
+    except Exception as e:
+        import traceback
+        _log(f"watcher crashed: {type(e).__name__}: {e}")
+        _log(traceback.format_exc())
+    finally:
+        _STOP.set()
+        _shutdown()
+    sys.exit(0)
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+def main():
+    if "--daemon" in sys.argv:
+        run_daemon()
+        return
+
+    if SVC.is_alive():
+        # An older daemon (an older version) keeps running old code after an upgrade:
+        # replace it when the version stamp does not match.
+        running = SVC.running_version() or "1"
+        if running == str(DAEMON_VERSION):
+            return
+        if SVC.stop_running():
+            _log(f"replaced daemon v{running} with v{DAEMON_VERSION}")
+        else:
+            _log(f"daemon v{running} would not stop — leaving it")
+            return
+    bootstrap()
+
+if __name__ == "__main__":
+    main()

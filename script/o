@@ -39,8 +39,7 @@ SCRIPT_DIR="$(cd -- "$_bvk_d" && pwd)"; unset _bvk_d
 _lt_b "start: dependencies"
 command -v python3 >/dev/null 2>&1 || { _lm_need bashbasicsbyvk_deps.sh; _dep_need -c "Starting the app" app.core || exit 1; }   # python3: only when it is missing does the central registry (bashbasicsbyvk_deps.list) load and offer to install it
 _lt_e
-_lt_b "start: recents daemon check";  _bvk_wake_recents_daemon; _lt_e
-# the usage ping and the snapshot daemon start after the first paint: the @call lines of [bg] in bashbasicsbyvk_loadmap.list
+# the usage ping, the local daemon and the alien daemon start after the first paint: the @call lines of [bg] in bashbasicsbyvk_loadmap.list
 _lt_b "start: terminal colours + screen setup"; _disp_startup; _lt_e
 _lt_b "start: native engine probe"; _bvk_go_bin; _lt_e   # once, HERE in the main shell: inside a $(...) subshell its cache is lost and it would re-probe on every call
 _lt_b "start: engines fit this machine?"; _bvk_engine_heal "$@"; _lt_e   # install made on another CPU / OS: offer a reinstall
@@ -190,7 +189,7 @@ while true; do
     z)           organise_menu ;;
     s)           settings_menu ;;
     r)           handle_rename ;;
-    cd)          if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁️  A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; else _lt_cleanup; cd "$path" && exec "$SHELL"; fi ;;
+    cd)          if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁️  A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; else _rc_record "$path"; _lt_cleanup; cd "$path" && exec "$SHELL"; fi ;;   # the in-app cd: the folder joins Recents
     goto|goto\ *) handle_goto "$choice" ;;
     kl)          kill -9 -1 ;;
     i)           infinity_stones_menu ;;

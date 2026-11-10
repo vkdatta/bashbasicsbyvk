@@ -12,7 +12,7 @@
 #            <pending>/<id>/pause.flag / stop.flag   written by the Pending menu, honoured by a running transfer within a second
 #
 #  1 auto-continue   a lost connection is waited out inside the running transfer (bashbasicsbyvk_staging_pending_xfer) and it carries
-#                    on by itself; an expired token is renewed; the snapshot daemon finishes interrupted snapshots on its own
+#                    on by itself; an expired token is renewed; the alien daemon finishes interrupted snapshots on its own
 #  2 manual continue the Pending menu (pn) → service → item → Continue: only the blobs the server does NOT hold are sent
 #  3 pause           p while uploading · Pending → Pause (also reaches a transfer running in another terminal)
 #  4 resume          Pending → Resume
@@ -261,7 +261,7 @@ _pn_report() {
   esac
 }
 
-# Continue / Resume an item from its folder (the Pending menu and the snapshot daemon call this)
+# Continue / Resume an item from its folder (the Pending menu and the alien daemon call this)
 _pn_continue() {
   local d="$1" quiet="${2:-0}" kind alias ttl rids rc src skind tgt csig
   kind=$(_pn_get "$d" kind); alias=$(_pn_get "$d" alias); ttl=$(_pn_get "$d" ttl); rids=$(_pn_get "$d" rids)
@@ -347,7 +347,7 @@ _pn_hint() {
   return 0
 }
 
-# the snapshot daemon (quiet, background) finishes interrupted snapshots on its own — "auto continue"
+# the alien daemon (quiet, background) finishes interrupted snapshots on its own — "auto continue"
 _pn_auto_snapshots() {
   local id d k st
   while read -r id; do

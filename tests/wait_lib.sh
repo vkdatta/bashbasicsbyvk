@@ -68,7 +68,7 @@ settle() {       # <secs max> <quiet> <cmd...>  -> the output of cmd did not cha
   done; return 0
 }
 
-bvk_reap() { pkill -f -- "$1" >/dev/null 2>&1 || true; }   # stop every process started from this temp dir (the app leaves its recents daemon / watchers running when it is killed)
+bvk_reap() { pkill -f -- "$1" >/dev/null 2>&1 || true; }   # stop every process started from this temp dir (the app leaves its local daemon / watchers running when it is killed)
 
 # --- tmux (only when tmux is installed; every tmx_* returns 1 and prints the screen when something does not show up in time)
 tmx_screen() { tmux capture-pane -p -t "$1" 2>/dev/null; }                 # what is VISIBLE now (older lines still in the scrollback must not count as "shown")

@@ -267,7 +267,8 @@ _vp_rule="   ──────────────────────�
 _vp_poll_active() {
   _vp_idle=0; _vp_poll_cur="$_vp_poll_fast"
   if [ "${_BVK_MOUSE_PASS:-0}" = 1 ]; then
-    if [ "${key-}" = $'\x1b' ]; then _bvk_mouse_rearm; else _bvk_mouse_rearm force; fi
+    # force only for a really typed key: callers also run this after an idle redraw (resize), where $key is empty and nobody typed anything
+    if [ -z "${key-}" ] || [ "${key-}" = $'\x1b' ]; then _bvk_mouse_rearm; else _bvk_mouse_rearm force; fi
   fi
   return 0
 }

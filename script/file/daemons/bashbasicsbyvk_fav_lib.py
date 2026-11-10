@@ -17,7 +17,12 @@ The daemon keeps favourites attached when items / folders are renamed or moved
 kept, and one that moved elsewhere gets a #moved= note (shown in sw → ⭐).
 
 Writes are atomic (tmp + replace) and guarded by the same mkdir-lock the bash
-side uses, so the shell and the daemon cannot clobber each other.
+side uses (planetary resources: owner pid inside, taken over only when its owner is dead or
+the lock is stale), so the shell and the daemon cannot clobber each other. The lock is
+never held during a directory walk: reconcile_all reads under it, walks without it, and
+applies what it found on a fresh read (compare-and-set), so an edit made meanwhile survives.
+Deleted items: a favourite whose item vanished is KEPT (it may come back or be found by inode);
+only the user removes a favourite.
 """
 import hashlib
 import os
@@ -25,7 +30,9 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-BVK_DIR = Path(os.environ.get("BVK_HOME_DIR") or (Path.home() / ".bashbasicsbyvk"))
+import bashbasicsbyvk_planetary_resources as pr
+
+BVK_DIR = pr.BVK_DIR
 FAV_DIR = BVK_DIR / "favourites"
 LOCK_DIR = FAV_DIR / ".lock"
 
@@ -37,53 +44,17 @@ LOCK_STALE = 10.0       # a lock older than this is considered abandoned
 @contextmanager
 def lock():
     FAV_DIR.mkdir(parents=True, exist_ok=True)
-    deadline = time.time() + LOCK_TIMEOUT
-    got = False
-    while True:
-        try:
-            os.mkdir(LOCK_DIR)
-            got = True
-            break
-        except FileExistsError:
-            try:
-                if time.time() - LOCK_DIR.stat().st_mtime > LOCK_STALE:
-                    os.rmdir(LOCK_DIR)
-                    continue
-            except OSError:
-                pass
-            if time.time() > deadline:
-                break
-            time.sleep(0.05)
-        except OSError:
-            break
-    try:
+    with pr.dir_lock(LOCK_DIR, wait=LOCK_TIMEOUT, stale=LOCK_STALE) as got:
         yield got
-    finally:
-        if got:
-            try:
-                os.rmdir(LOCK_DIR)
-            except OSError:
-                pass
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
-def norm(p):
-    p = str(p)
-    if len(p) > 1:
-        p = p.rstrip("/")
-    return p or "/"
+norm = pr.norm
+stat_id = pr.stat_id
 
 
 def hash_key(dirpath):
     return hashlib.sha1(norm(dirpath).encode("utf-8", "surrogateescape")).hexdigest()[:16]
-
-
-def stat_id(path):
-    try:
-        st = os.lstat(path)
-        return "%d:%d" % (st.st_dev, st.st_ino)
-    except OSError:
-        return ""
 
 
 def _join(d, name):
@@ -113,6 +84,7 @@ class FavFile:
         self.dirpath = dirpath
         self.dir_id = dir_id
         self.items = items
+        self.old_files = set()      # files this favourite lived in before its folder moved (removed after the new one is written)
 
     def find(self, name):
         for it in self.items:
@@ -231,168 +203,172 @@ def reconcile(fav, missing_ids=None):
 
 
 def find_moved(missing_ids, roots, budget=60.0, skip=None):
-    """One walk of `roots` looking for the inodes of missing favourites.
-    Sets item.moved for each hit.  Returns the number found."""
+    """One walk of `roots` (planetary resources: the one inode walk) looking for the inodes of missing favourites.
+    Sets item.moved for each hit. Returns the number found."""
     if not missing_ids:
         return 0
-    deadline = time.time() + budget
+    wanted = {it.id: (fav, it) for fav, it in missing_ids.values() if it.id}
+    hits = pr.find_inodes(roots, set(wanted), budget, skip)
     found = 0
-    remaining = dict(missing_ids)
-    stack = [str(r) for r in roots]
-    while stack and remaining and time.time() < deadline:
-        d = stack.pop()
-        try:
-            with os.scandir(d) as sc:
-                for e in sc:
-                    if e.name.startswith("."):
-                        continue
-                    try:
-                        isdir = e.is_dir(follow_symlinks=False)
-                    except OSError:
-                        continue
-                    hit = remaining.get(e.inode())
-                    if hit is not None:
-                        fav, it = hit
-                        if e.path != _join(fav.dirpath, it.name):
-                            it.moved = e.path
-                            found += 1
-                            remaining.pop(e.inode(), None)
-                    if isdir and not (skip and skip(e.path)):
-                        stack.append(e.path)
-        except OSError:
-            continue
+    for sid, path in hits.items():
+        fav, it = wanted[sid]
+        if path != _join(fav.dirpath, it.name):
+            it.moved = path
+            found += 1
     return found
 
 
 # ── event handlers (called by the daemon) ─────────────────────────────────────
-def on_dir_moved(src, dest):
-    """A folder was renamed/moved: re-point every favourites file at/under it."""
-    src, dest = norm(src), norm(dest)
-    n = 0
-    with lock():
-        for fav in load_all():
-            old = fav.dirpath
-            if old == src or old.startswith(src + "/"):
-                fav.dirpath = dest + old[len(src):]
-                old_file = fav.file
-                write(fav)
-                if old_file != fav.file:
-                    try:
-                        old_file.unlink()
-                    except OSError:
-                        pass
-                n += 1
-            # entries whose #moved target lived under the moved folder
-            dirty = False
-            for it in fav.items:
-                if it.moved and (it.moved == src or it.moved.startswith(src + "/")):
-                    it.moved = dest + it.moved[len(src):]
-                    dirty = True
-            if dirty:
-                write(fav)
-    return n
+def _dir_moved(favs, src, dest):
+    """A folder was renamed/moved: re-point every favourites file at/under it. Returns the set of FavFiles that changed."""
+    dirty = set()
+    for fav in favs:
+        old = fav.dirpath
+        if old == src or old.startswith(src + "/"):
+            fav.old_files.add(fav.file)
+            fav.dirpath = dest + old[len(src):]
+            dirty.add(fav)
+        # entries whose #moved target lived under the moved folder
+        for it in fav.items:
+            if it.moved and (it.moved == src or it.moved.startswith(src + "/")):
+                it.moved = dest + it.moved[len(src):]
+                dirty.add(fav)
+    return dirty
 
 
-def on_item_moved(src, dest):
-    """A file or folder was renamed/moved.  Returns number of favourites touched."""
+def _item_moved(favs, src, dest):
+    """A file or folder was renamed/moved. Returns the set of FavFiles that changed."""
     src, dest = os.path.normpath(src), os.path.normpath(dest)
     sdir, sname = os.path.dirname(src), os.path.basename(src)
     ddir, dname = os.path.dirname(dest), os.path.basename(dest)
-    n = 0
-    with lock():
-        for fav in load_all():
-            changed = False
-            # 1) the moved thing is a favourite of its old folder
-            if fav.dirpath == sdir:
-                it = fav.find(sname)
-                if it is not None:
-                    if ddir == sdir:                               # renamed in place
-                        if fav.find(dname) is None:
-                            it.name, it.moved = dname, ""
-                            it.id = stat_id(dest) or it.id
-                            changed = True
-                    else:                                          # moved to another folder
-                        it.moved = dest
+    dirty = set()
+    for fav in favs:
+        changed = False
+        # 1) the moved thing is a favourite of its old folder
+        if fav.dirpath == sdir:
+            it = fav.find(sname)
+            if it is not None:
+                if ddir == sdir:                               # renamed in place
+                    if fav.find(dname) is None:
+                        it.name, it.moved = dname, ""
                         it.id = stat_id(dest) or it.id
                         changed = True
-            # 2) something lands on a favourite's name (editor atomic-save, or
-            #    an item moved back) → refresh / revive it
-            if fav.dirpath == ddir:
-                it = fav.find(dname)
-                if it is not None and not (fav.dirpath == sdir and sname == dname):
-                    it.id = stat_id(dest) or it.id
-                    it.moved = ""
-                    changed = True
-            # 3) an item that already lives elsewhere moved again → follow it
-            for it in fav.items:
-                if it.moved and (it.moved == src):
+                else:                                          # moved to another folder
                     it.moved = dest
+                    it.id = stat_id(dest) or it.id
                     changed = True
-            if changed:
-                write(fav)
-                n += 1
-    return n
+        # 2) something lands on a favourite's name (editor atomic-save, or
+        #    an item moved back) -> refresh / revive it
+        if fav.dirpath == ddir:
+            it = fav.find(dname)
+            if it is not None and not (fav.dirpath == sdir and sname == dname):
+                it.id = stat_id(dest) or it.id
+                it.moved = ""
+                changed = True
+        # 3) an item that already lives elsewhere moved again -> follow it
+        for it in fav.items:
+            if it.moved and (it.moved == src):
+                it.moved = dest
+                changed = True
+        if changed:
+            dirty.add(fav)
+    return dirty
+
+
+def _commit(touched):
+    """Write every changed favourites file; remove the file a moved folder's favourites lived in before."""
+    for fav in touched:
+        write(fav)
+        for old in fav.old_files:
+            if old != fav.file:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+
+
+def apply_moves(events):
+    """A batch of (src, dest, is_dir) moves, in the order they happened: ONE lock, favourites read once, every changed file written once.
+    Returns the number of favourites files touched."""
+    touched = set()
+    with lock():
+        favs = load_all()
+        for src, dest, is_dir in events:
+            src, dest = norm(src), norm(dest)
+            if is_dir:
+                touched |= _dir_moved(favs, src, dest)
+            touched |= _item_moved(favs, src, dest)
+        _commit(touched)
+    return len(touched)
+
+
+def on_dir_moved(src, dest):
+    """One folder was renamed/moved: re-point the favourites files at/under it. Returns the number of files touched."""
+    with lock():
+        touched = _dir_moved(load_all(), norm(src), norm(dest))
+        _commit(touched)
+    return len(touched)
+
+
+def on_item_moved(src, dest):
+    """One file or folder was renamed/moved. Returns the number of favourites files touched."""
+    with lock():
+        touched = _item_moved(load_all(), src, dest)
+        _commit(touched)
+    return len(touched)
 
 
 def reconcile_all(search_roots=None, budget=60.0, skip=None):
-    """Full pass (daemon start / periodic).  Returns dict of counters."""
+    """Full pass (daemon start / periodic). Returns dict of counters.
+    1. under the lock: bring every file in line with the disk, collect what cannot be found;
+    2. WITHOUT the lock: one walk looks for the missing items / folders by inode;
+    3. under the lock again, on a fresh read: apply a hit only where the favourite is still exactly as it was when it went missing."""
     stats = {"folders": 0, "changed": 0, "located": 0}
+    lost_items, lost_dirs = [], []         # (dirpath, name, id)  /  (dirpath, dir_id)
     with lock():
-        favs = load_all()
         missing = {}
-        for fav in favs:
+        for fav in load_all():
             stats["folders"] += 1
             if not os.path.isdir(fav.dirpath):
-                # folder itself moved while we were not watching → adopt by DIR_ID
-                if fav.dir_id:
-                    new = _find_dir_by_id(fav.dir_id, search_roots or [], budget / 2, skip)
-                    if new:
-                        old_file = fav.file
-                        fav.dirpath = new
-                        write(fav)
-                        if old_file != fav.file:
-                            try:
-                                old_file.unlink()
-                            except OSError:
-                                pass
-                        stats["changed"] += 1
-                else:
-                    continue
+                if fav.dir_id and search_roots:
+                    lost_dirs.append((fav.dirpath, fav.dir_id))      # the folder itself moved while we were not watching
+                continue
             if reconcile(fav, missing):
                 write(fav)
                 stats["changed"] += 1
-        if missing and search_roots:
-            stats["located"] = find_moved(missing, search_roots, budget, skip)
-            if stats["located"]:
-                touched = {id(f): f for f, _ in missing.values()}
-                for fav in touched.values():
+        for fav, it in missing.values():
+            lost_items.append((fav.dirpath, it.name, it.id))
+    if not search_roots or not (lost_items or lost_dirs):
+        return stats
+    wanted = {i for _, _, i in lost_items} | {d for _, d in lost_dirs}
+    hits = pr.find_inodes(search_roots, wanted, budget, skip)        # the lock is NOT held while walking
+    if not hits:
+        return stats
+    with lock():
+        favs = load_all()
+        for old_dir, dir_id in lost_dirs:
+            new = hits.get(dir_id)
+            if not new or not os.path.isdir(new):
+                continue
+            for fav in favs:
+                if fav.dirpath == old_dir and fav.dir_id == dir_id and not os.path.isdir(old_dir):
+                    old_file = fav.file
+                    fav.dirpath = new
                     write(fav)
+                    if old_file != fav.file:
+                        try:
+                            old_file.unlink()
+                        except OSError:
+                            pass
+                    stats["changed"] += 1
+        for dirpath, name, ident in lost_items:
+            new = hits.get(ident)
+            if not new:
+                continue
+            for fav in favs:
+                it = fav.find(name) if fav.dirpath == dirpath else None
+                if it is not None and it.id == ident and not os.path.lexists(_join(dirpath, name)) and new != _join(dirpath, name):
+                    it.moved = new
+                    write(fav)
+                    stats["located"] += 1
     return stats
-
-
-def _find_dir_by_id(dir_id, roots, budget, skip):
-    try:
-        want = int(dir_id.partition(":")[2])
-    except ValueError:
-        return None
-    deadline = time.time() + budget
-    stack = [str(r) for r in roots]
-    while stack and time.time() < deadline:
-        d = stack.pop()
-        try:
-            with os.scandir(d) as sc:
-                for e in sc:
-                    if e.name.startswith("."):
-                        continue
-                    try:
-                        if not e.is_dir(follow_symlinks=False):
-                            continue
-                    except OSError:
-                        continue
-                    if e.inode() == want:
-                        return e.path
-                    if not (skip and skip(e.path)):
-                        stack.append(e.path)
-        except OSError:
-            continue
-    return None

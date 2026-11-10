@@ -25,12 +25,12 @@ handle_file() {
         case "$action" in
             0) run_file "$file"; return 1 ;;
             1) force_open "$file"; return 1 ;;
-            2) if command -v nano >/dev/null 2>&1; then nano "$file"; else "${EDITOR:-vi}" "$file"; fi; return 1 ;;
+            2) _hf_tracked "$file" _hf_edit "$file"; return 1 ;;
             3) bashbasicsbyvk_copy "$file"; return 1 ;;
             4) bashbasicsbyvk_delete "$file"; return 1 ;;
-            5) bashbasicsbyvk_erase "$file"; return 1 ;;
-            6) bashbasicsbyvk_overwrite "$file"; return 1 ;;
-            7) rename_item "$file"; return 1 ;;
+            5) _hf_tracked "$file" bashbasicsbyvk_erase "$file"; return 1 ;;
+            6) _hf_tracked "$file" bashbasicsbyvk_overwrite "$file"; return 1 ;;
+            7) _RN_NEW_PATH=""; rename_item "$file"; [ -n "$_RN_NEW_PATH" ] && _rc_record "$_RN_NEW_PATH"; return 1 ;;
             8) force_share "$file"; return 1 ;;
             9) _lk_file_toggle "$file"; return 1 ;;
             10) copy_to_clipboard "${file##*/}"; return 1 ;;
@@ -44,6 +44,19 @@ handle_file() {
                 ;;
         esac
     done
+}
+
+_hf_edit() { if command -v nano >/dev/null 2>&1; then nano "$1"; else "${EDITOR:-vi}" "$1"; fi; }
+
+# _hf_tracked FILE cmd args...   run the action; when it really changed FILE (opening the editor and leaving again does not), FILE joins Recents.
+# Used more than 5 times, it gets locked for good (bashbasicsbyvk_track.sh).
+_hf_tracked() {
+    local f="$1" before after; shift
+    before=$(_fav_mtime "$f")
+    "$@"
+    after=$(_fav_mtime "$f")
+    [ "$before" != "$after" ] && [ -e "$f" ] && _rc_record "$f"
+    return 0
 }
 
 # _file_abs_path <file> → _FILE_ABS  (absolute, no forks)

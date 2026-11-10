@@ -41,6 +41,7 @@ bashbasicsbyvk_findrun.sh|||tool, run as its own process
 bashbasicsbyvk_organise.sh|||tool, run as its own process
 bashbasicsbyvk_transfer.sh|||tool, run as its own process
 bashbasicsbyvk_carry.sh|||tool, run as its own process
+bashbasicsbyvk_track.sh|bashbasicsbyvk_lock.sh||bookmark pointers + Recents (rename / cd / edit call it; the displayer calls its stubs only for a .swlink row)
 bashbasicsbyvk_bundle_io.sh|||tool, run as its own process
 bashbasicsbyvk_action_confirm_key.sh|||tool, run as its own process
 bashbasicsbyvk_archive_formats.sh|||tool, run as its own process
@@ -74,11 +75,13 @@ bashbasicsbyvk_deps.sh|||the central dependency installer (asked only when a pro
 bashbasicsbyvk_health.sh|||the health check command
 bashbasicsbyvk_tabmenu.sh|||master template of every tabbed menu (rules, sw, upgrade, fx ...): they call _tm_define when their file loads, so it sits before the first of them
 bashbasicsbyvk_rules.sh|||.r rule book
-bashbasicsbyvk_daemon_cmd.sh|||.dm daemon commands
+bashbasicsbyvk_planetary_resources.sh|||planetary resources, bash flavour: the lock track.sh / favourites.sh take, the daemons' lifecycle helpers; the local daemon is woken after the first paint (@call below)
+bashbasicsbyvk_daemon_cmd.sh|||.dm daemon commands (both daemons)
 bashbasicsbyvk_telemetry.sh|||the daily usage ping: started after the first paint (@call below)
 bashbasicsbyvk_switch.sh|||sw: recents and bookmarks
 @call _bvk_telemetry_start | usage ping: after the first paint (it was a start-up step before)
-@call _snap_daemon_start | snapshot daemon: after the first paint
+@call _pr_wake_local_daemon | local daemon: after the first paint (it used to be a start-up step before it)
+@call _snap_daemon_start | alien daemon: after the first paint
 
 [no]
 bashbasicsbyvk_apimenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
@@ -115,7 +118,8 @@ bashbasicsbyvk_staging_upload.sh|||up- / c2c- upload
 bashbasicsbyvk_staging_ux.sh|||ux- RBAM share
 bashbasicsbyvk_staging_backup.sh|||bk backup
 bashbasicsbyvk_staging_saved.sh|||sv saved surf
-bashbasicsbyvk_staging_snapshot.sh|||sn snapshots + the snapshot daemon (@call below)
+bashbasicsbyvk_staging_snapshot.sh|||sn snapshots (the process that takes them is the alien daemon, next line)
+bashbasicsbyvk_alien_daemon.sh|bashbasicsbyvk_staging_snapshot.sh,bashbasicsbyvk_planetary_resources.sh||the alien daemon: snapshots while o runs (@call _snap_daemon_start in [bg]); NEEDS the snapshot file for its variables
 bashbasicsbyvk_csv.sh|||csv menu
 bashbasicsbyvk_upgrade.sh|||upgrade loop (-u)
 bashbasicsbyvk_api.sh|||api: link manager
@@ -169,6 +173,7 @@ bashbasicsbyvk_deps.list|||data
 bashbasicsbyvk_deps.py|||python helper, run as a process
 bashbasicsbyvk_erase|||stand-alone command, run as its own process
 bashbasicsbyvk_fav_lib.py|||python helper, run as a process
+bashbasicsbyvk_track_lib.py|||python helper of the local daemon, run as a process (the twin of bashbasicsbyvk_track.sh)
 bashbasicsbyvk_find.map|||command-map wiring, read as data
 bashbasicsbyvk_findrep|||tool, run as its own process
 bashbasicsbyvk_fx.map|||command-map wiring, read as data
@@ -221,7 +226,9 @@ bashbasicsbyvk_polyglot_verify.py|||python helper, run as a process
 bashbasicsbyvk_polyglot_xlsx.py|||python helper, run as a process
 bashbasicsbyvk_prompt.map|||command-map wiring, read as data
 bashbasicsbyvk_py_audit|||tool, run as its own process
-bashbasicsbyvk_recents_daemon|||tool, run as its own process
+bashbasicsbyvk_local_daemon|||tool, run as its own process (the local daemon)
+bashbasicsbyvk_planetary_resources.py|||python helper of both the local daemon and its libs, run as a process (the twin of bashbasicsbyvk_planetary_resources.sh)
+bashbasicsbyvk_planetary_versions.list|||data: the version of each daemon, read by both flavours of planetary resources
 bashbasicsbyvk_recover|||tool, run as its own process
 bashbasicsbyvk_recover_api.py|||python helper, run as a process
 bashbasicsbyvk_recover_creds.py|||python helper, run as a process

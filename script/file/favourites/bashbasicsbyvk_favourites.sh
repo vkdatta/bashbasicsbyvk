@@ -25,7 +25,7 @@
 #  Every favourite remembers the item's inode (#id) and the folder remembers its
 #  own (DIR_ID), so renaming an item OR the folder keeps the favourites attached.
 #  Items that vanish are kept and shown as 🔴 missing — never auto-deleted.
-#  The daemon (bashbasicsbyvk_recents_daemon) keeps this file in step in the
+#  The local daemon (bashbasicsbyvk_local_daemon) keeps this file in step in the
 #  background — renames, folder renames, and moves to other folders (#moved=).
 #  Both sides write atomically and share one lock:  favourites/.lock
 # ════════════════════════════════════════════════════════════════════════════
@@ -71,28 +71,20 @@ _fav_hash() {
 _fav_norm() { local d="${1%/}"; [ -z "$d" ] && d="/"; printf '%s' "$d"; }
 _fav_join() { local b="${1%/}"; printf '%s/%s' "$b" "$2"; }
 
-# ── lock shared with the daemon (mkdir is atomic) ─────────────────────────────
+# ── lock shared with the local daemon (planetary resources: same directory, same rule as bashbasicsbyvk_fav_lib.py) ─
 _FAV_LOCK_DEPTH=0
 _FAV_LOCK_OWN=false
 _fav_lock() {
   if [ "$_FAV_LOCK_DEPTH" -gt 0 ]; then _FAV_LOCK_DEPTH=$(( _FAV_LOCK_DEPTH + 1 )); return 0; fi
   mkdir -p "$_FAV_DIR" 2>/dev/null
-  local lk="$_FAV_DIR/.lock" tries=0 age
   _FAV_LOCK_OWN=false
-  while true; do
-    if mkdir "$lk" 2>/dev/null; then _FAV_LOCK_OWN=true; break; fi
-    age=$(( $(date +%s) - $(stat -c %Y "$lk" 2>/dev/null || echo 0) ))
-    if [ "$age" -gt 10 ]; then rmdir "$lk" 2>/dev/null; continue; fi     # abandoned
-    tries=$(( tries + 1 ))
-    [ "$tries" -ge 30 ] && break                                          # ~3s, then go ahead
-    sleep 0.1
-  done
+  _pr_lock_take "$_FAV_DIR/.lock" 30 10 && _FAV_LOCK_OWN=true       # ~3s, then go ahead without it
   _FAV_LOCK_DEPTH=1
 }
 _fav_unlock() {
   [ "$_FAV_LOCK_DEPTH" -gt 0 ] || return 0
   _FAV_LOCK_DEPTH=$(( _FAV_LOCK_DEPTH - 1 ))
-  if [ "$_FAV_LOCK_DEPTH" -eq 0 ] && $_FAV_LOCK_OWN; then rmdir "$_FAV_DIR/.lock" 2>/dev/null; _FAV_LOCK_OWN=false; fi
+  if [ "$_FAV_LOCK_DEPTH" -eq 0 ] && $_FAV_LOCK_OWN; then _pr_lock_drop "$_FAV_DIR/.lock"; _FAV_LOCK_OWN=false; fi
 }
 
 # ── locate the .fav file for a folder (adopting it if the folder was renamed) ─

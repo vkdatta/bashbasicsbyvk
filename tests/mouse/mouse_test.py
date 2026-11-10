@@ -436,10 +436,14 @@ def t_wheel_bottom_end(a):
 case('wheel down at the bottom end -> reports off', t_wheel_bottom_end)
 
 def t_rearm_idle(a):
+    # REGRESSION (the "scroll up, get pushed back to the bottom" bug): the terminal swallows its own scroll gestures, so the app cannot know
+    # the person is still scrolling.  A timer that re-armed the reports wrote ESC[?1000h 1.5 s later, which snaps the scrolled-back terminal
+    # to the bottom and takes the next swipe away.  The hand-back must last until a key is typed - nothing may be written meanwhile.
     a.wheel(True); a.wheel(True); off = not mouse_on(a)
-    a.wait(lambda: mouse_on(a), 6)                   # the app's own timer (_BVK_PASS_SCROLL_MS = 1500) brings the reports back
-    return off and mouse_on(a) and a.alive, 'reports must come back on their own after the hand-back (off=%s on=%s)' % (off, mouse_on(a))
-case('hand-back ends by itself: reports come back', t_rearm_idle)
+    time.sleep(4)
+    a.send(b'', 0.3)
+    return off and not mouse_on(a) and a.alive, 'reports must STAY off while the person scrolls the terminal (off=%s still_off=%s)' % (off, not mouse_on(a))
+case('hand-back lasts until a key: no timed re-arm (no snap to bottom)', t_rearm_idle)
 
 def t_rearm_key(a):
     a.wheel(True); a.wheel(True); off = not mouse_on(a)

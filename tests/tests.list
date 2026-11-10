@@ -40,6 +40,7 @@ startup_spawns|fast|30|bash tests/startup_spawns.sh|
 cell_width|fast|20|bash tests/cell_width.sh|
 wheel_target|fast|120|bash tests/wheel_target.sh|python3
 engine_heal|fast|40|bash tests/engine_heal.sh|python3
+track|fast|60|bash tests/track/track_test.sh|python3
 smartload|fast|90|bash tests/smartload.sh|python3
 rename_screen|fast|240|bash tests/rename_screen.sh|python3
 settings_desc|fast|40|bash tests/settings_desc.sh|python3

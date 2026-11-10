@@ -4,8 +4,8 @@
 #  SWITCH — three-tab overlay inside the main file-manager loop
 #
 #  Tabs (← / → to cycle when input is empty):
-#    📌 Bookmarks  ~/.bashbasicsbyvk/switch/   — .swlink bookmark files
-#    🕐 Recents    ~/.bashbasicsbyvk/recents.list — daemon-maintained, read-only
+#    📌 Bookmarks  ~/.bashbasicsbyvk/switch/   — pointers to folders AND files (.swlink inside, never shown)
+#    🕐 Recents    ~/.bashbasicsbyvk/recents.tsv — folders entered with cd, files edited in the run loop (bashbasicsbyvk_track.sh)
 #    ⭐ Favourites the favourites of the folder you came from (manage them:
 #                  N open/go · b remove (b-1,3 · x = same) · r rename alias · e edit file · e-N file actions).
 #                  Adding is done in the file view with  fa.
@@ -16,9 +16,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Storage roots ─────────────────────────────────────────────────────────────
-_SW_DIR="${HOME}/.bashbasicsbyvk/switch"
-_SW_RECENTS_LIST="${HOME}/.bashbasicsbyvk/recents.list"
-_SW_EXCLUDE_FILE="${HOME}/.bashbasicsbyvk/recents_exclude.conf"
+# _SW_DIR, the recents file and the exclude file are defined once, in bashbasicsbyvk_track.sh (the load mapper loads it first: NEEDS column)
 
 _sw_ensure_store() {
   mkdir -p "$_SW_DIR" 2>/dev/null
@@ -26,10 +24,10 @@ _sw_ensure_store() {
 
 # ── Exclude list helpers ───────────────────────────────────────────────────────
 
-# Ensure the exclude file exists (daemon also creates it, but defence-in-depth)
+# Ensure the exclude file exists
 _sw_excl_ensure() {
-  if [ ! -f "$_SW_EXCLUDE_FILE" ]; then
-    cat > "$_SW_EXCLUDE_FILE" << 'EXCL_TEMPLATE'
+  if [ ! -f "$_RC_EXCLUDE_FILE" ]; then
+    cat > "$_RC_EXCLUDE_FILE" << 'EXCL_TEMPLATE'
 # recents_exclude.conf — files/folders to hide from recents
 #
 # Syntax:  <type>  <value>
@@ -53,7 +51,7 @@ EXCL_TEMPLATE
 _sw_excl_list() {
   _sw_excl_ensure
   local idx=0 line kind value
-  echo "━━━ Exclude rules ($( grep -cv '^\s*#\|^\s*$' "$_SW_EXCLUDE_FILE" 2>/dev/null || echo 0 ) active) ━━━"
+  echo "━━━ Exclude rules ($( grep -cv '^\s*#\|^\s*$' "$_RC_EXCLUDE_FILE" 2>/dev/null || echo 0 ) active) ━━━"
   while IFS= read -r line; do
     [[ "$line" =~ ^[[:space:]]*# || -z "${line// }" ]] && continue
     idx=$(( idx + 1 ))
@@ -65,7 +63,7 @@ _sw_excl_list() {
       dirpath)    printf '  %2d)  🚫 dirpath    %s\n'  "$idx" "$value" ;;
       *)          printf '  %2d)  ❓ %-10s %s\n' "$idx" "$kind" "$value" ;;
     esac
-  done < "$_SW_EXCLUDE_FILE"
+  done < "$_RC_EXCLUDE_FILE"
   [ "$idx" -eq 0 ] && echo "  (no rules yet)"
 }
 
@@ -95,13 +93,13 @@ _sw_excl_add() {
     value="${value/#\~/$HOME}"  # expand leading ~
   fi
   # Duplicate check
-  if grep -qE "^\s*${kind}\s+${value}\s*$" "$_SW_EXCLUDE_FILE" 2>/dev/null; then
+  if grep -qE "^\s*${kind}\s+${value}\s*$" "$_RC_EXCLUDE_FILE" 2>/dev/null; then
     echo "📜  Rule already exists: $kind  $value"
     return 0
   fi
-  printf '%s  %s\n' "$kind" "$value" >> "$_SW_EXCLUDE_FILE"
+  printf '%s  %s\n' "$kind" "$value" >> "$_RC_EXCLUDE_FILE"
   echo "💫 Added: $kind  $value"
-  echo "   (daemon picks it up automatically — no restart needed)"
+  echo "   (applies at once)"
 }
 
 # Remove rule(s) by number (shown via _sw_excl_list)
@@ -109,7 +107,7 @@ _sw_excl_remove() {
   _sw_excl_ensure
   _sw_excl_list
   local total
-  total=$( grep -cv '^\s*#\|^\s*$' "$_SW_EXCLUDE_FILE" 2>/dev/null || echo 0 )
+  total=$( grep -cv '^\s*#\|^\s*$' "$_RC_EXCLUDE_FILE" 2>/dev/null || echo 0 )
   [ "$total" -eq 0 ] && return 0
   printf "Remove rule number(s) (e.g. 1 or 1 3 5), or Enter to cancel: "
   local nums
@@ -130,14 +128,14 @@ _sw_excl_remove() {
     for n in $sorted_nums; do
       [ "$n" -eq "$idx" ] && line_nums+=( "$lineno" )
     done
-  done < "$_SW_EXCLUDE_FILE"
+  done < "$_RC_EXCLUDE_FILE"
   if [ "${#line_nums[@]}" -eq 0 ]; then echo "🔴  No matching rules."; return 0; fi
   # Delete lines from file (descending order keeps line numbers valid)
   local tmp
   tmp=$(mktemp)
-  cp "$_SW_EXCLUDE_FILE" "$tmp"
+  cp "$_RC_EXCLUDE_FILE" "$tmp"
   for ln in $(echo "${line_nums[@]}" | tr ' ' '\n' | sort -rn); do
-    sed -i "${ln}d" "$_SW_EXCLUDE_FILE"
+    sed -i "${ln}d" "$_RC_EXCLUDE_FILE"
   done
   rm -f "$tmp"
   echo "🗑️  Removed ${#line_nums[@]} rule(s)."
@@ -150,9 +148,9 @@ _sw_excl_edit() {
   if [ -z "$ed" ]; then
     command -v nano &>/dev/null && ed="nano" || ed="vi"
   fi
-  echo "📝 Opening $_SW_EXCLUDE_FILE in $ed"
-  "$ed" "$_SW_EXCLUDE_FILE"
-  echo "   (daemon reloads automatically on save)"
+  echo "📝 Opening $_RC_EXCLUDE_FILE in $ed"
+  "$ed" "$_RC_EXCLUDE_FILE"
+  echo "   (applies at once)"
 }
 
 # Main exclude manager — called by 'xe' inside recents tab
@@ -186,31 +184,6 @@ _sw_tab="bookmarks"   # bookmarks | recents | favourites
 _sw_in_mode=0         # 1 while inside switch_menu — enables ←/→ sentinel
 _sw_did_switch=false  # set true on successful path jump — changes q behaviour
 
-# ── .swlink helpers ───────────────────────────────────────────────────────────
-
-_swlink_read_target() {
-  local f="$1"
-  [ -f "$f" ] || return 1
-  grep -m1 '^SWLINK_TARGET=' "$f" 2>/dev/null | cut -d'=' -f2-
-}
-
-_swlink_write() {
-  local dest_dir="$1" target="$2" display_name="$3"
-  _sw_ensure_store
-  mkdir -p "$dest_dir" 2>/dev/null
-  local sc_path="${dest_dir}/${display_name}.swlink" count=1
-  while [ -e "$sc_path" ]; do
-    sc_path="${dest_dir}/${display_name}${count}.swlink"
-    count=$(( count + 1 ))
-  done
-  {
-    printf 'SWLINK_TARGET=%s\n' "$target"
-    printf 'SWLINK_NAME=%s\n'   "$display_name"
-    printf 'SWLINK_CREATED=%s\n' "$(date +%s)"
-  } > "$sc_path"
-  printf '%s' "$sc_path"
-}
-
 # ── Bookmarks: add / remove ───────────────────────────────────────────────────
 
 _sw_add_path() {
@@ -218,8 +191,8 @@ _sw_add_path() {
   _sw_ensure_store
   local dup t
   while IFS= read -r -d '' dup; do
-    t=$(_swlink_read_target "$dup")
-    if [ "$t" = "$outer_path" ]; then
+    _swlink_read_target_v "$dup"
+    if [ "$_SWL_T" = "$outer_path" ]; then
       echo "📜  Already in switch: $outer_path"
       return 0
     fi
@@ -257,19 +230,6 @@ _sw_remove_paths() {
   echo "💫 Removed $removed bookmark(s)"
 }
 
-# ── Recents: read daemon list ─────────────────────────────────────────────────
-
-_sw_build_recents() {
-  items=()
-  if [ ! -f "$_SW_RECENTS_LIST" ]; then
-    return
-  fi
-  local line
-  while IFS= read -r line; do
-    [ -n "$line" ] && [ -f "$line" ] && items+=("$line")
-  done < "$_SW_RECENTS_LIST"
-}
-
 # recents and favourites are "managed" tabs: the normal file commands are blocked
 _sw_is_ro() { [ "$_sw_tab" = "recents" ] || [ "$_sw_tab" = "favourites" ]; }
 
@@ -284,7 +244,7 @@ _sw_menu_header() {
   echo
   local _loc
   case "$_sw_tab" in
-    recents) _loc="(recently modified — read only)" ;;
+    recents) _loc="(folders you entered with cd · files you edited)" ;;
     favourites) _loc="⭐ favourites of: $_sw_outer_path" ;;
     *)       _bvk_src_tag_v
              _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}$_bst_out" ;;
@@ -331,7 +291,7 @@ _sw_build_items_for_tab() {
   case "$_sw_tab" in
 
     recents)
-      _sw_build_recents
+      _rc_build
       ;;
 
     favourites)
@@ -350,7 +310,7 @@ _sw_recents_blocked() {
   if [ "$_sw_tab" = "favourites" ]; then
     printf '🔴  Not available in Favourites — use x / r / e here, or go to the Bookmarks tab\n'
   else
-    printf '🔴  Read-only in Recents — use Bookmarks tab or fx (functions) for scripts\n'
+    printf '🔴  Recents is managed by the app — use the Bookmarks tab or fx (functions) for scripts\n'
   fi
 }
 
@@ -417,11 +377,14 @@ _sw_bookmarks_handle_selection() {
     bn="${selected##*/}"
     [ -d "$selected" ] && { path="$selected"; group_prefix=""; force_show=false; return 0; }
     if [[ "$bn" == *.swlink ]]; then
-      local sw_target
-      sw_target=$(_swlink_read_target "$selected")
-      [ -z "$sw_target" ]   && { echo "🔴  Bookmark has no target"; return 0; }
-      [ ! -d "$sw_target" ] && [ ! -f "$sw_target" ] && { echo "🔴  Target gone: $sw_target"; return 0; }
-      _sw_result_path="$sw_target"; return 1
+      # a bookmark is a POINTER: a folder opens (the list moves there), a file opens its run loop. The pointer's own file is never what you land on.
+      _swlink_read_target_v "$selected" || { echo "🔴  Bookmark has no target"; return 0; }
+      if [ ! -e "$_SWL_T" ]; then
+        _swlink_heal "$selected" && echo "📍 ${bn%.swlink} had moved — found it: $_SWL_T" || { echo "🔴  Target gone: $_SWL_T"; return 0; }
+      fi
+      if [ -d "$_SWL_T" ]; then _sw_result_path="$_SWL_T"; return 1; fi
+      handle_file "$_SWL_T"
+      return 0
     fi
     [ -f "$selected" ] && handle_file "$selected"
   else
@@ -454,11 +417,15 @@ _sw_favourites_handle_selection() {
 
 # ── Recents selection ─────────────────────────────────────────────────────────
 
+# Recents: a folder → the list moves there (like a bookmark); a file → its run loop.
 _sw_recents_handle_selection() {
   local choice="$1"
   [[ "$choice" =~ ^[0-9]+$ ]] || { _bvk_invalid; return 0; }
   [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ] || { echo "🔴  Out of range"; return 0; }
-  handle_file "${items[$((choice-1))]}"
+  local t="${items[$((choice-1))]}"
+  if [ -d "$t" ]; then _sw_result_path="$t"; return 1; fi
+  handle_file "$t"
+  return 0
 }
 
 # ── In-place tab redraw ───────────────────────────────────────────────────────
@@ -496,6 +463,7 @@ _sw_perform_switch() {
 }
 
 switch_menu() {
+  _lm_need bashbasicsbyvk_track.sh       # _SW_DIR, the bookmark and recents helpers
   _sw_ensure_store
 
   local _sw_outer_path="$path"
@@ -562,7 +530,7 @@ switch_menu() {
           local _clr_ans
           _bvk_yn _clr_ans "Clear all recents? This only clears the list, not your files." -d none
           if [[ "${_clr_ans,,}" == "y" ]]; then
-            : > "$_SW_RECENTS_LIST"
+            : > "$_RC_FILE"
             echo "💫 Recents list cleared."
           else
             echo "Cancelled."
@@ -655,7 +623,7 @@ switch_menu() {
       s)            settings_menu ;;
 
       cd)
-        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || { _lt_cleanup; cd "$path" && exec "$SHELL"; }
+        _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || { _rc_record "$path"; _lt_cleanup; cd "$path" && exec "$SHELL"; }
         ;;
 
       disk)         df -h ;;
@@ -688,15 +656,17 @@ switch_menu() {
             _sw_bookmarks_handle_selection "$_sw_choice"
             _sw_rc=$?
             if [ "$_sw_rc" -eq 1 ] && [ -n "$_sw_result_path" ]; then
-              # Perform the switch (a picked file switches to its folder)
-              local _sw_cd_target="$_sw_result_path"
-              [ -f "$_sw_cd_target" ] && _sw_cd_target="$(dirname "$_sw_cd_target")"
-              _sw_perform_switch "$_sw_cd_target"
+              _sw_perform_switch "$_sw_result_path"      # a folder: a bookmarked file never gets here (it opened its run loop above)
               return 0
             fi
             ;;
           recents)
             _sw_recents_handle_selection "$_sw_choice"
+            _sw_rc=$?
+            if [ "$_sw_rc" -eq 1 ] && [ -n "$_sw_result_path" ]; then
+              _sw_perform_switch "$_sw_result_path"
+              return 0
+            fi
             ;;
           favourites)
             _sw_favourites_handle_selection "$_sw_choice"

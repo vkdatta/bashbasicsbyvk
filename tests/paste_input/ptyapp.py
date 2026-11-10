@@ -160,7 +160,7 @@ class PtyApp:
     def close(self):
         try: os.kill(self.pid, signal.SIGKILL); os.waitpid(self.pid, 0)
         except Exception: pass
-        # the app starts background helpers (recents daemon, watchers) that only stop when the app says goodbye; killing the app leaves them running
+        # the app starts background helpers (local daemon, watchers) that only stop when the app says goodbye; killing the app leaves them running
         # (hundreds of them ate all memory and made every later test time out), so everything started from this app's temp dir is stopped with it
         os.system('pkill -f %s >/dev/null 2>&1' % shlex.quote(self.tmp))
         shutil.rmtree(self.tmp, ignore_errors=True)

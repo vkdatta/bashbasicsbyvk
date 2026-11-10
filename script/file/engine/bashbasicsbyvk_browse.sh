@@ -1024,39 +1024,6 @@ _read_choice_raw() {
 }
 
 _BVK_LASTDIR_FILE="${HOME}/.bashbasicsbyvk/lastdir"
-_BVK_RECENTS_PID_FILE="${HOME}/.bashbasicsbyvk/recents.pid"
-_BVK_DAEMON_VERSION=2      # must match DAEMON_VERSION in bashbasicsbyvk_recents_daemon
-
-_bvk_wake_recents_daemon() {
-  local _candidates=(
-    "$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon.py"
-    "$SCRIPT_DIR/file/bashbasicsbyvk_recents_daemon"
-    "$SCRIPT_DIR/bashbasicsbyvk_recents_daemon.py"
-    "$SCRIPT_DIR/bashbasicsbyvk_recents_daemon"
-  )
-  local _daemon_script=""
-  local _c
-  for _c in "${_candidates[@]}"; do
-    if [ -f "$_c" ]; then _daemon_script="$_c"; break; fi
-  done
-  [ -n "$_daemon_script" ] || return
-  local _pid=""
-  [ -r "$_BVK_RECENTS_PID_FILE" ] && read -r _pid < "$_BVK_RECENTS_PID_FILE"     # read, not $(cat): no process
-  # alive AND current version → nothing to do.  Alive but older (pre-upgrade) →
-  # fall through: the daemon script itself replaces the old process.
-  local _ver=""
-  [ -r "${HOME}/.bashbasicsbyvk/daemon.version" ] && read -r _ver < "${HOME}/.bashbasicsbyvk/daemon.version"
-  kill -0 "$_pid" 2>/dev/null && [ "$_ver" = "$_BVK_DAEMON_VERSION" ] && return
-  if [ -x "$_daemon_script" ]; then
-    "$_daemon_script" </dev/null >/dev/null 2>&1 &
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 "$_daemon_script" </dev/null >/dev/null 2>&1 &
-  else
-    python "$_daemon_script" </dev/null >/dev/null 2>&1 &
-  fi
-  disown
-}
-
 path="$(pwd -P)"
 export BVK_FILEMANAGER_BOUNDARY="$path"
 selected_items=()

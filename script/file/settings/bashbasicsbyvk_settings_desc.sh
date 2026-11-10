@@ -461,8 +461,8 @@ Rule Book|rules	Saved rules for select (.s) and display (.d). Open a folder to u
 Rule Book|rules:select	Select rules: a number runs it, c creates one, d deletes, r renames.
 Rule Book|rules:display	Display rules: a number applies it, c creates one, d deletes, r renames.
 Rule Book|last	Expressions you used that are not saved yet. A number saves it as a rule.
-Switch|bookmarks	Folders you saved. A number jumps there; a adds this folder, b removes one.
-Switch|recents	Files you changed lately (read only). A number opens, edits or runs it.
+Switch|bookmarks	Folders and files you saved. A number opens the folder, or the file's menu; a adds this folder, b removes one.
+Switch|recents	Folders you entered with cd and files you edited, newest first. A number opens the folder, or the file's menu. Used more than 5 times = locked.
 Switch|favourites	Starred files and folders. A number opens it; b removes, r renames, fa adds.
 Upgrade|stable	Released versions, newest first. A number installs it; m = latest main.
 Upgrade|tags	All tags, betas included. A number installs it; m = latest main.

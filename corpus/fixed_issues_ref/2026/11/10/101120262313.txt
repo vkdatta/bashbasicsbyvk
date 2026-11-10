@@ -1,0 +1,47 @@
+1. ISSUE IN BRIEF
+The two background daemons (the recents daemon and the snapshot daemon) each carried their own copy of single-instance, pid, log, lock and version plumbing, the lock helpers existed four times with different rules, and the daemons were scattered across loops/iloop/switch and the snapshot folder. Wanted: one shared helper, one folder, and the names "local daemon" and "alien daemon".
+
+1. HOW DID YOU DEBUG
+Read both daemons, track_lib.py, fav_lib.py, track.sh, favourites.sh, browse.sh, daemon_cmd.sh and the snapshot script (audit in the conversation). Compared the lock code and the lifecycle code side by side.
+
+1. CAUSE
+Each feature grew its own lock and its own start/stop code; the daemon version lived in two hand-synced constants (browse.sh and the daemon).
+
+1. FIX
+New folder script/file/daemons/: bashbasicsbyvk_local_daemon (was the recents daemon), bashbasicsbyvk_alien_daemon.sh (the snapshot daemon's process, moved out of the snapshot script), bashbasicsbyvk_planetary_resources.py and .sh (the shared helper: dir lock, inode walk, service lifecycle, log trim, bashrc / systemd keeper), bashbasicsbyvk_planetary_versions.list (the ONE place of both daemon versions), plus the daemon-only libs bashbasicsbyvk_track_lib.py and bashbasicsbyvk_fav_lib.py moved there. track.sh and favourites.sh locks, fav_lib, track_lib and the snapshot log now call planetary resources. The daemon start-up check left the start-up path: it is an @call after the first paint. Runtime files of the local daemon moved to ~/.bashbasicsbyvk/daemons/local.*; the old names are retired by the new daemon at its first start. The alien lock is now alien.lock / alien.log. Lesson: a helper needed by a python daemon run with -I is loaded by file path and registered in sys.modules so the libs can import it by name.
+
+2. ISSUE IN BRIEF
+The pointer upkeep of the recents daemon could lose or revert user data and was uneven across kinds: the mkdir lock was not a lock (a second caller entered after 1 s while the daemon held it for a whole directory walk), reconcile wrote back text read before a 30 s walk, one failing case skipped the rest of an event, events were handled one by one (a 50-file move = 51 lock rounds), a delete of a file moved out of HOME or re-created dropped its lock and recents row, only bookmarks and favourites had a catch-up pass, and a deleted bookmark made every reconcile walk the whole home.
+
+2. HOW DID YOU DEBUG
+Tested the first five against the real track_lib and watchdog in the earlier audit (event counts, lock re-entry after 1.01 s, a bookmark rename reverted by a stale write-back, repeated full walks for a deleted target). This task's fixes are verified by the tests listed in the delivery status; anything not run is said there.
+
+2. CAUSE
+The lock released and took over by timeout instead of by owner state; reconcile held or ignored the lock around a slow walk and wrote stale buffers; handlers were per-event and all-or-nothing; ids were stored for bookmarks only.
+
+2. FIX
+planetary_resources.dir_lock: owner pid inside, takeover only when the owner is dead or the lock is stale (atomic rename), a live owner is waited for and never robbed; release only by the owner. track_lib: one _World loaded under the lock per batch, each registry written once; each kind is handled on its own; reconcile_all reads and stamps under the lock, walks WITHOUT it, and applies hits as ordinary moved events on fresh data (compare-and-set by construction). Ids of locks, recents rows and shortcut targets live in pointers.state so those kinds also have a catch-up pass. A deleted item's recents row goes at once, its lock stays a day (delete + re-create keeps it), and an id the walk could not find is not searched again for six hours (a sync on demand ignores that). fav_lib: same three-phase reconcile, batched apply_moves, one inode walk shared with track_lib. The daemon queues moves and deletes and applies them after a quiet moment (0.3 s) as one batch; events under the app's own state, config and cache folders (snapshot copies) are ignored. A favourite whose item vanished is kept by design (only the user removes one).
+
+3. ISSUE IN BRIEF
+Daemon lifecycle faults: two shells could each start a daemon, the cleanup deleted another daemon's pid file, a stop waited up to 120 s on the index lock held by the warmer, a dead watcher ended the daemon instead of falling back, the status thread had no error handling, a recycled pid blocked the daemon from ever starting, the bashrc hook deleted whatever line followed its marker and called bare python, the daemon log was never trimmed, and the alien daemon had a start race, removed a lock it did not own and its watcher could signal a recycled pid.
+
+3. HOW DID YOU DEBUG
+Read the code paths (single-instance, _cleanup, _p4_stop, the watcher fallback, the hook installer, snapshot start/cleanup). These were found by reading, not by running.
+
+3. CAUSE
+is_alive() only checked kill -0; the pid file was written by the starter after a delay; cleanup and the watcher loops had no ownership or stop signal; the bashrc editor removed the line after the marker unconditionally.
+
+3. FIX
+Local daemon: a flock held for the life of the process (a second copy exits), pid liveness also checks the command line, remove_pid only removes its own pid, SIGTERM sets a stop flag every loop watches, shutdown waits 1.5 s for the index lock at most, an observer that dies is restarted 3 times and then the periodic reconcile runs (the status loop, invalidator and workers have their own error handling), the hook only replaces a line that is really its own and uses sys.executable, the log is trimmed, systemd unit uses Restart=on-failure and the old unit name is removed. Alien daemon: _pr_svc_claim / _pr_svc_alive (pid plus process start time; a claim younger than 10 s without a pid counts as alive), the starter writes the pid, cleanup releases only its own lock, the parent watcher ends when either process is gone.
+
+4. ISSUE IN BRIEF
+Daemon management covered only the recents daemon (.dm): the snapshot daemon had no status or restart command, and the daemon version was kept in two places.
+
+4. HOW DID YOU DEBUG
+Read daemon_cmd.sh and browse.sh.
+
+4. CAUSE
+.dm was written for one daemon; _BVK_DAEMON_VERSION in browse.sh had to equal DAEMON_VERSION in the daemon by hand.
+
+4. FIX
+daemon_cmd.sh: .dm shows the local daemon plus one line for the alien daemon, new .dm.alien (status) and .dm.alien.restart; .dm.restart waits for the old daemon to leave. The version comes from bashbasicsbyvk_planetary_versions.list for both flavours; browse.sh lost its copy. Left for a later task: letting the local daemon mark dirty paths for the alien daemon (optional overlap with the per-pass _snap_sig walk).

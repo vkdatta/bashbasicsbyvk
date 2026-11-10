@@ -33,7 +33,7 @@ settings/bashbasicsbyvk_deepsearch	settings_deep loadmap
 settings/bashbasicsbyvk_settings_desc	settings_desc settings_deep
 cmdmap/(settings|home)	cc_truth cmd_drift
 functions/bashbasicsbyvk_archive_formats|staging/!buffer/other/bashbasicsbyvk_staging_archive|loops/rloop/run/	archive
-engine/bashbasicsbyvk_deps|functions/bashbasicsbyvk_(archive_formats|bundle_io)|infinity/tools/|settings/bashbasicsbyvk_timezone|loops/iloop/switch/bashbasicsbyvk_recents_daemon	deps deps_menu archive polyglot
+engine/bashbasicsbyvk_deps|functions/bashbasicsbyvk_(archive_formats|bundle_io)|infinity/tools/|settings/bashbasicsbyvk_timezone|daemons/bashbasicsbyvk_(local_daemon|planetary_resources|alien_daemon)|select/bashbasicsbyvk_daemon_cmd	deps deps_menu archive polyglot track
 setup\.py|MANIFEST\.in|setup\.cfg|engine/bashbasicsbyvk_engine_target|engine/bvk-	wheel_target
 engine/bashbasicsbyvk_engine_(heal|target)|infinity/tools/bashbasicsbyvk_upgrade_install|script/o$	engine_heal
 script/	loadmap
@@ -47,3 +47,4 @@ engine/bashbasicsbyvk_(menuchrome|smartmenu|tabmenu)|functions/bashbasicsbyvk_(t
 engine/bashbasicsbyvk_yn	yn_tools
 infinity/tools/	yn_tools
 cmd/	yn_tools
+functions/bashbasicsbyvk_(track|carry|rename)|select/bashbasicsbyvk_track_lib|loops/iloop/switch/|engine/bashbasicsbyvk_displayer|loops/rloop/run/	track cmd_drift

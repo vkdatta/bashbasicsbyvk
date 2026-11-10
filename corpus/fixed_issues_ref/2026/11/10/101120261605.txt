@@ -1,0 +1,47 @@
+1. ISSUE IN BRIEF
+A bookmark of a FILE (a .swlink pointing at 0.sh) opened the parent folder in the main list instead of acting as a pointer to the file. Folder bookmarks already worked. Wanted: a file bookmark opens the same run loop (Run / View / Edit / ...) the file gets in the local view.
+
+HOW DID YOU DEBUG
+Read bashbasicsbyvk_switch.sh: _sw_bookmarks_handle_selection read the target and handed it to switch_menu, which did `[ -f target ] && dirname`, then _sw_perform_switch cd'd there. Verified by reading plus a sandbox run of the new selection helpers; the interactive screen itself was not driven by a pty.
+
+CAUSE
+switch_menu turned every bookmark target into a folder to jump to; a file target was silently replaced by its directory.
+
+FIX
+bashbasicsbyvk_switch.sh: a folder target still jumps (_sw_result_path); a file target calls handle_file on it and stays in the switch menu (Go To Parent Folder still works through _BVK_TO_MAIN). A missing target first tries _swlink_heal (inode search) before saying "Target gone". Recents uses the same rule (folder jumps, file opens its run loop).
+
+2. ISSUE IN BRIEF
+Bookmark rows showed a generic page emoji and the internal .swlink suffix instead of what the same item shows in the local file list (gear for scripts, folder, image, archive, plugin ...). Wanted: every list that shows a path (local view, Recents, Bookmarks, Favourites) uses the same emoji and, for bookmarks, no suffix; the lock mark of the target is shown too.
+
+HOW DID YOU DEBUG
+Read _resolve_display_parts_core in bashbasicsbyvk_displayer.sh: the emoji table lived inline in the else-branch, keyed by the row's own path, so a .swlink file always got the file emoji. Checked with tests/track (displayer part): a script bookmark gets the same emoji as the script, a folder bookmark gets the folder emoji, a vanished target gets a red dot.
+
+CAUSE
+The emoji was resolved from the pointer file, not from what it points to, and the table was not reusable.
+
+FIX
+displayer.sh: the table became ONE helper, _icon_for_path_v (path [engine kind]); _resolve_display_parts_core calls it for every row, and for a *.swlink row calls it on the target, shows the name without .swlink, appends a red dot when the target is gone; _resolve_display_parts_v takes the lock suffix from the target (_rdp_real). Lesson: a new list of paths must call _icon_for_path_v, never carry its own table.
+
+3. ISSUE IN BRIEF
+Renaming or moving a bookmarked item left its bookmark pointing at the old path ("Target gone"); the daemon was expected to observe this but did not. The daemon only followed favourites and kept a list of recently modified files; it knew nothing about bookmarks, and the polling fallback cannot see renames at all.
+
+HOW DID YOU DEBUG
+Read the whole recents daemon: _p4_event followed favourites only; on_moved updated recents rows of files only; nothing read ~/.bashbasicsbyvk/switch. Also grepped every writer of a path change: _do_rename_mv called _lk_move and the shortcut sync directly and never the carry helpers. Ran the real daemon with watchdog in a sandbox HOME: a plain mv of a file and then of its folder re-pointed the bookmark and the recents row (tests/track part 3). Not run: the polling-only path (no watchdog) beyond the python reconcile unit.
+
+CAUSE
+No code anywhere rewrote SWLINK_TARGET. In-app renames only told locks and shortcuts; outside-app moves only reached favourites. Without watchdog the daemon had no way to follow a move.
+
+FIX
+New bashbasicsbyvk_track.sh (app side: _trk_move / _trk_forget, called from _carry_move / _carry_forget; _do_rename_mv now goes through _carry_move) and bashbasicsbyvk_track_lib.py (daemon side: bookmarks, recents, locks, shortcuts follow moves, deleted items' recents rows and locks go; bookmarks are never deleted). Bookmarks now store SWLINK_ID=dev:inode, so a move nobody saw is found by inode (daemon reconcile at start / every 10 min with inotify / every minute without / .dm.sync, and on selecting a dead bookmark). Editor backup renames (~, .swp, .bak ...) are ignored. Daemon version 3 (browse.sh _BVK_DAEMON_VERSION too); the old modified-files watcher, the exclude parser and the polling scanner are removed from the daemon. .dm shows the new counters. Lesson: any feature that stores a path must be added to _trk_move / track_lib.on_moved, nowhere else.
+
+4. ISSUE IN BRIEF
+Recents were every file the daemon saw modified anywhere under HOME, read-only, files only. Wanted: Recents holds what the person did in the app: a folder entered with the in-app cd command (shown by folder name with the folder emoji) and a file edited from the run loop (Edit, Erase, Replace, Rename). A folder entered, or a file edited, more than 5 times is locked automatically (nothing happens if already locked). The old list is dropped.
+
+HOW DID YOU DEBUG
+Read the daemon (_record on_modified, MAX_RECENT list file), _sw_build_recents, handle_file in run.sh and the cd handlers in `o` and the switch loop. Sandbox runs: counts, 6th use locks, a locked item stays quiet, newest first, rename / folder move / delete keep the rows right, exclude rules (xe) still hide entries. Opening the editor and leaving without saving is not counted (file stamp compared before / after).
+
+CAUSE
+Recents were an inotify side effect instead of a record of deliberate actions, so they filled with noise and could not hold folders.
+
+FIX
+recents.tsv (COUNT<TAB>path, newest first, max 100) replaces recents.list (the daemon deletes the old file). bashbasicsbyvk_track.sh: _rc_record (promote, count, auto-lock when count > _RC_AUTOLOCK_AFTER=5), _rc_build, _rc_move, _rc_forget, _rc_excluded (recents_exclude.conf rules are applied in bash now). Callers: `cd` in `o` and in the switch loop; handle_file Edit / Erase / Replace via _hf_tracked (only when the file really changed) and Rename via _RN_NEW_PATH. Switch Recents tab: a folder jumps there, a file opens its run loop. Settings descriptions, llms-full.txt and the .dm help updated. Tests: tests/track/track_test.sh (registered as `track`). Pre-existing reds in this environment, same output on the untouched base: deps, settings_desc, github_upgrade_shared, delete_confirm, choose_plain, hints.

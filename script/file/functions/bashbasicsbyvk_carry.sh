@@ -6,10 +6,11 @@
 #
 #    _carry_move   old new     renamed / moved   → lock follows; shortcuts to it
 #                                                  re-point; shortcut files that
-#                                                  moved keep being tracked
+#                                                  moved keep being tracked;
+#                                                  bookmarks re-point; Recents follow
 #    _carry_copy   old new     copied            → the copy is locked too; copied
 #                                                  .shortcut files are indexed
-#    _carry_forget path        deleted           → lock + shortcut index rows dropped
+#    _carry_forget path        deleted           → lock + shortcut index rows + Recents rows dropped
 #    _carry_begin / _carry_end bracket a loop of moves: shortcuts are re-synced in ONE pass
 #    _carry_move_batch dest src...      after a bulk `mv`
 #    _carry_apply_mv_log file           "old<TAB>new" lines from a helper script
@@ -26,6 +27,7 @@ _carry_end()   { _rn_flush_deferred; }
 _carry_move() {                    # <old> <new>
   _lk_move "$1" "$2"
   _sync_shortcuts_for_rename "$1" "$2"
+  _trk_move "$1" "$2"              # bookmarks re-point, Recents rows follow
 }
 
 _carry_copy() {                    # <old> <new>
@@ -36,6 +38,7 @@ _carry_copy() {                    # <old> <new>
 _carry_forget() {                  # <deleted path>
   _lk_forget "$1"
   _scr_forget_under "$1"
+  _trk_forget "$1"                 # its Recents row goes (a bookmark stays and shows 🔴)
 }
 
 _carry_move_batch() {              # <dest-dir> <src>...

@@ -189,7 +189,7 @@ echo "── 5. background process ──"
 rm -f "$_SNAP_LASTRUN" "$_SNAP_NOTICE"; bump v4
 n2=$(q1 "select count(*) from snapshots")
 cat > "$T/o_sim.sh" <<EOS
-source "bashbasicsbyvk_auth.sh"; source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_pending.sh"; source "bashbasicsbyvk_staging_upload.sh"; source "bashbasicsbyvk_staging_ux.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_snapshot.sh"
+source "bashbasicsbyvk_auth.sh"; source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_pending.sh"; source "bashbasicsbyvk_staging_upload.sh"; source "bashbasicsbyvk_staging_ux.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_planetary_resources.sh"; source "bashbasicsbyvk_staging_snapshot.sh"; source "bashbasicsbyvk_alien_daemon.sh"
 WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")
 _bb_get_credentials() { export FILEAPI_BASHBASICS_EMAIL="$EMAIL" FILEAPI_BASHBASICS_DISEPS="$DISEPS" FILEAPI_BASHBASICS_KEY="$APIKEY"; P_DINONS="$DINONS"; return 0; }
 _snap_daemon_start
@@ -200,8 +200,8 @@ OSIM=$!
 _gt_n2() { [ "$(snapcount)" -gt "$n2" ]; }; wait_until 40 "the background snapshot" _gt_n2
 chk "while 'o' runs, the background process takes the snapshot" "$(q1 "select count(*) from snapshots")" "$((n2+1))"
 chk "…one daemon, one lock" "$(ls -d "$_SNAP_LOCK" 2>/dev/null | wc -l | tr -d ' ')" "1"
-dpid=$(cat "$_SNAP_LOCK/pid" 2>/dev/null)
-chk "…second start does not spawn another" "$( ( _snap_daemon_start; settle 2 0.3 cat "$_SNAP_LOCK/pid"; cat "$_SNAP_LOCK/pid" ) )" "$dpid"
+dpid=$(head -1 "$_SNAP_LOCK/pid" 2>/dev/null)
+chk "…second start does not spawn another" "$( ( _snap_daemon_start; settle 2 0.3 head -1 "$_SNAP_LOCK/pid"; head -1 "$_SNAP_LOCK/pid" ) )" "$dpid"
 touch "$T/o_stop"; wait $OSIM 2>/dev/null
 wait_gone 30 "$dpid" && ok "when 'o' ends, snapshots stop (daemon gone)" || bad "daemon still alive after 'o' ended"
 [ -d "$_SNAP_LOCK" ] && bad "lock left behind" || ok "lock cleaned up"

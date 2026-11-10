@@ -1,0 +1,5 @@
+# The version of each daemon: the ONE place. Both flavours of planetary resources read it (bashbasicsbyvk_planetary_resources.py / .sh);
+# the daemons, the app's start-up check and .dm use that, so nothing is copied by hand. Raise a number when the daemon's behaviour
+# changes: a daemon that is still running with an older number is replaced at the next start of  o .
+local=4
+alien=1

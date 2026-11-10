@@ -15,6 +15,7 @@ _LM_NEEDS[bashbasicsbyvk_deps.sh]="bashbasicsbyvk_choose.sh"
 _LM_NEEDS[bashbasicsbyvk_rules.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_switch.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_xui_gdpmenucommands.sh]="bashbasicsbyvk_gdrive.sh"
+_LM_NEEDS[bashbasicsbyvk_alien_daemon.sh]="bashbasicsbyvk_planetary_resources.sh bashbasicsbyvk_staging_snapshot.sh"
 _LM_NEEDS[bashbasicsbyvk_upgrade.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_functions.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_adf_rename_csv.sh]="bashbasicsbyvk_functions.sh"
@@ -43,6 +44,8 @@ _LM_NEEDS[bashbasicsbyvk_gdrive.sh]="bashbasicsbyvk_run.sh bashbasicsbyvk_transf
 _LM_WITH[bashbasicsbyvk_functions.sh]="bashbasicsbyvk_adf_rename_csv.sh bashbasicsbyvk_adf_move_csv.sh bashbasicsbyvk_adf_copy_csv.sh bashbasicsbyvk_adf_shortcut_csv.sh bashbasicsbyvk_adf_upload_csv.sh bashbasicsbyvk_adf_map_csv.sh bashbasicsbyvk_adf_bookmark_csv.sh bashbasicsbyvk_adf_delete_common.sh bashbasicsbyvk_adf_delete_ext.sh bashbasicsbyvk_adf_delete_date.sh bashbasicsbyvk_adf_zip_csv.sh bashbasicsbyvk_adf_unzip_csv.sh bashbasicsbyvk_adf_delete_csv.sh bashbasicsbyvk_adf_upload_text_csv.sh bashbasicsbyvk_adf_import_link.sh bashbasicsbyvk_adf_selection.sh bashbasicsbyvk_adf_selected.sh bashbasicsbyvk_adf_gdrive.sh bashbasicsbyvk_adf_cfwp.sh bashbasicsbyvk_adf_github.sh"
 copy_to_clipboard() { _lm_stub bashbasicsbyvk_run.sh copy_to_clipboard "$@"; }
 handle_file() { _lm_stub bashbasicsbyvk_run.sh handle_file "$@"; }
+_hf_edit() { _lm_stub bashbasicsbyvk_run.sh _hf_edit "$@"; }
+_hf_tracked() { _lm_stub bashbasicsbyvk_run.sh _hf_tracked "$@"; }
 _file_abs_path() { _lm_stub bashbasicsbyvk_run.sh _file_abs_path "$@"; }
 _file_goto_parent() { _lm_stub bashbasicsbyvk_run.sh _file_goto_parent "$@"; }
 determine_shared_dir() { _lm_stub bashbasicsbyvk_run.sh determine_shared_dir "$@"; }
@@ -200,6 +203,25 @@ _carry_forget() { _lm_stub bashbasicsbyvk_carry.sh _carry_forget "$@"; }
 _carry_move_batch() { _lm_stub bashbasicsbyvk_carry.sh _carry_move_batch "$@"; }
 _carry_apply_mv_log() { _lm_stub bashbasicsbyvk_carry.sh _carry_apply_mv_log "$@"; }
 _carry_flatten_into() { _lm_stub bashbasicsbyvk_carry.sh _carry_flatten_into "$@"; }
+_trk_lock() { _lm_stub bashbasicsbyvk_track.sh _trk_lock "$@"; }
+_trk_unlock() { _lm_stub bashbasicsbyvk_track.sh _trk_unlock "$@"; }
+_swlink_read_target_v() { _lm_stub bashbasicsbyvk_track.sh _swlink_read_target_v "$@"; }
+_swlink_read_target() { _lm_stub bashbasicsbyvk_track.sh _swlink_read_target "$@"; }
+_swlink_name_v() { _lm_stub bashbasicsbyvk_track.sh _swlink_name_v "$@"; }
+_swlink_write() { _lm_stub bashbasicsbyvk_track.sh _swlink_write "$@"; }
+_swlink_set() { _lm_stub bashbasicsbyvk_track.sh _swlink_set "$@"; }
+_swlink_retarget() { _lm_stub bashbasicsbyvk_track.sh _swlink_retarget "$@"; }
+_swlink_heal() { _lm_stub bashbasicsbyvk_track.sh _swlink_heal "$@"; }
+_rc_load() { _lm_stub bashbasicsbyvk_track.sh _rc_load "$@"; }
+_rc_save() { _lm_stub bashbasicsbyvk_track.sh _rc_save "$@"; }
+_rc_excluded() { _lm_stub bashbasicsbyvk_track.sh _rc_excluded "$@"; }
+_rc_record() { _lm_stub bashbasicsbyvk_track.sh _rc_record "$@"; }
+_rc_dedupe() { _lm_stub bashbasicsbyvk_track.sh _rc_dedupe "$@"; }
+_rc_move() { _lm_stub bashbasicsbyvk_track.sh _rc_move "$@"; }
+_rc_forget() { _lm_stub bashbasicsbyvk_track.sh _rc_forget "$@"; }
+_rc_build() { _lm_stub bashbasicsbyvk_track.sh _rc_build "$@"; }
+_trk_move() { _lm_stub bashbasicsbyvk_track.sh _trk_move "$@"; }
+_trk_forget() { _lm_stub bashbasicsbyvk_track.sh _trk_forget "$@"; }
 _bz_need() { _lm_stub bashbasicsbyvk_bundle_io.sh _bz_need "$@"; }
 _bz_dest() { _lm_stub bashbasicsbyvk_bundle_io.sh _bz_dest "$@"; }
 _bz_export() { _lm_stub bashbasicsbyvk_bundle_io.sh _bz_export "$@"; }
@@ -593,8 +615,28 @@ _rl_cmd_save_hist() { _lm_stub bashbasicsbyvk_rules.sh _rl_cmd_save_hist "$@"; }
 _rl_help() { _lm_stub bashbasicsbyvk_rules.sh _rl_help "$@"; }
 handle_rule_cmd() { _lm_stub bashbasicsbyvk_rules.sh handle_rule_cmd "$@"; }
 rules_menu() { _lm_stub bashbasicsbyvk_rules.sh rules_menu "$@"; }
+_pr_find_file() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_find_file "$@"; }
+_pr_version() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_version "$@"; }
+_pr_now() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_now "$@"; }
+_pr_mtime() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_mtime "$@"; }
+_pr_pid_start() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_pid_start "$@"; }
+_pr_lock_stale() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_lock_stale "$@"; }
+_pr_lock_break() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_lock_break "$@"; }
+_pr_lock_take() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_lock_take "$@"; }
+_pr_lock_drop() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_lock_drop "$@"; }
+_pr_svc_alive() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_svc_alive "$@"; }
+_pr_svc_claim() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_svc_claim "$@"; }
+_pr_svc_pid_write() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_svc_pid_write "$@"; }
+_pr_svc_release() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_svc_release "$@"; }
+_pr_kill_desc() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_kill_desc "$@"; }
+_pr_die_with() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_die_with "$@"; }
+_pr_log() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_log "$@"; }
+_pr_log_trim() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_log_trim "$@"; }
+_pr_wake_local_daemon() { _lm_stub bashbasicsbyvk_planetary_resources.sh _pr_wake_local_daemon "$@"; }
 _dm_pid() { _lm_stub bashbasicsbyvk_daemon_cmd.sh _dm_pid "$@"; }
 _dm_status() { _lm_stub bashbasicsbyvk_daemon_cmd.sh _dm_status "$@"; }
+_dm_alien_line() { _lm_stub bashbasicsbyvk_daemon_cmd.sh _dm_alien_line "$@"; }
+_dm_restart_local() { _lm_stub bashbasicsbyvk_daemon_cmd.sh _dm_restart_local "$@"; }
 handle_daemon_cmd() { _lm_stub bashbasicsbyvk_daemon_cmd.sh handle_daemon_cmd "$@"; }
 _bvk_tel_gen_uuid() { _lm_stub bashbasicsbyvk_telemetry.sh _bvk_tel_gen_uuid "$@"; }
 _bvk_telemetry_ping() { _lm_stub bashbasicsbyvk_telemetry.sh _bvk_telemetry_ping "$@"; }
@@ -606,11 +648,8 @@ _sw_excl_add() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_add "$@"; }
 _sw_excl_remove() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_remove "$@"; }
 _sw_excl_edit() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_edit "$@"; }
 _sw_excl_menu() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_menu "$@"; }
-_swlink_read_target() { _lm_stub bashbasicsbyvk_switch.sh _swlink_read_target "$@"; }
-_swlink_write() { _lm_stub bashbasicsbyvk_switch.sh _swlink_write "$@"; }
 _sw_add_path() { _lm_stub bashbasicsbyvk_switch.sh _sw_add_path "$@"; }
 _sw_remove_paths() { _lm_stub bashbasicsbyvk_switch.sh _sw_remove_paths "$@"; }
-_sw_build_recents() { _lm_stub bashbasicsbyvk_switch.sh _sw_build_recents "$@"; }
 _sw_is_ro() { _lm_stub bashbasicsbyvk_switch.sh _sw_is_ro "$@"; }
 _sw_menu_header() { _lm_stub bashbasicsbyvk_switch.sh _sw_menu_header "$@"; }
 _sw_menu_header_imaginary() { _lm_stub bashbasicsbyvk_switch.sh _sw_menu_header_imaginary "$@"; }
@@ -691,17 +730,19 @@ _snap_json_tsv() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_json_tsv "$
 _snap_reconcile() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_reconcile "$@"; }
 _snap_take() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_take "$@"; }
 _snap_cycle() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_cycle "$@"; }
-_snap_kill_desc() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_kill_desc "$@"; }
-_snap_interval() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_interval "$@"; }
-_snap_daemon_alive() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_daemon_alive "$@"; }
-_snap_daemon_main() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_daemon_main "$@"; }
-_snap_daemon_start() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_daemon_start "$@"; }
 handle_snap_add() { _lm_stub bashbasicsbyvk_staging_snapshot.sh handle_snap_add "$@"; }
 _snap_menu_devices() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_menu_devices "$@"; }
 _snap_menu_device_view() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_menu_device_view "$@"; }
 _snap_menu_snaps() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_menu_snaps "$@"; }
 _snap_extend() { _lm_stub bashbasicsbyvk_staging_snapshot.sh _snap_extend "$@"; }
 snapshot_menu() { _lm_stub bashbasicsbyvk_staging_snapshot.sh snapshot_menu "$@"; }
+_snap_interval() { _lm_stub bashbasicsbyvk_alien_daemon.sh _snap_interval "$@"; }
+_snap_daemon_alive() { _lm_stub bashbasicsbyvk_alien_daemon.sh _snap_daemon_alive "$@"; }
+_snap_daemon_pid() { _lm_stub bashbasicsbyvk_alien_daemon.sh _snap_daemon_pid "$@"; }
+_snap_daemon_main() { _lm_stub bashbasicsbyvk_alien_daemon.sh _snap_daemon_main "$@"; }
+_snap_daemon_start() { _lm_stub bashbasicsbyvk_alien_daemon.sh _snap_daemon_start "$@"; }
+_snap_daemon_stop() { _lm_stub bashbasicsbyvk_alien_daemon.sh _snap_daemon_stop "$@"; }
+_snap_daemon_status() { _lm_stub bashbasicsbyvk_alien_daemon.sh _snap_daemon_status "$@"; }
 _file_picker() { _lm_stub bashbasicsbyvk_csv.sh _file_picker "$@"; }
 open_csv_menu() { _lm_stub bashbasicsbyvk_csv.sh open_csv_menu "$@"; }
 open_zip_menu() { _lm_stub bashbasicsbyvk_csv.sh open_zip_menu "$@"; }

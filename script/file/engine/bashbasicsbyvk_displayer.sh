@@ -933,43 +933,61 @@ _build_suffix() { local _bs_out; _build_suffix_v "$1"; printf '%s' "$_bs_out"; }
 # ── Icon resolution ───────────────────────────────────────────────────────────
 
 _resolve_display_parts_v() {
-  local f="$1"
+  local f="$1" real="$1"
   _rdp_bn="${f##*/}"
   [ "${_disp_relnames:-false}" = true ] && _rdp_bn="${f#"${path%/}/"}"      # .d ... -r : show where under this folder it is
   _resolve_display_parts_core "$f"
+  [ -n "${_rdp_real:-}" ] && real="$_rdp_real"                              # a bookmark wears its target's lock mark too
   # 🔒 suffix for items locked with l-N (never 🔐 — that is only in the unlock message)
   if [ "${#_LK_SET[@]}" -gt 0 ] && declare -F _lk_suffix_v >/dev/null; then
-    _lk_suffix_v "$f"; _rdp_bn+="$_lk_suffix"
+    _lk_suffix_v "$real"; _rdp_bn+="$_lk_suffix"
+  fi
+}
+
+# ONE emoji table for every list that shows a path: the folder view, Recents, Bookmarks, Favourites.
+# _icon_for_path_v PATH [KIND]  →  _ip_icon      KIND is what the C engine already found (dir archive image plugin exec file); "" = look at the path
+_icon_for_path_v() {
+  local f="$1" ic="${2:-}"
+  if [ -n "$ic" ]; then
+    case "$ic" in
+      dir)      _ip_icon="📁" ;;
+      archive)  _ip_icon="📦" ;;
+      image)    _ip_icon="🌄" ;;
+      plugin)   _ip_icon="🧩" ;;
+      exec)     _ip_icon="⚙️"  ;;
+      *)        _ip_icon="📄" ;;
+    esac
+  else
+    if   [ -d "$f" ];         then _ip_icon="📁"
+    elif _is_archive "$f";    then _ip_icon="📦"
+    elif _is_image   "$f";    then _ip_icon="🌄"
+    elif _is_plugin  "$f";    then _ip_icon="🧩"
+    elif _is_executable "$f"; then _ip_icon="⚙️"
+    else                           _ip_icon="📄"
+    fi
   fi
 }
 
 _resolve_display_parts_core() {
-  local f="$1"
+  local f="$1" _ip_icon
+  _rdp_real=""
   if [[ "$_rdp_bn" == *.shortcut ]]; then
     _shortcut_display_parts "$f"
     _rdp_icon="$_sc_icon"
     _rdp_bn="$_sc_display"
     return
   fi
-  local ic="${item_icon[$f]:-}"
-  if [ -n "$ic" ]; then
-    case "$ic" in
-      dir)      _rdp_icon="📁" ;;
-      archive)  _rdp_icon="📦" ;;
-      image)    _rdp_icon="🌄" ;;
-      plugin)   _rdp_icon="🧩" ;;
-      exec)     _rdp_icon="⚙️"  ;;
-      *)        _rdp_icon="📄" ;;
-    esac
-  else
-    if   [ -d "$f" ];         then _rdp_icon="📁"
-    elif _is_archive "$f";    then _rdp_icon="📦"
-    elif _is_image   "$f";    then _rdp_icon="🌄"
-    elif _is_plugin  "$f";    then _rdp_icon="🧩"
-    elif _is_executable "$f"; then _rdp_icon="⚙️"
-    else                           _rdp_icon="📄"
-    fi
+  if [[ "$f" == *.swlink ]]; then
+    # a bookmark: the row IS its target — same emoji, same name (no .swlink), 🔴 when the target is gone
+    _swlink_read_target_v "$f" && {
+      _rdp_real="$_SWL_T"
+      _icon_for_path_v "$_SWL_T"; _rdp_icon="$_ip_icon"
+      _swlink_name_v "$f"; _rdp_bn="$_SWL_NAME"
+      [ -e "$_SWL_T" ] || _rdp_bn+=" 🔴"
+      return
+    }
   fi
+  _icon_for_path_v "$f" "${item_icon[$f]:-}"; _rdp_icon="$_ip_icon"
   # favourites: alias ("Alias (name)") / ⭐ marker while favourite mode is paused
   [ -n "${_FAV_LABEL[$f]+x}" ] && _rdp_bn="${_FAV_LABEL[$f]}"
   # recursive "=" filter: show where the hit lives (sub/dir/name)
@@ -994,7 +1012,7 @@ _shortcut_display_parts() {
 _item_line_text()   { _item_line_text_v "$1"; printf '%s' "$_ilt_out"; }
 _item_line_text_v() {
   local target="$1"
-  local _rdp_icon _rdp_bn _sc_icon _sc_display _bs_out
+  local _rdp_icon _rdp_bn _rdp_real _sc_icon _sc_display _bs_out
   _ilt_out=""
   (( target < 1 || target > ${#items[@]} )) && return
   local f="${items[$((target-1))]}"
@@ -1007,7 +1025,7 @@ _item_line_text_v() {
 
 _display_items_flat() {
   local idx=1 f line
-  local _rdp_icon _rdp_bn _sc_icon _sc_display _bs_out
+  local _rdp_icon _rdp_bn _rdp_real _sc_icon _sc_display _bs_out
   local want_suffix=0
   [ -n "${display_suffix_set:-}" ] && want_suffix=1
   local hl="${_hl_index:-0}"

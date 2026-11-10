@@ -68,8 +68,7 @@ _do_rename_mv() {
     # Two-step rename: old → temp → new  (avoids "same file" rejection).
     local _tmp="${old_path%/*}/.$$_caseswap"
     if mv -- "$old_path" "$_tmp" && mv -- "$_tmp" "$new_path"; then
-      _lk_load; _lk_move "$old_path" "$new_path"
-      _sync_shortcuts_for_rename "$old_path" "$new_path"
+      _lk_load; _carry_move "$old_path" "$new_path"
       return 0
     else
       echo "❌ Case rename failed" >&2
@@ -79,8 +78,7 @@ _do_rename_mv() {
   fi
 
   if mv -- "$old_path" "$new_path"; then
-    _lk_load; _lk_move "$old_path" "$new_path"
-    _sync_shortcuts_for_rename "$old_path" "$new_path"
+    _lk_load; _carry_move "$old_path" "$new_path"     # lock, shortcuts, bookmarks and recents follow
     return 0
   fi
   return 1
@@ -110,7 +108,7 @@ rename_item() {
   _do_rename_mv "$target" "$new_path"
   local rc=$?
   case $rc in
-    0) echo "💫 Renamed: $(basename "$target") → $newname" ;;
+    0) _RN_NEW_PATH="$new_path"; echo "💫 Renamed: $(basename "$target") → $newname" ;;
     2) echo "🔴  '$newname' already exists — skipped" ;;
     3) _bvk_name_refuse "$newname" "Name"; echo " Not renamed: names over 255 bytes are not accepted." ;;
   esac

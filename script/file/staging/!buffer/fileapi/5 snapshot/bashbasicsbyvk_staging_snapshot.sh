@@ -5,7 +5,7 @@
 #   sn                  Home → Snapshots: every device's list, view / restore / nuke snapshots, stop watching a path
 #
 # How it behaves
-#   • While  o  is running, a background process takes a snapshot of every watched path whose contents changed,
+#   • While  o  is running, a background process (the alien daemon, bashbasicsbyvk_alien_daemon.sh) takes a snapshot of every watched path whose contents changed,
 #     every <interval> (Settings → File API → Snapshots; 1 minute … 30 days, default 1 hour).
 #   • It only runs while  o  is running. Close  o  (or the device) and nothing is taken. Reopen after 10 days with a
 #     10-minute interval → exactly ONE snapshot of the state at that moment, not 1440.
@@ -25,8 +25,8 @@
 
 _SNAP_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/snapshots"
 _SNAP_TARGETS="$_SNAP_DIR/targets"          # tgt TAB kind(f|d) TAB abs path TAB pushed(0|1) TAB last_sig TAB last_epoch
-_SNAP_LOCK="$_SNAP_DIR/daemon.lock"         # a directory; holds  pid
-_SNAP_LOG="$_SNAP_DIR/log"
+_SNAP_LOCK="$_SNAP_DIR/alien.lock"          # the alien daemon's claim: a directory; holds  pid  (+ start time)
+_SNAP_LOG="$_SNAP_DIR/alien.log"
 _SNAP_NOTICE="$_SNAP_DIR/notice"
 _SNAP_LASTRUN="$_SNAP_DIR/last_cycle"
 _SNAP_TMPROOT="${XDG_CACHE_HOME:-$HOME/.cache}/bashbasicsbyvk/snap-tmp"      # on disk on purpose: /tmp is often RAM
@@ -34,8 +34,8 @@ _SNAP_MIN_INTERVAL=60
 _SNAP_MAX_INTERVAL=$((30*86400))
 _SNAP_MAX_TARGETS=200
 
-_snap_log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$_SNAP_LOG" 2>/dev/null; }
-_snap_log_trim() { [ -f "$_SNAP_LOG" ] && [ "$(wc -l < "$_SNAP_LOG" 2>/dev/null || echo 0)" -gt 500 ] && { tail -n 300 "$_SNAP_LOG" > "$_SNAP_LOG.tmp" && mv -f "$_SNAP_LOG.tmp" "$_SNAP_LOG"; }; true; }
+_snap_log() { _pr_log "$_SNAP_LOG" "$@"; }                  # planetary resources: one log writer for both daemons
+_snap_log_trim() { _pr_log_trim "$_SNAP_LOG" 500 300; }
 
 # "AS ON 15102026 1030" from epoch-ms, in the app time zone
 _snap_name() {
@@ -233,72 +233,7 @@ _snap_cycle() {
   return 0
 }
 
-# ── the background process ───────────────────────────────────────────────────────────────────────────────
-# stop everything below a process (children first). The process itself is left alone: a TERM trap that killed ITSELF would re-enter forever.
-_snap_kill_desc() {
-  local c
-  for c in $(pgrep -P "$1" 2>/dev/null || ps -o pid= --ppid "$1" 2>/dev/null); do _snap_kill_desc "$c"; kill -TERM "$c" 2>/dev/null; done
-}
-_snap_interval() {
-  local v; v=$(_bb_cfg_val snapshot_interval_seconds 3600)
-  if [[ "$v" =~ ^[0-9]{1,9}$ ]] && [ "$v" -ge "$_SNAP_MIN_INTERVAL" ] && [ "$v" -le "$_SNAP_MAX_INTERVAL" ]; then printf '%s' "$v"; else printf '3600'; fi
-}
-_snap_daemon_alive() {
-  local pid; pid=$(cat "$_SNAP_LOCK/pid" 2>/dev/null)
-  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
-}
-
-_snap_daemon_main() {       # runs in the background; $1 = pid of the  o  process it lives and dies with
-  local oppid="$1" me="$BASHPID" now due last wait
-  # settings are re-read from the config file every pass (a stale copy of the shell variables would hide changes)
-  unset snapshot_enabled snapshot_interval_seconds snapshot_keep_seconds credit_prompts
-  _SNAP_WORK=""
-  _snap_cleanup() { [ -n "$_SNAP_WORK" ] && rm -rf "$_SNAP_WORK"; rm -rf "$_SNAP_LOCK"; }
-  trap 'trap "" TERM INT HUP; _snap_kill_desc "$me"; _snap_cleanup; exit 0' TERM INT HUP
-  trap '_snap_cleanup' EXIT
-  # stop the moment  o  is gone — even in the middle of an upload ("snapshots only happen while o is running")
-  ( while kill -0 "$oppid" 2>/dev/null; do sleep 2; done; kill -TERM "$me" 2>/dev/null ) &
-  # leftovers of an earlier crash
-  find "$_SNAP_TMPROOT" -maxdepth 1 -name 'run.*' -mmin +1440 -exec rm -rf {} + 2>/dev/null
-  _snap_log "background snapshots started (o pid $oppid)"
-  while kill -0 "$oppid" 2>/dev/null; do
-    if [ "$(_bb_cfg_val snapshot_enabled on)" = off ]; then sleep 20; continue; fi
-    # this computer's id is created and signed by the server on the first start with internet; until then there is nothing to do
-    if ! _snap_dev_hdrs; then sleep 15; continue; fi
-    now=$(date +%s); last=$(cat "$_SNAP_LASTRUN" 2>/dev/null); [[ "$last" =~ ^[0-9]+$ ]] || last=0
-    due=$(( last + $(_snap_interval) ))
-    if [ "$now" -ge "$due" ]; then
-      _snap_cycle
-      date +%s > "$_SNAP_LASTRUN"
-      _snap_log_trim
-      sleep 5
-    else
-      wait=$(( due - now )); [ "$wait" -gt 5 ] && wait=5
-      sleep "$wait"
-    fi
-  done
-}
-
-# start it (once per computer) when  o  starts, and again when the first path is added
-_snap_daemon_start() {
-  [ "$(_bb_cfg_val snapshot_enabled on)" = off ] && return 0
-  [ -s "$_SNAP_TARGETS" ] || return 0
-  command -v node >/dev/null 2>&1 || return 0
-  mkdir -p "$_SNAP_DIR" 2>/dev/null; chmod 700 "$_SNAP_DIR" 2>/dev/null
-  if ! mkdir "$_SNAP_LOCK" 2>/dev/null; then
-    _snap_daemon_alive && return 0
-    rm -rf "$_SNAP_LOCK"; mkdir "$_SNAP_LOCK" 2>/dev/null || return 0      # a dead owner left it behind
-  fi
-  local oppid=$$
-  (
-    declare -F _lt_off >/dev/null 2>&1 && _lt_off      # a daemon is never part of a loadtime report
-    echo "$BASHPID" > "$_SNAP_LOCK/pid"
-    exec </dev/null >>"$_SNAP_LOG" 2>&1
-    _snap_daemon_main "$oppid"
-  ) &
-  disown 2>/dev/null
-  return 0
-}
+# the background process (the alien daemon) lives in bashbasicsbyvk_alien_daemon.sh
 
 # ── snap-<items> ──────────────────────────────────────────────────────────────────────────────────────────
 handle_snap_add() {

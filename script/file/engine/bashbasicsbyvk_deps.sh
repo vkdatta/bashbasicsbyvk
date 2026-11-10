@@ -24,7 +24,7 @@
 #
 #  Options:   -c TEXT  what the person was doing (menu heading)      -o  also ask for the feature's OPTIONAL dependencies
 #             -y       assume yes (no menu)                          -n  only check, never install (prints the list + the commands)
-#             -q       no menu, no output: installs ONLY the `auto` user-space pip packages (the recents daemon), at most once a day each
+#             -q       no menu, no output: installs ONLY the `auto` user-space pip packages (the local daemon), at most once a day each
 #             --dry-run  print the commands, run nothing            --check  status of everything in the registry   --list  the map
 #  Ids:       a dependency id (7z, numpy), a feature (archive.create.7z, polyglot), `?id` = optional, a pip family member (tree_sitter_python)
 #  Env:       BVK_DEPS_ASSUME=yes|no  answers the menu (scripts, CI)      BVK_DEPS_MANAGER=apt|termux|...  forces the package manager
@@ -670,7 +670,7 @@ _dep_install() {
   return 0
 }
 
-# -q : no menu, no output.  Only `auto` pip packages, one attempt a day each (the recents daemon's rule, now in one place).
+# -q : no menu, no output.  Only `auto` pip packages, one attempt a day each (the local daemon's rule, now in one place).
 _dep_quiet() {
   local id dir s now rc=0; dir=$(_dep_statedir)
   local -a go=()

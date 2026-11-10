@@ -60,7 +60,7 @@ Example: `.s.ext png,jpg & .s.size <3mb & !.s.time 2025..2026` selects small, ol
 
 **Maintenance.** `-u` upgrades (Stable releases or beta Tags, with version choice and descriptions). `health` diagnoses whether the native `bvk-ls` helper or the Python fallback is loading files, and whether the find & replace engine (`bvk-fr`) or its Python twin is in use. `rf` refreshes the pipeline, `disk` and `ram` wrap `df -h` and `free -h`, `-h` opens help and the docs link.
 
-**Background helpers.** A recents daemon and local index keep favourites and recents current (`.dm`, `.dm.warm`, `.dm.sync`).
+**Background helpers.** A background daemon watches renames, moves and deletes and keeps bookmarks, recents, favourites, locks and shortcuts attached to their items; a local index keeps folder sizes and duplicate hashes warm (`.dm`, `.dm.warm`, `.dm.sync`). Recents holds folders entered with `cd` and files edited in the run loop; a folder or file used more than 5 times is locked automatically.
 
 **Infinity Stones (`i`), development stage.** Extract tables and links from websites, JavaScript audit, Python audit, Git Push with auto-tagging, SQL generation from CSV, a LocalHost server, and Polyglot (candidate duplicate functions across languages; candidates only, not 100% reliable). These are experimental and may modify or damage files; do not recommend them for production or sensitive data.
 
