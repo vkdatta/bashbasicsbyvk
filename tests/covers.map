@@ -4,17 +4,17 @@
 engine/bashbasicsbyvk_(viewport|browse|smartmenu|filter)	textedit textedit_unit paste_input wrap_input stale_size width hints nav_back mouse cheatcode choose choose_plain
 engine/bashbasicsbyvk_textedit	textedit textedit_unit paste_input wrap_input hints choose choose_plain settings_keys
 engine/bashbasicsbyvk_mouse	mouse
-engine/bashbasicsbyvk_(cmdmap|cheatcode)	textedit cmd_drift cheatcode hints
+engine/bashbasicsbyvk_(cmdmap|cheatcode)	textedit cmd_drift cheatcode hints xui_wiring
 engine/debug/	loadtime_print
-cmdmap/	cmd_drift cheatcode nav_back hints
-settings/	textedit hints nav_back stale_size width cheatcode choose choose_plain
-loops/	nav_back mouse hints choose_plain tabmenu
+cmdmap/	cmd_drift cheatcode nav_back hints xui_wiring
+settings/	textedit hints nav_back stale_size width cheatcode choose choose_plain choose_typed
+loops/	nav_back mouse hints choose_plain tabmenu xui_wiring
 home/	nav_back mouse hints
 staging/	xfer_ux resume_inflight e2e_pending e2e_services choose_plain
 telemetry/	nav_back
 infinity/tools/polyglot/	polyglot_unit
 group	group_view
-bashbasicsbyvk_.*_commands|menucommands	cmd_drift
+bashbasicsbyvk_.*_commands|menucommands	cmd_drift xui_wiring
 engine/bvk-fr/	findrep findrep_full
 functions/bashbasicsbyvk_find(run\.sh|rep|\.sh)	findrep
 settings/bashbasicsbyvk_findsettings	findrep hints

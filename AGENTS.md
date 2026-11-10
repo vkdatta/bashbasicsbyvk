@@ -204,6 +204,13 @@ So before you create anything, work in this order:
     - `BVK_LOADMAP=all` loads everything before the first paint (the old behaviour): use it to tell a load-order bug from a real one. `loadtime` shows every load, before and after the paint.
     - **Measure it:** `loadtime` (rule 7's recorder) and the `[fg]` percentage in `bashbasicsbyvk_loadmap_gen --report`. Before you move a file to `[fg]`, say what needs it before the paint.
 
+14. **Every screen that reads a typed word is WIRED; a typed word always goes through the command layer.** (`script/file/cmdmap/`, `script/file/engine/bashbasicsbyvk_cmdmap.sh`, `tests/xui_wiring.sh`.)
+    - The standard: a plain word is a command (`q`, `s`, `h`, the screen's own `r`, `rf` ...); `@word` is that text, typed literally. Inside a menu the screen's own key beats the main command of the same name; inside a question the main command wins and a blocked one cancels the flow.
+    - **Which table applies is decided by the function that reads the word, by NAME** (`_cm_ctx_find`: the `@func` of a `.map`, or `xui_<prefix>` for a `_xui_loop` screen). A screen no map claims does NOT fail loudly: it silently inherits another table (`xui`, or `main`) whose rules were written for other screens, so its own keys are blocked ("Invalid command: r - not available in xui") or swallowed (`rf` = the main redraw, the screen never reloads). `o --map-lint` cannot see it (it only reads maps that exist). That is how `cfw`, `gdp`, `cs_pp`, `ct`, `ru` stayed broken.
+    - **A new `_xui_screen X` + `_xui_loop` handler = a new `script/file/cmdmap/xui_X/` in the same change**: copy `xui_ghr` (`bashbasicsbyvk_xui_X.map` + `bashbasicsbyvk_xui_Xmenucommands.sh`), one `cmd_def` line per key the handler (`_X_cmd`) accepts or the footer prints (`local`, kind `exact` / `prefix`), two loadmap lines (`[no]`), `bashbasicsbyvk_loadmap_gen --write`. `bash tests/xui_wiring.sh` fails on a screen without a map and on any own key that does not resolve to the screen. Never "keep" an own key by hoping the parent allows it.
+    - **A `cmd_fn` of `_st_run` (the 5th argument) returns 1 for every word it does not own**, so `_st_cm_gate` (or `_bc_word` in the choice boxes) decides. A `cmd_fn` that returns 0 for "anything else" swallows commands: the hint row (`_cm_hint`) says "s -> Settings" and Enter drops it (that was `_bc_cmd`). `tests/choose/typed_test.py` types a command into a question.
+    - Do not give a list screen its own `read` / `case` for typed words, and do not add a second dispatcher: the gates are `_cm_gate_choice` (list loops), `_cm_gate_sm` (smart menus), `_cm_gate_dispatch` (text, boxes), `_st_cm_gate` (`_st_run`). A new kind of screen uses one of them.
+
 ## Tests: seconds, not half an hour (the rules the owner and the agents framed)
 
 A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes because they slept for guessed times, started the app dozens of times with a blind
@@ -294,3 +301,10 @@ unless the task says so). It asks the central installer for numpy / tree-sitter 
 that every place calls (a function in a lib that `o` / an import file loads earlier; for node tools `bashbasicsbyvk_staging_jslib.js`, found
 through `_bb_jslib`; for tests `tests/e2e_common.sh`, `tests/wait_lib.sh`, `tests/paste_input/ptyapp.py`). Before you write a block that looks like one you have
 seen elsewhere, grep for the helper first.
+
+15. **`u` is "go back ONE step", everywhere.** (`script/file/engine/bashbasicsbyvk_menuchrome.sh`: `_mc_steps`, `_mc_read`; `bashbasicsbyvk_cmdmap.sh`: `_CM_BACKED`; `tests/nav_back/`.)
+    - `u` at a prompt cancels only that prompt (empty answer, no abort flag). `_mc_read` returns 1 for back and 3 for cancel / EOF; `_mc_select`, `_mc_text`, `_mc_review` pass it on. A blocked command still aborts the whole flow (`_CM_ABORT`).
+    - **A flow with more than one question runs its questions with `_mc_steps`** (rc 1 = the question before; rc 1 on the first = the caller goes back one level; rc 5 = not applicable, skipped in the direction of travel). Never `|| return` after the first `u`.
+    - A text prompt inside a flow is `read ... || return 3` and the parent menu loops on 3. Prompts with "Enter = default" never take the default on `u`.
+    - The choice boxes (`_bvk_yn` / `_bvk_menu`, rule 14) follow the same contract: `u` in a box leaves that box only.
+

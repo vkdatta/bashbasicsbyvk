@@ -1,0 +1,58 @@
+1. ISSUE IN BRIEF
+In Find and Find & replace, u did not go one screen back. At Pattern type, Match case or Where?, u left the whole option sequence and landed on the Find mode menu (or, from the CSV picker, on the main file list) instead of the question before it. The same happened at the text prompts and at the result / preview screens. Follow-up of BB-201020260021-1.
+
+1. HOW DID YOU DEBUG
+1. Read corpus index (Menus & Navigation) and note 201020260021: u had been fixed for the results screen only, as "back to the Find menu".
+2. Read find.sh: _find_resolve_options asked Where? / Match case? / Pattern type? / Whole words? in a row and did `|| return` on the first rc 1 from _mc_select, so any u left the sequence. Callers mapped that to rc 3 = Find menu.
+3. Text prompts were plain `read -p`: the command layer turns u there into a global abort (flag + muted output), which only a menu redraw clears.
+4. _find_replace_csv did `open_csv_menu || return 0` and `[ -z "$csv_file" ] && return 0`: rc 0 = "done", so find_menu returned to the main file list. _find_replace never re-asked Single / Multi after u inside a flow.
+(Verified by reading the code; tests run after delivery are listed in the status line.)
+
+1. CAUSE
+Each multi-question flow hand-rolled its own "u = leave the function" instead of one shared stepper, so u meant "back one level" in single menus and "leave the flow" in sequences.
+
+1. FIX
+- engine/bashbasicsbyvk_menuchrome.sh: new _mc_steps (STEPS-01): runs question functions in order; rc 1 = previous question, rc 1 on the first = caller goes back one level.
+- functions/bashbasicsbyvk_find.sh: _find_resolve_options builds one step list (CSV picker, asked option questions, text to find, replacement, results / preview / confirm) and runs it with _mc_steps; settled options are not steps. Text prompts use _mc_text (prints u) Back, so u is the menu's own key). _find_replace loops back to Single / Multi when that question was asked; CSV picker z and the Apply-all question step back instead of returning 0.
+Lesson: a flow with more than one question calls _mc_steps; never `|| return` after the first u.
+
+2. ISSUE IN BRIEF
+u at a nested text prompt cancelled the whole flow up to the owning menu, with output muted, in every flow that asks more than one question or prompts for text: rename (u at New: skipped the item, then dropped to the file list), create, organise (u at "Number of years" carried on with the default and organised the files), extract (any u left xtr-). The same key meant different things on different screens. Follow-up of 1.
+
+2. HOW DID YOU DEBUG
+1. Probed rename in the pty test terminal (tests/paste_input/ptyapp.py): u at New: printed the next Old: line and then ended on the file list.
+2. Read cmdmap.sh: _cm_gate_dispatch and _cm_gate_sm answered "back" with _cm_abort (flag + mute), by design "cancel the whole flow".
+3. Read create / organise / extract: they ignore the rc of read or return 0 on the first u, so the abort (or, after the central change, an empty answer) decided what happened.
+4. Wrote tests/nav_back cases that press u at each step and assert the screen it lands on; the first run showed the text prompt still treated u as a cancelled read (rc 3) and left the flow, so _mc_read now tells back (rc 1) from a cancel (rc 3).
+5. tests/run.sh fast after the change: 32/38 passed; the 6 reds (deps, settings_desc, github_upgrade_shared, delete_confirm, choose_plain, hints) fail the same way on the untouched archive. tests/cmd_drift.sh expected the old abort and was updated.
+Not verified by running: the transfer, rules, favourites, switch, api, auth, github and staging prompt flows (listed in the delivery message).
+
+2. CAUSE
+The command layer made u at a prompt the global "cancel this flow" and each flow had no rule of its own for "one step back".
+
+2. FIX
+- engine/bashbasicsbyvk_cmdmap.sh: back cancels only the prompt it was typed at (empty answer, no abort flag, _CM_BACKED=1). A blocked command still aborts.
+- engine/bashbasicsbyvk_menuchrome.sh: _mc_read returns 1 for back, 3 for cancel/EOF; _mc_select / _mc_text / _mc_review pass it on; _mc_steps also skips a step that answers 5 (not applicable) in the direction of travel.
+- functions/bashbasicsbyvk_rename.sh (u at New: = item picker), bashbasicsbyvk_create.sh and bashbasicsbyvk_organise.sh (parent menu loops on rc 3), bashbasicsbyvk_extract.sh (handle_xtr is a step list).
+- tests/nav_back/nav_test.py: 11 new u cases; tests/cmd_drift.sh: the u expectation follows the new contract.
+Lesson: a text prompt inside a flow is `read ... || return 3` and the parent menu loops on 3; a flow with several questions uses _mc_steps.
+
+3. ISSUE IN BRIEF
+More flows left the whole flow on u, and the navigators ignored the keys their footer printed. Transfer (a four-step wizard) abandoned the transfer on u / z at Step 2-4; in the source / destination navigators u) Up (one folder up) and z) Cancel did not work at all: u left the transfer, z was refused as "Invalid command: z - exiting" (same on the untouched archive). Delete-by-date and Archive (format, then name) left on u instead of re-asking the question before. Prompts with "Enter = default" (staging map file name, GitHub release target / title / replace text) took the default on u.
+
+3. HOW DID YOU DEBUG
+1. Probed sw > t > 1 > u and z in the pty terminal on the untouched archive and on the changed tree.
+2. Read _cm_prompt_collect: a plain prompt only knows the keys in its own prompt text, not the footer printed above it, so u / z were resolved by the command map ("back" / "block").
+3. First attempt registered footer keys for every plain read: Create and Organise then accepted u as text (a file named "u"). Fixed by limiting it to _mc_read (always drawn under its own footer, _MC_UNDER_FOOTER).
+4. tests/nav_back now 21 cases, all pass; tests/run.sh fast: same 6 reds as the untouched archive (deps, settings_desc, github_upgrade_shared, delete_confirm, choose_plain, hints); loadmap passes alone in 59 s of its 60 s budget (58 s on the untouched archive), so it times out when the run is parallel.
+Not verified by running: delete-by-date, the GitHub and rules prompts, staging map (changed by reading, syntax-checked only).
+
+3. CAUSE
+A key printed in a footer was only the menu's own key for smart menus; the shared plain prompt never learned it.
+
+3. FIX
+- engine/bashbasicsbyvk_menuchrome.sh: _mc_footer records the keys it printed (_MC_PRINTED); _mc_read sets _MC_UNDER_FOOTER around its read. engine/bashbasicsbyvk_cmdmap.sh: _cm_prompt_collect adds them to _CM_LOCAL only then.
+- functions/bashbasicsbyvk_transfer.sh: transfer_menu is four steps for _mc_steps (z = back one step, Drive destination is skipped with rc 5).
+- fx/file_fx/bashbasicsbyvk_adf_delete_date.sh (level, dates), staging archive (format, name): two steps, u = the question before.
+- rules.sh, favourites.sh, staging_map.sh, adf_github.sh: every read cancels on u (never "use the default").
+- tests/nav_back/nav_test.py: transfer, archive cases.

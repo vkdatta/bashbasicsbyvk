@@ -97,9 +97,12 @@ _mc_options() {
 #                "|"            start a new line
 # Lines wrap at the viewport width (a line wider than the terminal would wrap
 # physically and throw the viewport's row accounting off).
+declare -g _MC_UNDER_FOOTER=0
+declare -gA _MC_PRINTED=()     # the keys the LAST footer printed ("u", "z", "v" ...): a plain prompt under it takes them as its own answers (cmdmap _cm_prompt_collect)
 _mc_footer() {
   local -a items=()
   local unders=0
+  _MC_PRINTED=()
   if [[ "${1:-}" == @* ]]; then
     local reg="${_MC_FOOTERS[${1#@}]-}"
     [ -z "$reg" ] && return 0
@@ -122,6 +125,7 @@ _mc_footer() {
     elif [ -n "${_MC_KEYLABEL[$it]-}" ]; then cell="${it%%.*}) ${_MC_KEYLABEL[$it]}"
     else cell="${it}) ${it}"; fi
     (( unders )) && cell="${cell//_/ }"
+    [[ "$cell" =~ ^([A-Za-z0-9_-]{1,5})\) ]] && _MC_PRINTED["${BASH_REMATCH[1],,}"]=1
     if [ -z "$line" ]; then
       line="$cell"
     elif _vp_cells "$line"; local _lw=$_vp_w; _vp_cells "$cell"; (( _lw + 3 + _vp_w >= cols )); then
@@ -196,11 +200,14 @@ _mc_std_key() {
   return 0
 }
 
-# _mc_read OUTVAR PROMPT   ONE read for every template: 0 = a line came back, 3 = the command layer cancelled the flow / EOF
+# _mc_read OUTVAR PROMPT   ONE read for every template: 0 = a line came back, 1 = u (back: that one prompt was cancelled), 3 = the command layer cancelled the flow / EOF
 #   (a loop that ignores this rc spins on the swallowed prompt: that was the 13-second loading bar of "Selection view").
 _mc_read() {
-  local _mr_a
-  read -e -r -p "$2" _mr_a || return 3
+  local _mr_a _mr_rc
+  _CM_BACKED=0; _MC_UNDER_FOOTER=1          # this prompt is drawn right under a footer: the keys it printed are this prompt's own
+  read -e -r -p "$2" _mr_a; _mr_rc=$?
+  _MC_UNDER_FOOTER=0
+  (( _mr_rc )) && { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 1; }; return 3; }
   _mr_a="${_mr_a%$'\r'}"
   printf -v "$1" '%s' "$_mr_a"
   return 0
@@ -215,6 +222,30 @@ _mc_nav() {
     h|cc) _mc_std_key "$1"; _mc_unwind && return 2; return 4 ;;
   esac
   return 5
+}
+
+# ---- STEPS-01: a flow of several questions, where u = ONE QUESTION BACK --------------------------------------
+#   _mc_steps STEP...      each STEP is a function name that asks ONE question and returns the CONTROL-01 code
+#                          (0 answered · 1 back (u) · 2 quit · 3 cancelled) or 5 = "this question does not apply now".
+#                          Runs them in order: 0 -> the next question · 1 -> the question before it (it is asked again) ·
+#                          5 -> skipped, in the direction you were going (forward on the way in, backward after a u) · 2 / 3 -> stop at once.
+#   Returns 0 all answered · 1 u on the FIRST question (the caller goes back one level) · 2 quit · 3 cancelled.
+#   A question that is already settled is simply not in the list (or answers 5), so u never lands on it.
+#   Every multi-question flow uses this (never `|| return` after the first u): u is one menu back, nothing else.
+#   The steps share the caller's local variables (bash dynamic scope): the caller declares them, the steps fill them.
+_mc_steps() {
+  local -a _mst=("$@"); local _msi=0 _msrc _msd=1
+  while (( _msi >= 0 && _msi < ${#_mst[@]} )); do
+    "${_mst[$_msi]}"; _msrc=$?
+    case "$_msrc" in
+      0) _msd=1;  _msi=$(( _msi + 1 )) ;;
+      1) _msd=-1; _msi=$(( _msi - 1 )) ;;
+      5) _msi=$(( _msi + _msd )) ;;
+      *) return "$_msrc" ;;
+    esac
+  done
+  (( _msi < 0 )) && return 1
+  return 0
 }
 
 # ---- MC-01 / MC-02: numbered selection (and the two-option setting) ------------------------------------------
@@ -266,7 +297,7 @@ _mc_select() {
     [ -n "$_ms_title" ] && _mc_header "$_ms_title" "${_ms_sub[@]}"
     if (( _ms_keyed )); then _mc_keyed "${_ms_kshow[@]}"; else _mc_options 1 "${_ms_show[@]}"; fi
     _mc_footer_std $_ms_b "${_ms_x[@]}"
-    _mc_read _ms_a "Select: " || { _mc_unwind && return 2; return 3; }
+    _mc_read _ms_a "Select: " || { local _mc_rc=$?; _mc_unwind && return 2; return "$_mc_rc"; }
     _ms_a="${_ms_a,,}"; _ms_a="${_ms_a//[[:space:]]/}"
     _mc_nav "$_ms_a"; _ms_rc=$?
     case "$_ms_rc" in
@@ -299,7 +330,7 @@ _mc_text() {
   while true; do
     (( $# )) && _mc_header "$@"
     _mc_footer_std -b "${_mt_x[@]}"
-    _mc_read _mt_a "$_mt_p" || { _mc_unwind && return 2; return 3; }
+    _mc_read _mt_a "$_mt_p" || { local _mc_rc=$?; _mc_unwind && return 2; return "$_mc_rc"; }
     _mc_nav "$_mt_a"; _mt_rc=$?
     case "$_mt_rc" in 1) return 1 ;; 2) return 2 ;; 4) continue ;; esac
     printf -v "$_mt_o" '%s' "$_mt_a"; return 0
@@ -329,7 +360,7 @@ _mc_review() {
       _mc_options 1 "${_mrv_lab[@]}"
     fi
     _mc_footer_std -b "c:Confirm" "x:Remove"
-    _mc_read _mrv_a "Select: " || { _mc_unwind && return 2; return 3; }
+    _mc_read _mrv_a "Select: " || { local _mc_rc=$?; _mc_unwind && return 2; return "$_mc_rc"; }
     _mrv_a="${_mrv_a,,}"; _mrv_a="${_mrv_a//[[:space:]]/}"
     _mc_nav "$_mrv_a"; _mrv_rc=$?
     case "$_mrv_rc" in

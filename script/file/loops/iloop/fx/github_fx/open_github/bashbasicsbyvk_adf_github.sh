@@ -307,10 +307,10 @@ _ghx_rename() {
     p) _xui_ask "Prefix" || { rm -rf "$_GHX_JOB"; return 1; }; printf '%s' prefix > "$_GHX_JOB/rule.mode"; printf '%s' "$_XUI_IN" > "$_GHX_JOB/rule.a" ;;
     s) _xui_ask "Suffix" || { rm -rf "$_GHX_JOB"; return 1; }; printf '%s' suffix > "$_GHX_JOB/rule.mode"; printf '%s' "$_XUI_IN" > "$_GHX_JOB/rule.a" ;;
     f) _xui_ask "Find" || { rm -rf "$_GHX_JOB"; return 1; }; a="$_XUI_IN"
-       IFS= read -e -r -p "   Replace with (empty = remove it): " b
+       IFS= read -e -r -p "   Replace with (empty = remove it): " b || { rm -rf "$_GHX_JOB"; return 1; }       # u = cancel
        printf '%s' replace > "$_GHX_JOB/rule.mode"; printf '%s' "$a" > "$_GHX_JOB/rule.a"; printf '%s' "$b" > "$_GHX_JOB/rule.b" ;;
     x) _xui_ask "Pattern (python regex, e.g.  ^v(.*)\$ )" || { rm -rf "$_GHX_JOB"; return 1; }; a="$_XUI_IN"
-       IFS= read -e -r -p "   Replacement (e.g.  release-\\1 ): " b
+       IFS= read -e -r -p "   Replacement (e.g.  release-\\1 ): " b || { rm -rf "$_GHX_JOB"; return 1; }       # u = cancel
        printf '%s' regex > "$_GHX_JOB/rule.mode"; printf '%s' "$a" > "$_GHX_JOB/rule.a"; printf '%s' "$b" > "$_GHX_JOB/rule.b" ;;
     m) printf '%s' manual > "$_GHX_JOB/rule.mode"; : > "$_GHX_JOB/map"
        for t in "${_GHX_PICK[@]}"; do
@@ -380,7 +380,7 @@ _ghx_create() {
     if [ "$_GHX_TAB" = tags ]; then echo "❌ The tag '$tag' already exists."; return 1; fi
     echo "   '$tag' is an existing tag — the release is attached to it."
   else
-    IFS= read -e -r -p "   Branch, tag or commit to build it from (Enter = the default branch): " target
+    IFS= read -e -r -p "   Branch, tag or commit to build it from (Enter = the default branch): " target || return 1       # u = cancel, never "use the default"
     _bvk_yn ans "Make it an annotated tag with a message?"
     case "$ans" in [yY]*) echo "   ✏️  the editor opens: write the tag message."; _ghx_editor "" && msg="$_GHX_TEXT" ;; esac
   fi
@@ -392,7 +392,7 @@ _ghx_create() {
       case "$ans" in [yY]*) _ghx_create_release_for "$tag" ;; esac; }
     _ghx_reload; return 0
   fi
-  IFS= read -e -r -p "   Release title (Enter = the tag name): " title
+  IFS= read -e -r -p "   Release title (Enter = the tag name): " title || return 1       # u = cancel, never "use the default"
   _bvk_yn ans "Write the release notes now (opens the editor)?"
   case "$ans" in [yY]*) _ghx_editor "" && body="$_GHX_TEXT" ;; esac
   _ghx_job_new || return 1
@@ -404,7 +404,7 @@ _ghx_create() {
 
 _ghx_create_release_for() {      # a tag that was just made → its stable release
   local title body="" ans
-  IFS= read -e -r -p "   Release title (Enter = the tag name): " title
+  IFS= read -e -r -p "   Release title (Enter = the tag name): " title || return 1       # u = cancel, never "use the default"
   _bvk_yn ans "Write the release notes now (opens the editor)?"
   case "$ans" in [yY]*) _ghx_editor "" && body="$_GHX_TEXT" ;; esac
   _ghx_job_new || return 1

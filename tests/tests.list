@@ -11,7 +11,9 @@ exactbytes|fast|30|bash tests/exactbytes.sh|
 group_view|fast|40|bash tests/group_view.sh|
 width|fast|20|bash tests/width/width_consistency.sh|
 choose_plain|fast|20|bash tests/choose/plain_test.sh|
+xui_wiring|fast|30|bash tests/xui_wiring.sh|python3
 choose|slow|90|python3 tests/choose/choose_test.py|python3
+choose_typed|slow|90|python3 tests/choose/typed_test.py|python3
 xfer_ux|fast|40|node tests/xfer_ux.mjs|node
 stale_size|fast|30|bash tests/stale_size/run.sh|python3
 wrap_input|fast|60|bash tests/wrap_input/run.sh|python3

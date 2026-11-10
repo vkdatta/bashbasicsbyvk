@@ -63,6 +63,7 @@ _CM_FLASH=""                    # one-shot message shown in the hint row
 _CM_ABORT=0; _CM_ABORT_MSG=""; _CM_ABORT_DEPTH=0; _CM_ABORT_N=0
 _CM_MAP=""; _CM_MDEPTH=0; _CM_FLOW=0     # set by _cm_ctx_find; defined here so nothing reads them unset
 _CM_MUTE=0
+_CM_BACKED=0        # set when the person typed u at a prompt that does not print u itself: that ONE prompt was cancelled as "back" (_mc_read turns it into rc 1)
 # No command is longer than this many characters. Past it, nothing is looked up WHILE TYPING (live hint, highlight):
 # only below it. Enter is the fallback: the gates (_cm_gate_*) still resolve the whole text (up to the 255 guard in _cm_resolve).
 _CM_LIVE_MAX=56
@@ -570,7 +571,7 @@ _cm_gate_dispatch() {
     run)   _cm_run_main "$t" text
            [ "${_BVK_TO_MAIN:-0}" = 1 ] && { _cm_abort ""; _CM_OUT=""; return 4; }   # q: cancel this flow silently, the menus close up to the main loop
            return 3 ;;
-    back)  _cm_abort "↩️  Back"; _CM_OUT=""; return 4 ;;
+    back)  _CM_OUT=""; _CM_BACKED=1; return 4 ;;                  # u: cancels THIS prompt only (empty answer, no abort flag): the function that asked decides what one step back is
     block) _cm_abort "❌ Invalid command: $t — exiting"; _CM_OUT=""; return 4 ;;
   esac
   return 0
@@ -615,7 +616,7 @@ _cm_gate_sm() {
     run)   _cm_run_main "$t" text
            [ "${_BVK_TO_MAIN:-0}" = 1 ] && { _cm_abort ""; _sm_result=""; return 2; }   # q: cancel this flow silently, the menus close up to the main loop
            _CM_REDRAW_FRESH=1; return 1 ;;
-    back)  _cm_abort "↩️  Back"; _sm_result=""; return 2 ;;
+    back)  _sm_result=""; _CM_BACKED=1; return 2 ;;               # u: cancels THIS prompt only (see _cm_gate_dispatch)
     block) _cm_abort "❌ Invalid command: $t — exiting"; _sm_result=""; return 2 ;;
   esac
   return 0
@@ -654,8 +655,10 @@ _cm_prompt_collect() {
       _CM_LOCAL["${BASH_REMATCH[1],,}"]="${lab:-answer}"
     fi
   done <<< "$p"
+  # the keys the footer above the prompt printed ("u) Up   z) Cancel   v) View ...") are this prompt's own answers too: they reach it as typed
+  local k; [ "${_MC_UNDER_FOOTER:-0}" = 1 ] && for k in "${!_MC_PRINTED[@]}"; do [ -n "${_CM_LOCAL[$k]+x}" ] || _CM_LOCAL["$k"]="printed in the footer"; done
   # numbers are rows / counts, never commands
-  local k; for k in "${!_CM_LOCAL[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] && unset '_CM_LOCAL[$k]'; done
+  for k in "${!_CM_LOCAL[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] && unset '_CM_LOCAL[$k]'; done
   return 0
 }
 

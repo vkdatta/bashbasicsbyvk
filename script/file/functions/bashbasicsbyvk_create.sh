@@ -1,5 +1,5 @@
 create_files() {
-  read -e -p "Enter filenames (separated by ,): " filelist
+  read -e -p "Enter filenames (separated by ,): " filelist || return 3     # u = back to Create:
   IFS=',' read -ra files <<< "$filelist"
   local skipped=0
   for file in "${files[@]}"; do
@@ -31,7 +31,7 @@ create_files() {
 }
 
 create_dirs() {
-  read -e -p "Enter folder names (separated by ,): " dirlist
+  read -e -p "Enter folder names (separated by ,): " dirlist || return 3   # u = back to Create:
   IFS=',' read -ra dirs <<< "$dirlist"
   local skipped=0
   for dir in "${dirs[@]}"; do
@@ -44,11 +44,17 @@ create_dirs() {
 }
 
 handle_create() {
-  _mc_select cr "Create:" "New folders" "New files" || return $(( $? == 2 ? 1 : 0 ))
-
-  case "$cr" in
-    1) create_dirs ;;
-    2) create_files ;;
-    *) _bvk_invalid ;;
-  esac
+  local rc
+  while true; do
+    _mc_select cr "Create:" "New folders" "New files" || return $(( $? == 2 ? 1 : 0 ))
+    case "$cr" in
+      1) create_dirs ;;
+      2) create_files ;;
+      *) _bvk_invalid ;;
+    esac
+    rc=$?
+    _mc_unwind && return 1
+    [ "$rc" -eq 3 ] && continue                  # u at the name prompt: the Create: menu again
+    return "$rc"
+  done
 }

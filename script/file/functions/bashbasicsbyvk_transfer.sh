@@ -733,123 +733,80 @@ _get_mime_type() {
   echo "$mime"
 }
 
-transfer_menu() {
+# Transfer is a wizard of four steps (mode, source, destination, action).  Each is one step for _mc_steps: u / z = back to the step before,
+# q = leave.  They fill transfer_menu's locals.  (Inside a navigator u still means one folder up: only its z cancel steps back.)
+_t_s_mode() {
   _mc_select t_mode "📦 TRANSFER — Step 1: Choose mode" \
     "Intra-location (Current CLI → Current CLI [Up Down])" \
     "Intra-location (Current CLI → Current CLI [Down Up])" \
     "Current CLI To Drive (Via rclone)" \
     "Local To GCloud (Run from Local)" \
-    "GCloud To Local (Run from Local)" || return $(( $? == 2 ? 1 : 0 ))
-
+    "GCloud To Local (Run from Local)" || return $(( $? == 2 ? 2 : 1 ))
+  return 0
+}
+_t_s_source() {
   echo
   echo "📦 TRANSFER — Step 2: Select source items"
-
-  local step2_ok=false _t_nrc
-
+  local _t_nrc
+  step2_ok=false
   if [ "$t_mode" == "5" ]; then
-    if ! command -v gcloud >/dev/null 2>&1; then
-      echo "❌ gcloud not found in PATH."
-      return
-    fi
+    if ! command -v gcloud >/dev/null 2>&1; then echo "❌ gcloud not found in PATH."; return 3; fi
     gcloud_navigator "source"; _t_nrc=$?
-    _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
-    if [ $_t_nrc -ne 0 ] || [ ${#gcloud_nav_selected_items[@]} -eq 0 ]; then
-      echo "🚫 Transfer cancelled"
-      return
-    fi
-    step2_ok=true
+    _mc_unwind && return 2                 # q in the navigator or in a screen below it: leave, say nothing more
+    [ $_t_nrc -eq 0 ] && [ ${#gcloud_nav_selected_items[@]} -gt 0 ] && step2_ok=true
+  elif $imaginary_mode; then
+    select_imaginary_items_common "$path" "$group_prefix" && step2_ok=true
+    _mc_unwind && return 2
   else
-    if $imaginary_mode; then
-      select_imaginary_items_common "$path" "$group_prefix" && step2_ok=true
-    else
-      local_navigator "source" "$path"; _t_nrc=$?
-      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
-      if [ $_t_nrc -eq 0 ] && [ ${#nav_selected_items[@]} -gt 0 ]; then
-        selected_items=("${nav_selected_items[@]}")
-        step2_ok=true
-      fi
-    fi
+    local_navigator "source" "$path"; _t_nrc=$?
+    _mc_unwind && return 2
+    if [ $_t_nrc -eq 0 ] && [ ${#nav_selected_items[@]} -gt 0 ]; then selected_items=("${nav_selected_items[@]}"); step2_ok=true; fi
   fi
-
-  if ! $step2_ok; then
-    echo "🚫 Transfer cancelled — no items selected"
-    return
-  fi
-
+  $step2_ok || return 1                    # z / nothing selected: back to Step 1
+  return 0
+}
+_t_s_dest() {
   echo
   echo "📦 TRANSFER — Step 3: Choose destination"
-
-  local dest_ok=false
-  local final_dest=""
-
+  local _t_nrc
+  dest_ok=false; final_dest=""
   case "$t_mode" in
-    1)
-      local_navigator "dest" "$HOME"; _t_nrc=$?
-      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
-      if [ $_t_nrc -eq 0 ]; then
-        final_dest="$nav_result_path"
-        dest_ok=true
-      fi
-      ;;
-    2)
-      local_navigator "dest" "${nav_last_browsed_path:-$path}"; _t_nrc=$?
-      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
-      if [ $_t_nrc -eq 0 ]; then
-        final_dest="$nav_result_path"
-        dest_ok=true
-      fi
-      ;;
-    3)
-      _dep_need -c "Transfer to Google Drive" rclone || return
-      final_dest="gdrive:/rclone"
-      echo "📍 Destination: Google Drive ($final_dest)"
-      dest_ok=true
-      ;;
-    4)
-      _dep_need -c "Transfer to Google Cloud Storage" gcloud || return
-      gcloud_navigator "dest"; _t_nrc=$?
-      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
-      if [ $_t_nrc -eq 0 ]; then
-        final_dest="$gcloud_nav_result_path"
-        dest_ok=true
-      fi
-      ;;
-    5)
-      local_navigator "dest" "$HOME"; _t_nrc=$?
-      _mc_unwind && return 1                 # q in the navigator or in a screen below it: leave, say nothing more
-      if [ $_t_nrc -eq 0 ]; then
-        final_dest="$nav_result_path"
-        dest_ok=true
-      fi
-      ;;
+    1) local_navigator "dest" "$HOME"; _t_nrc=$?; _mc_unwind && return 2
+       [ $_t_nrc -eq 0 ] && { final_dest="$nav_result_path"; dest_ok=true; } ;;
+    2) local_navigator "dest" "${nav_last_browsed_path:-$path}"; _t_nrc=$?; _mc_unwind && return 2
+       [ $_t_nrc -eq 0 ] && { final_dest="$nav_result_path"; dest_ok=true; } ;;
+    3) _dep_need -c "Transfer to Google Drive" rclone || return 3
+       final_dest="gdrive:/rclone"
+       echo "📍 Destination: Google Drive ($final_dest)"
+       return 5 ;;                         # nothing to ask here: skipped in both directions
+    4) _dep_need -c "Transfer to Google Cloud Storage" gcloud || return 3
+       gcloud_navigator "dest"; _t_nrc=$?; _mc_unwind && return 2
+       [ $_t_nrc -eq 0 ] && { final_dest="$gcloud_nav_result_path"; dest_ok=true; } ;;
+    5) local_navigator "dest" "$HOME"; _t_nrc=$?; _mc_unwind && return 2
+       [ $_t_nrc -eq 0 ] && { final_dest="$nav_result_path"; dest_ok=true; } ;;
   esac
-
-  if ! $dest_ok || [ -z "$final_dest" ]; then
-    echo "🚫 Transfer cancelled — no destination chosen"
-    return
-  fi
-
+  $dest_ok && [ -n "$final_dest" ] || return 1     # z / nothing chosen: back to Step 2
+  return 0
+}
+_t_s_action() {
   local -a _t_rows=("c|Copy|c" "m|Move|m")
   [[ "$t_mode" == "1" || "$t_mode" == "2" ]] && _t_rows+=("s|Shortcut|s")
-  _mc_select -k t_action "📦 TRANSFER — Step 4: Action" "${_t_rows[@]}" || return $(( $? == 2 ? 1 : 0 ))
-
-  local t_op
+  _mc_select -k t_action "📦 TRANSFER — Step 4: Action" "${_t_rows[@]}" || return $(( $? == 2 ? 2 : 1 ))
   case "$t_action" in
     c|C) t_op="copy" ;;
     m|M) t_op="move" ;;
     s|S)
-      if [[ "$t_mode" == "1" || "$t_mode" == "2" ]]; then
-        t_op="shortcut"
-      else
-        echo "❌ Shortcut is only available for intra-location transfers. Transfer cancelled."
-        return
-      fi
-      ;;
-    *)
-      echo "❌ Invalid action. Transfer cancelled."
-      return
-      ;;
+      if [[ "$t_mode" == "1" || "$t_mode" == "2" ]]; then t_op="shortcut"
+      else echo "❌ Shortcut is only available for intra-location transfers. Transfer cancelled."; return 3; fi ;;
+    *) echo "❌ Invalid action. Transfer cancelled."; return 3 ;;
   esac
+  return 0
+}
+
+transfer_menu() {
+  local t_mode step2_ok=false dest_ok=false final_dest="" t_action t_op rc
+  _mc_steps _t_s_mode _t_s_source _t_s_dest _t_s_action; rc=$?
+  case "$rc" in 0) ;; 2) return 1 ;; *) return 0 ;; esac      # 1 = u on Step 1: back to where transfer was opened from
 
   echo
   echo "⚙️  Executing $t_op..."

@@ -1,0 +1,9 @@
+# bashbasicsbyvk_xui_gdp.map — wiring of the Google Drive profiles screen
+# Chosen by _cm_ctx_find when _XUI_PFX=gdp (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_gdp
+@kind   menu
+@back   u
+@parent xui
+
+n          .mapto()  n          from bashbasicsbyvk_xui_gdpmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_gdpmenucommands.sh

@@ -103,6 +103,22 @@ _bc_leave() {
   return 0
 }
 
+# a typed word that is none of this box's answers: the command layer decides, like at every prompt of the app (the guide's rule: a typed
+# command beats the natural action). A command runs and the box is shown again; a blocked one or "back" cancels the whole flow; plain text
+# is not an answer and is cleared; @word is text, never an answer. Shares _bvk_menu's locals.
+# (This used to return 0 for EVERY word, so _st_run never reached _st_cm_gate: the hint row said "s -> Settings" and Enter dropped it.)
+_bc_word() {
+  local _bc_t="$1"
+  declare -F _cm_on >/dev/null 2>&1 && _cm_on && declare -F _cm_gate_dispatch >/dev/null 2>&1 || return 0
+  [[ "$_bc_t" == @* ]] && return 0
+  _cm_ctx_find
+  [ "${_CM_BOOTED:-0}" = 1 ] || _cm_boot
+  _cm_table_build "$_CM_MAP"
+  _cm_resolve text "$_bc_t"
+  case "$_CM_ACT" in none|local) return 0 ;; esac
+  _bc_leave "$_bc_t"
+}
+
 # typed text + Enter (cmd_fn of _st_run: return 0 = handled)
 _bc_cmd() {
   local _bc_t="$1"
@@ -116,8 +132,9 @@ _bc_cmd() {
   case "$_bc_t" in
     d|done) (( _bc_multi )) && { _bc_done=1; _st_back=1; } ;;
     u|q)    _bc_leave "$_bc_t" ;;
+    *)      _bc_word "$_bc_t" ;;
   esac
-  return 0                                           # anything else is not an answer: cleared
+  return 0                                           # handled: a command ran / the flow was cancelled / plain text is not an answer and is cleared
 }
 
 # split a long question into rows no wider than $2; fills _bc_q

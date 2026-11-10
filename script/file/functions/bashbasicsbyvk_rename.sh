@@ -192,7 +192,7 @@ _rn_select_items() {
   return 0
 }
 
-# _rn_name_prompt ITEM N TOTAL → _RN_FINAL.  rc 1 = blank / cancelled.   Adds  Old: / New:  under the screen above.
+# _rn_name_prompt ITEM N TOTAL → _RN_FINAL.  rc 0 named · 1 blank / refused (skip this item) · 2 u (back to the item picker).   Adds  Old: / New:  under the screen above.
 _rn_name_prompt() {
   local item="$1" bn="${item##*/}" out nl=$'\n'
   out="${nl}Old: $bn$nl"
@@ -204,7 +204,8 @@ _rn_name_prompt() {
   _CE_FILL="$bn"
   read -e -p "New: " in; local rc=$?
   _CE_FILL=""
-  (( rc == 0 )) && [ -n "$in" ] || return 1
+  (( rc == 0 )) || return 2                    # u: one step back = the item picker
+  [ -n "$in" ] || return 1
   _rn_finalize "$item" "$in" || return 1
   return 0
 }
@@ -215,6 +216,9 @@ _rn_name_prompt() {
 # Shortcut files get special handling (name-only, not the .shortcut pointer).
 # ---------------------------------------------------------------------------
 _rename_single_mutation() {
+  local _rn_back
+  while true; do                                 # u at a New: prompt comes back here: the item picker again
+  _rn_back=0
   _rn_select_items || return
 
   # a long selection is not asked item by item: it goes straight to the CSV rename (rename.select.items.csv)
@@ -240,7 +244,7 @@ _rename_single_mutation() {
         && echo "🔑  Shortcut (dir): $cur_name" \
         || echo "🗝️  Shortcut (file): $cur_name"
       echo "Renaming a shortcut only changes the shortcut's name — the original is untouched."
-      read -e -p "New display name (blank = cancel): " new_name
+      read -e -p "New display name (blank = cancel): " new_name || { _rn_back=1; break; }
       [ -z "$new_name" ] && echo "🚫 Skipped" && continue
       if _bvk_name_too_long "${new_name}.shortcut"; then _bvk_name_refuse "$new_name" "Shortcut"; echo " Not renamed: names over 255 bytes are not accepted."; continue; fi
 
@@ -265,7 +269,8 @@ echo "💫 Shortcut renamed: $cur_name → $new_name"
       continue
     fi
 
-    _rn_name_prompt "$item" "$((idx + 1))" "${#selected_items[@]}" || { echo "🚫 Skipped"; continue; }
+    _rn_name_prompt "$item" "$((idx + 1))" "${#selected_items[@]}"
+    case $? in 0) ;; 2) _rn_back=1; break ;; *) echo "🚫 Skipped"; continue ;; esac
     local new_name="$_RN_FINAL"
     local new_path
     new_path="$(dirname "$item")/$new_name"
@@ -276,6 +281,9 @@ echo "💫 Shortcut renamed: $cur_name → $new_name"
       2) echo "🔴  '$new_name' already exists — skipped" ;;
       3) _bvk_name_refuse "$new_name" "Name"; echo " Not renamed: names over 255 bytes are not accepted." ;;
     esac
+  done
+  [ "$_rn_back" = 1 ] && { _BVK_SCR_EXTRA=""; continue; }
+  return 0
   done
 }
 

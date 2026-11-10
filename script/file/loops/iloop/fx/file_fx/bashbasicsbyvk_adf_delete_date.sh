@@ -8,18 +8,16 @@
 #  to delete. Uses organise's _batch_stat + _ts_to_ymd.
 # ════════════════════════════════════════════════════════════════════════════
 
-_fx_adf_delete_by_date() {
-  local -a files=()
-  _fxdel_list_files files
-  [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-
-  local lvl
+# Two questions, one step each (_mc_steps: u = one question back): the level, then the dates.  They fill _fx_adf_delete_by_date's locals.
+_dd_s_level() {
   _mc_select lvl "🗑️  Delete by date in $path (file modified date):" "Day     (e.g. 2024-03-15)" \
-    "Month   (e.g. 2024-03)" "Year    (e.g. 2024)" "Decade  (e.g. 2020s)" || { local _rc=$?; (( _rc == 2 )) && return 1; echo "↩️  Back"; return; }
-
+    "Month   (e.g. 2024-03)" "Year    (e.g. 2024)" "Decade  (e.g. 2020s)" || return $(( $? == 2 ? 2 : 1 ))
+  return 0
+}
+_dd_s_pick() {
   _batch_stat "$path"
-  local -A count=() key_of=()
-  local f key
+  count=(); key_of=(); keys=()
+  local f key i
   for f in "${files[@]}"; do
     _ts_to_ymd "${_FILE_TS[$f]:-0}"
     case "$lvl" in
@@ -31,21 +29,28 @@ _fx_adf_delete_by_date() {
     key_of["$f"]="$key"
     count["$key"]=$(( ${count[$key]:-0} + 1 ))
   done
-
-  local -a keys=()
   mapfile -t keys < <(printf '%s\n' "${!count[@]}" | sort)
-
-  local i
   for i in "${!keys[@]}"; do
     printf '%d) %s  (%d file(s))\n' $((i+1)) "${keys[$i]}" "${count[${keys[$i]}]}"
   done
-  local reply
   _mc_text reply "Select: " "Pick one or more: numbers/ranges (1,3 or 2-4), or a = all"
+  case $? in 0) ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac       # u = back to the level question
+  [ -z "$reply" ] && { echo "🚫 Cancelled"; return 3; }
+  return 0
+}
+
+_fx_adf_delete_by_date() {
+  local -a files=()
+  _fxdel_list_files files
+  [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
+
+  local lvl reply f idx
+  local -A count=() key_of=()
+  local -a keys=()
+  _mc_steps _dd_s_level _dd_s_pick
   case $? in 0) ;; 1) echo "↩️  Back"; return ;; 2) return 1 ;; *) return ;; esac
-  [ -z "$reply" ] && { echo "🚫 Cancelled"; return; }
 
   local -A chosen=()
-  local idx
   for idx in $(_fxdel_pick_indices "$reply" "${#keys[@]}"); do
     chosen["${keys[$((idx-1))]}"]=1
   done

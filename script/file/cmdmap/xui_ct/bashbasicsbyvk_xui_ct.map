@@ -1,0 +1,10 @@
+# bashbasicsbyvk_xui_ct.map — wiring of the Cloud Surf file tree
+# Chosen by _cm_ctx_find when _XUI_PFX=ct (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_ct
+@kind   menu
+@back   u
+@parent xui
+
+d-         .mapto()  d-         from bashbasicsbyvk_xui_ctmenucommands.sh
+r-         .mapto()  r-         from bashbasicsbyvk_xui_ctmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_ctmenucommands.sh

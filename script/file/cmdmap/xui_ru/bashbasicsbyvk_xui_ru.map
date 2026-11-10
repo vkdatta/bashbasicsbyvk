@@ -1,0 +1,9 @@
+# bashbasicsbyvk_xui_ru.map — wiring of the Rbam person screen (their shares)
+# Chosen by _cm_ctx_find when _XUI_PFX=ru (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_ru
+@kind   menu
+@back   u
+@parent xui
+
+r-         .mapto()  r-         from bashbasicsbyvk_xui_rumenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_rumenucommands.sh

@@ -1,0 +1,20 @@
+ISSUE IN BRIEF
+In a few small menus the typed command did the opposite of the app's standard (plain word = command, @word = that text). Cloudflare workers / pages recover (cfw), Google Drive profiles (gdp), Cloud Surf people on a share (cs_pp), Cloud Surf file tree (ct) and Rbam person (ru): the screen's own keys were rejected ("Invalid command: r - not available in xui" for r on cfw, t on cs_pp) and rf did not reload the screen. In every yes/no and choice box (_bvk_yn / _bvk_menu) the hint row said "h -> Home" but Enter silently dropped the typed command.
+
+HOW DID YOU DEBUG
+1. Read AGENTS.md and the corpus index (command layer): BB-251020260246-2 and BB-251020260201-1 had fixed the xui family for rb / nf / cs / ghp / ghr and said the other screens "very likely have the same problem".
+2. Read cmdmap.sh (_cm_ctx_find, _cm_resolve, the gates) and listed every function that reads a typed word; built a matrix of every main command in every map and mode (all maps consistent).
+3. Found the screens that call _xui_screen + _xui_loop and compared with the maps: cfw, gdp, cs_pp, ct, ru have none, so _XUI_PFX has no xui_<prefix> map and _cm_ctx_find falls back to the generic xui map. Resolved each screen's own handler / footer keys against it: r, t = block; rf = run (main redraw). o --map-lint said "gaps: 0" because it only reads maps that exist.
+4. Reproduced in the real app (pty): two stub screens on the real _xui_loop, same handler, one prefix with a map and one without: r and t were refused and rf never reached the handler only on the unmapped one.
+5. _st_run runs cmd_fn before _st_cm_gate; _bc_cmd (every _bvk_yn / _bvk_menu) returned 0 for every word, so the gate was never reached. Reproduced: typed h in a yes/no box, Enter: nothing, while the hint row says "h -> Home".
+6. Ruled out: all list loops (_read_choice_filtered) are claimed by a map; the Settings screens open under settings_menu; the five mapped xui screens resolve their own keys to the screen.
+
+CAUSE
+The command table of a screen is chosen by the NAME of the function that reads the word, and a screen that nothing claims silently inherits another table (xui / main) written for other screens. Nothing checked that a screen had a map. Second, a cmd_fn answered 0 for words it did not own and so hid the gate.
+
+FIX
+- cmdmap/xui_cfw, xui_gdp, xui_cs_pp, xui_ct, xui_ru: one map + one menucommands file per screen (copy of the xui_ghr pattern; every key the handler / footer uses is local); loadmap lines + regenerated stubs.
+- settings/bashbasicsbyvk_choose.sh: new _bc_word; _bc_cmd sends every word that is not one of the box's answers through the command layer (command runs and the box returns; blocked / back cancels the flow; plain text and @word are cleared).
+- tests/xui_wiring.sh (fast): scans the sources for every _xui_screen + _xui_loop, requires its map and that every key of its handler and footer resolves to the screen. tests/choose/typed_test.py (slow): types text, @h and h into a question in a real terminal.
+- AGENTS.md rule 14 and the cmdmap guide: how a screen is wired, what a cmd_fn must return.
+Lesson: a new _xui_screen is not done until cmdmap/xui_<prefix>/ exists; a cmd_fn returns 1 for every word it does not own.

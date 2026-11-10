@@ -39,7 +39,7 @@ for k in c g e a x; do _cm_prompt_collect "$p_link"; _cm_gate_text "$k" ""; [ $?
 _cm_prompt_has_choices "$p_ask" && ok "[Y/n, c = cancel the delete] is a prompt that lists its own answers" || bad "[Y/n, c = ...] not recognised"
 _cm_prompt_collect "$p_name"; [ "${#_CM_LOCAL[@]}" = 0 ] && ok "a plain name prompt has no own keys" || bad "name prompt: own keys ${!_CM_LOCAL[*]}"
 _cm_prompt_collect "$p_link"; _cm_hint c text; case "$_hint_want" in "c  →  copy link"*) ok "link prompt: hint for c says copy link";; *) bad "link hint: $_hint_want";; esac
-_cm_prompt_collect "$p_name"; _cm_gate_text u ""; [ $? = 4 ] && [ "$_CM_ABORT" = 1 ] && [[ "$_CM_ABORT_MSG" == *Back* ]] && ok "name prompt: u cancels the flow with 'Back' (not 'Invalid command')" || bad "name prompt u: $_CM_ABORT_MSG"
+_cm_prompt_collect "$p_name"; _cm_gate_text u ""; [ $? = 4 ] && [ "$_CM_ABORT" = 0 ] && [ -z "$_CM_OUT" ] && ok "name prompt: u cancels THIS prompt only (empty answer, no abort flag: the caller steps back one)" || bad "name prompt u: $_CM_ABORT_MSG"
 _cm_abort_clear; _CM_LOCAL=()
 
 # ---- (3) -------------------------------------------------------------------------------

@@ -40,7 +40,7 @@ done
 }
 
 organise_by_ext() {
-_mc_select ech "📁 Organise by extension:" "All files by ext" "Selected extension" || return $(( $? == 2 ? 1 : 0 ))
+_mc_select ech "📁 Organise by extension:" "All files by ext" "Selected extension" || return $(( $? == 2 ? 1 : 3 ))
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
@@ -56,7 +56,7 @@ done
 _flush_buckets ext_buckets
 ;;
 2)
-read -e -p "Extension (e.g. py or .py): " inputext
+read -e -p "Extension (e.g. py or .py): " inputext || return 3
 local ext="${inputext#.}"
 [ -z "$ext" ] && ext="noext"
 local folder="$path/$ext"
@@ -140,7 +140,7 @@ organise_by_year() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -e -p "Number of years to group (1 = each year separate): " group_y
+read -e -p "Number of years to group (1 = each year separate): " group_y || return 3
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
 _batch_stat "$path"
 _year_range "${files[@]}"
@@ -158,9 +158,9 @@ organise_by_year_month() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -e -p "Number of years to group: " group_y
+read -e -p "Number of years to group: " group_y || return 3
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
-read -e -p "Number of months to group: " group_m
+read -e -p "Number of months to group: " group_m || return 3
 [[ $group_m =~ ^[0-9]+$ ]] || group_m=1
 _batch_stat "$path"
 _year_range "${files[@]}"
@@ -180,11 +180,11 @@ organise_by_year_month_date() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -e -p "Number of years to group: " group_y
+read -e -p "Number of years to group: " group_y || return 3
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
-read -e -p "Number of months to group: " group_m
+read -e -p "Number of months to group: " group_m || return 3
 [[ $group_m =~ ^[0-9]+$ ]] || group_m=1
-read -e -p "Number of days to group: " group_d
+read -e -p "Number of days to group: " group_d || return 3
 [[ $group_d =~ ^[0-9]+$ ]] || group_d=1
 _batch_stat "$path"
 _year_range "${files[@]}"
@@ -202,7 +202,7 @@ echo "💫 Organised by year(s) > month(s) > date(s)"
 }
 
 unorganise() {
-_mc_select uch "🔄 Unorganise and bring to current location:" "Unorganise all" "Unorganise selected folders" || return $(( $? == 2 ? 1 : 0 ))
+_mc_select uch "🔄 Unorganise and bring to current location:" "Unorganise all" "Unorganise selected folders" || return $(( $? == 2 ? 1 : 3 ))
 if [ "$uch" = "1" ]; then
 _carry_flatten_into "$path" "$path" 2   # locks + shortcuts follow; a locked empty folder is kept
 echo "💫 All files brought to current location. Empty folders removed."
@@ -213,6 +213,8 @@ for dir in "${selected_items[@]}"; do
 _carry_flatten_into "$path" "$dir" 1
 done
 echo "💫 Selected folders unorganised."
+else
+_mc_unwind && return 1; return 3        # u / nothing chosen: back to the Organise menu
 fi
 fi
 }
@@ -256,6 +258,8 @@ echo "💫 Organised A-Z"
 }
 
 organise_menu() {
+local rc
+while true; do
 _mc_select och "🗂️ Organise files in current location ($path):" "Organise by ext" "Organise by year(s) (metadata)" \
   "Organise by year(s) > month(s) (metadata)" "Organise by year(s) > month(s) > date(s) (metadata)" \
   "Unorganise and bring it to current location" "Organise A-Z" || return $(( $? == 2 ? 1 : 0 ))
@@ -268,4 +272,9 @@ case "$och" in
 6) organise_by_az ;;
 *) _bvk_invalid ;;
 esac
+rc=$?
+_mc_unwind && return 1
+[ "$rc" -eq 3 ] && continue                  # u inside a choice: the Organise menu again
+return "$rc"
+done
 }

@@ -69,4 +69,29 @@ for num, nm in (('6', 'Functions'), ('5', 'Switch'), ('7', 'Rules'), ('10', 'Lin
 case('Home > q  = main loop', ['h', 'q'], lambda a: a.alive and last_header(a) == 'MAIN', 'must return to main loop')
 case('Settings > q  = main loop', ['s', 'q'], lambda a: a.alive and last_header(a) == 'MAIN', 'must return to main loop')
 case('main > q  exits the app', ['q'], lambda a: not a.alive, 'q on the main loop must exit')
+# --- u inside a flow = ONE question / menu back (never the file list, never the whole flow)
+TITLES = ['Where?', 'Match case?', 'Pattern type?', 'Find mode in', 'Create:', 'Organise files in', 'Number of years to group',
+          'Extract what?', 'Which lines?', 'Step 1: Choose mode', 'SELECT SOURCE', 'Compress as', 'How many lines', '\u270f\ufe0f Rename', 'Old:', 'nav path:']
+def last_title(a):
+    best, bi = '', -1
+    for i, l in enumerate(a.scr.lines()):
+        for t in TITLES:
+            if t in l and i >= bi: best, bi = t, i
+    return best
+def at(title): return lambda a: a.alive and last_title(a) == title
+case('Find > 3 questions deep > u  = the question before', ['f', '1', '1', '1', 'u'], at('Match case?'), 'u at Pattern type must show Match case?')
+case('Find > 2 questions deep > u  = the question before', ['f', '1', '1', 'u'], at('Where?'), 'u at Match case must show Where?')
+case('Find > first question > u  = Find mode menu', ['f', '1', 'u'], at('Find mode in'), 'u at Where? must show the Find mode menu')
+case('Rename > New: > u  = the item picker', ['r', '1', 'u'], at('\u270f\ufe0f Rename'), 'u at New: must show the Rename picker again')
+case('Rename picker > u  = file list', ['r', 'u'], at('nav path:'), 'u at the picker must show the file list')
+case('Create > name prompt > u  = Create menu', ['c', '1', 'u'], at('Create:'), 'u at the name prompt must show Create:')
+case('Create menu > u  = file list', ['c', 'u'], at('nav path:'), 'u at Create: must show the file list')
+case('Organise > years prompt > u  = Organise menu', ['z', '2', 'u'], at('Organise files in'), 'u at the years prompt must show the Organise menu')
+case('Extract > number prompt > u  = Which lines?', ['xtr-1', '1', '1', 'u'], at('Which lines?'), 'u at How many must show Which lines?')
+case('Extract > Which lines? > u  = Extract what?', ['xtr-1', '1', 'u'], at('Extract what?'), 'u must go to the question before')
+case('Extract > Extract what? > u  = file list', ['xtr-1', 'u'], at('nav path:'), 'u at the first question must show the file list')
+case('Transfer > Step 2 > z  = Step 1', ['sw', 't', '1', 'z'], at('Step 1: Choose mode'), 'z in the source navigator must go back to Step 1')
+case('Transfer > Step 1 > u  = where it was opened', ['sw', 't', 'u'], lambda a: a.alive and 'Choose mode' not in ' '.join([l for l in a.scr.lines() if l.strip()][-8:]), 'u at Step 1 must leave transfer')
+case('Transfer source > u  = one folder up (still in the navigator)', ['sw', 't', '1', 'u'], at('SELECT SOURCE'), 'u in a navigator must go one folder up, not leave the transfer')
+case('Archive > name prompt > u  = format menu', ['z-1', '1', 'u'], at('Compress as'), 'u at the archive name must show the format menu')
 print('ALL OK' if all(results) else 'FAILED'); sys.exit(0 if all(results) else 1)

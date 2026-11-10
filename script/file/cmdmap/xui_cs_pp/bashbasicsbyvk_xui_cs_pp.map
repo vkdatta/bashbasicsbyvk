@@ -1,0 +1,11 @@
+# bashbasicsbyvk_xui_cs_pp.map — wiring of the Cloud Surf people-on-a-share screen
+# Chosen by _cm_ctx_find when _XUI_PFX=cs_pp (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_cs_pp
+@kind   menu
+@back   u
+@parent xui
+
+r-         .mapto()  r-         from bashbasicsbyvk_xui_cs_ppmenucommands.sh
+g          .mapto()  g          from bashbasicsbyvk_xui_cs_ppmenucommands.sh
+t          .mapto()  t          from bashbasicsbyvk_xui_cs_ppmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_cs_ppmenucommands.sh

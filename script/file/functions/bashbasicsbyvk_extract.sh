@@ -19,13 +19,13 @@
 #   Needs: bashbasicsbyvk_staging_helpers.sh (_sp_files_only), bashbasicsbyvk_exactbytes.sh (_eb_commas _eb_save_sheet),
 #          bashbasicsbyvk_choose.sh (_bvk_menu), bashbasicsbyvk_deps.sh (_dep_need), the copy command (clipboard).
 
-# _xtr_ask_int VAR "Prompt: "   -> VAR = a whole number >= 1 ; rc 1 = backed out / not a number (message printed)
+# _xtr_ask_int VAR "Prompt: "   -> VAR = a whole number >= 1 ; rc 1 = backed out (u) · 4 = not a number (message printed: ask again)
 _xtr_ask_int() {
   local _v
   read -e -r -p "$2" _v || return 1
   [ "${_CM_ABORT:-0}" = 1 ] && return 1
   _v="${_v//[[:space:]]/}"; _v="${_v//,/}"
-  if [[ ! "$_v" =~ ^[0-9]+$ ]] || [ "$_v" -lt 1 ]; then echo "🔴  Enter a whole number of 1 or more."; return 1; fi
+  if [[ ! "$_v" =~ ^[0-9]+$ ]] || [ "$_v" -lt 1 ]; then echo "🔴  Enter a whole number of 1 or more."; return 4; fi
   printf -v "$1" '%s' "$_v"
 }
 
@@ -180,64 +180,91 @@ PYEOF
 }
 
 # xtr-<items>
-handle_xtr() {
-  local raw="$1" what mode sub n="" n2="" unit="" kindname dlabel=""
-  _sp_files_only "${raw#xtr-}" "xtr-" "EXTRACT" "can't be extracted" || return 0
-
-  _bvk_menu what -t "Extract" -i "✂️" -q "Extract what?" \
-    "1:Lines" "2:Words" "3:Characters" "4:Bytes" || return 0
-  [ "${_CM_ABORT:-0}" = 1 ] && return 0
-  case "$what" in 1) kindname=lines ;; 2) kindname=words ;; 3) kindname=chars ;; 4) kindname=bytes ;; *) _bvk_invalid; return 0 ;; esac
-  local noun="$kindname"; [ "$kindname" = chars ] && noun="characters"
-
+# --- the questions of xtr-, one step each (_mc_steps: u = one question back); they fill handle_xtr's locals ---------------------
+_xtr_back() { _mc_unwind && return 2; return 1; }                    # a menu / prompt came back empty: q = quit, anything else (u) = back
+_xtr_int_step() {                                                    # VAR "Prompt: "  ->  0 · 1 back · 2 quit
+  local _r
+  while :; do _xtr_ask_int "$@"; _r=$?; case "$_r" in 0) return 0 ;; 4) continue ;; *) _xtr_back; return $? ;; esac; done
+}
+_xtr_s_what() {
+  _bvk_menu what -t "Extract" -i "✂️" -q "Extract what?" "1:Lines" "2:Words" "3:Characters" "4:Bytes" || { _xtr_back; return $?; }
+  [ "${_CM_ABORT:-0}" = 1 ] && return 3
+  case "$what" in 1) kindname=lines ;; 2) kindname=words ;; 3) kindname=chars ;; 4) kindname=bytes ;; *) _bvk_invalid; return 3 ;; esac
+  noun="$kindname"; [ "$kindname" = chars ] && noun="characters"
+  return 0
+}
+_xtr_s_mode() {
+  mode=""; dlabel=""
   if [ "$kindname" = bytes ]; then
-    _bvk_menu mode -t "Extract bytes" -i "✂️" -q "Which bytes?" "1:First n bytes" "2:Last n bytes" "3:Random n bytes" || return 0
-    [ "${_CM_ABORT:-0}" = 1 ] && return 0
-    case "$mode" in 1) mode=first ;; 2) mode=last ;; 3) mode=random ;; *) _bvk_invalid; return 0 ;; esac
-    read -e -r -p "How many (a number, e.g. 10 or 1.5): " n || return 0
-    [ "${_CM_ABORT:-0}" = 1 ] && return 0
-    n="${n//[[:space:]]/}"
-    if [[ ! "$n" =~ ^[0-9]+(\.[0-9]+)?$ ]] || [[ "$n" =~ ^0+(\.0+)?$ ]]; then echo "🔴  Enter a number above 0."; return 0; fi
-    _bvk_menu unit -t "Size unit" -i "📏" -q "In which unit is $n?" \
-      "b:Bytes (B)" "kb:KB — 1,000 bytes" "mb:MB — 1,000,000 bytes" "gb:GB — 10^9 bytes" "tb:TB — 10^12 bytes" "pb:PB — 10^15 bytes" "eb:EB — 10^18 bytes" \
-      "kib:KiB — 1,024 bytes" "mib:MiB — 1,048,576 bytes" "gib:GiB — 2^30 bytes" "tib:TiB — 2^40 bytes" "pib:PiB — 2^50 bytes" "eib:EiB — 2^60 bytes" || return 0
-    [ "${_CM_ABORT:-0}" = 1 ] && return 0
-    n2="$unit"
+    _bvk_menu mode -t "Extract bytes" -i "✂️" -q "Which bytes?" "1:First n bytes" "2:Last n bytes" "3:Random n bytes" || { _xtr_back; return $?; }
+    [ "${_CM_ABORT:-0}" = 1 ] && return 3
+    case "$mode" in 1) xmode=first ;; 2) xmode=last ;; 3) xmode=random ;; *) _bvk_invalid; return 3 ;; esac
   else
     _bvk_menu mode -t "Extract $noun" -i "✂️" -q "Which $noun?" \
-      "1:First n $noun" "2:Range" "3:Last n $noun" "4:Random $noun" "5:Duplicate $noun" "6:Unique $noun" || return 0
-    [ "${_CM_ABORT:-0}" = 1 ] && return 0
-    case "$mode" in
-      1) mode=first;  _xtr_ask_int n "How many $noun: " || return 0 ;;
-      2) mode=range;  _xtr_ask_int n "Range from (first one is 1): " || return 0
-                      _xtr_ask_int n2 "Range to (included): " || return 0 ;;
-      3) mode=last;   _xtr_ask_int n "How many $noun: " || return 0 ;;
-      4) mode=random; _xtr_ask_int n "How many random $noun: " || return 0 ;;
-      5|6) if [ "$mode" = 5 ]; then mode=dup; dlabel="duplicate"; else mode=uniq; dlabel="unique"; fi
-         _bvk_menu sub -t "How many?" -i "🔢" -q "How many $dlabel $noun do you want?" "1:All" "2:A specific number" || return 0
-         [ "${_CM_ABORT:-0}" = 1 ] && return 0
-         case "$sub" in 1) n="" ;; 2) _xtr_ask_int n "How many: " || return 0 ;; *) _bvk_invalid; return 0 ;; esac ;;
-      *) _bvk_invalid; return 0 ;;
-    esac
+      "1:First n $noun" "2:Range" "3:Last n $noun" "4:Random $noun" "5:Duplicate $noun" "6:Unique $noun" || { _xtr_back; return $?; }
+    [ "${_CM_ABORT:-0}" = 1 ] && return 3
+    case "$mode" in 1) xmode=first ;; 2) xmode=range ;; 3) xmode=last ;; 4) xmode=random ;;
+      5) xmode=dup; dlabel="duplicate" ;; 6) xmode=uniq; dlabel="unique" ;; *) _bvk_invalid; return 3 ;; esac
   fi
-
-  local base rc; base="$(mktemp)" || return 0
+  return 0
+}
+_xtr_s_sub() {                                                        # duplicate / unique only: all of them, or a number
+  case "$xmode" in dup|uniq) ;; *) return 5 ;; esac
+  _bvk_menu sub -t "How many?" -i "🔢" -q "How many $dlabel $noun do you want?" "1:All" "2:A specific number" || { _xtr_back; return $?; }
+  [ "${_CM_ABORT:-0}" = 1 ] && return 3
+  case "$sub" in 1|2) ;; *) _bvk_invalid; return 3 ;; esac
+  return 0
+}
+_xtr_s_n() {
+  n=""
+  if [ "$kindname" = bytes ]; then
+    local _r
+    while :; do
+      read -e -r -p "How many (a number, e.g. 10 or 1.5): " n || { _xtr_back; return $?; }
+      [ "${_CM_ABORT:-0}" = 1 ] && return 3
+      n="${n//[[:space:]]/}"
+      if [[ ! "$n" =~ ^[0-9]+(\.[0-9]+)?$ ]] || [[ "$n" =~ ^0+(\.0+)?$ ]]; then echo "🔴  Enter a number above 0."; continue; fi
+      return 0
+    done
+  fi
+  case "$xmode" in
+    first|last) _xtr_int_step n "How many $noun: " ;;
+    random)     _xtr_int_step n "How many random $noun: " ;;
+    range)      _xtr_int_step n "Range from (first one is 1): " ;;
+    dup|uniq)   [ "$sub" = 2 ] || return 5; _xtr_int_step n "How many: " ;;
+  esac
+}
+_xtr_s_n2() {                                                         # range: the end · bytes: the unit
+  n2=""
+  if [ "$kindname" = bytes ]; then
+    _bvk_menu unit -t "Size unit" -i "📏" -q "In which unit is $n?" \
+      "b:Bytes (B)" "kb:KB — 1,000 bytes" "mb:MB — 1,000,000 bytes" "gb:GB — 10^9 bytes" "tb:TB — 10^12 bytes" "pb:PB — 10^15 bytes" "eb:EB — 10^18 bytes" \
+      "kib:KiB — 1,024 bytes" "mib:MiB — 1,048,576 bytes" "gib:GiB — 2^30 bytes" "tib:TiB — 2^40 bytes" "pib:PiB — 2^50 bytes" "eib:EiB — 2^60 bytes" || { _xtr_back; return $?; }
+    [ "${_CM_ABORT:-0}" = 1 ] && return 3
+    n2="$unit"; return 0
+  fi
+  [ "$xmode" = range ] || return 5
+  _xtr_int_step n2 "Range to (included): "
+}
+_xtr_s_result() {                                                     # run it, show it, ask what to do with it.  u = back to the last question
+  local base rc ans stamp ext=txt
+  base="$(mktemp)" || return 3
   echo
   echo "✂️  Extracted"
-  _xtr_engine "$kindname" "$mode" "$n" "$n2" "$base" "${sp_files[@]}"
+  _xtr_engine "$kindname" "$xmode" "$n" "$n2" "$base" "${sp_files[@]}"
   rc=$?
-  if [ "$rc" = 3 ]; then echo "🔴  Nothing to extract (0 results)."; rm -f "$base" "$base.out" "$base.tsv"; return 0; fi
-  if [ "$rc" != 0 ]; then rm -f "$base" "$base.out" "$base.tsv"; return 0; fi
+  if [ "$rc" = 3 ]; then echo "🔴  Nothing to extract (0 results)."; rm -f "$base" "$base.out" "$base.tsv"; return 3; fi
+  if [ "$rc" != 0 ]; then rm -f "$base" "$base.out" "$base.tsv"; return 3; fi
   echo
-
-  local ans stamp ext=txt
   [ "$kindname" = bytes ] && ext=bin
   if [ "$kindname" = bytes ]; then
     _bvk_menu ans -t "Extracted" -i "✂️" -q "What do you want to do with the result?" "c:Copy it to the clipboard" "f:Save it to a file"
   else
     _bvk_menu ans -t "Extracted" -i "✂️" -q "What do you want to do with the result?" "c:Copy it to the clipboard" "f:Save it to a file" "x:Save it in Excel"
   fi
-  if [ $? -eq 0 ] && [ "${_CM_ABORT:-0}" != 1 ]; then
+  rc=$?
+  if [ "$rc" -ne 0 ]; then rm -f "$base" "$base.out" "$base.tsv"; _xtr_back; return $?; fi
+  if [ "${_CM_ABORT:-0}" != 1 ]; then
     printf -v stamp '%(%Y%m%d_%H%M%S)T' -1
     case "${ans,,}" in
       c) if [ "$(wc -c < "$base.out")" -gt 10485760 ]; then echo "🔴  Too big for the clipboard (over 10 MB) — save it to a file instead."
@@ -252,5 +279,13 @@ handle_xtr() {
     esac
   fi
   rm -f "$base" "$base.out" "$base.tsv"
+  return 0
+}
+
+handle_xtr() {
+  local raw="$1" what mode xmode sub n="" n2="" unit kindname noun dlabel=""
+  _sp_files_only "${raw#xtr-}" "xtr-" "EXTRACT" "can't be extracted" || return 0
+  # u = one question back; on the first question it leaves xtr- (back to where it was called from)
+  _mc_steps _xtr_s_what _xtr_s_mode _xtr_s_sub _xtr_s_n _xtr_s_n2 _xtr_s_result
   return 0
 }

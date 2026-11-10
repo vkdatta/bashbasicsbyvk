@@ -51,28 +51,33 @@ _compress_paths() {
     return 1
   fi
 
-  # ── Determine format ────────────────────────────────────────────────────
-  local fmt="${compress_format:-ask}"
-  _arc_is_fmt "$fmt" || fmt="ask"
+  # ── Determine format, then the name.  u at the name prompt = back to the format menu (when it was asked) ─────
+  local fmt ext _asked
+  while true; do
+    fmt="${compress_format:-ask}"; _asked=0
+    _arc_is_fmt "$fmt" || fmt="ask"
 
-  if [ "$fmt" = "ask" ]; then
-    local -a _rows=() 
-    local _f _miss
-    for _f in "${_ARC_FORMATS[@]}"; do
-      _miss=""; _arc_have create "$_f" || _miss="   (needs ${_ARC_MISSING})"
-      _rows+=("$_f:${_ARC_LABEL[$_f]}  —  ${_ARC_NOTE[$_f]}${_miss}")
-    done
-    _bvk_menu fmt -t "Compress as" -i "📦" "${_rows[@]}" || return
-    [ -n "$fmt" ] || { echo "🚫 Cancelled — invalid choice."; return; }
-  fi
+    if [ "$fmt" = "ask" ]; then
+      local -a _rows=()
+      local _f _miss
+      for _f in "${_ARC_FORMATS[@]}"; do
+        _miss=""; _arc_have create "$_f" || _miss="   (needs ${_ARC_MISSING})"
+        _rows+=("$_f:${_ARC_LABEL[$_f]}  —  ${_ARC_NOTE[$_f]}${_miss}")
+      done
+      _bvk_menu fmt -t "Compress as" -i "📦" "${_rows[@]}" || return
+      [ -n "$fmt" ] || { echo "🚫 Cancelled — invalid choice."; return; }
+      _asked=1
+    fi
 
-  # ── Tool availability check ─────────────────────────────────────────────
-  _arc_need create "$fmt" || return 1
-  local ext="${_ARC_LABEL[$fmt]}"
+    # ── Tool availability check ───────────────────────────────────────────
+    _arc_need create "$fmt" || return 1
+    ext="${_ARC_LABEL[$fmt]}"
 
-  # ── Archive name prompt ─────────────────────────────────────────────────
-  echo ""
-  read -e -r -p "Name for the archive (without ${ext}): " arc_name
+    # ── Archive name prompt ───────────────────────────────────────────────
+    echo ""
+    read -e -r -p "Name for the archive (without ${ext}): " arc_name || { (( _asked )) && continue; return; }
+    break
+  done
   arc_name="${arc_name%$'\r'}"
   [ -z "$arc_name" ] && echo "🚫 Cancelled — no name given." && return
 

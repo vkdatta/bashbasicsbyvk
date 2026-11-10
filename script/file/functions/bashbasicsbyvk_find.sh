@@ -51,30 +51,48 @@ _find_ask() {
   _mc_select -d "$def" "$out" "$q" "${rows[@]}"
 }
 
-# _find_resolve_options <names|contents|both>
-#   Turns the Find & replace settings into this run's options (_fo_*), asking only about the ones set to "ask every time".
-#   rc 0 ready · 1 back · 2 quit (q was pressed: nothing may be drawn again)
+# One Find & replace question = one step for _mc_steps (menuchrome.sh STEPS-01): rc 0 answered · 1 back (u) · 2 quit · 3 cancelled.
+_find_step_depth() { _find_ask _fo_depth "📂 Where?" rec f flat "this folder only" r rec "all sub-folders too"; }
+_find_step_case()  { _find_ask _fo_case "🔠 Match case?" exact e exact "exact case" a any "any case"; }
+_find_step_regex() { _find_ask _fo_regex "🧩 Pattern type?" 0 t 0 "plain text" r 1 "regex"; }
+_find_step_word()  { _find_ask _fo_word "🔤 Whole words only?" 0 n 0 "no" w 1 "yes"; }
+# The typed questions are steps too, on the shared text prompt (it prints u) Back, so u reaches it as the menu's own key).
+_find_step_pattern() {
+  _fo_pat=""
+  _mc_text _fo_pat "$(_find_what "$_fr_scope")" "$(_find_options_line)" || return $?
+  [ -z "$_fo_pat" ] && { echo "Nothing entered."; return 3; }
+  return 0
+}
+_find_step_replacement() { _fo_rep=""; _mc_text _fo_rep "Replace with: "; }
+
+# _find_resolve_options <names|contents|both> [PRESTEP...] [-- STEP...]
+#   Turns the Find & replace settings into this run's options (_fo_*), then runs ONE flow through _mc_steps:
+#   PRESTEPs, the questions set to "ask every time" (settled ones are not steps), then the STEPs.  u = one question back.
+#   rc 0 every step answered · 1 u on the first question · 2 quit (q was pressed: nothing may be drawn again) · 3 cancelled
 _find_resolve_options() {
-  local scope="$1" rc=0 mb
+  local scope="$1" mb; shift
+  local -a steps=()
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do steps+=("$1"); shift; done
+  [ "${1:-}" = -- ] && shift
   _fr_scope="$scope"
   case "$find_depth_mode" in
     flat) _fo_depth=flat ;;
     recursive) _fo_depth=rec ;;
-    *) _find_ask _fo_depth "📂 Where?" rec f flat "this folder only" r rec "all sub-folders too" || return $(( $? == 2 ? 2 : 1 )) ;;
+    *) steps+=(_find_step_depth) ;;
   esac
   case "$find_case_mode" in
     exact|any) _fo_case="$find_case_mode" ;;
-    *) _find_ask _fo_case "🔠 Match case?" exact e exact "exact case" a any "any case" || return $(( $? == 2 ? 2 : 1 )) ;;
+    *) steps+=(_find_step_case) ;;
   esac
   case "$find_regex_mode" in
     on) _fo_regex=1 ;;
     off) _fo_regex=0 ;;
-    *) _find_ask _fo_regex "🧩 Pattern type?" 0 t 0 "plain text" r 1 "regex" || return $(( $? == 2 ? 2 : 1 )) ;;
+    *) steps+=(_find_step_regex) ;;
   esac
   case "$find_word_mode" in
     on) _fo_word=1 ;;
     off) _fo_word=0 ;;
-    *) _find_ask _fo_word "🔤 Whole words only?" 0 n 0 "no" w 1 "yes" || return $(( $? == 2 ? 2 : 1 )) ;;
+    *) steps+=(_find_step_word) ;;
   esac
   case "$find_hidden_mode" in
     include) _fo_hidden=1 ;;
@@ -88,8 +106,12 @@ _find_resolve_options() {
   [ "$find_threads" = auto ] && _fo_threads=0 || _fo_threads="$find_threads"
   _fo_limit="${find_show_limit:-300}"
   _fr_root="$path"; _fr_only=""; _fr_excl=()
-  return 0
+  steps+=("$@")
+  _mc_steps "${steps[@]}"
 }
+
+# _find_flow_rc <steps rc> → the rc of the flow functions below:  0 finished (leave Find) · 3 u = back to the menu above · 1 quit
+_find_flow_rc() { case "$1" in 1) return 3 ;; 2) return 1 ;; *) return 0 ;; esac; }
 
 # _find_options_line  — "recursive · exact case · plain text · hidden: no"
 _find_options_line() {
@@ -134,11 +156,13 @@ _find_apply_report() {
 # ── 1-3  Find ────────────────────────────────────────────────────────────────
 # rc 0 done (leave the menu) · 3 back to the Find menu · 1 quit
 _find_search() {
-  local scope="$1" pat act target n
-  _find_resolve_options "$scope" || return $(( $? == 2 ? 1 : 3 ))
-  _find_options_line
-  read -e -r -p "$(_find_what "$scope")" pat || return 3
-  [ -z "$pat" ] && { echo "Nothing entered."; return 0; }
+  _find_resolve_options "$1" -- _find_step_pattern _find_step_results
+  _find_flow_rc $?
+}
+
+# the last step of Find: run it and list the hits.  u = back to the question before (the text to find)
+_find_step_results() {
+  local pat="$_fo_pat" act target n
   _fr_finds=("$pat"); _fr_reps=("")
   echo "⏳ Searching…"
   _fr_exec find || return 0
@@ -151,7 +175,7 @@ _find_search() {
   while true; do
     # rc != 0 = back / quit / the command layer cancelled this flow: leave at once
     _mc_text -x "#Enter item number to navigate" act "Select: "
-    case $? in 1) return 3 ;; 2) return 1 ;; 3) return 0 ;; esac
+    case $? in 1) return 1 ;; 2) return 2 ;; 3) return 0 ;; esac
     if [[ $act =~ ^[0-9]+$ ]] && (( act >= 1 && act <= ${#_FR_LIST[@]} )); then
       target="${_FR_LIST[$((act-1))]}"
       if [ -d "$target" ]; then path="$target"
@@ -164,12 +188,13 @@ _find_search() {
 
 # ── 4-6  Find & replace, one pattern ─────────────────────────────────────────
 _find_replace_single() {
-  local scope="$1" pat rep act what="" idx
-  _find_resolve_options "$scope" || return $(( $? == 2 ? 1 : 3 ))
-  _find_options_line
-  read -e -r -p "$(_find_what "$scope")" pat || return 3
-  [ -z "$pat" ] && { echo "Nothing entered."; return 0; }
-  read -e -r -p "Replace with: " rep || return 3
+  _find_resolve_options "$1" -- _find_step_pattern _find_step_replacement _find_step_preview
+  _find_flow_rc $?
+}
+
+# the last step of a single replace: preview, choose what to apply, apply.  u = back to "Replace with:"
+_find_step_preview() {
+  local pat="$_fo_pat" rep="$_fo_rep" act
   _fr_finds=("$pat"); _fr_reps=("$rep")
   if [ "$find_confirm_mode" != direct ]; then
     echo "⏳ Looking…"
@@ -180,7 +205,7 @@ _find_replace_single() {
     _fr_notes
     # MC-06: the preview rows ARE the numbered choices; the footer adds a) Apply to ALL to the standard keys
     _mc_text -x "a:Apply to ALL" -x "#Enter a number to apply to just that item" act "Select: "
-    case $? in 1) return 3 ;; 2) return 1 ;; 3) return 0 ;; esac
+    case $? in 1) return 1 ;; 2) return 2 ;; 3) return 0 ;; esac
     case "$act" in
       a|A) ;;
       [0-9]*)
@@ -227,23 +252,27 @@ _find_csv_rows() {
 }
 
 # ── 4-6  Find & replace, many rows from a CSV ───────────────────────────────
-_find_replace_csv() {
-  local scope="$1" abs_csv_file ok
-  local -a csv_finds=() csv_reps=() csv_counts=()
-  open_csv_menu || return 0
-  [ -z "$csv_file" ] && return 0
-  _find_resolve_options "$scope" || return $(( $? == 2 ? 1 : 3 ))
+# Steps (in order): pick the CSV (z = back) · the questions set to "ask every time" · read + preview + "Apply all?" (u = back).
+# They share the locals of _find_replace_csv (csv_finds, csv_reps, abs_csv_file).
+_find_step_csvfile() {
+  open_csv_menu && [ -n "$csv_file" ] && return 0
+  _mc_unwind && return 2
+  return 1                                       # z / nothing picked = back one menu (Single / Multi)
+}
+_find_step_csv_confirm() {
+  local ok
+  csv_finds=(); csv_reps=(); csv_counts=()
   echo ""
   echo "🔄 Reading rows from: $(basename "$csv_file")"
   _find_csv_read "$csv_file" csv_finds csv_reps
-  if [ ${#csv_finds[@]} -eq 0 ]; then echo "❌ No valid rows found in CSV."; return 0; fi
+  if [ ${#csv_finds[@]} -eq 0 ]; then echo "❌ No valid rows found in CSV."; return 3; fi
   _find_options_line
   echo "📋 ${#csv_finds[@]} row(s), applied one after the other, in: $path"
   abs_csv_file="$(cd "$(dirname "$csv_file")" && pwd)/$(basename "$csv_file")"
   _fr_finds=("${csv_finds[@]}"); _fr_reps=("${csv_reps[@]}")
   _fr_excl=("$abs_csv_file")                  # the CSV itself is never edited or renamed
   echo "⏳ Looking…"
-  _fr_exec preview || return 0
+  _fr_exec preview || return 3
   _find_csv_rows preview
   echo ""
   if [ "${_FRS[names_planned]:-0}" -eq 0 ] && [ "${_FRS[files_matched]:-0}" -eq 0 ]; then
@@ -251,9 +280,17 @@ _find_replace_csv() {
   elif [ "$find_confirm_mode" != direct ]; then
     echo "📋 Total — $(_find_preview_summary)"
     _fr_notes
-    _bvk_yn ok "Apply all ${#csv_finds[@]} row(s)?" || return 0
-    [[ "$ok" =~ ^[Yy]$ ]] || { echo "Aborted."; return 0; }
+    _bvk_yn ok "Apply all ${#csv_finds[@]} row(s)?" || { _mc_unwind && return 2; return 1; }   # u = back one question
+    [[ "$ok" =~ ^[Yy]$ ]] || { echo "Aborted."; return 3; }
   fi
+  return 0
+}
+_find_replace_csv() {
+  local scope="$1" abs_csv_file rc
+  local -a csv_finds=() csv_reps=() csv_counts=()
+  _find_resolve_options "$scope" _find_step_csvfile -- _find_step_csv_confirm
+  rc=$?
+  [ "$rc" -eq 0 ] || { _find_flow_rc "$rc"; return $?; }
   echo "⏳ Applying…"
   _fr_exec apply || return 0
   _fr_changes_log
@@ -270,18 +307,24 @@ _find_replace_csv() {
 }
 
 # ── 4-6  Find & replace entry: Single or Multi ──────────────────────────────
+# u inside Single / Multi goes back to THIS question when the person was asked it (setting "ask"), else to the Find menu.
 _find_replace() {
-  local scope="$1" title how
+  local scope="$1" title how rc
   case "$scope" in names) title="🔤 Find & Replace in file/folder names" ;; contents) title="🔄 Find & Replace inside file contents" ;; *) title="🔁 Find & Replace in names and contents" ;; esac
-  case "$find_input_mode" in
-    single) how=1 ;;
-    csv)    how=2 ;;
-    *) _mc_select how "$title" "Single Mutation" "Multi Mutation (CSV)" || return $(( $? == 2 ? 1 : 3 )) ;;
-  esac
-  case "$how" in
-    1) _find_replace_single "$scope" ;;
-    2) _find_replace_csv "$scope" ;;
-  esac
+  while true; do
+    case "$find_input_mode" in
+      single) how=1 ;;
+      csv)    how=2 ;;
+      *) _mc_select how "$title" "Single Mutation" "Multi Mutation (CSV)" || return $(( $? == 2 ? 1 : 3 )) ;;
+    esac
+    case "$how" in
+      1) _find_replace_single "$scope" ;;
+      2) _find_replace_csv "$scope" ;;
+    esac
+    rc=$?
+    if [ "$rc" -eq 3 ] && [ "$find_input_mode" != single ] && [ "$find_input_mode" != csv ]; then continue; fi
+    return "$rc"
+  done
 }
 
 find_menu() {
