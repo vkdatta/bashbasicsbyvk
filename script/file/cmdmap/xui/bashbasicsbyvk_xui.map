@@ -77,3 +77,4 @@ goto       .mapto()  block()
 eb-        .mapto()  block()
 xtr-       .mapto()  block()
 i-         .mapto()  block()
+sys        .mapto()  sys        from bashbasicsbyvk_maincommands.sh

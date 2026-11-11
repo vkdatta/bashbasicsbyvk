@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+In the upgrade menu (-u), typing a version number started the install straight away (after one Continue? question), and after a good install the screen only said to quit and start o again. Wanted: the number opens a version menu (Install / Info) like the file menu, Install needs no second question, and the program ends after a good install.
+
+1. HOW DID YOU DEBUG
+Written from the change itself; the menus were not driven in a terminal. bash -n was run on every edited file. In the fast tier on the merged tree github_upgrade_shared is red exactly as on the untouched base (_tm_define: command not found in that environment), so no passing test exercises the new upgrade-loop paths. Read _upg_cmd_install, _upg_do_install and the choice loop in bashbasicsbyvk_upgrade.sh, and handle_file in bashbasicsbyvk_run.sh as the model for the menu.
+
+1. CAUSE
+Not a defect: the number was wired directly to the install, so the only way to look at a version first was i-N.
+
+1. FIX
+New bashbasicsbyvk_version.sh (handle_version: 0 Install, 1 Info; _hv_info) built from the shared menu pieces (_mc_header, _mc_options, _mc_footer @file_menu). bashbasicsbyvk_upgrade.sh: _upg_cmd_install remembers the pick (_UPG_PICK_N), loads the file with _lm_need and calls handle_version; _upg_do_install takes a third argument yes (already confirmed in the menu: no Continue?) and ends with exit 0 after a good install, because the running copy is the old version; the list is redrawn afterwards (_up_fresh=true). Loadmap line and regenerated stubs added for handle_version, _hv_info and the new upgrade helpers. Lesson: a number picked from a list opens that item's menu, as in the file list.
+
+2. ISSUE IN BRIEF
+i-N in the upgrade menu described one version and then waited for any key, while i- on files takes lists and ranges (1,3  1-5  a  a-2) and then offers to save in Excel or copy. Wanted: the same item lists and the same closing question for versions.
+
+2. HOW DID YOU DEBUG
+Written from the change itself; the menus were not driven in a terminal. bash -n was run on every edited file. In the fast tier on the merged tree github_upgrade_shared is red exactly as on the untouched base (_tm_define: command not found in that environment), so no passing test exercises the new upgrade-loop paths. Compared the i- handler of the upgrade loop with handle_info in bashbasicsbyvk_fileinfo.sh and its _eb_finish ending; the resolver of the item lists is _sp_resolve_itemlist.
+
+2. CAUSE
+Not a defect: the version info command was written for one tag and never used the shared item-list resolver or the Excel / copy ending.
+
+2. FIX
+bashbasicsbyvk_upgrade.sh: _upg_info_one prints one version (split out of _upg_cmd_info, which stays for single-version callers); new _upg_cmd_info_many resolves the list with _sp_resolve_itemlist, prints every version, builds the text and TSV and ends with _eb_finish (Project info), then the list is drawn again. The commit of a tag is fetched in the loop, not inside $( ), so the cache survives. Header, help and usage texts updated. Follow-up of BB-291020260155-2 (the i-N screen). Lesson: one item-list resolver and one Excel / copy ending for every i- command.
+
+3. ISSUE IN BRIEF
+The file menu (the run loop of a selected file) had no Info item; file info existed only through the i- command. Wanted: Info in the file menu, showing the same screen for that one file.
+
+3. HOW DID YOU DEBUG
+Written from the change itself; the menus were not driven in a terminal. bash -n was run on every edited file. In the fast tier on the merged tree github_upgrade_shared is red exactly as on the untouched base (_tm_define: command not found in that environment), so no passing test exercises the new upgrade-loop paths. Read handle_info in bashbasicsbyvk_fileinfo.sh and the option list and case in bashbasicsbyvk_run.sh.
+
+3. CAUSE
+Not a defect: the info screen lived inside handle_info, tied to the i- argument parsing, so the menu could not call it.
+
+3. FIX
+bashbasicsbyvk_fileinfo.sh: the scan / print / Excel-or-copy part moved into _fi_show; handle_info now only validates the items and calls it. bashbasicsbyvk_run.sh: new 13th item Info calls _hf_info, which resolves the absolute path (_file_abs_path) and calls _fi_show. Stubs added for _fi_show and _hf_info. The screen is shared, not copied.

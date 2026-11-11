@@ -48,3 +48,4 @@ engine/bashbasicsbyvk_yn	yn_tools
 infinity/tools/	yn_tools
 cmd/	yn_tools
 functions/bashbasicsbyvk_(track|carry|rename)|select/bashbasicsbyvk_track_lib|loops/iloop/switch/|engine/bashbasicsbyvk_displayer|loops/rloop/run/	track cmd_drift
+cmd/bashbasicsbyvk_sys	sys deps

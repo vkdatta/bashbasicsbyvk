@@ -28,6 +28,7 @@
 #             --dry-run  print the commands, run nothing            --check  status of everything in the registry   --list  the map
 #  Ids:       a dependency id (7z, numpy), a feature (archive.create.7z, polyglot), `?id` = optional, a pip family member (tree_sitter_python)
 #  Env:       BVK_DEPS_ASSUME=yes|no  answers the menu (scripts, CI)      BVK_DEPS_MANAGER=apt|termux|...  forces the package manager
+#             BVK_DEPS_DEVICE=termux|server|...  forces the device kind (what `bashbasicsbyvk_sys --device` says; ids as in bashbasicsbyvk_install.sh)
 #             BVK_DEPS_JOBS=N  parallel installs (default: CPUs, max 4)   BVK_DEPS_REGISTRY=file  another registry (tests)
 #             BVK_DEPS_LOG=file  install log (default ~/.bashbasicsbyvk/deps_install.log)
 #
@@ -62,8 +63,11 @@ _dep_log() {
 
 # user-space installs (pip --user, npm --prefix ~/.local) put programs in ~/.local/bin
 _dep_path_fix() {
-  [ -d "$HOME/.local/bin" ] || return 0
-  case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$PATH:$HOME/.local/bin" ;; esac
+  local d
+  for d in "$HOME/.local/bin" "$HOME/bin"; do          # ~/bin: the official rclone build (recipe rclone)
+    [ -d "$d" ] || continue
+    case ":$PATH:" in *":$d:"*) ;; *) PATH="$PATH:$d" ;; esac
+  done
   return 0
 }
 
@@ -97,6 +101,22 @@ _dep_mgr() {
   elif command -v brew >/dev/null 2>&1;    then _DEP_MGR=brew
   else _DEP_MGR=""; fi
   return 0
+}
+
+# the KIND OF DEVICE -> _DEP_DEVICE: termux linux server wsl2 wsl1 macos-arm macos-intel rpi chromeos container gcloud awscs azurecs codespaces notebook freebsd ...
+# ONE source: `bashbasicsbyvk_sys --device` (the `sys` command's own detector, same ids as bashbasicsbyvk_install.sh).  Only asked when an install
+# has device-specific wiring (a `dev:<id>=` key or a recipe), never on the fast path.  Without python / the tool: a coarse answer from uname.
+_dep_device() {
+  [ -n "${BVK_DEPS_DEVICE:-}" ] && { _DEP_DEVICE="$BVK_DEPS_DEVICE"; return 0; }
+  [ -n "${_DEP_DEVICE:-}" ] && return 0
+  local d=""
+  command -v bashbasicsbyvk_sys >/dev/null 2>&1 && d=$(bashbasicsbyvk_sys --device 2>/dev/null)
+  case "$d" in *[!a-z0-9-]*|"") d="" ;; esac
+  if [ -z "$d" ]; then
+    if [[ "${PREFIX:-}" == *com.termux* ]]; then d=termux
+    else case "$(uname -s 2>/dev/null)" in Darwin) d=macos-intel ;; FreeBSD) d=freebsd ;; *) d=linux ;; esac; fi
+  fi
+  _DEP_DEVICE="$d"
 }
 
 # _DEP_PRIV = (sudo) when the manager needs root and we are not root; rc 1 = needs root and there is no way to get it
@@ -326,7 +346,9 @@ _dep_pkgval() {
     pip) if [ -n "$_DEP_MGR" ] && _dep_pkgkey "$1" "$_DEP_MGR" && [[ "$_DEP_VAL" == sys:* ]]; then return 0; fi
          _dep_pkgkey "$1" pip ;;
     npm) _dep_pkgkey "$1" npm ;;
-    *)   [ -n "$_DEP_MGR" ] && { _dep_pkgkey "$1" "$_DEP_MGR" || _dep_pkgkey "$1" '*'; } ;;
+    *)   if [[ "${_DEP_PKGS[$1]}" == *dev:* ]]; then _dep_device; _dep_pkgkey "$1" "dev:$_DEP_DEVICE" && return 0; fi   # the device's own wiring beats the manager's
+         [ -n "$_DEP_MGR" ] && _dep_pkgkey "$1" "$_DEP_MGR" && return 0
+         _dep_pkgkey "$1" '*' && { [ -n "$_DEP_MGR" ] || [[ "$_DEP_VAL" == @* ]]; } ;;   # `*` needs a manager, except a recipe (it brings its own way)
   esac
 }
 
@@ -363,6 +385,7 @@ _dep_plan() {
       npm) _PL_NPM+=("$v"); _PL_HOW[$id]="npm install -g $v" ;;
       *)   if [[ "$v" == @* ]]; then
              r="${v#@}"; name="${r%%+*}"; pre=""; [[ "$r" == *+* ]] && pre="${r#*+}"
+             if [ "$name" = rclone ] && ! _dep_rclone_target; then _PL_NA+=("$id"); _PL_HOW[$id]="no official rclone build here ($_DEP_RC_WHY)"; continue; fi
              _PL_RECIPE+=("$name"); _PL_HOW[$id]="$(_dep_recipe_text "$name")"
              for p in ${pre//+/ }; do
                _dep_resolve "$p" && [ "${_DEP_ST[$p]:-0}" != 1 ] && ! _dep_probe_one "$p" && _dep_pkgval "$p" && { _dep_plan_sys "$_DEP_VAL" ""; _PL_EXTRA+=("${_DEP_LABEL[$p]}"); }
@@ -378,8 +401,27 @@ _dep_recipe_text() {
   case "$1" in
     gh-apt) printf '%s' "adds GitHub's official apt repository (cli.github.com) to this computer, then installs gh" ;;
     gh-dnf) printf '%s' "adds GitHub's official rpm repository (cli.github.com) to this computer, then installs gh" ;;
+    rclone) if _dep_rclone_target; then printf '%s' "downloads rclone ($_DEP_RC_URL) into ~/bin, no root needed, and puts ~/bin on PATH"
+            else printf '%s' "no official rclone build for this CPU / device ($_DEP_RC_WHY)"; fi ;;
     *)      printf '%s' "install recipe $1" ;;
   esac
+}
+
+# does the recipe need root?  (gh adds a system repository; rclone is a user-space download into ~/bin)
+_dep_recipe_root() { case "$1" in rclone) return 1 ;; *) return 0 ;; esac; }
+
+# rclone's own name for this machine -> _DEP_RC_URL ; rc 1 + _DEP_RC_WHY when there is none.
+# The CPU / OS table is _bvk_engine_target (the one place, AGENTS.md rule 9); only rclone's spelling of it is here.
+_dep_rclone_target() {
+  _DEP_RC_URL=""; _DEP_RC_WHY=""
+  local os arch
+  _dep_device
+  [ "$_DEP_DEVICE" = android-other ] && { _DEP_RC_WHY="Android without Termux: install Termux (F-Droid), then pkg install rclone there"; return 1; }
+  declare -F _bvk_engine_target >/dev/null 2>&1 || { _DEP_RC_WHY="the CPU table (bashbasicsbyvk_engine_target.sh) is not loaded"; return 1; }
+  _bvk_engine_target
+  case "$_bet_os" in linux) os=linux ;; darwin) os=osx ;; freebsd) os=freebsd ;; *) _DEP_RC_WHY="$_bet_os"; return 1 ;; esac
+  case "$_bet_m" in arm) arch=arm-v7 ;; "") _DEP_RC_WHY="$(uname -m 2>/dev/null) on $_bet_os"; return 1 ;; *) arch="$_bet_m" ;; esac
+  _DEP_RC_URL="https://downloads.rclone.org/rclone-current-$os-$arch.zip"
 }
 
 _dep_recipe_gh_apt() {
@@ -399,6 +441,50 @@ _dep_recipe_gh_dnf() {
   _dep_run "${_DEP_PRIV[@]}" "$_DEP_MGR" install -y 'dnf-command(config-manager)' || return 1
   _dep_run "${_DEP_PRIV[@]}" "$_DEP_MGR" config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo || return 1
   _dep_run "${_DEP_PRIV[@]}" "$_DEP_MGR" install -y gh
+}
+
+# rclone, the way the README does it for a VM / Linux box (Termux and Homebrew use their package, see the registry): the official build,
+# unzipped to ~/bin, ~/bin put on PATH once.  Everything stays in the user's home: no root.
+_dep_path_line() {   # _dep_path_line FILE LINE : append once, never twice
+  local f="$1" l="$2"
+  grep -qsF -- "$l" "$f" 2>/dev/null && return 0
+  { [ -s "$f" ] && [ -n "$(tail -c1 "$f" 2>/dev/null)" ] && printf '\n'; printf '%s\n' "$l"; } >> "$f" 2>/dev/null || { echo "could not write $f"; return 0; }
+  _dep_say "   added to $f:  $l"
+}
+
+_dep_recipe_rclone() {
+  local tmp dest="$HOME/bin" line shn
+  _dep_rclone_target || { echo "rclone: $_DEP_RC_WHY"; return 1; }
+  if [ "${BVK_DEPS_DRYRUN:-0}" = 1 ]; then _dep_say "   would: download $_DEP_RC_URL, unzip rclone into $dest, chmod 755, put $dest on PATH (once)"; return 0; fi
+  command -v curl >/dev/null 2>&1 || { echo "curl is required to download rclone"; return 1; }
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/bvkrclone.XXXXXX") || return 1
+  _dep_log "run: curl $_DEP_RC_URL"
+  if ! curl -fL --retry 3 --connect-timeout 20 -sS -o "$tmp/rclone.zip" "$_DEP_RC_URL"; then rm -rf "$tmp"; echo "could not download $_DEP_RC_URL (no internet, or a proxy / firewall in the way)"; return 1; fi
+  mkdir -p "$dest" || { rm -rf "$tmp"; return 1; }
+  if command -v unzip >/dev/null 2>&1; then unzip -o -j "$tmp/rclone.zip" "*/rclone" -d "$dest/" >/dev/null || { rm -rf "$tmp"; echo "could not unzip rclone"; return 1; }
+  else python3 - "$tmp/rclone.zip" "$dest/rclone" <<'PY' || { rm -rf "$tmp"; echo "could not unzip rclone"; return 1; }
+import sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+name = next(n for n in z.namelist() if n.endswith("/rclone"))
+open(sys.argv[2], "wb").write(z.read(name))
+PY
+  fi
+  chmod 755 "$dest/rclone"; rm -rf "$tmp"
+  "$dest/rclone" version >/dev/null 2>&1 || { echo "the downloaded rclone does not run on this machine"; return 1; }
+  case ":$PATH:" in
+    *":$dest:"*) ;;
+    *) line='export PATH="$HOME/bin:$PATH"'                                  # exactly the README's line (literal $HOME)
+       _dep_path_line "$HOME/.bashrc" "$line"
+       shn=$(basename "${SHELL:-bash}")
+       case "$shn" in
+         zsh)  _dep_path_line "$HOME/.zshrc" "$line" ;;
+         fish) _dep_path_line "$HOME/.config/fish/config.fish" "fish_add_path -g $dest" ;;
+       esac
+       [ "${_DEP_DEVICE:-}" = macos-arm ] || [ "${_DEP_DEVICE:-}" = macos-intel ] && _dep_path_line "$HOME/.zshrc" "$line"
+       PATH="$dest:$PATH" ;;                                                 # this run (and the app) finds it at once
+  esac
+  hash -r 2>/dev/null
+  return 0
 }
 
 # ── running things ───────────────────────────────────────────────────────────
@@ -425,6 +511,7 @@ _dep_lane_sys() {          # system packages, then recipes (foreground: sudo may
     case "$r" in
       gh-apt) _dep_recipe_gh_apt ;;
       gh-dnf) _dep_recipe_gh_dnf ;;
+      rclone) _dep_recipe_rclone ;;
     esac
   done
   return 0
@@ -605,7 +692,10 @@ _dep_need() {
   for id in "${na_req[@]}"; do _dep_say "  ⚠ ${_DEP_LABEL[$id]}: ${_PL_HOW[$id]} - install it yourself, then try again."; done
   [ "${#na_req[@]}" -gt 0 ] && [ "${#todo[@]}" -eq 0 ] && return 1
   [ "$check" = 1 ] && return $reqrc
-  if [ "${_DEP_PRIV_OK:-0}" != 0 ] && { [ "${#_PL_SYS[@]}" -gt 0 ] || [ "${#_PL_RECIPE[@]}" -gt 0 ]; }; then
+  local needroot=0 rr
+  [ "${#_PL_SYS[@]}" -gt 0 ] && needroot=1
+  for rr in "${_PL_RECIPE[@]}"; do _dep_recipe_root "$rr" && needroot=1; done
+  if [ "${_DEP_PRIV_OK:-0}" != 0 ] && [ "$needroot" = 1 ]; then
     _dep_say "  ⚠ Installing system packages needs root and 'sudo' was not found: run as root, or install them yourself."
     return $reqrc
   fi
@@ -699,7 +789,8 @@ _dep_table() {
   local id st
   _dep_load || return 2
   _dep_mgr
-  echo "package manager: ${_DEP_MGR:-none found}"
+  _dep_device
+  echo "package manager: ${_DEP_MGR:-none found}   device: ${_DEP_DEVICE}"
   _dep_probe_all "${!_DEP_KIND[@]}"
   for id in $(printf '%s\n' "${!_DEP_KIND[@]}" | sort); do
     st="missing"; [ "${_DEP_ST[$id]:-0}" = 1 ] && st="installed"

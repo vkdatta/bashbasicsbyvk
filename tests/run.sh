@@ -37,6 +37,7 @@ run_one() {   # runs in a background job: writes $OUT/<n>.rc (PASS/FAIL/SKIP/TIM
   local n="$1" r cmd to need why t0; r="$(row_of "$n")"
   [ -n "$r" ] || { echo "no such test: $n" >"$OUT/$n.log"; echo FAIL >"$OUT/$n.rc"; echo 0 >"$OUT/$n.secs"; return; }
   to="$(field "$r" 3)"; cmd="$(field "$r" 4)"; need="$(field "$r" 5)"
+  to=$(( to * TEST_TIME_FACTOR ))   # the hard limit grows with the waits inside the tests (same factor); smartload: 71 s alone, 90+ s at x2-x3, listed limit 90
   why="$(need_missing "$need")"; [ -n "$need" ] && [ -n "$why" ] && { echo "$why" >"$OUT/$n.log"; echo SKIP >"$OUT/$n.rc"; echo 0 >"$OUT/$n.secs"; return; }
   mkdir -p "$OUT/tmp.$n"; t0="$(_wl_now)"
   TMPDIR="$OUT/tmp.$n" timeout -k 5 "$to" bash -c "$cmd" >"$OUT/$n.log" 2>&1; local rc=$?

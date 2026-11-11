@@ -122,6 +122,7 @@ bashbasicsbyvk_staging_snapshot.sh|||sn snapshots (the process that takes them i
 bashbasicsbyvk_alien_daemon.sh|bashbasicsbyvk_staging_snapshot.sh,bashbasicsbyvk_planetary_resources.sh||the alien daemon: snapshots while o runs (@call _snap_daemon_start in [bg]); NEEDS the snapshot file for its variables
 bashbasicsbyvk_csv.sh|||csv menu
 bashbasicsbyvk_upgrade.sh|||upgrade loop (-u)
+bashbasicsbyvk_version.sh|||version menu (Install / Info) opened by a number in the upgrade loop
 bashbasicsbyvk_api.sh|||api: link manager
 bashbasicsbyvk_pending.sh|||pn: pending uploads menu
 bashbasicsbyvk_functions.sh||bashbasicsbyvk_adf_rename_csv.sh,bashbasicsbyvk_adf_move_csv.sh,bashbasicsbyvk_adf_copy_csv.sh,bashbasicsbyvk_adf_shortcut_csv.sh,bashbasicsbyvk_adf_upload_csv.sh,bashbasicsbyvk_adf_map_csv.sh,bashbasicsbyvk_adf_bookmark_csv.sh,bashbasicsbyvk_adf_delete_common.sh,bashbasicsbyvk_adf_delete_ext.sh,bashbasicsbyvk_adf_delete_date.sh,bashbasicsbyvk_adf_zip_csv.sh,bashbasicsbyvk_adf_unzip_csv.sh,bashbasicsbyvk_adf_delete_csv.sh,bashbasicsbyvk_adf_upload_text_csv.sh,bashbasicsbyvk_adf_import_link.sh,bashbasicsbyvk_adf_selection.sh,bashbasicsbyvk_adf_selected.sh,bashbasicsbyvk_adf_gdrive.sh,bashbasicsbyvk_adf_cfwp.sh,bashbasicsbyvk_adf_github.sh|fx menu (and the registry the adf_* files fill)
@@ -243,6 +244,7 @@ bashbasicsbyvk_recover_wrangler.py|||python helper, run as a process
 bashbasicsbyvk_rename.map|||command-map wiring, read as data
 bashbasicsbyvk_rules.map|||command-map wiring, read as data
 bashbasicsbyvk_sast|||stand-alone command, run as its own process
+bashbasicsbyvk_sys|||stand-alone command (sys, and sys --device for the dependency installer), run as its own process
 bashbasicsbyvk_select_expr|||tool, run as its own process
 bashbasicsbyvk_settings.map|||command-map wiring, read as data
 bashbasicsbyvk_snapshot.map|||command-map wiring, read as data

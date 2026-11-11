@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Organising a Google Drive folder by extension deleted every native Google file (.gdoc, .gsheet, .gscript, .gform): each was exported to local disk and the original went to the Drive bin, while ordinary files were moved correctly.
+
+HOW DID YOU DEBUG
+Written from the change itself; not run against a real Drive. Read backend_id() in bashbasicsbyvk_gd and its two callers (copyid for a copy, moveid for the organise move of native files) and compared them with the ordinary-file path, which moves with `moveto gd:... gd:...`. The only difference is the destination: the native-file path passed a bare Drive-relative path such as gdoc/Foo. ctx.rpath(rel) already exists and returns remote:rel. No test in tests/ covers backend_id; only py_compile was run on the edited file.
+
+CAUSE
+rclone treats the destination argument of `backend copyid` / `moveid` as a full rclone path, exactly like copyto. A bare gdoc/Foo therefore names a LOCAL folder: moveid exported the Google file to local disk and then removed the original from Drive (to the bin). Ordinary files were never affected because their moveto carries gd: on both sides.
+
+FIX
+bashbasicsbyvk_gd, backend_id(): the destination is passed through ctx.rpath(dest), so it is always gd:gdoc/Foo; a comment there records the root cause. Callers are unchanged (they already pass the Drive-relative path). Follow-up of BB-201020261200-1 and BB-201020261335-1 (same area: native Google files, organise by extension). Lesson: for an rclone backend command, a destination is a full rclone path: always give it the remote, a bare path means the local disk.

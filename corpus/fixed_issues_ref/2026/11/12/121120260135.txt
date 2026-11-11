@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+A standalone system-information script (sys.py) was to become the app command sys, in the project style, and its device detection was to be reusable by the dependency installer.
+
+1. HOW DID YOU DEBUG
+Read sys.py, bashbasicsbyvk_install.sh (detect_platform, platform ids), AGENTS.md and an existing stand-alone command (sast) and its wiring (cmd_def, .map, bvk_main_exec, loadmap). Ran sys under faked environments (tests/sys/sys_test.sh) and the generators (mapgen, loadmap_gen --check, cmd_docs --write). Not run on a real phone, Mac or WSL: those are faked by environment variables.
+
+1. CAUSE
+Not a defect: new command.
+
+1. FIX
+script/cmd/bashbasicsbyvk_sys (the script, plus device() / looks_server() and the options --device and --help; the install hints in its status strings no longer print commands, rule 12). Wired: maincommands.sh cmd_def sys, main.map, bvk_main_exec case sys, loadmap [no] line, every map got its explicit line from mapgen, deps.list F|cmd.sys, llms-full.txt command table. tests/sys, tests.list, covers.map.
+
+2. ISSUE IN BRIEF
+rclone was installed with the distribution package on every Linux package manager, while the README installs the official build into ~/bin on VMs and Linux and uses pkg on Termux; there was no device-specific install in the dependency installer.
+
+2. HOW DID YOU DEBUG
+Read bashbasicsbyvk_deps.list / .sh and bashbasicsbyvk_install.sh. Dry-ran the plan per device with BVK_DEPS_DEVICE and a forced manager; ran the real install with a fake curl that serves a local zip (no network): file in ~/bin, PATH line added once, second install does not repeat it, an installed rclone is silent. Not run against downloads.rclone.org or on a real Termux / Mac (the pkg / brew paths are the existing manager rows).
+
+2. CAUSE
+The registry line was rclone for every manager (apt installs the distro build, often old), with no way to say "this device installs differently"; _dep_mgr knows only the package manager, not the kind of device.
+
+2. FIX
+bashbasicsbyvk_deps.sh: _dep_device (asks bashbasicsbyvk_sys --device, BVK_DEPS_DEVICE overrides, coarse uname fallback); registry keys dev:<device> are tried before the manager and the *; a *=@recipe works with no package manager; recipe rclone (official zip for this CPU via _bvk_engine_target, unzip or python zipfile, ~/bin, README PATH line once into .bashrc / .zshrc / fish, no root); recipes now ask for root only when they need it (_dep_recipe_root); ~/bin joins the PATH fix. deps.list: rclone = dev:termux=rclone;brew=rclone;*=@rclone+curl. _3bvk_import_deps.sh also sources bashbasicsbyvk_engine_target.sh. tests/deps (16). install.sh needed no change.

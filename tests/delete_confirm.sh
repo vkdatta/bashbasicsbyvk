@@ -20,8 +20,8 @@ t 'a=[] rc=1'  '\n'     _bvk_yn a "Are you really sure?" -d n
 t 'a=[] rc=1'  '\n'     _bvk_yn a "Revoke 2 people?" -d n
 t 'a=[] rc=1'  '\n'     _bvk_yn a "Free the downloaded content of this whole Drive?" -d n
 # a harmless question keeps its default
-t 'a=[n] rc=0' '\n'     _bvk_yn a "Open in browser now?" -d n
-t 'a=[y] rc=0' '\n'     _bvk_yn a "Open in browser now?" -d y
+t 'a=[] rc=1'  '\n'     _bvk_yn a "Open in browser now?" -d n
+t 'a=[] rc=1'  '\n'     _bvk_yn a "Open in browser now?" -d y
 
 # (2) the source says it too
 miss=""

@@ -9,7 +9,7 @@
 #
 #  Commands
 #    N      install version N  (asks first)         ←/→   switch tab
-#    i-N    description of version N                 m     install latest main (old -u behaviour)
+#    i-N    description of version(s) N (1,3  1-5  a  a-2), then Excel / copy   m     install latest main (old -u behaviour)
 #    rf     refresh the list from GitHub             u     exit        -u   close
 #    fx / sw / .r   hand over to those loops         p-…   path map of the listed items
 #
@@ -187,13 +187,15 @@ _upg_pick() {                    # _upg_pick <N>  → _upg_ref
   return 0
 }
 
-_upg_do_install() {              # _upg_do_install <ref|main> <label>
-  local ref="$1" label="$2" ans core inst; inst="$(_upg_installed)"
+_upg_do_install() {              # _upg_do_install <ref|main> <label> [yes]   (yes = already confirmed in the version menu: no "Continue?")
+  local ref="$1" label="$2" sure="${3:-}" ans core inst; inst="$(_upg_installed)"
   echo "🔼  Install $label"
   [ -n "$inst" ] && [ "$inst" != "$ref" ] && echo "   currently installed: $inst"
   [ -n "$inst" ] && [ "$inst" = "$ref" ] && echo "   (this is already the installed version — it will be reinstalled)"
-  _bvk_yn ans "Continue?"
-  case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+  if [ "$sure" != yes ]; then
+    _bvk_yn ans "Continue?"
+    case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+  fi
   core="$(command -v bashbasicsbyvk_upgrade_install 2>/dev/null)"
   [ -n "$core" ] || core="$SCRIPT_DIR/bashbasicsbyvk_upgrade_install"
   if [ ! -f "$core" ]; then echo "❌ bashbasicsbyvk_upgrade_install not found"; return 1; fi
@@ -201,16 +203,18 @@ _upg_do_install() {              # _upg_do_install <ref|main> <label>
   local rc=$?
   if [ $rc -eq 0 ]; then
     _upg_record "$ref"
-    echo "💫 Installed $label — quit and start  o  again to run it."
-    return 0
+    exit 0                       # installed: the running copy is the old one, so end here (the shell prompt is next); start  o  again for the new one
   fi
   echo "❌ pip exited with $rc — the installed version was not recorded."
   return 1
 }
 
+# N → the version menu (Install / Info) for that version, the sibling of the file menu
 _upg_cmd_install() {
   _upg_pick "$1" || return 1
-  _upg_do_install "$_upg_ref" "$_upg_ref"
+  _UPG_PICK_N="$1"
+  _lm_need bashbasicsbyvk_version.sh
+  handle_version "$_upg_ref"
 }
 
 _upg_fetch_commit() {            # _upg_fetch_commit <tag> → fills _UPG_T_CACHE[tag]
@@ -225,9 +229,9 @@ _upg_fetch_commit() {            # _upg_fetch_commit <tag> → fills _UPG_T_CACH
   _UPG_T_CACHE["$tag"]="$out"
 }
 
-_upg_cmd_info() {
-  _upg_pick "$1" || return 1
-  local tag="$_upg_ref" inst; inst="$(_upg_installed)"
+# _upg_info_one <tag>   print the description of ONE version (what i-N shows, per version)
+_upg_info_one() {
+  local tag="$1" inst; inst="$(_upg_installed)"
   if [ "$_upg_tab" = stable ]; then
     local ix="${_UPG_S_IDX[$tag]}"
     echo "📦 $tag   (stable release)"
@@ -244,7 +248,7 @@ _upg_cmd_info() {
     [ "$inst" = "$tag" ] && echo "   status   : ★ installed"
     if [ -n "${_UPG_S_IDX[$tag]+x}" ]; then echo "   page     : $_UPG_WEB/releases/tag/$tag"
     else echo "   page     : $_UPG_WEB/tree/$tag"; fi
-    if _upg_fetch_commit "$tag"; then
+    if [ -n "${_UPG_T_CACHE[$tag]+x}" ]; then
       local d a m; IFS="$_UPG_US" read -r d a m <<<"${_UPG_T_CACHE[$tag]}"
       echo "   commit   : ${d:-unknown}${a:+  by $a}"
       echo "   message  :"
@@ -260,6 +264,39 @@ _upg_cmd_info() {
   fi
 }
 
+# _upg_cmd_info <N>   print the description of version N (kept for callers that want one version, no question after it)
+_upg_cmd_info() {
+  _upg_pick "$1" || return 1
+  [ "$_upg_tab" = tags ] && _upg_fetch_commit "$_upg_ref"
+  _upg_info_one "$_upg_ref"
+}
+
+# _upg_cmd_info_many <spec>   i-1,3  i-1-5  i-a  i-a-2: the SAME item lists as every other i-/eb- command.
+#   Prints each version, then asks the same question as i- on files: save it in Excel / copy it to the clipboard.
+_upg_cmd_info_many() {
+  local spec="$1" tag one n=0
+  if [ -z "$spec" ]; then echo "🔴  Usage: i-1,3,5  or  i-1-7  or  i-a-1-5,7"; return 1; fi
+  _sp_resolve_itemlist "$spec" || return 1
+  local _EB_TEXT="" _EB_TSV="" flat
+  for tag in "${sp_resolved[@]}"; do
+    [ "$_upg_tab" = tags ] && _upg_fetch_commit "$tag"       # here, not inside $( ): the cache must survive
+    one="$(_upg_info_one "$tag")"
+    n=$(( n + 1 ))
+    _EB_TEXT+="$one"$'\n\n'
+    flat="${one//$'\t'/ }"; flat="${flat//$'\n'/ | }"
+    _EB_TSV+="$n"$'\t'"$tag"$'\t'"$flat"$'\n'
+  done
+  _EB_TEXT="${_EB_TEXT%$'\n\n'}"
+  echo
+  echo "📜  Project info"
+  printf '%s\n' "$_EB_TEXT"
+  echo
+  local _EB_HEAD _EB_SHEET="project info" _EB_NUMS="" _EB_BOLDLAST=0
+  printf -v _EB_HEAD 'No.\tVersion\tInfo'
+  _eb_finish "Project info" "📜" "project_info" "i-"
+  return 0
+}
+
 _upg_cmd_refresh() {
   if [ "$_upg_tab" = stable ]; then _UPG_S_LOADED=0; else _UPG_T_LOADED=0; _UPG_T_CACHE=(); fi
 }
@@ -269,7 +306,7 @@ _upg_help() {
 🔼  UPGRADE  (-u)   ← / → switch tabs
  📦 Stable        published GitHub releases, newest first
  🧪 Tags (beta)   every git tag, newest first (✓ stable = also a release)
- N install version N (asks first) · i-N description · m install latest main
+ N install version N (asks first) · i-N / i-1,3 / i-1-5 description (then Excel / copy) · m install latest main
  rf refresh from GitHub · p-… path map of items · u exit · -u close
  fx / sw / .r hand over to those loops
  ★ installed = the last version installed from THIS menu (pip itself always says 0.0)
@@ -318,7 +355,7 @@ upgrade_menu() {
 
       -h) _upg_help; _up_fresh=false ;;
 
-      i-*)  _upg_cmd_info "${_up_choice#[iI]-}" && _bvk_info_wait ;;      # info mode: any key, then the list is drawn again
+      i-*)  _upg_cmd_info_many "${_up_choice#[iI]-}" ;;          # multi-select like i- on files; then "save in Excel / copy", then the list is drawn again
 
       m|main)
         _upg_do_install main "latest main (default branch)" || true
@@ -340,7 +377,7 @@ upgrade_menu() {
           _bvk_invalid _up_fresh
         else
           _upg_cmd_install "$_up_choice" || true
-          _up_fresh=false
+          _up_fresh=true
         fi ;;
     esac
 

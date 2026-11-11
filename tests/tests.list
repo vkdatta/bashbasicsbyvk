@@ -52,6 +52,7 @@ github_ui|slow|180|python3 tests/github/ui_test.py|python3
 cc_truth|slow|240|python3 tests/cc_truth/cc_truth_test.py|python3
 archive|fast|60|bash tests/archive/archive_test.sh|
 deps|fast|60|bash tests/deps/deps_test.sh|
+sys|fast|30|bash tests/sys/sys_test.sh|python3
 deps_menu|fast|60|python3 tests/deps/standalone_test.py|python3
 loadmap|fast|60|bash tests/loadmap.sh|python3
 xtr_info|fast|40|bash tests/xtr_info.sh|python3

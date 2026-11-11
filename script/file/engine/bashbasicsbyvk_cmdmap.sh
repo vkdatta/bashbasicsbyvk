@@ -468,6 +468,7 @@ bvk_main_exec() {
     lang)   bvk_lang ;;
     clear)  hash -r ;;
     sast)   bashbasicsbyvk_sast ;;
+    sys)    bashbasicsbyvk_sys ;;
     -auth)  auth_menu ;;
     print)  bvk_print_cmd ;;
     loadtime|loadtime\ *) bvk_loadtime_cmd "$c" ;;

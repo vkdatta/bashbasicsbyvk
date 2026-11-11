@@ -24,7 +24,10 @@ def check(name, cond, a=None):
 def row_above_select(a, typed):
     L = [l.rstrip() for l in a.scr.lines()]
     idx = [i for i, l in enumerate(L) if l == ('Select: ' + typed).rstrip()]
-    return L[idx[-1] - 1] if idx and idx[-1] > 0 else None
+    if not idx or idx[-1] <= 0: return None
+    r = L[idx[-1] - 1]
+    if typed and not r.strip() and idx[-1] > 1: r = L[idx[-1] - 2]   # list screens (_st_draw) keep one blank row between the suggestion and Select:
+    return r
 
 a = App(user=True)
 try:

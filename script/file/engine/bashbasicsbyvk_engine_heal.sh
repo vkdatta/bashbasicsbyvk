@@ -36,7 +36,7 @@ _bvk_engine_heal() {
   _eh_ans=""
   _bvk_yn _eh_ans "Reinstall bashbasicsbyvk for this machine now?" -t "Engines" -i "🔧" || _eh_ans=n
   mkdir -p "${_mark%/*}" 2>/dev/null; printf '%s %s\n' "$_want" "${_now:-0}" > "$_mark" 2>/dev/null
-  [ "$_eh_ans" = y ] || { echo "   Skipped. Reinstall any time with  -u  (or: pip install --force-reinstall --no-cache-dir git+https://github.com/vkdatta/bashbasicsbyvk.git)"; return 0; }
+  [ "$_eh_ans" = y ] || { echo "   Skipped. Reinstall any time with  -u"; return 0; }
   _core="$(command -v bashbasicsbyvk_upgrade_install 2>/dev/null)"
   if [ -z "$_core" ]; then echo "❌ bashbasicsbyvk_upgrade_install not found; use  -u"; return 0; fi
   if BVK_REINSTALL_FRESH=1 bash "$_core"; then

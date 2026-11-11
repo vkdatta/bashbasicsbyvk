@@ -78,12 +78,10 @@ _fi_build() {
   return 0
 }
 
-# i-<items>
-handle_info() {
-  local raw="$1"
-  _sp_files_only "${raw#i-}" "i-" "INFO" "info can't be used on" || return 0
+# _fi_show FILE...   scan, PRINT the info, then ask: save it in Excel / copy it.  Shared by i-<items> and the file menu's "Info".
+_fi_show() {
   local _EB_TEXT _EB_TSV
-  local rows; rows="$(_fi_scan "${sp_files[@]}")"
+  local rows; rows="$(_fi_scan "$@")"
   _fi_build <<< "$rows"
   echo
   echo "📜  File info"
@@ -92,5 +90,13 @@ handle_info() {
   local _EB_HEAD _EB_SHEET="file info" _EB_NUMS="5,7,8,9,10" _EB_BOLDLAST=0
   printf -v _EB_HEAD 'No.\tName\tPath\tBinary bytes\tDecimal bytes\tHuman readable\tWord count\tCharacters (with spaces)\tCharacters (no spaces)\tTotal lines\tExtension\tDate created\tDate modified'
   _eb_finish "File info" "📜" "file_info" "i-"
+  return 0
+}
+
+# i-<items>
+handle_info() {
+  local raw="$1"
+  _sp_files_only "${raw#i-}" "i-" "INFO" "info can't be used on" || return 0
+  _fi_show "${sp_files[@]}"
   return 0
 }

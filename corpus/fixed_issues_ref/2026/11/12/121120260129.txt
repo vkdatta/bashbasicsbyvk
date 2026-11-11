@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Scrolling the terminal back (touch swipe) on a menu with mouse reporting on snapped the view back to the bottom after about 1.5 s, over and over, so the scrollback could not be read.
+
+HOW DID YOU DEBUG
+Read the mouse hand-back code (_bvk_mouse_wheel_outside, _bvk_mouse_pass, _bvk_mouse_rearm, _vp_poll_active). Ran the menu loop in a pty, sent a wheel-up above the menu and logged what the app wrote: reports OFF at 2.02 s, ON again at 3.53 s with no input. After the fix the same run writes nothing for 20 s after a 15-event swipe burst, and a typed key re-arms at once. Run in a pty only; the snap-to-bottom itself on Termux was inferred, not run on a phone.
+
+CAUSE
+The hand-back to the terminal had a 1.5 s timer (_BVK_PASS_SCROLL_MS) meant as "idle since the last wheel event", but once reports are off the terminal consumes the swipes itself, so the app never sees them and the timer ran from the first swipe. Re-arming writes ESC[?1000h, which snaps a scrolled-back terminal to the bottom and takes the next swipe away again. A second path: _vp_poll_active forced a re-arm after any idle redraw because $key was empty and not ESC.
+
+FIX
+bashbasicsbyvk_mouse.sh: _BVK_PASS_SCROLL_MS defaults to 0 = no timer, the hand-back lasts until a key is typed (BVK_PASS_SCROLL_MS restores a timer). bashbasicsbyvk_viewport.sh: _vp_poll_active forces a re-arm only for a really typed key. tests/mouse: the old test that required the timed re-arm now requires that nothing is written. Lesson: a timer cannot measure activity the app is not told about.

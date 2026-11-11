@@ -79,6 +79,18 @@ BUILTINS = {'read', 'printf', 'echo', 'cd', 'test', 'true', 'false', 'exit', 're
 DEFS_OF = {}
 TOKEN = re.compile(r'[A-Za-z_][\w:.\-]*')
 
+_STATE_RX = {}
+def _state_rx(v):
+    """the three patterns for one state variable, compiled once (they were rebuilt for every file x variable pair: 138k compiles)"""
+    r = _STATE_RX.get(v)
+    if r is None:
+        e = re.escape(v)
+        r = _STATE_RX[v] = (
+            re.compile(r'(?<![\w$])' + e + r'(?![\w])'),
+            re.compile(r'\blocal\b[^\n;]*(?<![\w$])' + e + r'(?![\w])'),
+            re.compile(r'\$\{' + e + r':?[-+]|(?<![\w$])' + e + r'\+?=|\$\{#?' + e + r'(\[[@*]\])?\}|unset\s+' + e + r'\b|-v\s+' + e + r'\b'))
+    return r
+
 
 def strip_comment(l):
     """the line without its # comment (a # inside quotes is kept)"""
@@ -235,10 +247,10 @@ def main():
         # state: it reads a variable another library sets when it is loaded, in a form that breaks when the variable is unset
         for v, owners in owner.items():
             if f in owners: continue
-            rx = re.compile(r'(?<![\w$])' + re.escape(v) + r'(?![\w])')
+            if v not in d['text']: continue                       # cheap exact pre-check: the pattern below cannot match without the name (was 440k regex searches)
+            rx, rx_local, safe = _state_rx(v)
             if not rx.search(d['text']): continue
-            if re.search(r'\blocal\b[^\n;]*(?<![\w$])' + re.escape(v) + r'(?![\w])', d['text']): continue
-            safe = re.compile(r'\$\{' + re.escape(v) + r':?[-+]|(?<![\w$])' + re.escape(v) + r'\+?=|\$\{#?' + re.escape(v) + r'(\[[@*]\])?\}|unset\s+' + re.escape(v) + r'\b|-v\s+' + re.escape(v) + r'\b')
+            if rx_local.search(d['text']): continue
             for i, l in lines:
                 if not rx.search(l): continue
                 rest = safe.sub(' ', l)

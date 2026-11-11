@@ -66,6 +66,7 @@ disk       .mapto()  disk       from bashbasicsbyvk_maincommands.sh
 ram        .mapto()  ram        from bashbasicsbyvk_maincommands.sh
 clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
 sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+sys        .mapto()  sys        from bashbasicsbyvk_maincommands.sh
 kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
 print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
 loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh

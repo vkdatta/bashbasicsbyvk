@@ -16,9 +16,12 @@
 #                 npm    a global npm package                   probe = the command it provides
 #                 file   a data file installed by a package     probe = paths, comma separated, ONE existing is enough ($PREFIX is expanded)
 #       packages  `manager=name;manager=name`, manager = termux apt dnf yum pacman apk zypper brew (system) | pip | npm | * (any system manager).
+#                 `dev:<id>` = the install for ONE kind of device (what `bashbasicsbyvk_sys --device` says: termux server linux wsl2 macos-arm rpi ...),
+#                 tried BEFORE the manager's own entry (dev:termux=rclone).  Order: dev:<device>, the manager, `*`.
 #                 `a,b` = alternatives: the first one the manager knows is used (7zip,p7zip-full).
 #                 `sys:name` (value for a pip dep) = install it with the SYSTEM manager on that platform instead of pip (Termux: python-numpy).
-#                 `@recipe` or `@recipe+dep+dep` = a multi-step install the engine knows (needs those deps first).
+#                 `@recipe` or `@recipe+dep+dep` = a multi-step install the engine knows (needs those deps first).  A `*=@recipe` works even when no
+#                 package manager is known (rclone's official build needs only curl).
 #                 A manager that is missing from the list = "not installable here": the dependency is skipped on that platform (termux-api on Linux).
 #       label     what the person sees          purpose   one line: what it is needed for (shown in the Installer menu)
 #       needs     other dependency ids that must be installed first, space separated
@@ -42,7 +45,7 @@ D|nodejs|cmd|node|termux=nodejs;apt=nodejs;dnf=nodejs;yum=nodejs;pacman=nodejs;a
 D|curl|cmd|curl|*=curl|curl|talks to the web (sign-in, uploads, updates, telemetry)|||
 D|git|cmd|git|*=git|git|reads and writes repositories (GitHub screens, upgrade, push)|||
 D|gh|cmd|gh|termux=gh;apt=@gh-apt+curl;dnf=@gh-dnf;yum=@gh-dnf;pacman=github-cli;apk=github-cli;zypper=gh;brew=gh|GitHub CLI (gh)|signs in to GitHub and creates / pushes repositories|git||
-D|rclone|cmd|rclone|*=rclone|rclone|talks to Google Drive and other clouds|||
+D|rclone|cmd|rclone|dev:termux=rclone;brew=rclone;*=@rclone+curl|rclone|talks to Google Drive and other clouds|||Termux: pkg install rclone.  Linux / VM / cloud shell / WSL / container: the official build from downloads.rclone.org goes to ~/bin (no root).  Then run: rclone config
 D|sqlite3|cmd|sqlite3|termux=sqlite;apt=sqlite3;dnf=sqlite;yum=sqlite;pacman=sqlite;apk=sqlite;zypper=sqlite3;brew=sqlite|SQLite|reads the browser / app databases for the load-time report|||
 D|tzdata|file|$TZDIR/Asia/Kolkata,/usr/share/zoneinfo/Asia/Kolkata,/usr/lib/zoneinfo/Asia/Kolkata,/usr/share/lib/zoneinfo/Asia/Kolkata,/etc/zoneinfo/Asia/Kolkata,$PREFIX/share/zoneinfo/Asia/Kolkata,/system/usr/share/zoneinfo/tzdata|termux=tzdata;apt=tzdata;dnf=tzdata;yum=tzdata;pacman=tzdata;apk=tzdata;zypper=timezone|Timezone database|lists every timezone and converts times correctly, including daylight saving|||
 
@@ -128,6 +131,7 @@ F|api|API links (api)|python3|termux-api
 F|cmd.copy|Copy to the cloud clipboard (bashbasicsbyvk_copy)|curl nodejs|termux-tools termux-api
 F|cmd.overwrite|Overwrite from the clipboard (bashbasicsbyvk_overwrite)||termux-api
 F|cmd.sast|Static code scan (bashbasicsbyvk_sast)|python3|
+F|cmd.sys|System information (sys)|python3|
 F|telemetry|Usage ping|curl|
 F|ai|AI helper (.ai)|curl python3|openpyxl
 F|eb|Exact bytes (eb-)|python3|openpyxl

@@ -17,7 +17,7 @@ handle_file() {
         _mc_options 0 "$lab_run" "View" "Edit" "Copy Content" "Delete File" \
                       "Erase Content" "Replace With Clipboard Content" \
                       "Rename File" "Share" "$lab_lock" "Copy Name" \
-                      "Copy File Path" "Go To Parent Folder"
+                      "Copy File Path" "Go To Parent Folder" "Info"
         _mc_footer @file_menu
 
         read -e -p "Select: " action || return 1          # EOF (the terminal closed): leave, never spin on "invalid"
@@ -36,6 +36,7 @@ handle_file() {
             10) copy_to_clipboard "${file##*/}"; return 1 ;;
             11) _file_abs_path "$file"; copy_to_clipboard "$_FILE_ABS"; return 1 ;;
             12) _file_goto_parent "$file"; return 1 ;;
+            13) _hf_info "$file"; return 1 ;;
             u|U) return 1 ;;
             h|H) home_menu; return 1 ;;
             q|Q) _bvk_quit; return 1 ;;
@@ -44,6 +45,12 @@ handle_file() {
                 ;;
         esac
     done
+}
+
+# "Info": the same screen as the i- command (info printed, then save in Excel / copy it) for this one file.
+_hf_info() {
+    _file_abs_path "$1"
+    _fi_show "$_FILE_ABS"
 }
 
 _hf_edit() { if command -v nano >/dev/null 2>&1; then nano "$1"; else "${EDITOR:-vi}" "$1"; fi; }

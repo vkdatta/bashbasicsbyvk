@@ -954,7 +954,12 @@ def rclone_rel(row):
 
 
 def backend_id(ctx, verb, did, dest):
-    rc, out, err = rclone(ctx, ["backend", verb, f"{ctx.remote}:", did, dest], check=False)
+    # ROOT CAUSE of "Organise by extension deletes every .gdoc/.gsheet/.gscript/.gform": rclone treats <dest> of
+    # copyid/moveid as a full rclone path (it is split and handed to rclone's cache.Get, exactly like `copyto`). A bare
+    # "gdoc/Foo" therefore means a LOCAL folder: moveid exported the Google file to local disk and then removed the
+    # original from Drive (-> Trash). Ordinary files use `moveto gd:... gd:...`, so they were never affected.
+    # The destination must always carry the remote:  gd:gdoc/Foo
+    rc, out, err = rclone(ctx, ["backend", verb, f"{ctx.remote}:", did, ctx.rpath(dest)], check=False)
     if rc != 0:
         tail = [l for l in (err or "").strip().splitlines() if l.strip()][-2:]
         raise GdError(f"{verb} failed (rclone exit {rc}): " + " | ".join(tail))

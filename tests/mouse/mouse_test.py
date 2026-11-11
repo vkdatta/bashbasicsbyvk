@@ -440,7 +440,7 @@ def t_rearm_idle(a):
     # the person is still scrolling.  A timer that re-armed the reports wrote ESC[?1000h 1.5 s later, which snaps the scrolled-back terminal
     # to the bottom and takes the next swipe away.  The hand-back must last until a key is typed - nothing may be written meanwhile.
     a.wheel(True); a.wheel(True); off = not mouse_on(a)
-    time.sleep(4)
+    time.sleep(4)  # lint-wait-ok: "nothing may be written" IS the behaviour under test (the old timer fired at 1.5 s)
     a.send(b'', 0.3)
     return off and not mouse_on(a) and a.alive, 'reports must STAY off while the person scrolls the terminal (off=%s still_off=%s)' % (off, not mouse_on(a))
 case('hand-back lasts until a key: no timed re-arm (no snap to bottom)', t_rearm_idle)

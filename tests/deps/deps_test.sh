@@ -107,4 +107,38 @@ out="$(PATH="$W/bin:$SAFE" BVK_DEPS_MANAGER=apt BVK_DEPS_ASSUME=yes bash -c 'set
 # (15) the registry is the one source: no private installers / hints left in script/
 leftover="$(grep -rnE 'pkg install|apt(-get)? install|pip3? install|npm install|brew install|please install' "$ROOT/script" --include='*' 2>/dev/null | grep -vE 'bashbasicsbyvk_deps\.(sh|list|py)|_3bvk_import|README|health|bashbasicsbyvk_upgrade_install|# ' | head -5)"
 [ -z "$leftover" ] && ok "no private install hints left outside the registry" || { bad "private install hints remain:"; echo "$leftover"; }
+# (16) rclone is installed the way the README says, per kind of device (BVK_DEPS_DEVICE = what `bashbasicsbyvk_sys --device` answers)
+ENG="$(dirname "$DEPS")"; rcrun() { PATH="$W/bin:$ENG:$SAFE" "$@"; }
+out="$(rcrun env BVK_DEPS_DEVICE=termux BVK_DEPS_MANAGER=termux bash "$DEPS" -n rclone 2>&1)"
+echo "$out" | grep -q "pkg install -y rclone" && ok "rclone on Termux: pkg install rclone" || bad "Termux rclone plan wrong: $out"
+for dev in server linux wsl2 container gcloud; do
+  out="$(rcrun env BVK_DEPS_DEVICE=$dev BVK_DEPS_MANAGER=apt bash "$DEPS" -n rclone 2>&1)"
+  echo "$out" | grep -qE "downloads.rclone.org/rclone-current-linux-(amd64|arm64|arm-v7|386).zip\) into ~/bin" && ! echo "$out" | grep -q "apt-get install" \
+    && ok "rclone on $dev: the official build into ~/bin (no apt)" || bad "$dev rclone plan wrong: $out"
+done
+out="$(rcrun env BVK_DEPS_DEVICE=android-other BVK_DEPS_MANAGER=apt bash "$DEPS" -n rclone 2>&1)"; rc=$?
+[ $rc = 1 ] && echo "$out" | grep -q "Android without Termux" && ok "rclone on Android without Termux: said plainly, no wrong install" || bad "android-other rclone wrong rc=$rc: $out"
+out="$(rcrun env BVK_DEPS_DEVICE=linux BVK_DEPS_MANAGER= bash "$DEPS" -n rclone 2>&1)"
+echo "$out" | grep -q "downloads.rclone.org" && ok "rclone with no package manager at all: the official build still works" || bad "no-manager rclone: $out"
+# the real run, nothing from the internet: a fake curl serves a zip that holds <dir>/rclone
+python3 -I - "$W/rclone.zip" <<'PY'
+import sys, zipfile
+z = zipfile.ZipFile(sys.argv[1], "w"); z.writestr("rclone-v9.9.9-linux/README.txt", "x")
+i = zipfile.ZipInfo("rclone-v9.9.9-linux/rclone"); i.external_attr = 0o755 << 16
+z.writestr(i, "#!/bin/sh\necho rclone v9.9.9\n"); z.close()
+PY
+cat > "$W/bin/curl" <<'FAKE'
+#!/usr/bin/env bash
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; http*) echo "$1" >> "$FAKELOG" ;; esac; shift; done
+cp "$FAKEZIP" "$out"
+FAKE
+chmod +x "$W/bin/curl"; export FAKEZIP="$W/rclone.zip"; rm -f "$FAKELOG" "$HOME/.bashrc"; rm -rf "$HOME/bin"
+out="$(rcrun env BVK_DEPS_DEVICE=server BVK_DEPS_MANAGER=apt BVK_DEPS_ASSUME=yes SHELL=/bin/bash bash "$DEPS" rclone 2>&1)"; rc=$?
+[ $rc = 0 ] && [ -x "$HOME/bin/rclone" ] && grep -q "rclone-current-linux-" "$FAKELOG" && ok "rclone installed into ~/bin from the official URL" || bad "rclone install failed rc=$rc: $out"
+[ "$(grep -cF 'export PATH="$HOME/bin:$PATH"' "$HOME/.bashrc" 2>/dev/null)" = 1 ] && ok "the README's PATH line was added to ~/.bashrc once" || bad "PATH line missing or doubled: $(cat "$HOME/.bashrc" 2>&1)"
+rm -f "$HOME/bin/rclone"; rcrun env BVK_DEPS_DEVICE=server BVK_DEPS_MANAGER=apt BVK_DEPS_ASSUME=yes SHELL=/bin/bash bash "$DEPS" rclone >/dev/null 2>&1
+[ "$(grep -cF 'export PATH="$HOME/bin:$PATH"' "$HOME/.bashrc")" = 1 ] && [ -x "$HOME/bin/rclone" ] && ok "a second install does not repeat the PATH line" || bad "PATH line repeated: $(cat "$HOME/.bashrc")"
+rm -f "$FAKELOG"; out="$(rcrun env BVK_DEPS_DEVICE=server BVK_DEPS_MANAGER=apt bash "$DEPS" rclone 2>&1)"
+[ -z "$out" ] && [ ! -e "$FAKELOG" ] && ok "rclone already in ~/bin: silent, nothing downloaded" || bad "installed rclone asked for again: $out"
+rm -rf "$HOME/bin" "$HOME/.bashrc"
 exit $fail

@@ -254,6 +254,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `snap-` | act | Add to snapshots | `snap-1` |
 | `sv` | act | Saved surf |  |
 | `sw` | act | Switch — recents & tabs |  |
+| `sys` | util | System information: OS, device, CPU, memory, disk, battery |  |
 | `t` | act | Transfer — copy / move, Google Drive |  |
 | `u` | act | Up one folder / back |  |
 | `ul-` | act | Unlock items | `ul-1,3` |

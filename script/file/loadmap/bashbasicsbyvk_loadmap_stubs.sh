@@ -44,6 +44,7 @@ _LM_NEEDS[bashbasicsbyvk_gdrive.sh]="bashbasicsbyvk_run.sh bashbasicsbyvk_transf
 _LM_WITH[bashbasicsbyvk_functions.sh]="bashbasicsbyvk_adf_rename_csv.sh bashbasicsbyvk_adf_move_csv.sh bashbasicsbyvk_adf_copy_csv.sh bashbasicsbyvk_adf_shortcut_csv.sh bashbasicsbyvk_adf_upload_csv.sh bashbasicsbyvk_adf_map_csv.sh bashbasicsbyvk_adf_bookmark_csv.sh bashbasicsbyvk_adf_delete_common.sh bashbasicsbyvk_adf_delete_ext.sh bashbasicsbyvk_adf_delete_date.sh bashbasicsbyvk_adf_zip_csv.sh bashbasicsbyvk_adf_unzip_csv.sh bashbasicsbyvk_adf_delete_csv.sh bashbasicsbyvk_adf_upload_text_csv.sh bashbasicsbyvk_adf_import_link.sh bashbasicsbyvk_adf_selection.sh bashbasicsbyvk_adf_selected.sh bashbasicsbyvk_adf_gdrive.sh bashbasicsbyvk_adf_cfwp.sh bashbasicsbyvk_adf_github.sh"
 copy_to_clipboard() { _lm_stub bashbasicsbyvk_run.sh copy_to_clipboard "$@"; }
 handle_file() { _lm_stub bashbasicsbyvk_run.sh handle_file "$@"; }
+_hf_info() { _lm_stub bashbasicsbyvk_run.sh _hf_info "$@"; }
 _hf_edit() { _lm_stub bashbasicsbyvk_run.sh _hf_edit "$@"; }
 _hf_tracked() { _lm_stub bashbasicsbyvk_run.sh _hf_tracked "$@"; }
 _file_abs_path() { _lm_stub bashbasicsbyvk_run.sh _file_abs_path "$@"; }
@@ -259,6 +260,7 @@ _eb_finish() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_finish "$@"; }
 handle_eb() { _lm_stub bashbasicsbyvk_exactbytes.sh handle_eb "$@"; }
 _fi_scan() { _lm_stub bashbasicsbyvk_fileinfo.sh _fi_scan "$@"; }
 _fi_build() { _lm_stub bashbasicsbyvk_fileinfo.sh _fi_build "$@"; }
+_fi_show() { _lm_stub bashbasicsbyvk_fileinfo.sh _fi_show "$@"; }
 handle_info() { _lm_stub bashbasicsbyvk_fileinfo.sh handle_info "$@"; }
 _xtr_ask_int() { _lm_stub bashbasicsbyvk_extract.sh _xtr_ask_int "$@"; }
 _xtr_engine() { _lm_stub bashbasicsbyvk_extract.sh _xtr_engine "$@"; }
@@ -498,6 +500,7 @@ _dep_path_fix() { _lm_stub bashbasicsbyvk_deps.sh _dep_path_fix "$@"; }
 _dep_jobs() { _lm_stub bashbasicsbyvk_deps.sh _dep_jobs "$@"; }
 _dep_path() { _lm_stub bashbasicsbyvk_deps.sh _dep_path "$@"; }
 _dep_mgr() { _lm_stub bashbasicsbyvk_deps.sh _dep_mgr "$@"; }
+_dep_device() { _lm_stub bashbasicsbyvk_deps.sh _dep_device "$@"; }
 _dep_priv() { _lm_stub bashbasicsbyvk_deps.sh _dep_priv "$@"; }
 _dep_cmds() { _lm_stub bashbasicsbyvk_deps.sh _dep_cmds "$@"; }
 _dep_pkg_known() { _lm_stub bashbasicsbyvk_deps.sh _dep_pkg_known "$@"; }
@@ -516,8 +519,12 @@ _dep_choose_pkg() { _lm_stub bashbasicsbyvk_deps.sh _dep_choose_pkg "$@"; }
 _dep_plan_sys() { _lm_stub bashbasicsbyvk_deps.sh _dep_plan_sys "$@"; }
 _dep_plan() { _lm_stub bashbasicsbyvk_deps.sh _dep_plan "$@"; }
 _dep_recipe_text() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_text "$@"; }
+_dep_recipe_root() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_root "$@"; }
+_dep_rclone_target() { _lm_stub bashbasicsbyvk_deps.sh _dep_rclone_target "$@"; }
 _dep_recipe_gh_apt() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_gh_apt "$@"; }
 _dep_recipe_gh_dnf() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_gh_dnf "$@"; }
+_dep_path_line() { _lm_stub bashbasicsbyvk_deps.sh _dep_path_line "$@"; }
+_dep_recipe_rclone() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_rclone "$@"; }
 _dep_run() { _lm_stub bashbasicsbyvk_deps.sh _dep_run "$@"; }
 _dep_lane_sys() { _lm_stub bashbasicsbyvk_deps.sh _dep_lane_sys "$@"; }
 _dep_pip_one() { _lm_stub bashbasicsbyvk_deps.sh _dep_pip_one "$@"; }
@@ -770,10 +777,14 @@ _upg_pick() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_pick "$@"; }
 _upg_do_install() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_do_install "$@"; }
 _upg_cmd_install() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_cmd_install "$@"; }
 _upg_fetch_commit() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_fetch_commit "$@"; }
+_upg_info_one() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_info_one "$@"; }
 _upg_cmd_info() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_cmd_info "$@"; }
+_upg_cmd_info_many() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_cmd_info_many "$@"; }
 _upg_cmd_refresh() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_cmd_refresh "$@"; }
 _upg_help() { _lm_stub bashbasicsbyvk_upgrade.sh _upg_help "$@"; }
 upgrade_menu() { _lm_stub bashbasicsbyvk_upgrade.sh upgrade_menu "$@"; }
+handle_version() { _lm_stub bashbasicsbyvk_version.sh handle_version "$@"; }
+_hv_info() { _lm_stub bashbasicsbyvk_version.sh _hv_info "$@"; }
 _api_http() { _lm_stub bashbasicsbyvk_api.sh _api_http "$@"; }
 _api_fail() { _lm_stub bashbasicsbyvk_api.sh _api_fail "$@"; }
 _api_load() { _lm_stub bashbasicsbyvk_api.sh _api_load "$@"; }

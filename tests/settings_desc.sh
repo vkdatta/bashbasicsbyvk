@@ -21,10 +21,10 @@ dup=$(cut -f1 <<<"$tbl" | sort | uniq -d | head -3)
 source "$f"
 st() {   # st ROWS COLS TITLE PARENT CUR TAG   (the locals _st_draw hands to _st_desc_prepare)
   local rows=$1 cols=$2 title=$3 parent_title=$4 cur=$5; local -a _st_kind=(a) _st_tag=("$6")
-  _st_desc_prepare; local last=""; (( ${#_ST_DESC_LN[@]} )) && last="${_ST_DESC_LN[${#_ST_DESC_LN[@]}-1]}"
+  _st_desc_prepare; local last="" i; for i in "${!_ST_DESC_LN[@]}"; do [ -n "${_ST_DESC_LN[$i]}" ] && last="${_ST_DESC_LN[$i]}"; done   # the last text row (a blank spacer row follows it)
   echo "$_ST_DESC_N|$_ST_DESC_TRUNC|${_ST_DESC_LN[0]-}|$last"
 }
-r="$(st 40 80 Display "Settings" 0 hidden)";  [[ "$r" == [1-9]*"|0|Decides whether hidden files"* ]] && ok "a highlighted row shows ITS text" || bad "row text: $r"
+r="$(st 40 80 Display "Settings" 0 hidden)";  [[ "$r" == [1-9]*"|0|How the list of files looks"* ]] && ok "a highlighted row still shows the SCREEN's text (one fixed block height)" || bad "row text: $r"
 r="$(st 40 80 Display "Settings" -1 "")";     [[ "$r" == [1-9]*"|0|How the list of files looks"* ]] && ok "nothing highlighted shows the screen's text" || bad "screen text: $r"
 r="$(st 40 80 Display "Settings" 0 nosuchrow)"; [[ "$r" == [1-9]*"|0|How the list of files looks"* ]] && ok "a row without a line shows its screen's text" || bad "fallback: $r"
 r="$(st 40 80 "No such screen" "" 0 x)";      [[ "$r" == "0|0|"* ]] && ok "a screen without a line shows nothing (and breaks nothing)" || bad "unknown screen: $r"
@@ -32,8 +32,8 @@ r="$(st 17 80 Display "Settings" 0 hidden)";  [[ "$r" == "0|0|"* ]] && ok "a sho
 r="$(st 18 40 Display "Settings" 0 hidden)";  [[ "$r" == *"|1|"*"(? = all)" ]] && ok "a long text is cut with (? = all) and flagged" || bad "truncation: $r"
 w=$(  rows=40 cols=30 title=Display parent_title=Settings cur=0; _st_kind=(a); _st_tag=(hidden); _st_desc_prepare; for l in "${_ST_DESC_LN[@]}"; do echo ${#l}; done | sort -n | tail -1)
 [ "${w:-999}" -le 30 ] && ok "no line is wider than the screen ($w <= 30)" || bad "a line is $w wide on a 30-column screen"
-r="$( rows=40 cols=80 title=Sort\ order parent_title="Settings › Pending uploads (pn)" cur=0; _st_kind=(a); _st_tag=(srv); _st_desc_prepare; echo "${_ST_DESC_LN[0]}")"
-[[ "$r" == "This computer's own unfinished uploads"* ]] && ok "a parent-qualified key wins over the shared title" || bad "parent key: $r"
+r="$( rows=40 cols=80 title=Display parent_title="Settings › Pending uploads (pn)" cur=0; _st_kind=(a); _st_tag=(sort); _st_desc_prepare; echo "${_ST_DESC_LN[0]}")"
+[[ "$r" == "Display options for your list of unfinished uploads"* ]] && ok "a parent-qualified key wins over the shared title" || bad "parent key: $r"
 
 # the block keeps ONE height while the highlight moves (it is erased and redrawn by row count: a block that grew and shrank with the row moved the prompt)
 hs=""; for c in -1 0 1 2 3 4 5 6; do

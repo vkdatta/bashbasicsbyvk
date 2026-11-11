@@ -1,0 +1,1064 @@
+#!/usr/bin/env python3
+"""bashbasicsbyvk_sys: the `sys` command - portable system-info script (Python 3.6+, stdlib only).
+
+    bashbasicsbyvk_sys            the system information screen
+    bashbasicsbyvk_sys --device   ONE word: which kind of device this is (termux linux server wsl2 wsl1 macos-arm macos-intel rpi chromeos
+                                  container gcloud awscs azurecs codespaces notebook freebsd android-other other).  The same ids as
+                                  bashbasicsbyvk_install.sh; the dependency installer (bashbasicsbyvk_deps.sh) asks this to pick the
+                                  install steps that fit the device.
+
+
+Targets: Linux (any distro, Kali, Raspberry Pi), WSL1/2, Docker/Podman/K8s,
+cloud shells, Android/Termux, macOS, and the BSDs. Native Windows gets
+best-effort support.
+
+Every field tries several independent sources. If all direct sources are
+blocked, the value is derived from a related source and prefixed with "~"
+so an estimate is never mistaken for a direct reading.
+"""
+
+import functools
+import glob
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+SYSTEM = platform.system()
+DARWIN = SYSTEM == "Darwin"
+LINUX = SYSTEM in ("Linux", "Android") or sys.platform.startswith(("linux", "android"))
+WINDOWS = SYSTEM == "Windows"
+CYGWIN = SYSTEM.startswith(("CYGWIN", "MSYS", "MINGW"))
+BSD = SYSTEM.endswith("BSD") or SYSTEM == "DragonFly"
+MACHINE = platform.machine() or "unknown-arch"
+BAD = {
+    "", "unknown", "unavailable", "none", "generic", "n/a", "default string",
+    "to be filled by o.e.m.", "system product name", "not specified",
+    "system manufacturer", "not applicable",
+}
+
+
+# ───────────────────────── helpers ─────────────────────────
+
+def read(path):
+    try:
+        return Path(path).read_text(errors="replace").replace("\x00", "").strip()
+    except (OSError, ValueError):
+        return ""
+
+
+def command(args, timeout=2):
+    env = dict(os.environ, LC_ALL="C", LANG="C")  # stable, English output
+    try:
+        result = subprocess.run(
+            args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, universal_newlines=True, timeout=timeout, env=env, check=False,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return ""
+
+
+def has_command(name):
+    return shutil.which(name) is not None
+
+
+def prop(name):
+    return command(["getprop", name], 1) if has_command("getprop") else ""
+
+
+def sysctl(name):
+    return command(["sysctl", "-n", name], 2) if has_command("sysctl") else ""
+
+
+def good(value):
+    return bool(value) and str(value).strip().lower() not in BAD
+
+
+def first_good(*getters):
+    """Return the first usable result; a getter that raises is skipped."""
+    for getter in getters:
+        try:
+            value = getter()
+        except Exception:
+            continue
+        if good(value):
+            return value
+    return None
+
+
+def cpu_count():
+    return os.cpu_count() or 1
+
+
+def strip_prefix(text, prefix):
+    return text[len(prefix):] if text.startswith(prefix) else text
+
+
+ANDROID = (
+    "ANDROID_ROOT" in os.environ
+    or Path("/system/build.prop").exists()
+    or bool(prop("ro.build.version.sdk"))
+    or SYSTEM == "Android" or sys.platform == "android"
+) and not DARWIN and not WINDOWS
+TERMUX = os.environ.get("PREFIX", "").startswith("/data/data/com.termux")
+
+
+@functools.lru_cache(maxsize=1)
+def environment_tag():
+    """' [WSL2]', ' [container]' or ''."""
+    if not LINUX:
+        return ""
+    release = read("/proc/sys/kernel/osrelease").lower()
+    if "microsoft" in release or os.environ.get("WSL_DISTRO_NAME"):
+        return " [WSL2]" if "wsl2" in release or "microsoft-standard" in release else " [WSL]"
+    cgroup = read("/proc/1/cgroup")
+    if (
+        os.path.exists("/.dockerenv")
+        or os.path.exists("/run/.containerenv")
+        or os.environ.get("KUBERNETES_SERVICE_HOST")
+        or os.environ.get("container")
+        or re.search(r"docker|kubepods|containerd|libpod|lxc", cgroup)
+    ):
+        return " [container]"
+    return ""
+
+
+@functools.lru_cache(maxsize=1)
+def termux_battery():
+    if not has_command("termux-battery-status"):
+        return {}
+    try:
+        return json.loads(command(["termux-battery-status"], 4) or "{}")
+    except ValueError:
+        return {}
+
+
+def mem_text(used, total, prefix="", suffix=""):
+    return f"{prefix}{used >> 20} MiB / {total >> 20} MiB ({used * 100 // total}%){suffix}"
+
+
+# ───────────────────────── fields ─────────────────────────
+
+def os_info():
+    tag = environment_tag()
+
+    if ANDROID:
+        version, api = prop("ro.build.version.release"), prop("ro.build.version.sdk")
+        result = f"Android {version}" if version else "Android"
+        result += f" (API {api})" if api else ""
+        result += " / Termux" if TERMUX else ""
+        return f"{result} {MACHINE}"
+
+    if DARWIN:
+        name = command(["sw_vers", "-productName"], 1) or "macOS"
+        version = command(["sw_vers", "-productVersion"], 1) or platform.mac_ver()[0]
+        return f"{name} {version} {MACHINE}".replace("  ", " ")
+
+    if WINDOWS:
+        return platform.platform()
+
+    values = {}
+    for path in ("/etc/os-release", "/usr/lib/os-release"):
+        for line in read(path).splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values.setdefault(key, value.strip('"').strip("'"))
+    name = values.get("PRETTY_NAME") or command(["lsb_release", "-ds"], 1).strip('"')
+    if not name:
+        name = f"{SYSTEM} {platform.release()}".strip() if (BSD or not LINUX) else "Linux"
+    elif BSD and SYSTEM not in name:
+        name = f"{SYSTEM} {platform.release()}"
+    return f"{name} {MACHINE}{tag}"
+
+
+def host_info():
+    if ANDROID:
+        manufacturer = prop("ro.product.manufacturer") or prop("ro.product.brand")
+        model = prop("ro.product.model") or prop("ro.product.device")
+        parts = []
+        if good(manufacturer):
+            parts.append(manufacturer)
+        if good(model) and (not parts or model.lower() != parts[-1].lower()):
+            parts.append(model)
+        return " ".join(parts)
+
+    if DARWIN:
+        model = sysctl("hw.model")
+        return f"Apple {model}" if model else ""
+
+    def dmi():
+        product = read("/sys/class/dmi/id/product_name") or read("/sys/devices/virtual/dmi/id/product_name")
+        vendor = read("/sys/class/dmi/id/sys_vendor")
+        if not good(product):
+            product = read("/sys/class/dmi/id/board_name")
+        if not good(product):
+            return ""
+        if good(vendor) and vendor.lower().split()[0] not in product.lower():
+            return f"{vendor} {product}"
+        return product
+
+    def device_tree():  # Raspberry Pi and other ARM boards
+        return read("/proc/device-tree/model") or read("/sys/firmware/devicetree/base/model")
+
+    def wsl():
+        return "Windows Subsystem for Linux" if "WSL" in environment_tag() else ""
+
+    def bsd():
+        return sysctl("hw.product") or sysctl("hw.model")
+
+    def container():
+        return f"Container ({platform.node()})" if "container" in environment_tag() else ""
+
+    return first_good(dmi, device_tree, wsl, bsd, container, platform.node)
+
+
+def looks_like_kernel(value):
+    return bool(value) and re.match(r"\d+\.\d+", value.strip()) is not None
+
+
+def kernel_info():
+    def uname_a():
+        match = re.search(r"\b(\d+\.\d+[^\s]*)", command(["uname", "-a"], 1))
+        return match.group(1) if match else ""
+
+    def proc_version():
+        match = re.search(r"Linux version\s+(\S+)", read("/proc/version"))
+        return match.group(1) if match else ""
+
+    getters = [
+        platform.release,
+        platform.version if WINDOWS else (lambda: ""),
+        lambda: os.uname().release,
+        lambda: command(["uname", "-r"], 1),
+        lambda: read("/proc/sys/kernel/osrelease"),
+        proc_version, uname_a,
+        lambda: prop("ro.kernel.version"),
+        lambda: prop("ro.build.kernel.version"),
+    ]
+    for getter in getters:
+        try:
+            value = getter()
+        except Exception:
+            continue
+        if looks_like_kernel(value):
+            value = value.strip()
+            return f"{SYSTEM} {value}" if (DARWIN or BSD or WINDOWS) else value
+
+    return f"~{SYSTEM or 'Linux'} {MACHINE} (release hidden by OS)"
+
+
+def format_uptime(seconds):
+    days, seconds = divmod(int(seconds), 86400)
+    hours, seconds = divmod(seconds, 3600)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours or days:
+        parts.append(f"{hours}h")
+    parts.append(f"{seconds // 60}m")
+    return " ".join(parts)
+
+
+def uptime_info():
+    def from_proc():
+        return format_uptime(float(read("/proc/uptime").split()[0]))
+
+    def from_boottime():  # Linux/Android; independent of /proc
+        return format_uptime(time.clock_gettime(time.CLOCK_BOOTTIME))
+
+    def from_sysctl():  # macOS and the BSDs
+        match = re.search(r"sec\s*=\s*(\d+)", sysctl("kern.boottime")) \
+            or re.fullmatch(r"(\d+)", sysctl("kern.boottime"))
+        return format_uptime(time.time() - int(match.group(1))) if match else ""
+
+    def from_windows():
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetTickCount64.restype = ctypes.c_ulonglong
+        return format_uptime(kernel32.GetTickCount64() / 1000)
+
+    def from_command():
+        return strip_prefix(command(["uptime", "-p"], 1), "up ")
+
+    def from_monotonic():  # excludes deep-sleep time
+        return "~" + format_uptime(time.monotonic())
+
+    return first_good(from_proc, from_boottime, from_sysctl, from_windows,
+                      from_command, from_monotonic) or "~0m"
+
+
+def shell_info():
+    def versioned():
+        path = os.environ.get("SHELL", "")
+        name = os.path.basename(path)
+        if name in ("bash", "zsh", "fish", "ksh", "tcsh") and path:
+            match = re.search(r"(\d+\.\d+[\w.\-]*)", command([path, "--version"], 1))
+            if match:
+                return f"{name} {match.group(1)}"
+        return ""
+
+    def env_version():
+        for var, name in (("BASH_VERSION", "bash"), ("ZSH_VERSION", "zsh"), ("FISH_VERSION", "fish")):
+            if os.environ.get(var):
+                return f"{name} {os.environ[var].split()[0]}"
+        return ""
+
+    def env_shell():
+        return os.path.basename(os.environ.get("SHELL", "")) or os.path.basename(os.environ.get("COMSPEC", ""))
+
+    def parent_shell():
+        return read(f"/proc/{os.getppid()}/comm") or command(["ps", "-p", str(os.getppid()), "-o", "comm="], 1)
+
+    return first_good(env_version, versioned, env_shell, parent_shell) or "sh"
+
+
+def cpu_model():
+    def cpuinfo():
+        for line in read("/proc/cpuinfo").splitlines():
+            if ":" not in line:
+                continue
+            key, value = (x.strip() for x in line.split(":", 1))
+            key = key.lower()
+            if key in ("model name", "hardware", "cpu model", "cpu") and good(value):
+                return value
+            if key == "processor" and value and not value.isdigit():
+                return value
+        return ""
+
+    def lscpu():
+        match = re.search(r"^Model name:\s*(.+)$", command(["lscpu"], 2), re.M)
+        return match.group(1).strip() if match else ""
+
+    def sysctl_brand():
+        return sysctl("machdep.cpu.brand_string") or sysctl("hw.model") if (DARWIN or BSD) else ""
+
+    def android():
+        if not ANDROID:
+            return ""
+        for key in ("ro.soc.model", "ro.board.platform", "ro.hardware"):
+            value = prop(key)
+            if good(value):
+                return f"{value} (SoC/platform)"
+        return ""
+
+    def windows():
+        return os.environ.get("PROCESSOR_IDENTIFIER", "") if WINDOWS else ""
+
+    def device_tree():
+        return (read("/proc/device-tree/compatible").split(",")[-1] or "").strip()
+
+    return first_good(sysctl_brand, cpuinfo, lscpu, android, windows, platform.processor,
+                      device_tree) or f"{MACHINE} ({cpu_count()} cores)"
+
+
+def cpu_usage(interval=0.2):
+    def snapshot():
+        for line in read("/proc/stat").splitlines():
+            if line.startswith("cpu "):
+                values = [int(x) for x in line.split()[1:]]
+                return sum(values), values[3] + (values[4] if len(values) > 4 else 0)
+        return None
+
+    def from_proc():
+        first = snapshot()
+        if not first:
+            return ""
+        time.sleep(interval)
+        second = snapshot()
+        total, idle = second[0] - first[0], second[1] - first[1]
+        return f"{max(0, min(100, 100 * (total - idle) / total)):.0f}%" if total > 0 else ""
+
+    def from_top_darwin():  # second sample is the live one
+        if not DARWIN:
+            return ""
+        idles = re.findall(r"([\d.]+)%\s*idle", command(["top", "-l", "2", "-n", "0"], 6))
+        return f"{max(0, 100 - float(idles[-1])):.0f}%" if idles else ""
+
+    def from_top():
+        if not has_command("top") or DARWIN:
+            return ""
+        out = command(["top", "-b", "-n", "1"], 4) or command(["top", "-n", "1"], 4)
+        total, idle = re.search(r"(\d+)%cpu", out), re.search(r"(\d+)%idle", out)  # toybox
+        if total and idle and int(total.group(1)) > 0:
+            return f"{max(0, 100 - 100 * int(idle.group(1)) / int(total.group(1))):.0f}%"
+        match = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:%\s*)?id(?:le)?\b", out)  # procps / BSD
+        return f"{max(0, 100 - float(match.group(1).replace(',', '.'))):.0f}%" if match else ""
+
+    def from_load():
+        return f"~{min(100, 100 * os.getloadavg()[0] / cpu_count()):.0f}% (est. from load)"
+
+    return first_good(from_proc, from_top_darwin, from_top, from_load) or "~0%"
+
+
+def load_average():
+    def from_proc():
+        values = read("/proc/loadavg").split()
+        return " / ".join(values[:3]) if len(values) >= 3 else ""
+
+    def from_syscall():
+        return " / ".join(f"{x:.2f}" for x in os.getloadavg())
+
+    def from_uptime():
+        match = re.search(r"load averages?:\s*([\d.,\s]+)", command(["uptime"], 1))
+        return " / ".join(re.findall(r"\d+[.,]\d+", match.group(1))[:3]) if match else ""
+
+    value = first_good(from_proc, from_syscall, from_uptime)
+    return f"{value} (1/5/15 min)" if value else ""
+
+
+def memory_info():
+    def cgroup_limit():  # inside containers /proc/meminfo shows the HOST
+        if "container" not in environment_tag():
+            return ""
+        host = 0
+        for line in read("/proc/meminfo").splitlines():
+            if line.startswith("MemTotal:"):
+                host = int(line.split()[1]) * 1024
+        v2 = read("/sys/fs/cgroup/memory.max")
+        if v2.isdigit():
+            limit = int(v2)
+            used = int(read("/sys/fs/cgroup/memory.current") or 0)
+            stat = read("/sys/fs/cgroup/memory.stat")
+            inactive = re.search(r"^inactive_file (\d+)", stat, re.M)
+        else:
+            limit = int(read("/sys/fs/cgroup/memory/memory.limit_in_bytes") or 0)
+            used = int(read("/sys/fs/cgroup/memory/memory.usage_in_bytes") or 0)
+            inactive = re.search(r"^total_inactive_file (\d+)", read("/sys/fs/cgroup/memory/memory.stat"), re.M)
+        if not limit or (host and limit >= host):
+            return ""
+        used = max(0, used - (int(inactive.group(1)) if inactive else 0))
+        return mem_text(used, limit, suffix=" (container limit)")
+
+    def from_proc():
+        data = {}
+        for line in read("/proc/meminfo").splitlines():
+            if ":" in line:
+                key, value = line.split(":", 1)
+                try:
+                    data[key] = int(value.split()[0])
+                except (ValueError, IndexError):
+                    pass
+        total, available = data.get("MemTotal"), data.get("MemAvailable")
+        if not total or available is None:
+            return ""
+        return mem_text(max(0, total - available) * 1024, total * 1024)
+
+    def from_darwin():
+        if not DARWIN:
+            return ""
+        total, out = int(sysctl("hw.memsize")), command(["vm_stat"], 2)
+        page = int(re.search(r"page size of (\d+)", out).group(1))
+
+        def pages(label):
+            match = re.search(label + r":\s+(\d+)", out)
+            return int(match.group(1)) if match else 0
+
+        used = (pages("Pages active") + pages("Pages wired down")
+                + pages("Pages occupied by compressor")) * page
+        return mem_text(min(used, total), total)
+
+    def from_windows():
+        import ctypes
+
+        class Status(ctypes.Structure):
+            _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong)] + \
+                       [(n, ctypes.c_ulonglong) for n in ("tp", "ap", "tpf", "apf", "tv", "av", "ev")]
+
+        status = Status()
+        status.length = ctypes.sizeof(Status)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+        return mem_text(status.tp - status.ap, status.tp)
+
+    def from_free():
+        for line in command(["free", "-m"]).splitlines():
+            fields = line.split()
+            if fields and fields[0].lower().startswith("mem") and len(fields) >= 3:
+                return mem_text(int(fields[2]) << 20, int(fields[1]) << 20)
+        return ""
+
+    def from_sysconf():  # counts free pages only → usage slightly overstated
+        page = os.sysconf("SC_PAGE_SIZE")
+        total, free = os.sysconf("SC_PHYS_PAGES") * page, os.sysconf("SC_AVPHYS_PAGES") * page
+        return mem_text(total - free, total, prefix="~")
+
+    def from_sysctl_total():
+        total = int(sysctl("hw.physmem") or sysctl("hw.memsize"))
+        return f"~{total >> 20} MiB total (usage hidden by OS)"
+
+    return first_good(cgroup_limit, from_proc, from_darwin, from_windows, from_free,
+                      from_sysconf, from_sysctl_total) or "~memory size hidden by OS"
+
+
+def format_bytes(value):
+    value = float(value)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB", "PiB"):
+        if value < 1024:
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} PiB"
+
+
+def disk_usage(path):
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError:
+        return ""
+    if not usage.total:
+        return ""
+    return (f"{format_bytes(usage.used)} / {format_bytes(usage.total)} "
+            f"({usage.used * 100 // usage.total}% used; {format_bytes(usage.free)} free)")
+
+
+def disk_info():
+    home = os.environ.get("HOME") or os.environ.get("USERPROFILE")
+    if not home:
+        try:
+            home = str(Path.home())
+        except (RuntimeError, KeyError, OSError):
+            home = ""
+    root = os.path.abspath(os.sep)
+    candidates = [
+        ("Home", home),
+        ("Shared storage", os.path.join(home, "storage", "shared") if home else ""),
+        ("Data volume", "/System/Volumes/Data" if DARWIN else ""),
+        ("Root mount", root),
+    ]
+    extras = [("Working dir", os.getcwd()), ("Temp", tempfile.gettempdir())]  # last resorts only
+    seen, rows = set(), []
+    for label, path in candidates + extras:
+        if len(rows) >= 3 or (rows and (label, path) in extras):
+            break
+        if not path or not os.path.exists(path):
+            continue
+        text = disk_usage(path)
+        if text and text not in seen:
+            seen.add(text)
+            rows.append(f"{label}: {text}")
+    return "; ".join(rows)
+
+
+def package_info():
+    def count_lines(name, args, label, timeout=8):
+        def run():
+            if not has_command(name):
+                return ""
+            n = len(command([name, *args], timeout).splitlines())
+            return f"{n} ({label})" if n else ""
+        return run
+
+    def dpkg():
+        if has_command("dpkg-query"):
+            out = command(["dpkg-query", "-W", "-f=${db:Status-Status}\\n"], 8)
+            n = sum(1 for line in out.splitlines() if line.strip() == "installed")
+            if n:
+                return f"{n} (dpkg)"
+        for path in (os.path.join(os.environ.get("PREFIX", ""), "var/lib/dpkg/status"), "/var/lib/dpkg/status"):
+            n = sum("Status: install ok installed" in b for b in read(path).split("\n\n"))
+            if n:
+                return f"{n} (dpkg)"
+        return ""
+
+    def brew():
+        for prefix in ("/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"):
+            try:
+                n = len(os.listdir(f"{prefix}/Cellar"))
+            except OSError:
+                continue
+            try:
+                casks = len(os.listdir(f"{prefix}/Caskroom"))
+            except OSError:
+                casks = 0
+            return f"{n} (brew)" + (f", {casks} (brew-cask)" if casks else "")
+        return ""
+
+    def emerge():
+        n = len(glob.glob("/var/db/pkg/*/*"))
+        return f"{n} (portage)" if n else ""
+
+    def snap():
+        n = len(command(["snap", "list"], 4).splitlines()) - 1 if has_command("snap") else 0
+        return f"{n} (snap)" if n > 0 else ""
+
+    def bsd_pkg():
+        if not BSD:
+            return ""
+        return count_lines("pkg", ["info"], "pkg")() or count_lines("pkg_info", [], "pkg_info")()
+
+    found = []
+    for getter in (
+        dpkg, count_lines("rpm", ["-qa"], "rpm"), count_lines("pacman", ["-Q"], "pacman"),
+        count_lines("apk", ["info"], "apk"), count_lines("xbps-query", ["-l"], "xbps"),
+        emerge, bsd_pkg, brew,
+        count_lines("nix-env", ["-q"], "nix", 6),
+        count_lines("scoop", ["list"], "scoop") if WINDOWS else (lambda: ""),
+        count_lines("flatpak", ["list", "--columns=application"], "flatpak"), snap,
+    ):
+        try:
+            value = getter()
+        except Exception:
+            continue
+        if value:
+            found.append(value)
+    if found:
+        return ", ".join(found)
+
+    names = set()
+    for folder in os.environ.get("PATH", "").split(os.pathsep):
+        try:
+            names.update(e.name for e in os.scandir(folder) if e.is_file())
+        except OSError:
+            pass
+    return f"~{len(names)} commands on PATH" if names else "~no package manager found"
+
+
+def battery_info():
+    def sysfs():
+        for entry in Path("/sys/class/power_supply").iterdir():
+            if read(entry / "type") != "Battery" or read(entry / "scope") == "Device":
+                continue  # skip wireless mouse/keyboard batteries
+            percentage, status = read(entry / "capacity"), read(entry / "status")
+            if percentage.isdigit():
+                return f"{percentage}%" + (f" ({status})" if status else "")
+        return ""
+
+    def pmset():
+        if not has_command("pmset"):
+            return ""
+        match = re.search(r"(\d+)%;\s*([^;]+)", command(["pmset", "-g", "batt"], 2))
+        return f"{match.group(1)}% ({match.group(2).strip().capitalize()})" if match else ""
+
+    def termux():
+        data = termux_battery()
+        if "percentage" in data:
+            status = data.get("status")
+            return f"{int(data['percentage'])}%" + (f" ({status})" if status else "") + " (Termux:API)"
+        return ""
+
+    def dumpsys():
+        out = command(["dumpsys", "battery"], 3) if has_command("dumpsys") else ""
+        level = re.search(r"level:\s*(\d+)", out)
+        return f"{level.group(1)}%" if level else ""
+
+    def upower():
+        if not has_command("upower"):
+            return ""
+        out = command(["upower", "-i", "/org/freedesktop/UPower/devices/DisplayDevice"], 2)
+        pct, state = re.search(r"percentage:\s*(\d+)%", out), re.search(r"state:\s*(\S+)", out)
+        return f"{pct.group(1)}% ({state.group(1).capitalize() if state else 'Unknown'})" if pct else ""
+
+    def windows():
+        if not WINDOWS:
+            return ""
+        import ctypes
+
+        class Power(ctypes.Structure):
+            _fields_ = [("ac", ctypes.c_ubyte), ("flag", ctypes.c_ubyte), ("pct", ctypes.c_ubyte),
+                        ("saver", ctypes.c_ubyte), ("life", ctypes.c_ulong), ("full", ctypes.c_ulong)]
+
+        power = Power()
+        ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(power))
+        if power.flag == 128 or power.pct == 255:
+            return ""
+        return f"{power.pct}% ({'Charging' if power.flag & 8 else 'AC' if power.ac == 1 else 'Discharging'})"
+
+    result = first_good(sysfs, pmset, termux, dumpsys, upower, windows)
+    if result:
+        return result
+    if ANDROID:
+        return "~hidden by Android (needs the Termux:API app and the termux-api package)"
+    return "No battery (mains powered)"
+
+
+def temperature_info():
+    def thermal():
+        results = []
+        for path in sorted(Path("/sys/class/thermal").glob("thermal_zone*/temp")):
+            try:
+                t = float(read(path))
+            except ValueError:
+                continue
+            t = t / 1000 if abs(t) > 1000 else t
+            if -20 <= t <= 150:
+                results.append(f"{read(path.parent / 'type') or path.parent.name}: {t:.1f}°C")
+        return ", ".join(results[:3])
+
+    def hwmon():
+        results = []
+        for path in sorted(Path("/sys/class/hwmon").glob("hwmon*/temp*_input")):
+            try:
+                t = float(read(path)) / 1000
+            except ValueError:
+                continue
+            if -20 <= t <= 150:
+                label = read(path.with_name(path.name.replace("_input", "_label"))) or read(path.parent / "name")
+                results.append(f"{label or path.parent.name}: {t:.1f}°C")
+        return ", ".join(results[:3])
+
+    def sensors():
+        if not has_command("sensors"):
+            return ""
+        found = re.findall(r"^([\w .\-]+):\s+\+?(-?\d+\.\d+)\s*°C", command(["sensors"], 3), re.M)
+        return ", ".join(f"{n.strip()}: {float(v):.1f}°C" for n, v in found[:3])
+
+    def vcgencmd():  # Raspberry Pi
+        match = re.search(r"temp=([\d.]+)", command(["vcgencmd", "measure_temp"], 1)) if has_command("vcgencmd") else None
+        return f"SoC: {match.group(1)}°C" if match else ""
+
+    def freebsd():
+        if not BSD:
+            return ""
+        out = sysctl("dev.cpu.0.temperature")
+        if out:
+            return f"CPU: {out.replace('C', '')}°C"
+        match = re.search(r"([\d.]+)\s*degC", sysctl("hw.sensors.cpu0.temp0"))
+        return f"CPU: {match.group(1)}°C" if match else ""
+
+    def mac_tool():
+        if has_command("osx-cpu-temp"):
+            match = re.search(r"(\d+(?:\.\d+)?)", command(["osx-cpu-temp"], 2))
+            if match and float(match.group(1)) > 0:
+                return f"CPU: {float(match.group(1)):.1f}°C"
+        return ""
+
+    def mac_battery():
+        if not DARWIN:
+            return ""
+        match = re.search(r'"Temperature"\s*=\s*(\d+)', command(["ioreg", "-rn", "AppleSmartBattery"], 3))
+        if match and 0 < int(match.group(1)) < 15000:
+            return f"Battery: {int(match.group(1)) / 100:.1f}°C"
+        return ""
+
+    def battery_sysfs():
+        for entry in Path("/sys/class/power_supply").iterdir():
+            raw = read(entry / "temp")
+            if read(entry / "type") == "Battery" and raw.lstrip("-").isdigit():
+                return f"Battery: {int(raw) / 10:.1f}°C"
+        return ""
+
+    def termux():
+        temp = termux_battery().get("temperature")
+        return f"Battery: {float(temp):.1f}°C (Termux:API)" if temp is not None else ""
+
+    def dumpsys():
+        out = command(["dumpsys", "battery"], 3) if has_command("dumpsys") else ""
+        match = re.search(r"temperature:\s*(-?\d+)", out)
+        return f"Battery: {int(match.group(1)) / 10:.1f}°C" if match else ""
+
+    result = first_good(thermal, hwmon, sensors, vcgencmd, freebsd, mac_tool, mac_battery,
+                        battery_sysfs, termux, dumpsys)
+    if result:
+        return result
+    if environment_tag():
+        return "~no sensors in container/WSL"
+    if DARWIN:
+        return "~Apple hides CPU temp (the osx-cpu-temp tool can show it)"
+    if ANDROID:
+        return "~no sensor exposed (the termux-api package can show the battery temperature)"
+    return "~no sensors exposed (VM or locked-down kernel)"
+
+
+def display_info():
+    def x11():
+        if not (os.environ.get("DISPLAY") and has_command("xrandr")):
+            return ""
+        for line in command(["xrandr", "--current"]).splitlines():
+            fields = line.split()
+            if fields and "*" in line and re.fullmatch(r"\d+x\d+", fields[0]):
+                rate = next((i.replace("*", "").replace("+", "") for i in fields[1:] if "*" in i), "")
+                return fields[0] + (f" @ {rate}Hz" if rate else "") + " (X11)"
+        return ""
+
+    def xdpyinfo():
+        if not (os.environ.get("DISPLAY") and has_command("xdpyinfo")):
+            return ""
+        match = re.search(r"dimensions:\s+(\d+x\d+)", command(["xdpyinfo"], 2))
+        return f"{match.group(1)} (X11)" if match else ""
+
+    def macos():
+        if not DARWIN:
+            return ""
+        out = command(["system_profiler", "SPDisplaysDataType"], 10)
+        res = re.search(r"Resolution:\s*(\d+)\s*x\s*(\d+)", out)
+        if not res:
+            return ""
+        rate = re.search(r"@\s*([\d.]+)\s*Hz", out)
+        return f"{res.group(1)}x{res.group(2)}" + (f" @ {float(rate.group(1)):.0f}Hz" if rate else "") + " (macOS)"
+
+    def wayland():
+        if not os.environ.get("WAYLAND_DISPLAY"):
+            return ""
+        for name, args in (("wlr-randr", []), ("kscreen-doctor", ["-o"]), ("swaymsg", ["-t", "get_outputs"])):
+            if has_command(name):
+                match = re.search(r"\b(\d{3,5})\s*x\s*(\d{3,5})\b", command([name, *args]))
+                if match:
+                    return f"{match.group(1)}x{match.group(2)} (Wayland)"
+        return ""
+
+    def wm_size():
+        match = re.search(r"(?:Physical|Override) size:\s*(\d+x\d+)", command(["wm", "size"])) if has_command("wm") else None
+        return f"{match.group(1)} (Android)" if match else ""
+
+    def dumpsys_display():
+        match = re.search(r"real (\d+) x (\d+)", command(["dumpsys", "display"], 3)) if has_command("dumpsys") else None
+        return f"{match.group(1)}x{match.group(2)} (Android)" if match else ""
+
+    def framebuffer():
+        match = re.match(r"(\d+)[,x](\d+)", read("/sys/class/graphics/fb0/virtual_size"))
+        return f"{match.group(1)}x{match.group(2)} (framebuffer)" if match else ""
+
+    def drm():
+        for path in sorted(Path("/sys/class/drm").glob("card*-*/modes")):
+            match = re.match(r"(\d+x\d+)", read(path))
+            if match:
+                return f"{match.group(1)} (DRM)"
+        return ""
+
+    def windows():
+        if not WINDOWS:
+            return ""
+        import ctypes
+        user32 = ctypes.windll.user32
+        return f"{user32.GetSystemMetrics(0)}x{user32.GetSystemMetrics(1)} (Windows)"
+
+    def android_props():
+        w, h = prop("ro.surface_flinger.max_graphics_width"), prop("ro.surface_flinger.max_graphics_height")
+        if w.isdigit() and h.isdigit():
+            return f"~{w}x{h} (max, from system props)"
+        dpi = prop("ro.sf.lcd_density") or prop("ro.sf.lcd_density.default")
+        return f"~Built-in screen, {dpi} dpi (resolution hidden by Android)" if dpi.isdigit() else ""
+
+    result = first_good(macos, x11, xdpyinfo, wayland, wm_size, dumpsys_display, framebuffer, drm,
+                        windows, android_props)
+    if result:
+        return result
+    if ANDROID:
+        return "~Built-in screen (resolution hidden by Android)"
+    return "~No display (headless/TTY/container)"
+
+
+def process_names():
+    names = set()
+    try:
+        for entry in Path("/proc").iterdir():
+            if entry.name.isdigit():
+                name = read(entry / "comm")
+                if name:
+                    names.add(name.lower())
+    except OSError:
+        pass
+    if not names:  # macOS / BSD / restricted /proc
+        for line in command(["ps", "-A", "-o", "comm="], 3).splitlines():
+            if line.strip():
+                names.add(os.path.basename(line.strip()).lower())
+    return names
+
+
+def window_manager():
+    if ANDROID:
+        return "Android System UI"
+    if DARWIN:
+        return "Quartz Compositor"
+    if WINDOWS:
+        return "Desktop Window Manager"
+
+    names = process_names()
+    known = (
+        ("hyprland", "Hyprland"), ("sway", "Sway"), ("kwin_wayland", "KWin (Wayland)"),
+        ("kwin_x11", "KWin (X11)"), ("gnome-shell", "Mutter / GNOME"), ("mutter", "Mutter"),
+        ("muffin", "Muffin"), ("marco", "Marco"), ("xfwm4", "Xfwm"), ("openbox", "Openbox"),
+        ("bspwm", "bspwm"), ("i3", "i3"), ("awesome", "awesome"), ("dwm", "dwm"),
+        ("xmonad", "xmonad"), ("river", "river"), ("weston", "Weston"), ("labwc", "labwc"),
+    )
+    for process, name in known:
+        if process in names:
+            return name
+    for key in ("XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION"):
+        if os.environ.get(key):
+            return os.environ[key]
+    if "WSL" in environment_tag() and os.environ.get("WAYLAND_DISPLAY"):
+        return "WSLg (Weston)"
+    return "None (TTY/headless)"
+
+
+def terminal_info():
+    term = os.environ.get("TERM") or "unknown"
+    for var, label in (("CLOUD_SHELL", "Google Cloud Shell"), ("CODESPACES", "GitHub Codespaces"),
+                       ("GITPOD_WORKSPACE_ID", "Gitpod")):
+        if os.environ.get(var):
+            return f"{label} (TERM={term})"
+    if os.environ.get("AWS_EXECUTION_ENV") == "CloudShell":
+        return f"AWS CloudShell (TERM={term})"
+    for key in ("TERM_PROGRAM", "LC_TERMINAL", "KONSOLE_VERSION"):
+        if os.environ.get(key):
+            return os.environ[key]
+    if os.environ.get("WT_SESSION"):
+        return "Windows Terminal"
+    if TERMUX:
+        return f"Termux terminal (TERM={term})"
+    if os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY"):
+        return f"SSH session (TERM={term})"
+
+    names = process_names()
+    for process, name in (("ghostty", "Ghostty"), ("kitty", "kitty"), ("alacritty", "Alacritty"),
+                          ("wezterm-gui", "WezTerm"), ("konsole", "Konsole"),
+                          ("gnome-terminal", "GNOME Terminal"), ("xfce4-terminal", "Xfce Terminal"),
+                          ("xterm", "xterm")):
+        if process in names:
+            return name
+
+    try:
+        tty = os.ttyname(sys.stdout.fileno())
+    except (OSError, ValueError, AttributeError):
+        tty = ""
+    return os.environ.get("TERM") or tty or "non-interactive (piped)"
+
+
+def user_name():
+    def env():
+        return os.environ.get("USER") or os.environ.get("USERNAME") or os.environ.get("LOGNAME")
+
+    def pwd_entry():
+        import pwd
+        return pwd.getpwuid(os.getuid()).pw_name
+
+    def getpass_user():
+        import getpass
+        return getpass.getuser()
+
+    return first_good(env, pwd_entry, getpass_user, lambda: f"uid{os.getuid()}") or "user"
+
+
+def device():
+    """The kind of device, as ONE id (same ids and order as bashbasicsbyvk_install.sh: detect_platform)."""
+    env = os.environ.get
+    if ANDROID:
+        return "termux" if (TERMUX or env("TERMUX_VERSION")) else "android-other"
+    if DARWIN:
+        return "macos-arm" if MACHINE.lower() in ("arm64", "aarch64") else "macos-intel"
+    if SYSTEM == "FreeBSD":
+        return "freebsd"
+    if not LINUX:
+        return "other"                                     # native Windows, Cygwin / MSYS, the other BSDs
+    if env("CLOUD_SHELL") or env("DEVSHELL_GCLOUD_CONFIG") or env("GOOGLE_CLOUD_SHELL"):
+        return "gcloud"
+    if env("AWS_EXECUTION_ENV") == "CloudShell":
+        return "awscs"
+    if env("ACC_CLOUD") or env("AZUREPS_HOST_ENVIRONMENT"):
+        return "azurecs"
+    if env("CODESPACES") or env("GITPOD_WORKSPACE_ID") or env("REMOTE_CONTAINERS"):
+        return "codespaces"
+    if env("COLAB_RELEASE_TAG") or env("COLAB_GPU") or env("KAGGLE_KERNEL_RUN_TYPE") or env("REPL_ID"):
+        return "notebook"
+    tag = environment_tag()
+    if "WSL" in tag:
+        return "wsl2" if "WSL2" in tag else "wsl1"
+    if "container" in tag:
+        return "container"
+    if "Raspberry Pi" in (read("/proc/device-tree/model") or read("/sys/firmware/devicetree/base/model")):
+        return "rpi"
+    if os.path.exists("/dev/.cros_milestone") or os.path.isdir("/opt/google/cros-containers"):
+        return "chromeos"
+    if looks_server():
+        return "server"
+    return "linux"
+
+
+def looks_server():
+    """A VM / VPS / headless box reached over SSH (the README's "VMs" case)."""
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        return False                                       # a desktop session
+    if has_command("systemd-detect-virt") and command(["systemd-detect-virt"], 2) not in ("", "none"):
+        return True
+    dmi = read("/sys/class/dmi/id/product_name") + " " + read("/sys/class/dmi/id/sys_vendor")
+    if re.search(r"KVM|QEMU|VirtualBox|VMware|Virtual Machine|HVM|Google Compute|Amazon EC2|OpenStack|DigitalOcean|Hetzner|Droplet|Bochs",
+                 dmi, re.I):
+        return True
+    return bool(os.environ.get("SSH_CONNECTION"))
+
+
+
+# ───────────────────────── output ─────────────────────────
+
+def safe(func, fallback):
+    """A field can never crash the script or show an 'unavailable'-style value."""
+    try:
+        value = func()
+    except Exception:
+        value = ""
+    return value if good(value) else fallback
+
+
+def collect():
+    usage = safe(cpu_usage, "~0%")
+    load = safe(load_average, "")
+    activity = f"CPU {usage}" + (f" | Load {load}" if load else "")
+
+    return [
+        ("OS", safe(os_info, f"~{SYSTEM or 'Linux'} {MACHINE}")),
+        ("Host", safe(host_info, "~Generic device")),
+        ("Kernel", safe(kernel_info, f"~{SYSTEM or 'Linux'} (release hidden by OS)")),
+        ("Uptime", safe(uptime_info, "~0m")),
+        ("Packages", safe(package_info, "~no package manager found")),
+        ("Shell", safe(shell_info, "sh")),
+        ("Display", safe(display_info, "~No display (headless)")),
+        ("WM", safe(window_manager, "~None (TTY/headless)")),
+        ("Terminal", safe(terminal_info, "~non-interactive (piped)")),
+        ("CPU", safe(cpu_model, f"~{MACHINE} ({cpu_count()} cores)")),
+        ("Activity", activity),
+        ("Temperature", safe(temperature_info, "~no sensors exposed")),
+        ("Memory", safe(memory_info, "~memory size hidden by OS")),
+        ("Disk", safe(disk_info, "~storage stats hidden by OS")),
+        ("Battery", safe(battery_info, "~battery state unavailable")),
+    ]
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__.strip().split("\n\n")[0] + "\n\n" + "\n".join(l for l in __doc__.splitlines() if l.startswith("    bashbasicsbyvk_sys")))
+        return
+    if args and args[0] == "--device":
+        print(device())
+        return
+    if args:
+        print(f"bashbasicsbyvk_sys: unknown option {args[0]} (try --help)", file=sys.stderr)
+        sys.exit(2)
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(errors="replace")
+        except (ValueError, OSError):
+            pass
+
+    if WINDOWS:
+        os.system("")  # enables ANSI escape processing in modern Windows consoles
+    utf8 = "utf" in (sys.stdout.encoding or "").lower()
+    color = sys.stdout.isatty() and "NO_COLOR" not in os.environ and os.environ.get("TERM") != "dumb"
+    bold, cyan, dim, reset = ("\033[1m", "\033[96m", "\033[2m", "\033[0m") if color else ("",) * 4
+
+    rows = collect()
+    title = f"{user_name()}@{platform.node() or 'localhost'}"
+    width = max(36, min(90, max(len(k) + len(v) + 2 for k, v in rows)))
+
+    print()
+    print(f"{bold}{title}{reset}")
+    print(("─" if utf8 else "-") * width)
+    for key, value in rows:
+        print(f"{cyan}{key:<14}{reset} {value}")
+
+    if any(value.startswith("~") or " ~" in value or "(~" in value for _, value in rows):
+        print()
+        print(f"{dim}~ = estimated or inferred: the OS blocks the direct reading.{reset}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
