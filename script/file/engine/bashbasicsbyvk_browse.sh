@@ -658,9 +658,7 @@ _input_hint_sync() {
 
 _print_input_line() {
   _BVK_SCR_PROMPT="Select:"
-  # the block cursor would sit on the first selected character and hide it: no cursor while a selection is shown
-  if (( ${_TE_ANC:--1} >= 0 )) && _te_sel "$_buf" "$_pos"; then builtin printf '\033[?25l'; _RC_CUR_HID=1
-  elif [ "${_RC_CUR_HID:-0}" = 1 ]; then builtin printf '\033[?25h'; _RC_CUR_HID=0; fi
+  _te_cursor "$_buf" "$_pos"                            # no block cursor over a selection (the template, textedit.sh)
   # a text that does not fit one row (a paste, line breaks) is shown in full as a block of rows (see _bvk_row_multi)
   if declare -F _bvk_row_multi >/dev/null 2>&1 && _bvk_row_multi "Select: " "$_buf" "$_pos"; then return 0; fi
   _input_hint_sync
@@ -852,7 +850,7 @@ _rc_click() {
       _bvk_mouse_dbl "i:$_MS_ITEM" && rc=2
       _nav_jump_to "$_MS_ITEM" ;;                            # highlight + type its number in the prompt (exactly what the arrow keys do)
     prompt)                                                  # a tap on the typed text puts the cursor there (empty prompt: the touch goes back to the terminal, keyboard)
-      if [ -n "$_buf" ] && _bvk_click_pos "$_MS_Y" "$_BVK_CROW" "$_MS_X"; then _pos=$_BVK_CLICK_POS; _TE_ANC=-1; _BVK_LAST_ITEM=""; _print_input_line
+      if _bvk_prompt_tap "$_buf" _pos; then _print_input_line
       else _bvk_mouse_other "$_MS_Y" "$_BVK_CROW"; fi ;;
     pgup) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-1} - _vp_page_step )) ;;
     pgdn) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-0} + _vp_page_step )) ;;
@@ -1010,7 +1008,6 @@ _read_choice_raw() {
   _bvk_paste_off
   declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
   _te_end
-  [ "${_RC_CUR_HID:-0}" = 1 ] && { builtin printf '\033[?25h'; _RC_CUR_HID=0; }
   stty "$_orig_stty" 2>/dev/null
   _bvk_blk_leave
   # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)

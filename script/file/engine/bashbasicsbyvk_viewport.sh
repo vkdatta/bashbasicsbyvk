@@ -976,23 +976,33 @@ _bvk_row_multi() {
   return 0
 }
 
-# _bvk_click_pos CLICKED_ROW FIRST_PROMPT_ROW CLICKED_COL(1-based) -> _BVK_CLICK_POS = the character of _buf that cell is on (end of text if past it)
+# _bvk_click_pos CLICKED_ROW FIRST_PROMPT_ROW CLICKED_COL(1-based) TEXT -> _BVK_CLICK_POS = the character of TEXT that cell is on (end of text if past it)
 _bvk_click_pos() {
-  local y=$1 crow=$2 x=$3 r s l c ch w=0 i=0
+  local y=$1 crow=$2 x=$3 t=$4 r s l c ch w=0 i=0
   if (( ${_BLK_ROWS:-1} > 1 )); then
     r=$(( ${_BLK_TOP:-0} + y - crow ))
     (( r >= 0 && r < ${#_BLK_RS[@]} )) || return 1
     s=${_BLK_RS[r]}; l=${_BLK_RL[r]}; c=$(( x - 1 - (r == 0 ? ${_BLK_PW:-8} : 0) ))
   else
-    s=${_BVK_FIT_S:-0}; l=$(( ${#_buf} - s )); c=$(( x - 1 - ${_BVK_FIT_PW:-8} - (s > 0 ? 1 : 0) ))
+    s=${_BVK_FIT_S:-0}; l=$(( ${#t} - s )); c=$(( x - 1 - ${_BVK_FIT_PW:-8} - (s > 0 ? 1 : 0) ))
   fi
   (( c < 0 )) && c=0
   while (( i < l )); do
-    ch="${_buf:s+i:1}"; _bvk_dispw "$ch"
+    ch="${t:s+i:1}"; _bvk_dispw "$ch"
     (( w + _BVK_W > c )) && break
     w=$(( w + _BVK_W )); i=$(( i + 1 ))
   done
   _BVK_CLICK_POS=$(( s + i ))
+}
+
+# _bvk_prompt_tap TEXT POSVAR   THE tap on a prompt row (_MS_KIND=prompt, the row is _BVK_CROW).  Every read loop with a typed line calls
+#   this in its prompt case (main Select:, item / group numbers, smart menus, the Settings / choice-box Select:), so they cannot drift.
+#   rc 0: the cursor (POSVAR) moved to the tapped character, the selection is gone, the caller redraws the line.
+#   rc 1: nothing typed (or not on the text): the caller hands the touch back to the terminal (_bvk_mouse_other), so the keyboard opens.
+_bvk_prompt_tap() {
+  [ -n "$1" ] && _bvk_click_pos "$_MS_Y" "$_BVK_CROW" "$_MS_X" "$1" || return 1
+  printf -v "$2" '%s' "$_BVK_CLICK_POS"; _TE_ANC=-1; _BVK_LAST_ITEM=""
+  return 0
 }
 
 # moving the cursor inside the text: a plain one-row text just steps the cursor; a block is redrawn (it may scroll / change row)
@@ -1272,6 +1282,7 @@ _multi_compute_set() {
 
 _multi_print_input_line() {
   local _mp back
+  _te_cursor "$_buf" "$_pos"                             # no block cursor over a selection
   if [ "$_vp_mode" == "imaginary" ]; then _BVK_SCR_PROMPT="Group numbers:"; _mp="Group numbers: "
   else _mp="${_multi_label:-Item numbers}: "; _BVK_SCR_PROMPT="${_mp% }"; fi      # _multi_label: a screen that calls this "Select" (rename)
   _bvk_row_multi "$_mp" "$_buf" "$_pos" && return 0       # a text that does not fit one row: shown in full, as a block of rows
@@ -1427,7 +1438,7 @@ _multi_click() {
       fi ;;
     pgup) _BVK_LAST_ITEM=""; _bvk_mouse_scroll $(( - _vp_page )) ;;
     pgdn) _BVK_LAST_ITEM=""; _bvk_mouse_scroll "$_vp_page" ;;
-    prompt) _bvk_mouse_other "$_MS_Y" "$_BVK_CROW" ;;            # hands the touch back: the next tap opens the keyboard
+    prompt) _bvk_prompt_tap "$_buf" _pos || _bvk_mouse_other "$_MS_Y" "$_BVK_CROW" ;;     # on the typed text: the cursor goes there; empty prompt: the touch goes back, the keyboard opens
   esac
   _multi_print_input_line
   return $rc

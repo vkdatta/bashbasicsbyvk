@@ -1,0 +1,18 @@
+1. ISSUE IN BRIEF
+Two Select: prompt fixes of BB-121120260402-1 (no block cursor over a selection, a tap on the typed text moves the cursor) worked only on the main list. The item / group number picker, smart menus, the Settings engine (Settings and every choice box, e.g. Confirm delete) and the typed-line prompt still drew the cursor over the first selected character, and a tap on the text there did not move the cursor.
+
+1. HOW DID YOU DEBUG
+1. Listed every loop that draws or clicks a typed line: browse.sh (_print_input_line, _rc_click), viewport.sh (_multi_print_input_line, _multi_click), smartmenu.sh (_sm_input_fn, _sm_click), settings_ui.sh (_st_draw, _st_click), cmdmap.sh (_cm_edit_draw). Only browse.sh had the fixes (inline, with its own _RC_CUR_HID flag).
+2. tests/prompt_template/prompt_test.py drives the real app (pty): selection hides the cursor, tap moves the cursor, tap on an empty prompt still hands the touch back; on main Select:, delete item picker, Confirm delete and Settings. On the archive before this change: 5 of the 12 cases FAIL (picker, Confirm delete, Settings: cursor + tap), all 12 PASS after. tests/prompt_template/drift.sh (static) fails on the archive before, passes after.
+3. Ran cmd_drift, loadmap, xui_wiring, delete_confirm, settings_keys, wrap_input, hints, choose_typed, nav_back: green. choose (12 FAIL), paste_input (Enter accepts ONE input, 40 cols) and mouse (double click Settings / Home) fail identically on the archive before this change and on base.
+Not verified by running: smart menus (covered by the static check only; no screen of the test app reaches one cheaply); the typed-line prompt cursor hide.
+
+1. CAUSE
+Copied code drifted: the template (textedit.sh) shared the editing KEYS, but each loop drew its own prompt line and handled its own tap, so a fix made in one loop was not in the others.
+
+1. FIX
+- textedit.sh: _te_cursor TEXT CURSOR (hide the cursor while TEXT has a selection, show it again after); _te_end restores it. Replaces browse.sh's _RC_CUR_HID.
+- viewport.sh: _bvk_prompt_tap TEXT POSVAR (the tap on the typed text, rc 1 = hand the touch back); _bvk_click_pos takes the text as its 4th argument.
+- All loops call them: browse.sh, viewport.sh (_multi_*), smartmenu.sh (_sm_input_fn, new prompt case in _sm_click), settings_ui.sh (_st_draw, _st_click), cmdmap.sh (_cm_edit_draw, cursor only: its prompt has no mouse reports, so no tap reaches it).
+- loadmap stubs regenerated (_te_cursor). tests: prompt_template/prompt_test.py (slow), prompt_template/drift.sh (fast); tests.list and covers.map updated.
+Lesson: a behaviour of the typed line goes into the template (textedit.sh / _bvk_prompt_tap) and the drift test, never into one loop.

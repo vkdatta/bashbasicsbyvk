@@ -32,7 +32,8 @@
 #               (a loop that redraws after every key itself passes `:` for REDRAW / EDIT)
 #     _te_insert BUFVAR POSVAR TEXT                    type / paste TEXT at the cursor; a selection is replaced
 #     _te_del_sel BUFVAR POSVAR                        delete the selection (rc 0 = there was one)
-#  Drawing: the line drawers (_bvk_fit_input, _bvk_row_multi, _cm_edit_draw) ask _te_hl for the selected part in reverse video.
+#  Drawing: the line drawers (_bvk_fit_input, _bvk_row_multi, _cm_edit_draw) ask _te_hl for the selected part in reverse video, and
+#  every drawer calls _te_cursor first (no block cursor over a selection).  A tap on the typed text is _bvk_prompt_tap (viewport.sh).
 #  A selection belongs to ONE text: it counts only while the line still IS that text (_TE_ABUF), so a loop that sets its
 #  buffer by hand (an arrow that types a number) drops it by itself.
 # ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -69,6 +70,7 @@ _te_ctx_push() {
 }
 _te_end() {          # the editor on top is closed: the signals go back to what they were when the last one is gone
   local n=${#_TE_STK[@]}
+  (( _TE_CUR_HID )) && { builtin printf '\033[?25h'; _TE_CUR_HID=0; }      # a selection hid the cursor (_te_cursor): it comes back with the line
   (( n > 0 )) || return 0
   _TE_STK=("${_TE_STK[@]:0:n-1}")
   if (( n == 1 )); then trap - INT TSTP; [ -n "$_TE_OLDTRAP" ] && eval "$_TE_OLDTRAP"; _TE_OLDTRAP=""; fi
@@ -91,6 +93,16 @@ _te_sel() {
   [ "$1" = "$_TE_ABUF" ] || return 1
   (( _TE_ANC <= ${#1} && _TE_ANC != $2 )) || return 1
   if (( _TE_ANC < $2 )); then _TE_LO=$_TE_ANC; _TE_HI=$2; else _TE_LO=$2; _TE_HI=$_TE_ANC; fi
+  return 0
+}
+
+# _te_cursor TEXT CURSOR   EVERY prompt-line drawer calls this first (main Select:, item / group numbers, smart menus, the
+#   Settings / choice-box Select:, typed-line prompts): while TEXT has a selection the terminal's block cursor is hidden, or it sits
+#   on the first selected character and that character looks blank.  It is shown again as soon as the selection is gone, and by _te_end.
+_TE_CUR_HID=0
+_te_cursor() {
+  if (( ${_TE_ANC:--1} >= 0 )) && _te_sel "$1" "$2"; then builtin printf '\033[?25l'; _TE_CUR_HID=1
+  elif (( _TE_CUR_HID )); then builtin printf '\033[?25h'; _TE_CUR_HID=0; fi
   return 0
 }
 

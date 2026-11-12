@@ -469,6 +469,7 @@ _sm_compute_msel() {
 _sm_is_hl_multi() { [ -n "${_msel_set[$1]+x}" ]; }
 
 _sm_input_fn() {
+  _te_cursor "$_buf" "$_pos"                             # no block cursor over a selection
   _BVK_SCR_PROMPT="${_sm_prompt##*$'\n'}"
   if declare -F _bvk_row_multi >/dev/null 2>&1 && _bvk_row_multi "$_sm_prompt" "$_buf" "$_pos"; then return 0; fi   # too long for one row: shown in full
   declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
@@ -671,6 +672,7 @@ _sm_click() {
       return $rc ;;
     pgup) _BVK_LAST_ITEM=""; _bvk_mouse_scroll $(( - _vp_page )) ;;
     pgdn) _BVK_LAST_ITEM=""; _bvk_mouse_scroll "$_vp_page" ;;
+    prompt) _bvk_prompt_tap "$_buf" _pos || _bvk_mouse_other "$_MS_Y" "$_BVK_CROW" ;;   # same as every read loop
     *)
       if _bvk_mouse_other "$_MS_Y" "$_BVK_CROW"; then           # a footer key (double tap only) or the prompt row (hands the touch back)
         case "$_MS_FACT" in

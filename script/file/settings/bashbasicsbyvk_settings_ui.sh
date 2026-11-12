@@ -321,6 +321,7 @@ _st_draw() {
     local hl; for hl in "${_BVK_HINT_LN[@]}"; do out+="$nl"$'\033[2m'"$hl"$'\033[0m\n'; done
     out+="$nl"$'\n'; _ST_TAIL=$(( _ST_HINT_N + 1 ))     # the suggestion rows + a blank line, only while there is a suggestion
   fi
+  _te_cursor "$buf" "${pos:-${#buf}}"                      # no block cursor over a selection
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
   if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "${_st_msg:+$_st_msg  }Select: " "$buf" "${pos:-${#buf}}"; out+="${nl}${_BVK_FIT_PROMPT}${_BVK_FIT}"$'\033[J'   # the block is redrawn by row count: the Select line must stay ONE row
   else out+="${nl}Select: $buf"$'\033[J'; fi
@@ -376,7 +377,10 @@ _st_click() {
   _bvk_mouse_prow || return 0
   local vis=$(( prev - 9 - _ST_DESC_N - _ST_TAIL )) rel i d=$(( _BVK_CROW - _MS_Y )) t=$_ST_TAIL
   rel=$(( _MS_Y - ( _BVK_CROW - vis - 4 - t ) ))     # 0 = the first list row on screen
-  if (( d == 0 )); then _BVK_LAST_ITEM=""; _bvk_mouse_pass "$_BVK_PASS_TAP_MS"      # the Select: row: the next tap opens the keyboard
+  if (( d == 0 )); then                                                              # the Select: row
+    [ "$buf" = "$posb" ] || pos=${#buf}
+    if _bvk_prompt_tap "$buf" pos; then posb="$buf"                                 # on the typed text: the cursor goes there
+    else _BVK_LAST_ITEM=""; _bvk_mouse_pass "$_BVK_PASS_TAP_MS"; fi                 # nothing typed: the next tap opens the keyboard
   elif (( d == prev - 2 )); then _BVK_LAST_ITEM=""; _st_crumb_tap                    # the title row: a part of the path
   elif (( d == 1 + t || d == 2 + t )); then                    # footer 2 / footer 1: a key there needs a DOUBLE tap (it is typed and Enter pressed)
     if _bvk_mouse_cell_key "$( (( d == 2 + t )) && builtin printf '%s' "$_ST_FTR1" || builtin printf '%s' "$_ST_FTR2" )"; then

@@ -706,6 +706,7 @@ _cm_complete() {   # path completion for the word before the cursor  → sets _c
 _CE_ROW=0     # rows between the first row of the prompt and the row the cursor is on (after the last draw)
 _cm_edit_draw() {   # redraw the whole prompt + text; long text WRAPS onto the next rows like `read -e` does
   local lastp="${_ce_prompt##*$'\n'}" W pw bw T tp erow ecol trow tcol hint="${_CM_HINT_SHOW:-}"
+  _te_cursor "$_ce_buf" "$_ce_pos"                       # no block cursor over a selection
   if ! declare -F _bvk_dispw >/dev/null 2>&1; then          # helper not loaded: old single-row redraw
     local shown0="$_ce_buf"
     (( ${_TE_ANC:--1} >= 0 )) && { _te_hl "$_ce_buf" "$_ce_pos" 0 "${#_ce_buf}"; shown0="$_TE_OUT"; }

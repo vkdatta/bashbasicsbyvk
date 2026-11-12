@@ -67,6 +67,7 @@ _te_end() { _lm_stub bashbasicsbyvk_textedit.sh _te_end "$@"; }
 _te_interrupt() { _lm_stub bashbasicsbyvk_textedit.sh _te_interrupt "$@"; }
 _te_onsig() { _lm_stub bashbasicsbyvk_textedit.sh _te_onsig "$@"; }
 _te_sel() { _lm_stub bashbasicsbyvk_textedit.sh _te_sel "$@"; }
+_te_cursor() { _lm_stub bashbasicsbyvk_textedit.sh _te_cursor "$@"; }
 _te_hl() { _lm_stub bashbasicsbyvk_textedit.sh _te_hl "$@"; }
 _te_sel_len() { _lm_stub bashbasicsbyvk_textedit.sh _te_sel_len "$@"; }
 _te_push() { _lm_stub bashbasicsbyvk_textedit.sh _te_push "$@"; }
