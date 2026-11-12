@@ -95,10 +95,10 @@ rename_item() {
 
   if [ -d "$target" ]; then
     dir=$(dirname -- "$target")
-    read -e -p "Enter new folder name for '$(basename "$target")': " newname
+    _bvk_read newname "Enter new folder name for '$(basename "$target")': "
   elif [ -f "$target" ]; then
     dir=$(dirname -- "$target")
-    read -e -p "Enter new file name for '$(basename "$target")': " newname
+    _bvk_read newname "Enter new file name for '$(basename "$target")': "
   else
     echo "❌ Cannot rename: '$target' not found." >&2
     return 1
@@ -201,7 +201,7 @@ _rn_name_prompt() {
   local in
   while :; do                                  # u at the "No extension" menu comes back here: New: again
     _CE_FILL="$bn"
-    read -e -p "New: " in; local rc=$?
+    _bvk_read in "New: "; local rc=$?
     _CE_FILL=""
     (( rc == 0 )) || return 2                  # u: one step back = the item picker
     [ -n "$in" ] || return 1
@@ -246,7 +246,7 @@ _rename_single_mutation() {
         && echo "🔑  Shortcut (dir): $cur_name" \
         || echo "🗝️  Shortcut (file): $cur_name"
       echo "Renaming a shortcut only changes the shortcut's name — the original is untouched."
-      read -e -p "New display name (blank = cancel): " new_name || { _rn_back=1; break; }
+      _bvk_read new_name "New display name (blank = cancel): " || { _rn_back=1; break; }
       [ -z "$new_name" ] && echo "🚫 Skipped" && continue
       if _bvk_name_too_long "${new_name}.shortcut"; then _bvk_name_refuse "$new_name" "Shortcut"; echo " Not renamed: names over 255 bytes are not accepted."; continue; fi
 

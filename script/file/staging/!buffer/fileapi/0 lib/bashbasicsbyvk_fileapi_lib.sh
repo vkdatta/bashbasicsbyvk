@@ -481,7 +481,7 @@ _bb_ask_time() {
   local cur="$1" hint="$2" dflt="$3" a n rc
   while :; do
     _CM_BACKED=0
-    read -e -r -p "   $hint: " a || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 6; }; return 1; }     # u = 6: the Credits menu again
+    _bvk_read a "   $hint: " || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 6; }; return 1; }     # u = 6: the Credits menu again
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
       u|back) return 6 ;;

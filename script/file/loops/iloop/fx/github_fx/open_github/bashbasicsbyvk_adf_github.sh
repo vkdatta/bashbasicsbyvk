@@ -236,7 +236,7 @@ _ghx_ask_field() {
       echo "   ✏️  $name of ${_GHX_PICK[0]} — the editor opens; save and close it."
       _ghx_editor "$cur" || return 1; new="$_GHX_TEXT"
     else
-      IFS= read -e -r -i "$cur" -p "   New $name: " new || return 1
+      _bvk_read new "   New $name: " -i "$cur" -I || return 1
     fi
     if [ "$new" = "$cur" ]; then echo "   (the $name is unchanged — skipped)"; return 2; fi
     printf '%s' set > "$_GHX_JOB/$file.mode"; printf '%s' "$new" > "$_GHX_JOB/$file.a"
@@ -247,13 +247,13 @@ _ghx_ask_field() {
   local hint=""; [ "$multi" = 1 ] && hint="  (type \\n for a new line)"
   case "$mode" in
     s) if [ "$multi" = 1 ]; then echo "   ✏️  the editor opens: write the text every item gets."; _ghx_editor "" || return 1; a="$_GHX_TEXT"
-       else IFS= read -r -p "   New $name for all: " a || return 1; fi
+       else _bvk_read a "   New $name for all: " -I || return 1; fi
        printf '%s' set > "$_GHX_JOB/$file.mode"; printf '%s' "$a" > "$_GHX_JOB/$file.a" ;;
-    f) IFS= read -r -p "   Find$hint: " a || return 1; [ -n "$a" ] || { echo "   (nothing to find)"; return 2; }
-       IFS= read -r -p "   Replace with (empty = remove it)$hint: " b || return 1
+    f) _bvk_read a "   Find$hint: " -I || return 1; [ -n "$a" ] || { echo "   (nothing to find)"; return 2; }
+       _bvk_read b "   Replace with (empty = remove it)$hint: " -I || return 1
        [ "$multi" = 1 ] && { a="$(printf '%b' "$a")"; b="$(printf '%b' "$b")"; }
        printf '%s' replace > "$_GHX_JOB/$file.mode"; printf '%s' "$a" > "$_GHX_JOB/$file.a"; printf '%s' "$b" > "$_GHX_JOB/$file.b" ;;
-    p|a) IFS= read -r -p "   Text to add (used exactly as typed — include a space or \\n yourself)$hint: " a || return 1
+    p|a) _bvk_read a "   Text to add (used exactly as typed — include a space or \\n yourself)$hint: " -I || return 1
        [ -n "$a" ] || return 2
        [ "$multi" = 1 ] && a="$(printf '%b' "$a")"
        [ "$mode" = p ] && printf '%s' prepend > "$_GHX_JOB/$file.mode" || printf '%s' append > "$_GHX_JOB/$file.mode"
@@ -342,9 +342,9 @@ _ghx_s_rn_a() {                  # prefix / suffix / the text to find / the patt
 }
 _ghx_s_rn_b() {                  # the replacement of find / regex (empty = remove it)
   case "$rule" in
-    f) IFS= read -e -r -p "   Replace with (empty = remove it): " b || return 1
+    f) _bvk_read b "   Replace with (empty = remove it): " -I || return 1
        printf '%s' replace > "$_GHX_JOB/rule.mode" ;;
-    x) IFS= read -e -r -p "   Replacement (e.g.  release-\\1 ): " b || return 1
+    x) _bvk_read b "   Replacement (e.g.  release-\\1 ): " -I || return 1
        printf '%s' regex > "$_GHX_JOB/rule.mode" ;;
     *) return 5 ;;
   esac
@@ -356,7 +356,7 @@ _ghx_s_rn_map() {                # type each new name
   local t new
   printf '%s' manual > "$_GHX_JOB/rule.mode"; : > "$_GHX_JOB/map"
   for t in "${_GHX_PICK[@]}"; do
-    IFS= read -e -r -i "$t" -p "   $t → " new || return 1
+    _bvk_read new "   $t → " -i "$t" -I || return 1
     printf '%s\t%s\n' "$t" "$new" >> "$_GHX_JOB/map"
   done
   return 0
@@ -462,7 +462,7 @@ _ghx_s_cr_tag() {
 }
 _ghx_s_cr_target() {
   [ "$exists" = 1 ] && return 5
-  IFS= read -e -r -p "   Branch, tag or commit to build it from (Enter = the default branch): " target || return 1       # u = back, never "use the default"
+  _bvk_read target "   Branch, tag or commit to build it from (Enter = the default branch): " -I || return 1       # u = back, never "use the default"
   return 0
 }
 _ghx_s_cr_tagmsg() {
@@ -475,7 +475,7 @@ _ghx_s_cr_tagmsg() {
   return 0
 }
 _ghx_s_cr_title() {
-  IFS= read -e -r -p "   Release title (Enter = the tag name): " title || return 1       # u = back, never "use the default"
+  _bvk_read title "   Release title (Enter = the tag name): " -I || return 1       # u = back, never "use the default"
   return 0
 }
 _ghx_s_cr_notes() {

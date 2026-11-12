@@ -951,6 +951,35 @@ _bvk_noemoji() {
   __ne_ref="$__ne_out"
 }
 
+# ------------------------------------------------------------
+# _bvk_read — THE typed-line prompt: every place that waits for the person to TYPE calls this, never `read` itself
+# ------------------------------------------------------------
+#   _bvk_read VAR "Prompt: " [-i INITIAL] [-I] [-s] [-1]
+#     VAR        the variable that gets the answer (no emoji in the prompt: rule 6; _bvk_noemoji strips them as a net)
+#     -i TEXT    the line starts with TEXT (the person edits it)
+#     -I         keep leading / trailing spaces of the answer (the old `IFS= read`)
+#     -s         a SECRET (a key, a token): nothing is echoed, so there is nothing to select or tap; the only prompt that skips the editor
+#     -1         ONE key, no Enter ("Press any key ...")
+#   Returns exactly what `read` returned (0 a line · 1 u / back, EOF · 3 a cancelled flow), so a caller's `|| return N` is unchanged.
+#   Everything below goes through the `read` shim and from there to ONE editor (_cm_line_edit, textedit.sh): selection, Shift / Ctrl keys, cut / copy /
+#   paste, undo, the highlight / cursor fixes, the command layer.  A change to how a typed line behaves is made THERE, once, and every prompt gets it.
+#   `tests/prompt_template/read_lint.sh` fails on a bare `read` anywhere else (AGENTS.md rule 16).
+_bvk_read() {
+  local __br_v="$1" __br_p="$2"; shift 2
+  local -a __br_f=(-r); local __br_ifs=0 __br_e=1
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -i) __br_f+=(-i "${2-}"); shift 2 ;;
+      -I) __br_ifs=1; shift ;;
+      -s) __br_f+=(-s); __br_e=0; shift ;;          # a secret / one key: the plain silent read (nothing is drawn, so nothing to edit)
+      -1) __br_f+=(-s -n1); __br_e=0; shift ;;
+      *)  shift ;;
+    esac
+  done
+  (( __br_e )) && __br_f+=(-e)
+  if (( __br_ifs )); then IFS= read "${__br_f[@]}" -p "$__br_p" "$__br_v"; else read "${__br_f[@]}" -p "$__br_p" "$__br_v"; fi   # bvk-read-ok: the body of _bvk_read itself: the ONE place -p is passed, into the read shim and on to the editor
+}
+
 read() {
   # a flow that is being cancelled (blocked command / "back"): every prompt answers at once
   if [ "${_CM_ABORT:-0}" = 1 ] && [ -t 0 ] && declare -F _cm_abort_swallow >/dev/null 2>&1 && _cm_abort_swallow; then

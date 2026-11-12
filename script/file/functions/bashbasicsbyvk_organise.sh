@@ -56,7 +56,7 @@ done
 _flush_buckets ext_buckets
 ;;
 2)
-read -e -p "Extension (e.g. py or .py): " inputext || return 3
+_bvk_read inputext "Extension (e.g. py or .py): " || return 3
 local ext="${inputext#.}"
 [ -z "$ext" ] && ext="noext"
 local folder="$path/$ext"
@@ -140,7 +140,7 @@ organise_by_year() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -e -p "Number of years to group (1 = each year separate): " group_y || return 3
+_bvk_read group_y "Number of years to group (1 = each year separate): " || return 3
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
 _batch_stat "$path"
 _year_range "${files[@]}"
@@ -158,9 +158,9 @@ organise_by_year_month() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -e -p "Number of years to group: " group_y || return 3
+_bvk_read group_y "Number of years to group: " || return 3
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
-read -e -p "Number of months to group: " group_m || return 3
+_bvk_read group_m "Number of months to group: " || return 3
 [[ $group_m =~ ^[0-9]+$ ]] || group_m=1
 _batch_stat "$path"
 _year_range "${files[@]}"
@@ -180,11 +180,11 @@ organise_by_year_month_date() {
 local -a files=()
 for f in "$path"/*; do [ -f "$f" ] && files+=("$f"); done
 [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-read -e -p "Number of years to group: " group_y || return 3
+_bvk_read group_y "Number of years to group: " || return 3
 [[ $group_y =~ ^[0-9]+$ ]] || group_y=1
-read -e -p "Number of months to group: " group_m || return 3
+_bvk_read group_m "Number of months to group: " || return 3
 [[ $group_m =~ ^[0-9]+$ ]] || group_m=1
-read -e -p "Number of days to group: " group_d || return 3
+_bvk_read group_d "Number of days to group: " || return 3
 [[ $group_d =~ ^[0-9]+$ ]] || group_d=1
 _batch_stat "$path"
 _year_range "${files[@]}"

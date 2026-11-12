@@ -551,5 +551,5 @@ _st_desc_show() {
   fi
   builtin printf '\n'
   builtin printf '  Press Enter to go back '
-  builtin read -r x || true
+  builtin read -r x || true   # bvk-read-ok: Enter-to-leave pager inside the Settings engine: no answer is read, the typed text is dropped
 }

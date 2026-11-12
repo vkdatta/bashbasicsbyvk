@@ -788,6 +788,7 @@ _cm_line_edit() {
   local _ce_buf="$init" _ce_pos=${#init} key seq rc stty_orig mode=text
   local no_cmds=0 _ce_deny=""
   _cm_prompt_has_choices "$_ce_prompt" && no_cmds=1
+  [ "${_CM_ON:-0}" = 1 ] || no_cmds=1                        # no command layer (a stand-alone tool, bashbasicsbyvk_ask): no command words, no hint row
   _CM_HINT_CUR=""
   stty_orig=$(stty -g 2>/dev/null)
   _te_begin _ce_buf _ce_pos text _cm_edit_refresh _cm_edit_refresh _cm_edit_paste   # raw keys, a clean selection / undo, Ctrl-C / Ctrl-Z (bashbasicsbyvk_textedit.sh)

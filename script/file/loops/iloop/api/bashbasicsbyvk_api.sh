@@ -199,7 +199,7 @@ _api_do_alias() {
   local k="$1" new="${2:-}" id="${_API_ID[$1]}"
   echo "🏷️  Link $((k + 1)):  current alias: ${_API_ALIAS[$k]:-(none)}"
   if [ -z "$new" ]; then
-    read -e -r -p "   New alias (blank = cancel, - = remove alias): " new
+    _bvk_read new "   New alias (blank = cancel, - = remove alias): "
   fi
   new="${new#"${new%%[![:space:]]*}"}"; new="${new%"${new##*[![:space:]]}"}"
   [ -z "$new" ] && { echo "🚫 Skipped"; return 1; }
@@ -352,7 +352,7 @@ _api_cmd_key() {
   local k="$_api_k" id="${_API_ID[$_api_k]}"
   echo "🔑 Link $((k + 1)): $(_api_name "$k")"
   if [ -z "$link" ]; then
-    read -e -r -p "   Paste the full link (with #k=…), or just the key (blank = cancel): " link
+    _bvk_read link "   Paste the full link (with #k=…), or just the key (blank = cancel): "
   fi
   link="${link#"${link%%[![:space:]]*}"}"; link="${link%"${link##*[![:space:]]}"}"
   [ -z "$link" ] && { echo "🚫 Skipped"; return 1; }
@@ -607,7 +607,7 @@ _api_s_ed_time() {
   _api_show "$k"
   echo "   Enter the NEW TOTAL life counted from creation (2d · 36h · 1 week), or +12h to extend / -1d to shorten."
   echo "   Extending charges the extra time now; shortening refunds whole days only (time used rounds UP to a day)."
-  read -e -r -p "   New time (u = back): " spec || return 1
+  _bvk_read spec "   New time (u = back): " || return 1
   case "${spec,,}" in u|q|"") return 1 ;; esac
   return 0
 }

@@ -20,7 +20,7 @@ _bd_confirm() {
     4) return 1 ;;                                           # u: the file menu again
     1|2) echo "Deletion cancelled."; return 3 ;;
     *) echo "Are you sure you want to delete '$target'? You may not recover this."
-       read -e -p "Type 'yes' to confirm: " confirm
+       read -e -p "Type 'yes' to confirm: " confirm   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_yn)
        [ "$confirm" = "yes" ] && return 0
        echo "Deletion cancelled."; return 3 ;;
   esac

@@ -794,7 +794,7 @@ _c2c_paths() {
 handle_do_import() {
   _crypto_check || return 1
 
-  read -e -r -p "Paste link to import (include the #k=... part): " link
+  _bvk_read link "Paste link to import (include the #k=... part): "
   [ -z "$link" ] && echo "🚫 Cancelled" && return
 
   if [[ "$link" != *://* ]]; then
@@ -809,7 +809,7 @@ handle_do_import() {
   link="${link%/}"
 
   if [ -z "$key" ]; then
-    read -r -s -p "No key found in the pasted link — paste the decryption key separately: " key
+    _bvk_read key "No key found in the pasted link — paste the decryption key separately: " -s
     echo
     if [ -z "$key" ]; then
       echo "❌ No decryption key — cannot proceed."
@@ -849,7 +849,7 @@ handle_do_import() {
     rm -f "$tmp_body"
 
     if [ -t 1 ] && [ -t 0 ]; then
-      read -e -r -p "Save as filename in $path (blank = print to terminal): " fname
+      _bvk_read fname "Save as filename in $path (blank = print to terminal): "
     else
       fname=""
     fi

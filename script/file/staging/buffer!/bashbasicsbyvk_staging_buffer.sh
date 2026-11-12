@@ -132,7 +132,7 @@ _sp_view_set() {
           echo "🔴  Nothing to remove"
           continue
         fi
-        read -e -p "Item number(s) to remove (e.g. 1,3 or 2-4): " rm_input
+        _bvk_read rm_input "Item number(s) to remove (e.g. 1,3 or 2-4): "
         local rm_indices
         rm_indices=($(parse_selection "$rm_input" "${#list[@]}"))
         if [ ${#rm_indices[@]} -eq 0 ]; then
@@ -183,7 +183,7 @@ _sp_view_set() {
 _SP_NEW_NAME=""
 _sp_view_rename() {
   local label="$1" file="$2" op="$3" old="$4" new
-  read -e -r -p "New name${old:+ for '$old'}: " new
+  _bvk_read new "New name${old:+ for '$old'}: "
   [ "${_CM_ABORT:-0}" = 1 ] && return 1
   new="${new#"${new%%[![:space:]]*}"}"; new="${new%"${new##*[![:space:]]}"}"
   [ -z "$new" ] && { echo "🚫 Cancelled"; return 1; }
@@ -234,7 +234,7 @@ _sp_view_one_buffer() {
         fi
         ;;
       x|X)
-        read -e -p "Set number(s) to remove (e.g. 1,3 or 2-4): " rm_input
+        _bvk_read rm_input "Set number(s) to remove (e.g. 1,3 or 2-4): "
         local rm_indices ri
         rm_indices=($(parse_selection "$rm_input" "${#rows[@]}"))
         if [ ${#rm_indices[@]} -eq 0 ]; then
@@ -249,7 +249,7 @@ _sp_view_one_buffer() {
         echo "💫 Removed ${#rm_indices[@]} set(s) from the $label buffer"
         ;;
       n|N)
-        read -e -p "Set number to rename: " rn_input
+        _bvk_read rn_input "Set number to rename: "
         if [[ "$rn_input" =~ ^[0-9]+$ ]] && [ "$rn_input" -ge 1 ] && [ "$rn_input" -le ${#rows[@]} ]; then
           _sp_view_rename "$label" "$file" "$op" "${rowname[$((rn_input-1))]}"
         else

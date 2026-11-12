@@ -22,7 +22,7 @@
 # _xtr_ask_int VAR "Prompt: "   -> VAR = a whole number >= 1 ; rc 1 = backed out (u) · 4 = not a number (message printed: ask again)
 _xtr_ask_int() {
   local _v
-  read -e -r -p "$2" _v || return 1
+  _bvk_read _v "$2" || return 1
   [ "${_CM_ABORT:-0}" = 1 ] && return 1
   _v="${_v//[[:space:]]/}"; _v="${_v//,/}"
   if [[ ! "$_v" =~ ^[0-9]+$ ]] || [ "$_v" -lt 1 ]; then echo "🔴  Enter a whole number of 1 or more."; return 4; fi
@@ -220,7 +220,7 @@ _xtr_s_n() {
   if [ "$kindname" = bytes ]; then
     local _r
     while :; do
-      read -e -r -p "How many (a number, e.g. 10 or 1.5): " n || { _xtr_back; return $?; }
+      _bvk_read n "How many (a number, e.g. 10 or 1.5): " || { _xtr_back; return $?; }
       [ "${_CM_ABORT:-0}" = 1 ] && return 3
       n="${n//[[:space:]]/}"
       if [[ ! "$n" =~ ^[0-9]+(\.[0-9]+)?$ ]] || [[ "$n" =~ ^0+(\.0+)?$ ]]; then echo "🔴  Enter a number above 0."; continue; fi

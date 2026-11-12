@@ -187,7 +187,7 @@ _bvk_auth_create() {
    For any help with paid services ONLY a receipt from the e-mail used here
    is accepted. Anything else is rejected outright, with no reply.
 TXT
-  local mail; read -e -r -p $'\n   Enter email: ' mail
+  local mail; _bvk_read mail $'\n   Enter email: '
   [ -z "$mail" ] && { echo "↩️  Cancelled."; return; }
   _bvk_auth_mail_ok "$mail" || { echo "❌ Invalid input (max 256 chars; no spaces, quotes, < > \` \$ \\ ; | & ( ) { })."; return; }
   [ -r "$_BVK_TELEMETRY_DIR/uuid" ] || { echo "❌ No telemetry id found (is BVK_TELEMETRY=off?). Creating a user needs it for abuse protection. Restart 'o' once with telemetry on."; return; }
@@ -317,7 +317,7 @@ _bvk_auth_regen() {  # $1=what: diseps|apikey|dinons|mail   (P_* = current profi
   cp -f "$file" "$file.prev" 2>/dev/null && chmod 600 "$file.prev"        # lock-out safety net
   case "$what" in
     mail)
-      read -e -r -p "   New email: " newmail
+      _bvk_read newmail "   New email: "
       _bvk_auth_mail_ok "$newmail" || { echo "❌ Invalid input."; return; }
       json=$(printf '{"action":"change_mail","new_mail":%s}' "$(_bvk_auth_jstr "$newmail")") ;;
     diseps)
@@ -461,7 +461,7 @@ _au_billing_action() {  # $1 = 0-based slot
   local i="$1" key="${_AU_BILL_KEYS[$1]}" label="${_AU_BILL_LABELS[$1]}" cur new
   cur=$(_bvk_bill_get "$key")
   [ -z "$cur" ] && [ "$key" = email ] && cur="$P_MAIL"
-  echo; read -e -r -i "$cur" -p "   $label: " new </dev/tty || return 0
+  echo; _bvk_read new "   $label: " -i "$cur" </dev/tty || return 0
   new="${new#"${new%%[![:space:]]*}"}"; new="${new%"${new##*[![:space:]]}"}"
   [ "$new" = "$cur" ] && [ -n "$(_bvk_bill_get "$key")" ] && return 0
   if _bvk_bill_valid "$key" "$new"; then _bvk_bill_set "$key" "$new" && echo "   💫 $label saved."; else _au_pause; fi
@@ -492,7 +492,7 @@ _pay_s_cur() {                                  # steps of _bvk_pay_amount (u = 
 _pay_s_amt() {                                  # blank or u = back to the currency menu
   local a
   while :; do
-    read -e -r -p "   Amount in $_PAY_CUR (min $min, blank = back): " a </dev/tty || return 1
+    _bvk_read a "   Amount in $_PAY_CUR (min $min, blank = back): " </dev/tty || return 1
     case "${a,,}" in ""|u) return 1 ;; esac
     if [[ "$a" =~ ^[0-9]{1,7}(\.[0-9]{1,2})?$ ]] && awk "BEGIN{exit !($a>=$min)}"; then _PAY_AMOUNT="$a"; return 0; fi
     echo "   ❌ Enter a number of at least $min (up to 2 decimals)."
@@ -563,7 +563,7 @@ _bvk_pay_recharge() {  # $1=self|others
     done
   else
     echo "   File (.csv / .txt): one account per line, as  email,diseps"
-    read -e -r -p "   Path (blank = cancel): " f </dev/tty; f="${f/#\~/$HOME}"
+    _bvk_read f "   Path (blank = cancel): " </dev/tty; f="${f/#\~/$HOME}"
     [ -z "$f" ] && { echo "   Cancelled."; _au_pause; return 0; }
     [ -f "$f" ] && [ -r "$f" ] || { echo "   ❌ Cannot read: $f"; _au_pause; return 0; }
     [ "$(wc -c < "$f")" -le 1048576 ] || { echo "   ❌ File is larger than 1 MB."; _au_pause; return 0; }
@@ -770,7 +770,7 @@ except Exception: pass' "$resp")
 _bvk_auth_ledger_date() {  # $1=label -> _AU_DATE (ddmmyyyy, real date) ; 1 = cancelled
   local v
   while :; do
-    read -e -r -p "   $1 (DDMMYYYY, blank = cancel): " v </dev/tty || return 1
+    _bvk_read v "   $1 (DDMMYYYY, blank = cancel): " </dev/tty || return 1
     [ -z "$v" ] && return 1
     if _bvk_ai_date_ok "$v"; then _AU_DATE="$v"; return 0; fi
     echo "   ❌ Use DDMMYYYY, e.g. 01102026."

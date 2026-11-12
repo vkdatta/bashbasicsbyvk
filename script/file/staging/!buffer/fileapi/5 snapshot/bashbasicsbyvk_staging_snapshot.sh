@@ -322,7 +322,7 @@ _snap_menu_device_view() {   # one device: its watched paths, and its snapshots
     done
     echo "   N: snapshots of that path · all: every snapshot of this device · x-N: stop snapshotting it (removes it from the list$( [ "$is_self" = 1 ] || echo ' — that device stops on its next sync' )) · u: back"
     [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
-    read -e -r -p "   > " a || return 0
+    _bvk_read a "   > " || return 0
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
       u|"") return 0 ;;
@@ -372,7 +372,7 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
     done
     echo "   N: restore here (into a new folder named after it) · e-N: extend / shorten · x-N: nuke · u: back      (snapshots cannot be renamed)"
     [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
-    read -e -r -p "   > " a || return 0
+    _bvk_read a "   > " || return 0
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
       u|"") return 0 ;;
@@ -405,7 +405,7 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
 _snap_s_time() {
   [ -n "$_given" ] && return 5
   echo "   Total life now $(_bb_fmt_duration "$cur"). Enter the NEW TOTAL (2d · 36h), or +12h to extend / -1d to shorten."
-  read -e -r -p "   New time (u = back): " spec || return 1
+  _bvk_read spec "   New time (u = back): " || return 1
   case "${spec,,}" in u|q|"") return 1 ;; esac
   return 0
 }
@@ -468,7 +468,7 @@ snapshot_menu() {
     done
     echo "   N: open that device · rf: refresh · u: back       (★ = this computer)"
     [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
-    read -e -r -p "   > " a || return 0
+    _bvk_read a "   > " || return 0
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
       u|sn|"") return 0 ;;

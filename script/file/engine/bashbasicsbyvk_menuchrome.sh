@@ -165,7 +165,7 @@ _mc_menu()  { _mc_menu_n 1 "$@"; }
 _mc_menu0() { _mc_menu_n 0 "$@"; }
 
 # prompt wrapper: answer lands in $REPLY
-_mc_ask() { read -e -p "${1:-Select: }" REPLY; }
+_mc_ask() { _bvk_read REPLY "${1:-Select: }"; }
 
 # ---- FOOTER-01: the standard footer with a screen's own actions in front ----------------------------------------
 #   _mc_footer_std [-b] [item...]     -b = no folders on this screen: u reads "Back", not "Up"
@@ -205,7 +205,7 @@ _mc_std_key() {
 _mc_read() {
   local _mr_a _mr_rc
   _CM_BACKED=0; _MC_UNDER_FOOTER=1          # this prompt is drawn right under a footer: the keys it printed are this prompt's own
-  read -e -r -p "$2" _mr_a; _mr_rc=$?
+  _bvk_read _mr_a "$2"; _mr_rc=$?
   _MC_UNDER_FOOTER=0
   (( _mr_rc )) && { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 1; }; return 3; }
   _mr_a="${_mr_a%$'\r'}"
@@ -414,7 +414,7 @@ _bvk_info_wait() {
   echo
   echo -n "$_BVK_MSG_INFO_EXIT"
   stty -icanon -echo min 1 time 0 2>/dev/null
-  IFS= builtin read -rsn1 _k
+  IFS= builtin read -rsn1 _k   # bvk-read-ok: "press any key" pause of info mode: one raw key (then its escape tail), no line to edit
   if [[ "$_k" == $'\x1b' ]]; then                       # an arrow key / mouse report is ONE key: swallow the rest of it
     while IFS= builtin read -rsn1 -t 0.02 _s; do :; done
   fi

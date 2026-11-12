@@ -140,7 +140,7 @@ ask_yn() {
         esac
     fi
     while :; do
-        read -e -r -p "$1 [y/n]: " a || die "No answer (input closed)."
+        read -e -r -p "$1 [y/n]: " a || die "No answer (input closed)."   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_yn)
         case "${a,,}" in
             y|yes) ANS=y; return 0 ;;
             n|no)  ANS=n; return 0 ;;
@@ -336,7 +336,8 @@ select_version() {
     echo "4) None   (Skip version tag)"
     echo
 
-    read -e -r -p "Enter choice [1-4, Default: 1]: " choice
+    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then choice="$(bashbasicsbyvk_ask "Enter choice [1-4, Default: 1]: ")"      # THE native line editor
+    else read -e -r -p "Enter choice [1-4, Default: 1]: " choice; fi   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
 
     case "$choice" in
         2)
@@ -379,9 +380,8 @@ create_commit() {
     select_version
 
     echo
-    read -e -r -p \
-        "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " \
-        user_msg
+    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then user_msg="$(bashbasicsbyvk_ask "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: ")"      # THE native line editor
+    else read -e -r -p "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " user_msg; fi   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
 
     user_msg="${user_msg:-$DEFAULT_COMMIT_MESSAGE}"
     final_msg="$user_msg"

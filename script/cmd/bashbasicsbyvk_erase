@@ -12,7 +12,7 @@ if [ -f "$1" ]; then
     0) confirm=yes ;;
     1|2) confirm=no ;;
     *) echo -n "Erase all contents of '$1'? (yes/no): "
-       read -e confirm ;;
+       read -e confirm ;;   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_yn)
   esac
   if [ "$confirm" = "yes" ]; then
     > "$1"

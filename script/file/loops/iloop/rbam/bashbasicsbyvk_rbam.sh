@@ -172,7 +172,7 @@ _rb_answer() {
   else q="has offered to give you receive access. Become their receiver?"; fi
   echo "   📨 ${_RB_MAIL[$k]} [${_RB_D30[$k]}] $q"
   echo "      1. Yes   2. No"
-  local a; read -e -r -p "   Select: " a
+  local a; _bvk_read a "   Select: "
   case "$a" in 1|y|Y) _nf_rbam_respond "${_RB_RID[$k]}" true ;; 2|n|N) _nf_rbam_respond "${_RB_RID[$k]}" false ;; *) echo "🚫 No answer given." ;; esac
 }
 

@@ -99,10 +99,10 @@ _map_deliver() {
     2)
       local filename
       if [ -n "$suggest" ]; then
-        read -e -p "Enter file name [$suggest]: " filename || return      # u = back, never "use the suggestion"
+        _bvk_read filename "Enter file name [$suggest]: " || return      # u = back, never "use the suggestion"
         filename="${filename:-$suggest}"
       else
-        read -e -p "Enter file name: " filename || return
+        _bvk_read filename "Enter file name: " || return
       fi
       if [ -z "$filename" ]; then
         echo "🚫 Cancelled — no file name entered."

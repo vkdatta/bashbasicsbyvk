@@ -60,7 +60,7 @@ _arc_s_name() {
   _arc_need create "$fmt" || { _arc_rc=1; return 3; }
   ext="${_ARC_LABEL[$fmt]}"
   echo ""
-  read -e -r -p "Name for the archive (without ${ext}): " arc_name || return 1     # u (or EOF): the format menu when it was asked, else out
+  _bvk_read arc_name "Name for the archive (without ${ext}): " || return 1     # u (or EOF): the format menu when it was asked, else out
   arc_name="${arc_name%$'\r'}"
   [ -z "$arc_name" ] && { echo "🚫 Cancelled — no name given."; return 3; }
   _arc_strip_ext "$arc_name"; arc_name="$_ARC_STRIPPED"        # strip a known ending if the user typed it

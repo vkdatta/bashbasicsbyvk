@@ -422,7 +422,7 @@ _sp_conflict_decide() {
       1) _SP_CF=add;     return 0 ;;
       2) _SP_CF=replace; return 0 ;;
       3) echo "🚫 Cancelled — nothing changed."; return 1 ;;
-      n) read -e -r -p "New name: " n
+      n) _bvk_read n "New name: "
          [ "${_CM_ABORT:-0}" = 1 ] && return 1
          n="${n#"${n%%[![:space:]]*}"}"; n="${n%"${n##*[![:space:]]}"}"
          if _bb_alias_ok "$n"; then _SP_CF_NAME="$n"

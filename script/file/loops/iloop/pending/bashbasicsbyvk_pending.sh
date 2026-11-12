@@ -92,7 +92,7 @@ _pn_state_word() {
     *) printf '%s' "$1" ;;
   esac
 }
-_pn_pause_enter() { local _a; read -r -s -n1 -p "  Press any key to go back… " _a; echo; }
+_pn_pause_enter() { local _a; _bvk_read _a "  Press any key to go back… " -1; echo; }
 
 # ── screen 3: one item ───────────────────────────────────────────────────────
 _pn_item_build() {

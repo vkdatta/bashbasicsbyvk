@@ -20,7 +20,7 @@ handle_file() {
                       "Copy File Path" "Go To Parent Folder" "Info"
         _mc_footer @file_menu
 
-        read -e -p "Select: " action || return 1          # EOF (the terminal closed): leave, never spin on "invalid"
+        _bvk_read action "Select: " || return 1          # EOF (the terminal closed): leave, never spin on "invalid"
 
         case "$action" in
             0) run_file "$file"; return 1 ;;

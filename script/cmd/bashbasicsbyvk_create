@@ -5,7 +5,8 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-read -e -p "Create as (d)irectory or (f)ile? [d/f]: " type
+if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then type="$(bashbasicsbyvk_ask "Create as (d)irectory or (f)ile? [d/f]: ")"      # THE native line editor
+else read -e -p "Create as (d)irectory or (f)ile? [d/f]: " type; fi   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
 
 case "$type" in
   d|D)

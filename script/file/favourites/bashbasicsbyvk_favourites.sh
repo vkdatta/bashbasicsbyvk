@@ -324,7 +324,7 @@ handle_fav_add() {                 # fa ...
   if [ -z "$arg" ]; then
     echo "⭐ Add to favourites in $path"
     echo "   numbers/ranges (1,3,5-9)   a   a-1-4   sel   or a .s expression"
-    read -e -r -p "Add: " arg || return 0                 # u = back to the favourites list
+    _bvk_read arg "Add: " || return 0                 # u = back to the favourites list
     arg="${arg#"${arg%%[![:space:]]*}"}"
     [ -z "$arg" ] && { echo "🚫 Cancelled"; return; }
   fi
@@ -411,10 +411,10 @@ _fav_sw_rename() {                 # _fav_sw_rename <dir>   (alias only; the fil
   local dir; dir=$(_fav_norm "$1")
   [ ${#items[@]} -eq 0 ] && { echo "📜  No favourites here"; return; }
   local num alias
-  read -e -r -p "Rename which favourite (number): " num || return 0                 # u = back to the favourites list
+  _bvk_read num "Rename which favourite (number): " || return 0                 # u = back to the favourites list
   [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#items[@]}" ] || { echo "🔴  Invalid number"; return; }
   local name="${items[$((num-1))]##*/}"
-  read -e -r -p "New display name for '$name' (empty = clear alias): " alias || return 0                 # u = back to the favourites list
+  _bvk_read alias "New display name for '$name' (empty = clear alias): " || return 0                 # u = back to the favourites list
   if [[ "$alias" == *$'\t'* || "$alias" == *" #id="* || "$alias" == *" => "* ]]; then echo "❌ That name has characters not allowed"; return; fi
   _fav_lock
   _fav_cache_key=""; _fav_load "$dir" >/dev/null 2>&1

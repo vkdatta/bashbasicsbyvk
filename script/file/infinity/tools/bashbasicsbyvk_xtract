@@ -18,6 +18,12 @@ import subprocess
 import math
 import numpy as np
 
+try:
+    import bashbasicsbyvk_ask as _bvk_ask        # THE native line editor for every typed prompt (AGENTS.md rule 16)
+    _bvk_input = _bvk_ask.ask
+except ImportError:                              # a broken install: the plain built-in line
+    _bvk_input = input                           # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+
 def clean_sheet_name(name):
     """Clean invalid characters from Excel sheet names"""
     name = re.sub(r'[\\/*?:\[\]]', '', name)
@@ -547,7 +553,7 @@ def main():
     
     excel_support = True      # openpyxl is part of the data.xtract dependencies checked at start-up
     
-    content_type = input("\nExtract tables or links? (t/l): ").strip().lower()
+    content_type = _bvk_input("\nExtract tables or links? (t/l): ").strip().lower()
     if content_type not in ['t', 'l']:
         print("\n❌ Invalid selection. Please choose 't' for tables or 'l' for links")
         return
@@ -562,11 +568,11 @@ def main():
             import bashbasicsbyvk_yn as _yn      # THE native yes/no menu
             recurse_input = 'y' if _yn.ask("Do you need recursive link extraction?", title="xtract", icon="🔗") else 'n'
         except ImportError:
-            recurse_input = input("\nDo you need recursive link extraction? (y/n): ").strip().lower()
+            recurse_input = _bvk_input("\nDo you need recursive link extraction? (y/n): ").strip().lower()
         if recurse_input == 'y':
             try:
                 recursion_depth = int(
-                    input("Enter recursion depth (e.g. 1 = one level deep, 2 = two levels): ").strip()
+                    _bvk_input("Enter recursion depth (e.g. 1 = one level deep, 2 = two levels): ").strip()
                 )
                 if recursion_depth < 0:
                     recursion_depth = 0
@@ -574,7 +580,7 @@ def main():
                 print(f"   Output columns: Source URL | Source Text | L0 Link | L0 Text"
                       + "".join([f" | L{d} Link | L{d} Text" for d in range(1, recursion_depth + 1)]))
                 try:
-                    cap_raw = input(f"\nMax links to follow per page per level (default: {RECURSION_LINK_CAP}, higher = much slower):\n> ").strip()
+                    cap_raw = _bvk_input(f"\nMax links to follow per page per level (default: {RECURSION_LINK_CAP}, higher = much slower):\n> ").strip()
                     link_cap = int(cap_raw) if cap_raw else RECURSION_LINK_CAP
                     if link_cap < 1:
                         link_cap = RECURSION_LINK_CAP
@@ -587,7 +593,7 @@ def main():
                 print("🔴  Invalid input. Using recursion depth 1.")
     # ─────────────────────────────────────────────────────────────────────────
 
-    mode = input("\nSingle URL or Multiple URLs? (1/2): ").strip()
+    mode = _bvk_input("\nSingle URL or Multiple URLs? (1/2): ").strip()
     
     urls = []
     classes = None
@@ -596,21 +602,21 @@ def main():
     
     if content_type == 'tables':
         classes = parse_comma_separated(
-            input("\nEnter table class(es) (optional, comma separated):\n> ").strip()
+            _bvk_input("\nEnter table class(es) (optional, comma separated):\n> ").strip()
         )
         ids = parse_comma_separated(
-            input("\nEnter container ID(s) (optional, comma separated):\n> ").strip()
+            _bvk_input("\nEnter container ID(s) (optional, comma separated):\n> ").strip()
         )
     else:
         link_classes = parse_comma_separated(
-            input("\nEnter link class(es) (optional, comma separated):\n> ").strip()
+            _bvk_input("\nEnter link class(es) (optional, comma separated):\n> ").strip()
         )
         ids = parse_comma_separated(
-            input("\nEnter container ID(s) (optional, comma separated):\n> ").strip()
+            _bvk_input("\nEnter container ID(s) (optional, comma separated):\n> ").strip()
         )
     
     if mode == '1':
-        url_input = input("\nEnter website URL:\n> ").strip()
+        url_input = _bvk_input("\nEnter website URL:\n> ").strip()
         
         if re.search(r'/\d+$', url_input):
             url = url_input
@@ -629,7 +635,7 @@ def main():
             urlparse(url).netloc.replace('www.', '')[:20] + '.xlsx',
             'xlsx'
         )
-        filename = input(f"\nEnter output filename (default: {default_name}):\n> ").strip() or default_name
+        filename = _bvk_input(f"\nEnter output filename (default: {default_name}):\n> ").strip() or default_name
         
         # ADDENDUM: Enforce .xlsx extension regardless of what user typed
         if not filename.endswith('.xlsx'):
@@ -667,7 +673,7 @@ def main():
         print("Press Enter twice when finished")
         lines = []
         while True:
-            line = input("> ").strip()
+            line = _bvk_input("> ").strip()
             if line:
                 lines.append(line)
             else:
@@ -692,7 +698,7 @@ def main():
         
         print(f"\nFound {len(urls)} URLs to process")
         
-        output_mode = input("\nSave in single file or multiple files? (1/2): ").strip()
+        output_mode = _bvk_input("\nSave in single file or multiple files? (1/2): ").strip()
         
         if output_mode == '1':
             if content_type == 'tables' and not excel_support:
@@ -701,7 +707,7 @@ def main():
             else:
                 # ADDENDUM: Always use xlsx
                 default_ext = 'xlsx'
-                filename = input(f"\nEnter output filename (default: combined.{default_ext}):\n> ").strip()
+                filename = _bvk_input(f"\nEnter output filename (default: combined.{default_ext}):\n> ").strip()
                 if not filename:
                     filename = f"combined.{default_ext}"
                 elif '.' not in filename:
@@ -778,7 +784,7 @@ def main():
                         print("\n❌ No content extracted from any URLs")
                 
         if output_mode == '2':
-            output_dir = input("\nEnter output directory (default: current directory):\n> ").strip()
+            output_dir = _bvk_input("\nEnter output directory (default: current directory):\n> ").strip()
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir)
                 

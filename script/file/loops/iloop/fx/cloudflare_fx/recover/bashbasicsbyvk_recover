@@ -42,6 +42,12 @@ from bashbasicsbyvk_recover_worker import recover_worker
 NAME_OK = re.compile(r"[A-Za-z0-9_-]+")
 
 
+try:
+    import bashbasicsbyvk_ask as _bvk_ask        # THE native line editor for every typed prompt (AGENTS.md rule 16)
+    _bvk_input = _bvk_ask.ask
+except ImportError:                              # a broken install: the plain built-in line
+    _bvk_input = input                           # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+
 def parse_selection(text, n):
     """'1,3-5' | 'a' | 'a-2' -> sorted list of 1-based numbers (invalid parts ignored)."""
     s = text.replace(" ", "").lower()
@@ -65,7 +71,7 @@ def parse_selection(text, n):
 def pick_workers(names):
     for i, w in enumerate(names, 1):
         print(f"  {i:>3}) {w}")
-    sel = parse_selection(input("Recover which? (1,3-5 / a / a-2, blank = cancel): "), len(names))
+    sel = parse_selection(_bvk_input("Recover which? (1,3-5 / a / a-2, blank = cancel): "), len(names))
     return [names[i - 1] for i in sel]
 
 

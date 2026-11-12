@@ -45,7 +45,7 @@ action_confirm_key() {
   echo "  $key"
   echo
   _CM_BACKED=0
-  read -e -r -p "Confirmation number: " typed || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 2; }; return 1; }
+  _bvk_read typed "Confirmation number: " || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 2; }; return 1; }
 
   if [[ "$typed" == "$key" ]]; then
     echo "OK: Confirmation accepted."

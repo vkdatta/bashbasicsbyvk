@@ -10,6 +10,12 @@ except ImportError:
     HAS_PANDAS = False
 
 
+try:
+    import bashbasicsbyvk_ask as _bvk_ask        # THE native line editor for every typed prompt (AGENTS.md rule 16)
+    _bvk_input = _bvk_ask.ask
+except ImportError:                              # a broken install: the plain built-in line
+    _bvk_input = input                           # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+
 def format_value(val):
     escaped = str(val).replace("'", "''")
     return f"'{escaped}'"
@@ -44,7 +50,7 @@ cwd     = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
 ALLOWED = {".csv", ".xlsx", ".xls", ".xlsm"}
 
 while True:
-    filename = input("\nEnter file name (with extension): ").strip()
+    filename = _bvk_input("\nEnter file name (with extension): ").strip()
     if not filename:
         continue
     ext = os.path.splitext(filename)[1].lower()
@@ -77,7 +83,7 @@ Select statement type:
 """)
 
 while True:
-    choice = input("Enter choice (1 / 2 / 3 / 4): ").strip()
+    choice = _bvk_input("Enter choice (1 / 2 / 3 / 4): ").strip()
     if choice == "1":
         stmt_type = "INSERT INTO"; break
     if choice == "2":
@@ -93,7 +99,7 @@ print(f"  --> Using: {stmt_type}")
 pk_cols = []
 if stmt_type == "UPDATE":
     while True:
-        raw = input("\nEnter Primary Key column(s), comma separated: ").strip()
+        raw = _bvk_input("\nEnter Primary Key column(s), comma separated: ").strip()
         if not raw:
             continue
         pk_cols = [c.strip() for c in raw.split(",") if c.strip()]
@@ -111,7 +117,7 @@ if stmt_type == "UPDATE":
         break
 
 while True:
-    table_name = input("\nEnter table name: ").strip()
+    table_name = _bvk_input("\nEnter table name: ").strip()
     if table_name:
         break
 

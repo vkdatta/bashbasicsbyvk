@@ -1,0 +1,5 @@
+source "bashbasicsbyvk_viewport.sh"
+source "bashbasicsbyvk_textedit.sh"
+source "bashbasicsbyvk_menuchrome.sh"
+source "bashbasicsbyvk_smartmenu.sh"
+source "bashbasicsbyvk_cmdmap.sh"

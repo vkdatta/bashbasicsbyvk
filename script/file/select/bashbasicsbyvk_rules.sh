@@ -194,7 +194,7 @@ _rule_save_as() {
     printf '%s\n' "$expr" > "$dir/$name.rule"
     echo "💾 Updated $scope rule '$name'"; return 0
   fi
-  read -e -r -p "Description (optional): " desc || return 1                 # u = cancel (back to the rules menu)
+  _bvk_read desc "Description (optional): " || return 1                 # u = cancel (back to the rules menu)
   _rl_write_bundle "$scope" "$name" "$expr" "$desc" || { echo "❌ Could not write the rule"; return 1; }
   echo "💾 Saved $scope rule '$name'   (.r to manage it)"
 }
@@ -358,15 +358,15 @@ _rl_cmd_create() {
     kind="$ans"
   fi
   local head=.s; [ "$kind" = display ] && head=.d
-  read -e -r -p "Rule name (e.g. mango or mango.txt): " raw || return 1                 # u = cancel (back to the rules menu)
+  _bvk_read raw "Rule name (e.g. mango or mango.txt): " || return 1                 # u = cancel (back to the rules menu)
   case "$raw" in u|U) return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   name="$(_rl_clean_name "$raw")"
   if [ -z "$name" ]; then echo "🚫 Cancelled"; return 1; fi
   if ! _rule_valid_name "$name"; then echo "❌ Rule names: letters, digits, _ and - only"; return 1; fi
   if [ -e "$(_rl_dir "$kind" "$name")" ]; then echo "❌ A $kind rule called '$name' already exists"; return 1; fi
-  read -e -r -p "Expression (e.g. $head.ext png ; blank = open editor): " expr || return 1                 # u = cancel (back to the rules menu)
+  _bvk_read expr "Expression (e.g. $head.ext png ; blank = open editor): " || return 1                 # u = cancel (back to the rules menu)
   case "$expr" in u|U) return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
-  read -e -r -p "Description (optional): " desc || return 1                 # u = cancel (back to the rules menu)
+  _bvk_read desc "Description (optional): " || return 1                 # u = cancel (back to the rules menu)
   _rl_write_bundle "$kind" "$name" "$expr" "$desc" || { echo "❌ Could not create the rule"; return 1; }
   if [ -z "$expr" ]; then
     printf '# %s — %s rule.  Write ONE expression below; this file is the rule.\n# e.g.  %s.ext png,jpg    %s.size >3mb -r    %s.rule other_rule\n' \
@@ -412,11 +412,11 @@ _rl_cmd_rename() {
   fi
   if [ "${#items[@]}" -eq 0 ]; then echo "📜  No rules here"; return 1; fi
   local num raw new
-  read -e -r -p "Rename which rule number? " num || return 1                 # u = cancel (back to the rules menu)
+  _bvk_read num "Rename which rule number? " || return 1                 # u = cancel (back to the rules menu)
   case "$num" in u|U|"") return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   _rl_pick "$num" || return 1
   _rl_is_bundle "$_rl_p" || { echo "🔒 Protected item"; return 1; }
-  read -e -r -p "New name for '$_rl_n': " raw || return 1                 # u = cancel (back to the rules menu)
+  _bvk_read raw "New name for '$_rl_n': " || return 1                 # u = cancel (back to the rules menu)
   case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   new="$(_rl_clean_name "$raw")"
   _rule_valid_name "$new" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
@@ -475,12 +475,12 @@ _rl_cmd_save_hist() {
     *) echo "❌ This expression mixes .s and .d clauses — it can't be one rule"; return 1 ;;
   esac
   echo "💾 $expr   → will be a $kind rule"
-  read -e -r -p "Rule name (u = cancel): " raw || return 1                 # u = cancel (back to the rules menu)
+  _bvk_read raw "Rule name (u = cancel): " || return 1                 # u = cancel (back to the rules menu)
   case "$raw" in u|U|"") echo "🚫 Cancelled"; return 1 ;; q|Q) _bvk_quit; return 1 ;; esac
   name="$(_rl_clean_name "$raw")"
   _rule_valid_name "$name" || { echo "❌ Rule names: letters, digits, _ and - only"; return 1; }
   [ -e "$(_rl_dir "$kind" "$name")" ] && { echo "❌ A $kind rule called '$name' already exists"; return 1; }
-  read -e -r -p "Description (optional): " desc || return 1                 # u = cancel (back to the rules menu)
+  _bvk_read desc "Description (optional): " || return 1                 # u = cancel (back to the rules menu)
   _rl_write_bundle "$kind" "$name" "$expr" "$desc" || { echo "❌ Could not save"; return 1; }
   local h tmp; h="$(_rl_hist_file)"; tmp="$h.tmp.$$"
   grep -vxF -- "$expr" "$h" > "$tmp" 2>/dev/null; mv -f -- "$tmp" "$h"

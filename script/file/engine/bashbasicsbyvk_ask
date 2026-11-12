@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# bashbasicsbyvk_ask — THE typed-line prompt for every tool that runs as its own process (bash or python): the app's native line editor.
+#
+#   answer=$(bashbasicsbyvk_ask "Prompt: " [-i "text the line starts with"] [-s])
+#
+#   stdout = the typed line (so command substitution works); the prompt and the editor are drawn on the TERMINAL, also when the caller's stdin / stdout are pipes.
+#   exit 0 = a line came back · 2 = no answer (Ctrl-D / EOF) · 3 = cannot ask (the editor is not installed: a broken install)
+#   -s  a secret (a key, a token): nothing is echoed
+#
+# It is the SAME editor as every prompt inside the app (_cm_line_edit, bashbasicsbyvk_textedit.sh): selection, Shift / Ctrl keys, cut / copy / paste, undo.
+# A change to how a typed line behaves is made there once and reaches this tool too.  Callers keep a plain `read` only as the last fallback for exit 3
+# (a broken install), marked  # bvk-read-ok: ... , exactly as bashbasicsbyvk_yn is used (AGENTS.md rules 6 and 16).
+# shellcheck disable=SC1090
+declare -F _cm_line_edit >/dev/null 2>&1 || source "_3bvk_import_ask.sh" 2>/dev/null
+declare -F _cm_line_edit >/dev/null 2>&1 || { echo "bashbasicsbyvk_ask: the line editor is not installed (reinstall bashbasicsbyvk)." >&2; exit 3; }
+[ -n "${1:-}" ] || { echo 'usage: bashbasicsbyvk_ask "Prompt: " [-i text] [-s]' >&2; exit 3; }
+_ak_p="$1"; shift; _ak_i=""; _ak_s=0
+while [ "$#" -gt 0 ]; do case "$1" in -i) _ak_i="${2-}"; shift 2 ;; -s) _ak_s=1; shift ;; *) shift ;; esac; done
+exec 3>&1                                                   # the caller's stdout: only the answer goes there
+[ -t 0 ] || { [ -r /dev/tty ] && exec </dev/tty; }
+[ -t 1 ] || { [ -w /dev/tty ] && exec >/dev/tty; }
+if [ -t 0 ] && [ -t 1 ]; then
+  if [ "$_ak_s" = 1 ]; then
+    IFS= read -rs -p "$_ak_p" _ak_a || exit 2; echo >&2     # bvk-read-ok: a secret is read silently: nothing is drawn, so there is no line to edit
+  else
+    _CM_ON=0                                                # no command layer in a stand-alone process: plain text, no hint row
+    _cm_line_edit "$_ak_p" "$_ak_i" _ak_a 0 || exit 2
+    _ak_a="$_CM_OUT"
+  fi
+else
+  IFS= read -r _ak_a || exit 2                              # bvk-read-ok: no terminal at all (a pipe, a test harness): the piped answer
+fi
+printf '%s' "$_ak_a" >&3
+exit 0

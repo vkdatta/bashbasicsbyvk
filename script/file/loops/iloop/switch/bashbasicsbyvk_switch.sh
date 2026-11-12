@@ -83,9 +83,8 @@ _sw_excl_add() {
     4) kind="dirpath"    ;;
     *) echo "Cancelled."; return 0 ;;
   esac
-  printf "Value: "
   local value
-  IFS= read -e -r value
+  _bvk_read value "Value: " -I
   value="${value// /}"          # strip leading/trailing spaces
   [ -z "$value" ] && { echo "Cancelled — empty value."; return 0; }
   # For filepath/dirpath: resolve ~ and make absolute if path-like
@@ -109,9 +108,8 @@ _sw_excl_remove() {
   local total
   total=$( grep -cv '^\s*#\|^\s*$' "$_RC_EXCLUDE_FILE" 2>/dev/null || echo 0 )
   [ "$total" -eq 0 ] && return 0
-  printf "Remove rule number(s) (e.g. 1 or 1 3 5), or Enter to cancel: "
   local nums
-  IFS= read -e -r nums
+  _bvk_read nums "Remove rule number(s) (e.g. 1 or 1 3 5), or Enter to cancel: " -I
   [ -z "$nums" ] && { echo "Cancelled."; return 0; }
   # Build list of 1-based indices to delete (sorted descending so sed line
   # numbers stay stable as we delete)
@@ -165,9 +163,8 @@ _sw_excl_menu() {
     echo "  a) Add rule    x) Remove rule"
     echo "  e) Edit file   u) Back to recents   q) Quit"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    printf "Choice: "
     local xc
-    IFS= read -e -r xc
+    _bvk_read xc "Choice: " -I
     case "${xc,,}" in
       a)  _sw_excl_add    ;;
       x)  _sw_excl_remove ;;

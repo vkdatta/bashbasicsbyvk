@@ -158,6 +158,7 @@ _3bvk_import_cmd_copy.sh|||import file of a stand-alone tool (its own process, n
 _3bvk_import_cmd_delete.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_deps.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_gitpush.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+_3bvk_import_ask.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_yn.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 bashbasicsbyvk_api.map|||command-map wiring, read as data
 bashbasicsbyvk_auth.map|||command-map wiring, read as data
@@ -200,6 +201,8 @@ bashbasicsbyvk_loadmap.list|||data
 bashbasicsbyvk_loadmap_gen|||tool, run as its own process
 bashbasicsbyvk_loadtime_report|||tool, run as its own process
 bashbasicsbyvk_localhost|||tool, run as its own process
+bashbasicsbyvk_ask|||tool, run as its own process: THE typed-line prompt (native line editor) for every stand-alone tool
+bashbasicsbyvk_ask.py|||python helper, run as a process: the python door to bashbasicsbyvk_ask
 bashbasicsbyvk_yn|||tool, run as its own process: THE yes/no question (native menu) for every stand-alone tool
 bashbasicsbyvk_yn.py|||python helper, run as a process
 bashbasicsbyvk_lt.py|||python helper, run as a process

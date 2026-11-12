@@ -38,7 +38,11 @@ fi
 
 echo
 
-read -e -rp "Enter localhost port: " PORT
+if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then        # THE native line editor; the plain line below is only the fallback of a broken install
+    PORT="$(bashbasicsbyvk_ask "Enter localhost port: ")"
+else
+    read -e -rp "Enter localhost port: " PORT   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+fi
 
 if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
     echo
@@ -59,7 +63,7 @@ ask_yes() {
         bashbasicsbyvk_yn "$1" -t "Localhost" -i "🌐"; rc=$?
         case "$rc" in 0) return 0 ;; 1|2) return 1 ;; esac
     fi
-    read -e -rp "$1 (y/n): " a
+    read -e -rp "$1 (y/n): " a   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_yn)
     [[ "$a" == [Yy]* ]]
 }
 

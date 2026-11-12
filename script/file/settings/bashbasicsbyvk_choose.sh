@@ -162,7 +162,7 @@ _bc_plain() {
   fi
   _bc_p="${_bc_question:-$_bc_title} [$_bc_h]: "
   while :; do
-    read -e -r -p "$_bc_p" _bc_a || return 1
+    read -e -r -p "$_bc_p" _bc_a || return 1   # bvk-read-ok: plain one-line fallback where the box cannot draw (no terminal / the yn tool has no shim)
     [ "${_CM_ABORT:-0}" = 1 ] && return 1
     _bc_a="${_bc_a,,}"
     [ -z "$_bc_a" ] && [ -z "$_bc_def" ] && continue      # no default: a bare Enter is not an answer, ask again

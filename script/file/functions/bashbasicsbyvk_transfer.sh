@@ -242,7 +242,7 @@ local_navigator() {
         ;;
       n|N)
         if [ "$mode" == "dest" ]; then
-          read -e -p "New folder name: " new_dir_name
+          _bvk_read new_dir_name "New folder name: "
           if [ -n "$new_dir_name" ] && _bvk_name_too_long "$new_dir_name"; then
             _bvk_name_refuse "$new_dir_name" "Folder"
           elif [ -n "$new_dir_name" ]; then
@@ -404,7 +404,7 @@ gcloud_navigator() {
         ;;
       n|N)
         if [ "$mode" == "dest" ]; then
-          read -e -p "New remote folder name: " new_rdir
+          _bvk_read new_rdir "New remote folder name: "
           if [ -n "$new_rdir" ]; then
             _gcloud_cmd "mkdir -p '$remote_path/$new_rdir'"
             echo "💫 Created remote: $remote_path/$new_rdir"

@@ -121,6 +121,7 @@ So before you create anything, work in this order:
    - The naming checks below only scan `script/`, so they do not apply to `corpus/`; check 6 covers the corpus.
 
 6. **Ask with the shared choice menu, and keep emoji off the line the caret sits on.** (Follow-up of `BB-211020261500-1`.)
+   - **Typed prompts go through `_bvk_read` / `bashbasicsbyvk_ask`, never a bare `read` (rule 16).**
    - **No emoji in any `read ... -p` prompt**, and none in a variable that becomes one. A terminal and the width table can disagree about an emoji's
      width, and then the caret lands in the wrong cell on some devices; text without emoji cannot disagree. Emoji stay in headers, `echo` lines and menu icons.
      `tests/width` fails on one; the `read` shim also strips them at run time (`_bvk_noemoji`) as a net, never as the fix: write the prompt without them.
@@ -209,7 +210,8 @@ So before you create anything, work in this order:
     - **Which table applies is decided by the function that reads the word, by NAME** (`_cm_ctx_find`: the `@func` of a `.map`, or `xui_<prefix>` for a `_xui_loop` screen). A screen no map claims does NOT fail loudly: it silently inherits another table (`xui`, or `main`) whose rules were written for other screens, so its own keys are blocked ("Invalid command: r - not available in xui") or swallowed (`rf` = the main redraw, the screen never reloads). `o --map-lint` cannot see it (it only reads maps that exist). That is how `cfw`, `gdp`, `cs_pp`, `ct`, `ru` stayed broken.
     - **A new `_xui_screen X` + `_xui_loop` handler = a new `script/file/cmdmap/xui_X/` in the same change**: copy `xui_ghr` (`bashbasicsbyvk_xui_X.map` + `bashbasicsbyvk_xui_Xmenucommands.sh`), one `cmd_def` line per key the handler (`_X_cmd`) accepts or the footer prints (`local`, kind `exact` / `prefix`), two loadmap lines (`[no]`), `bashbasicsbyvk_loadmap_gen --write`. `bash tests/xui_wiring.sh` fails on a screen without a map and on any own key that does not resolve to the screen. Never "keep" an own key by hoping the parent allows it.
     - **A `cmd_fn` of `_st_run` (the 5th argument) returns 1 for every word it does not own**, so `_st_cm_gate` (or `_bc_word` in the choice boxes) decides. A `cmd_fn` that returns 0 for "anything else" swallows commands: the hint row (`_cm_hint`) says "s -> Settings" and Enter drops it (that was `_bc_cmd`). `tests/choose/typed_test.py` types a command into a question.
-    - Do not give a list screen its own `read` / `case` for typed words, and do not add a second dispatcher: the gates are `_cm_gate_choice` (list loops), `_cm_gate_sm` (smart menus), `_cm_gate_dispatch` (text, boxes), `_st_cm_gate` (`_st_run`). A new kind of screen uses one of them.
+    - A typed-word prompt is read with `_bvk_read` (rule 16): one editor for all of them.
+   - Do not give a list screen its own `read` / `case` for typed words, and do not add a second dispatcher: the gates are `_cm_gate_choice` (list loops), `_cm_gate_sm` (smart menus), `_cm_gate_dispatch` (text, boxes), `_st_cm_gate` (`_st_run`). A new kind of screen uses one of them.
 
 ## Tests: seconds, not half an hour (the rules the owner and the agents framed)
 
@@ -282,6 +284,8 @@ find script -type f -printf '%f\n' | sort | uniq -d
 grep -rnI '_3bvk_' script tests setup.py MANIFEST.in README.md | grep -v '_3bvk_import_'
 # 5. ONLY when the prompt asks to dedupe / find duplicates (never as part of an ordinary fix or feature): duplicate-function candidates (polyglot: parses the code, finds renamed and cross-language copies too) — prints clusters, writes nothing into the repo
 PYTHONPATH=script/file/engine BVK_DEPS_ASSUME=yes python3 script/file/infinity/tools/polyglot/bashbasicsbyvk_polyglot . --no-xlsx --plain --exclude sample_project -o /tmp/polyglot_report.json
+# 8. no bare typed-line read (rule 16); also part of `bash tests/run.sh fast`
+python3 tests/prompt_template/read_lint.py
 # 6. corpus index: valid JSON lines, unique ids, every line's note exists, every note has a line, note sits in its YYYY/MM/DD folder
 python3 - <<'EOF'
 import glob, json, os
@@ -308,3 +312,10 @@ seen elsewhere, grep for the helper first.
     - A text prompt inside a flow is `read ... || return 3` and the parent menu loops on 3. Prompts with "Enter = default" never take the default on `u`.
     - The choice boxes (`_bvk_yn` / `_bvk_menu`, rule 14) follow the same contract: `u` in a box leaves that box only.
 
+16. **ONE typed-line prompt: every place that waits for the person to TYPE calls the app's native prompt, never `read`, `input()` or `getpass` itself.** (`_bvk_read` in `script/file/engine/bashbasicsbyvk_smartmenu.sh`; `bashbasicsbyvk_ask` + `bashbasicsbyvk_ask.py` for tools; `tests/prompt_template/read_lint.py`.) The key-loop files (viewport, browse, mouse, smartmenu, cmdmap, settings_ui, textedit, smartload, loadmap) are exempt for KEY reads only (`-n` / `-N` / `-t` / `-d` / `-u`); a `read ... -p` there is a typed line and must use `_bvk_read` (read_lint flags it).
+    - **Why:** a prompt that calls `read` itself is a copy of the line editor. Every later improvement (selection, Shift / Ctrl keys, cut / copy / paste, undo, the cursor and highlight fixes, tap / click) lands in the ONE editor (`_cm_line_edit`, `bashbasicsbyvk_textedit.sh`) and so only reaches the prompts that go through it. The bare ones (`switch.sh`, `localhost`, `xtract` ...) stayed behind: that is the drift.
+    - **In the app:** `_bvk_read VAR "Prompt: " [-i INITIAL] [-I] [-s] [-1]` (`-i` starting text, `-I` keep surrounding spaces = the old `IFS= read`, `-s` a secret, `-1` one key / "press any key"). It returns exactly what `read` returned (0 line, 1 back / EOF, 3 cancelled flow), so `|| return N` stays as it was. The prompt text has no emoji (rule 6) and is ONE argument: do not `printf` a prompt and then call a prompt-less `read`.
+    - **In a tool that runs as its own process (rule 3):** bash `ans=$(bashbasicsbyvk_ask "Prompt: " [-i text] [-s])` (exit 0 line, 2 no answer, 3 not installed); python `import bashbasicsbyvk_ask as bvk; bvk.ask("Prompt: ")` (raises `EOFError` like `input()`). Same editor, so a change to it reaches the tool too. Fixed answers still use the choice menu (rule 6).
+    - **A raw `read` is allowed only** (a) in the key-loop files that ARE the editors (the `ENGINE_ALLOW` list in `tests/prompt_template/read_lint.py`: viewport, browse, mouse, smartmenu, cmdmap, settings_ui, textedit, smartload, loadmap); (b) when it reads DATA: `< file`, `<<< "$x"`, a pipe, a `while read` loop; (c) on a line that ends with `# bvk-read-ok: <why>` (the plain last fallback beside `bashbasicsbyvk_yn` / `bashbasicsbyvk_ask` for a broken install; a pager that reads nothing). A new marker needs a real reason, and a new `ENGINE_ALLOW` file needs the owner's say.
+    - **New or changed prompt = call `_bvk_read` / `bashbasicsbyvk_ask` in the same change.** Never add `read -p` / `read -e` / `read VAR` / `input(` / `getpass` / `sys.stdin.readline` and never an `ENGINE_ALLOW` entry to make a lint go green. `python3 tests/prompt_template/read_lint.py` (in `run.sh fast`) fails on the first one.
+    - **To change how typing behaves** (a key, a highlight, tap, paste): change the editor behind `_bvk_read` (`bashbasicsbyvk_textedit.sh`, `_cm_line_edit` / `_cm_edit_draw` in `bashbasicsbyvk_cmdmap.sh`), once. Never patch one prompt, and never write a second line editor beside it.

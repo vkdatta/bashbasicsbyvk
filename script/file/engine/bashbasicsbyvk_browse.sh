@@ -21,7 +21,7 @@ handle_goto() {
   arg="${arg#"${arg%%[![:space:]]*}"}"
   dest="$arg"
   if [ -z "$dest" ]; then
-    read -e -r -p "Path to go to: " dest || return 0
+    _bvk_read dest "Path to go to: " || return 0
     [ "${_CM_ABORT:-0}" = 1 ] && return 0
   fi
   dest="${dest%$'\r'}"

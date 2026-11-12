@@ -616,7 +616,7 @@ _dep_ask() {
     [ "$ans" = y ]; return $?
   fi
   while :; do
-    read -r -p "Do you want to install them? [yes/no]: " ans </dev/tty || return 1
+    read -r -p "Do you want to install them? [yes/no]: " ans </dev/tty || return 1   # bvk-read-ok: last fallback of a broken install (a stand-alone process has no native menu), see rule 6
     case "${ans,,}" in y|yes) return 0 ;; n|no) return 1 ;; esac
   done
 }

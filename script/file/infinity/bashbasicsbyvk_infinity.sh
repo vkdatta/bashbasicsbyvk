@@ -33,7 +33,7 @@ infinity_stones_menu() {
       "Extract Tables and Links from Web" "JavaScript Audit" "Python Audit" \
       "Git Push" "Generate SQL" "LocalHost" "Polyglot Clone Finder" -- @infinity
 
-    read -e -p "Select: " is_choice
+    _bvk_read is_choice "Select: "
 
     case "$is_choice" in
     u|U|"") return ;;

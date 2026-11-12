@@ -24,6 +24,21 @@ SECRET_FILES = (".dev.vars", ".env", ".env.local", ".env.production", ".env.deve
 _LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
 
 
+try:
+    import bashbasicsbyvk_ask as _bvk_ask        # THE native line editor for every typed prompt (AGENTS.md rule 16)
+except ImportError:                              # a broken install
+    _bvk_ask = None
+
+
+def _ask(prompt, secret=False):
+    if _bvk_ask is not None:
+        return _bvk_ask.ask(prompt, secret=secret)
+    if secret:
+        return getpass.getpass(prompt)           # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+    sys.stderr.write(prompt); sys.stderr.flush()
+    return sys.stdin.readline()                  # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+
+
 def _err(msg=""):
     print(msg, file=sys.stderr, flush=True)
 
@@ -109,7 +124,7 @@ def credentials(nav, interactive=True):
         _err(f"  API token  : from {tsrc}")
     elif interactive:
         try:
-            token = getpass.getpass(f"Cloudflare API token (hidden) - not found in {nav}: ").strip()
+            token = _ask(f"Cloudflare API token (hidden) - not found in {nav}: ", secret=True).strip()
         except EOFError:
             token = ""
     if not token:
@@ -128,14 +143,12 @@ def credentials(nav, interactive=True):
         elif accts and interactive:
             for i, a in enumerate(accts):
                 _err(f"  [{i}] {a.get('name')}  {a['id']}")
-            sys.stderr.write("Choose account number: "); sys.stderr.flush()
             try:
-                account = accts[int(sys.stdin.readline().strip())]["id"]
+                account = accts[int(_ask("Choose account number: ").strip())]["id"]
             except (ValueError, IndexError):
                 raise RecoverError("Invalid account number.")
         elif interactive:
-            sys.stderr.write("Cloudflare account ID: "); sys.stderr.flush()
-            account = sys.stdin.readline().strip()
+            account = _ask("Cloudflare account ID: ").strip()
     if not account:
         raise RecoverError(
             f"No Cloudflare account ID. Put CLOUDFLARE_ACCOUNT_ID=... in {Path(nav) / '.dev.vars'} (or .env) in this folder.")

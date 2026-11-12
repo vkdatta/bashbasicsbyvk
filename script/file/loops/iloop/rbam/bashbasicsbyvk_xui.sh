@@ -132,8 +132,8 @@ _xui_select_rows() {
 # ── one-line questions ───────────────────────────────────────────────────────
 _xui_ask() {                                 # _xui_ask "What to type" [default]
   local q="$1" def="${2:-}" a
-  if [ -n "$def" ]; then read -e -r -p "   $q [$def] (u = back): " a; a="${a:-$def}"
-  else                   read -e -r -p "   $q (u = back): " a; fi
+  if [ -n "$def" ]; then _bvk_read a "   $q [$def] (u = back): "; a="${a:-$def}"
+  else                   _bvk_read a "   $q (u = back): "; fi
   a="${a%$'\r'}"
   _XUI_IN="$a"
   case "${a,,}" in ""|u|q) return 1 ;; esac

@@ -63,7 +63,7 @@ _bkd_ask() {
 # one name prompt: 0 answered (nm) · 1 u · 3 EOF / flow cancelled
 _bkd_read_name() {
   _CM_BACKED=0
-  read -e -r -p "Name this backup (Enter = just the date and time): " nm || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 1; }; return 3; }
+  _bvk_read nm "Name this backup (Enter = just the date and time): " || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 1; }; return 3; }
   [ "${_CM_ABORT:-0}" = 1 ] && return 3
   return 0
 }

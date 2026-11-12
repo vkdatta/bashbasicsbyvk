@@ -721,7 +721,7 @@ _st_run() {
 _st_ask() {
   local p="$1" cur="${2:-}"
   [ -n "$cur" ] && p="$p [now: $cur]"
-  read -e -r -p "  $p  (u = back): " _st_in
+  _bvk_read _st_in "  $p  (u = back): "
   _st_in="${_st_in%$'\r'}"
   case "${_st_in,,}" in
     u|"") return 1 ;;
