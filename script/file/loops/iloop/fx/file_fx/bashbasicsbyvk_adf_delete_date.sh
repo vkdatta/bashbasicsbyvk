@@ -39,28 +39,34 @@ _dd_s_pick() {
   return 0
 }
 
-_fx_adf_delete_by_date() {
-  local -a files=()
-  _fxdel_list_files files
-  [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
-
-  local lvl reply f idx
-  local -A count=() key_of=()
-  local -a keys=()
-  _mc_steps _dd_s_level _dd_s_pick
-  case $? in 0) ;; 1) echo "↩️  Back"; return ;; 2) return 1 ;; *) return ;; esac
-
+# Third step: build the list, then Confirm delete / Back up (u there = the dates question again).
+_dd_s_confirm() {
   local -A chosen=()
+  local idx f rc
   for idx in $(_fxdel_pick_indices "$reply" "${#keys[@]}"); do
     chosen["${keys[$((idx-1))]}"]=1
   done
-  [ ${#chosen[@]} -eq 0 ] && { echo "❌ No valid selection"; return; }
+  [ ${#chosen[@]} -eq 0 ] && { echo "❌ No valid selection"; return 3; }
 
   selected_items=()
   for f in "${files[@]}"; do
     [ -n "${chosen[${key_of[$f]}]+x}" ] && selected_items+=("$f")
   done
   echo "Selected: $(printf '%s\n' "${!chosen[@]}" | sort | tr '\n' ' ')"
-  _fxdel_run_selected
+  _fxdel_run_selected; rc=$?
+  case "$rc" in 1|2) return "$rc" ;; esac
+  return 0
+}
+
+_fx_adf_delete_by_date() {
+  local -a files=()
+  _fxdel_list_files files
+  [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
+
+  local lvl reply
+  local -A count=() key_of=()
+  local -a keys=()
+  _mc_steps _dd_s_level _dd_s_pick _dd_s_confirm
+  case $? in 0) ;; 1) echo "↩️  Back"; return ;; 2) return 1 ;; *) return ;; esac
 }
 _fx_adf_register_fx "delete.by.date" "_fx_adf_delete_by_date"

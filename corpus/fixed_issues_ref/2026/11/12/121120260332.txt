@@ -1,0 +1,72 @@
+1. ISSUE IN BRIEF
+In the delete flow, u at "Back up before deleting" did not go back to "Confirm delete": it left the whole delete and landed on the main file list. The same flow ended on the file list from u at Confirm delete (instead of the item picker) and, in delete by date / extension / CSV and the stand-alone delete command, u at Confirm or Backup left the flow instead of going one question back. Follow-up of BB-101120260205-1 / -2 / -3 (Find, rename, create, transfer were fixed; the delete family was missed).
+
+1. HOW DID YOU DEBUG
+1. Read corpus index (Menus & Navigation) and note 101120260205: the lesson there is "a flow with more than one question calls _mc_steps; never `|| return` after the first u".
+2. grep for every caller of _lk_confirm_delete / _bk_before_delete: delete_items, _fxdel_run_selected (used by delete by date / ext / CSV / selected), the stand-alone `delete` command and two rules prompts. Each ran confirm, then backup, as two plain calls with `|| return`.
+3. Read _bvk_menu (choose.sh): u and q both end in _bc_leave and both return 1 with an empty VAR, so a caller could not tell "back" from "cancel" at all.
+4. Probed the real app in the pty harness (tests/paste_input/ptyapp.py) with backup_mode=ask: d, 1, y, u went to the file list on the untouched archive; after the fix u shows Confirm delete, a second u shows the item picker.
+5. Added 4 cases to tests/nav_back/nav_test.py (3 u cases, 1 cancel case) and ran them on the untouched archive: the 3 u cases FAIL there and PASS on the fix, the cancel case passes on both (it must: c keeps the file).
+Not verified by running: delete by date / extension / CSV and the stand-alone `delete` command (changed by reading, syntax-checked only); the GitHub, api, snapshot, auth-pay, upload-cost flows listed below were audited by reading and NOT changed.
+
+1. CAUSE
+Two causes. (a) _bvk_menu / _bvk_yn gave no way to tell u from q, so no chained flow could implement "one question back". (b) the delete gate was two sequential calls with `|| return`, not a step list, and _lk_confirm_delete itself chained up to four questions the same way.
+
+1. FIX
+- settings/bashbasicsbyvk_choose.sh: _bvk_menu records the key that left the box in _BVK_LEFT (u or q); new _bvk_back = "the last menu was left with u and no abort is running". Works with and without the command layer.
+- functions/bashbasicsbyvk_lock.sh: _lk_ask (answered / back / cancelled); _lk_confirm_delete is now a step list (_lcd_first, _lcd_key_one, _lcd_choice, _lcd_final, _lcd_key_all) on _mc_steps; new _lk_delete_gate = Confirm delete then Back up, u = one step back, the selection is restored when u re-asks Confirm. Contract of _lk_confirm_delete: 0 go, 1 u, 2 q, 3 cancelled.
+- functions/bashbasicsbyvk_action_confirm_key.sh: returns 2 for u (the callers treated every non-zero as "failed", unchanged).
+- staging/!buffer/fileapi/3 backup/bashbasicsbyvk_staging_backup.sh: _bk_before_delete = steps (_bkd_ask, _bkd_name, _bkd_upload); returns 6 for u on the first question (0 go, 1 do not delete as before); u at "Delete anyway?" returns to the name prompt.
+- functions/bashbasicsbyvk_delete.sh: delete_items loops: u at Confirm delete = the item picker again. loops/iloop/fx/file_fx: _fxdel_run_selected returns 1 for u; delete by date and by extension are step lists with Confirm as the last step; delete by CSV re-opens the CSV picker.
+- cmd/bashbasicsbyvk_delete (stand-alone): three steps (_bd_confirm, _bd_lock, _bd_backup); engine/bashbasicsbyvk_yn gets -b (u exits 4 instead of 2); functions/_3bvk_import_cmd_delete.sh now also sources bashbasicsbyvk_menuchrome.sh (for _mc_steps).
+- loadmap stubs regenerated.
+Lesson: whenever a flow asks a second yes/no or menu, the first caller is a step list; read _bvk_back, never `|| return` after the first u.
+
+2. ISSUE IN BRIEF
+Archive (z-, the compress step): u at "already exists. Overwrite?" or at "Include hidden files?" cancelled the whole archive instead of going back to the name prompt. Follow-up of BB-101120260205-3, which covered format and name only.
+
+2. HOW DID YOU DEBUG
+1. Read _compress_paths: a hand-made while loop for format and name, then a plain _bvk_yn for the overwrite and _hidden_decide for hidden files, each with `|| { echo Cancelled; return; }`.
+2. Read _hidden_decide and its four callers (archive, upload, ux share, save): all treat any non-zero as cancel.
+(Verified by reading and bash -n only; the existing nav_back case "Archive > name prompt > u = format menu" is the regression guard for the part that already worked.)
+
+2. CAUSE
+The BB-101120260205-3 fix stopped at the two questions it named; the questions added after the name were never put into the step list.
+
+2. FIX
+- staging/!buffer/other/bashbasicsbyvk_staging_archive.sh: _compress_paths runs _arc_s_fmt, _arc_s_name, _arc_s_over, _arc_s_hidden on _mc_steps; the old archive is removed only after all questions are answered (a u at the hidden-files question must not delete it).
+- settings/bashbasicsbyvk_hidefiles.sh: _hidden_decide returns 6 for u (no "Cancelled." line), 1 for q; the upload, ux and save callers treat it as before (any non-zero leaves).
+
+3. ISSUE IN BRIEF
+GitHub bulk actions (edit, rename, delete, download, create tag / stable release, release for a new tag): each is a wizard of several menus, yes/no questions and text prompts, and u at any later question abandoned the whole wizard (or, at a yes/no, was read as "No" and printed Cancelled). Follow-up of 1 and of BB-101120260205-2.
+
+3. HOW DID YOU DEBUG
+1. Read _ghx_edit / _ghx_rename / _ghx_delete / _ghx_download / _ghx_create / _ghx_create_release_for in adf_github.sh: every question ended in `|| return 1` or an unchecked _bvk_yn followed by a `case` that treated an empty answer as "Cancelled".
+2. Converted each into a step list on _mc_steps; kept every message, job file and engine call as before.
+3. tests/github/ui_test.py: 5 reds (download, cheat codes, three rename checks) on the untouched archive AND on the fix; nothing else changed (one extra red in a parallel run, the delete check, did not repeat in two single runs).
+Not verified by running: rename, download and the edit wizard end to end (the 5 reds above stop the test before / inside them, for a reason that predates this change); create tag / release has no test.
+
+3. CAUSE
+Same as 1: chained questions written as sequential calls with `|| return` instead of a step list.
+
+3. FIX
+- loops/iloop/fx/github_fx/open_github/bashbasicsbyvk_adf_github.sh: step functions _ghx_s_ed_*, _ghx_s_rn_*, _ghx_s_del_*, _ghx_s_dl_*, _ghx_s_cr_*; _ghx_yes_rc maps a yes/no step to its rc; the job folder is removed on any non-zero end.
+- settings/bashbasicsbyvk_choose.sh: _bvk_ask (the yes/no step helper) now lives next to _bvk_back; _lk_ask was removed and lock.sh calls _bvk_ask (one helper, not two).
+- tests/archive/archive_test.sh sources menuchrome.sh (the archive flow needs _mc_steps); tests/cmd_drift.sh checks the new shape of the backup name prompt; tests/tests.list: nav_back timeout 120 to 300 s.
+
+4. ISSUE IN BRIEF
+The remaining chained flows still left on u: api and snapshot extend / shorten (time, then "use the longest you can afford?", then Continue?), the Credits menu and its time prompts (fileapi credit gate), payment links (currency, amount, "Create the payment link?"), rename's "No extension" menu, and the Rules overwrite question. Follow-up of 1-3.
+
+4. HOW DID YOU DEBUG
+1. Read each flow: all were sequential calls with `|| return` / an unchecked yes/no after the first u.
+2. Not changed on purpose (judged by reading): the hidden-files question of up- / ux- / save- is the FIRST question of those flows (items come from the command), so u leaving is already one level back; the Credits gate runs after the data is packed, so going back to the hidden-files question would mean packing again. The Rules overwrite question is the only question of its function (the name and expression are typed in the caller), so u = cancel is the one-level-back there too.
+Not verified by running: api, snapshot, credits gate, pay and rename "No extension" (they need the server or an account; changed by reading, bash -n only).
+
+4. CAUSE
+Same as 1: chained questions written without a step list.
+
+4. FIX
+- api.sh _api_do_edit and staging_snapshot.sh _snap_extend: step lists (_api_s_ed_*, _snap_s_*); a step that asks nothing returns 5.
+- fileapi_lib.sh: _bb_ask_time returns 6 for u; _bb_credit_gate goes back to the Credits menu on 6 (it used to stop).
+- auth.sh: _bvk_pay_amount = two steps (_pay_s_cur, _pay_s_amt); _bvk_pay_create returns 6 for u and its three callers loop back to the amount.
+- rename.sh: _rn_finalize returns 6 for u at "No extension"; _rn_name_prompt asks New: again.

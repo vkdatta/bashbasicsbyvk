@@ -480,9 +480,11 @@ _bb_estimate() {
 _bb_ask_time() {
   local cur="$1" hint="$2" dflt="$3" a n rc
   while :; do
-    read -e -r -p "   $hint: " a || return 1
+    _CM_BACKED=0
+    read -e -r -p "   $hint: " a || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 6; }; return 1; }     # u = 6: the Credits menu again
     a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
     case "${a,,}" in
+      u|back) return 6 ;;
       s|stop|n|no|q|cancel) return 1 ;;
       "") if [ -n "$dflt" ]; then _BB_NEWTTL="$dflt"; return 0; fi; return 1 ;;
     esac
@@ -492,6 +494,7 @@ _bb_ask_time() {
   done
 }
 
+# _bb_ask_time rc: 0 a time · 1 stop / cancel · 6 u (the caller asks the question before: the Credits menu)
 # The price check before any fileapi upload.  _bb_credit_gate <packed-bytes> <what> [service]
 #   cost 1 and affordable                → carry on silently
 #   cost > 1 and affordable              → ask: continue / reduce time / increase time / stop
@@ -517,7 +520,7 @@ _bb_price_is_one() {
 }
 
 _bb_credit_gate() {
-  local bytes="$1" what="${2:-this operation}" svc="${3:-}" ttl a guard=0
+  local bytes="$1" what="${2:-this operation}" svc="${3:-}" ttl a guard=0 rc
   _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
   [ "$(_bb_cfg_val credit_prompts show)" = "skip" ] && return 0
   [[ "$bytes" =~ ^[1-9][0-9]*$ ]] || return 0
@@ -534,8 +537,8 @@ _bb_credit_gate() {
       _bvk_menu a -t "Credits" -i "💳" "c:Continue" "r:Reduce Time" "i:Increase Time" "s:Stop" || { echo "🚫 Stopped."; return 1; }
       case "${a,,}" in
         c|y|yes|continue) [ "$_BB_E_OVER" = "1" ] && _BB_OVERSIZE_OK=1; return 0 ;;
-        r|reduce)   _bb_ask_time "$ttl" "New time (e.g. 12h · 2d · -1d)" "" || { echo "🚫 Stopped."; return 1; }; ttl="$_BB_NEWTTL"; _BB_TTL_OVERRIDE="$ttl" ;;
-        i|increase) _bb_ask_time "$ttl" "New time (e.g. 7d · +2d)" "" || { echo "🚫 Stopped."; return 1; }; ttl="$_BB_NEWTTL"; _BB_TTL_OVERRIDE="$ttl" ;;
+        r|reduce)   _bb_ask_time "$ttl" "New time (e.g. 12h · 2d · -1d)" ""; rc=$?; (( rc == 6 )) && continue; (( rc )) && { echo "🚫 Stopped."; return 1; }; ttl="$_BB_NEWTTL"; _BB_TTL_OVERRIDE="$ttl" ;;
+        i|increase) _bb_ask_time "$ttl" "New time (e.g. 7d · +2d)" ""; rc=$?; (( rc == 6 )) && continue; (( rc )) && { echo "🚫 Stopped."; return 1; }; ttl="$_BB_NEWTTL"; _BB_TTL_OVERRIDE="$ttl" ;;
         *) echo "🚫 Stopped."; return 1 ;;
       esac
     else
@@ -549,7 +552,8 @@ _bb_credit_gate() {
       _bvk_menu a -t "Not enough credits" -i "💳" "r:Reduce Time" "s:Stop" || { echo "🚫 Stopped."; return 1; }
       case "${a,,}" in
         r|reduce)
-          _bb_ask_time "$ttl" "Longest your credits cover: $(_bb_fmt_duration "$sug") — Enter to use it, or type a time" "$sug" || { echo "🚫 Stopped."; return 1; }
+          _bb_ask_time "$ttl" "Longest your credits cover: $(_bb_fmt_duration "$sug") — Enter to use it, or type a time" "$sug"; rc=$?
+          (( rc == 6 )) && continue; (( rc )) && { echo "🚫 Stopped."; return 1; }
           ttl="$_BB_NEWTTL"; _BB_TTL_OVERRIDE="$ttl" ;;
         *) echo "🚫 Stopped."; return 1 ;;
       esac

@@ -40,6 +40,51 @@ handle_compress_items() {
 # item is staged by name through a temp folder of symlinks, so the archive
 # never embeds absolute filesystem paths.
 # ---------------------------------------------------------------------------
+# The questions of _compress_paths, one step each: 0 answered · 1 u (back) · 3 cancelled (_arc_rc = the return code) · 5 not asked.
+# They share _compress_paths's locals (paths fmt ext arc_name arc_path _arc_rm _arc_rc hid_inc).
+_arc_s_fmt() {
+  fmt="${compress_format:-ask}"
+  _arc_is_fmt "$fmt" || fmt="ask"
+  [ "$fmt" = "ask" ] || return 5
+  local -a _rows=()
+  local _f _miss
+  for _f in "${_ARC_FORMATS[@]}"; do
+    _miss=""; _arc_have create "$_f" || _miss="   (needs ${_ARC_MISSING})"
+    _rows+=("$_f:${_ARC_LABEL[$_f]}  —  ${_ARC_NOTE[$_f]}${_miss}")
+  done
+  _bvk_menu fmt -t "Compress as" -i "📦" "${_rows[@]}" || { _bvk_back && return 1; return 3; }
+  [ -n "$fmt" ] || { echo "🚫 Cancelled — invalid choice."; return 3; }
+  return 0
+}
+_arc_s_name() {
+  _arc_need create "$fmt" || { _arc_rc=1; return 3; }
+  ext="${_ARC_LABEL[$fmt]}"
+  echo ""
+  read -e -r -p "Name for the archive (without ${ext}): " arc_name || return 1     # u (or EOF): the format menu when it was asked, else out
+  arc_name="${arc_name%$'\r'}"
+  [ -z "$arc_name" ] && { echo "🚫 Cancelled — no name given."; return 3; }
+  _arc_strip_ext "$arc_name"; arc_name="$_ARC_STRIPPED"        # strip a known ending if the user typed it
+  if _bvk_name_too_long "${arc_name}${ext}"; then _bvk_name_refuse "$arc_name" "Archive"; return 3; fi
+  arc_path="$path/${arc_name}${ext}"
+  return 0
+}
+_arc_s_over() {
+  _arc_rm=0
+  [ -e "$arc_path" ] || return 5
+  local ow
+  _bvk_yn ow "'${arc_path##*/}' already exists. Overwrite?" -d none || { _bvk_back && return 1; echo "🚫 Cancelled."; return 3; }
+  [[ "${ow%$'\r'}" =~ ^[Yy]$ ]] || { echo "🚫 Cancelled."; return 3; }
+  _arc_rm=1
+  return 0
+}
+_arc_s_hidden() {                 # Settings → Zip hidden: _hidden_decide returns 6 for u
+  local r
+  _hidden_decide "${zip_hidden_mode:-follow}" "the archive" "${paths[@]}"; r=$?
+  (( r == 0 )) && { hid_inc="$_hid_inc"; return 0; }
+  (( r == 6 )) && return 1
+  return 3
+}
+
 _compress_paths() {
   local -a in_paths=("$@") paths=()
   local p
@@ -51,56 +96,12 @@ _compress_paths() {
     return 1
   fi
 
-  # ── Determine format, then the name.  u at the name prompt = back to the format menu (when it was asked) ─────
-  local fmt ext _asked
-  while true; do
-    fmt="${compress_format:-ask}"; _asked=0
-    _arc_is_fmt "$fmt" || fmt="ask"
-
-    if [ "$fmt" = "ask" ]; then
-      local -a _rows=()
-      local _f _miss
-      for _f in "${_ARC_FORMATS[@]}"; do
-        _miss=""; _arc_have create "$_f" || _miss="   (needs ${_ARC_MISSING})"
-        _rows+=("$_f:${_ARC_LABEL[$_f]}  —  ${_ARC_NOTE[$_f]}${_miss}")
-      done
-      _bvk_menu fmt -t "Compress as" -i "📦" "${_rows[@]}" || return
-      [ -n "$fmt" ] || { echo "🚫 Cancelled — invalid choice."; return; }
-      _asked=1
-    fi
-
-    # ── Tool availability check ───────────────────────────────────────────
-    _arc_need create "$fmt" || return 1
-    ext="${_ARC_LABEL[$fmt]}"
-
-    # ── Archive name prompt ───────────────────────────────────────────────
-    echo ""
-    read -e -r -p "Name for the archive (without ${ext}): " arc_name || { (( _asked )) && continue; return; }
-    break
-  done
-  arc_name="${arc_name%$'\r'}"
-  [ -z "$arc_name" ] && echo "🚫 Cancelled — no name given." && return
-
-  # Strip a known ending if user typed it
-  _arc_strip_ext "$arc_name"; arc_name="$_ARC_STRIPPED"
-
-  if _bvk_name_too_long "${arc_name}${ext}"; then _bvk_name_refuse "$arc_name" "Archive"; return; fi
-
-  # ── Build archive path ───────────────────────────────────────────────────
-  local arc_path="$path/${arc_name}${ext}"
-
-  # ── Overwrite check ──────────────────────────────────────────────────────
-  if [ -e "$arc_path" ]; then
-    local shown; shown="${arc_path##*/}"
-    _bvk_yn ow "'${shown}' already exists. Overwrite?" -d none
-    ow="${ow%$'\r'}"
-    [[ "$ow" =~ ^[Yy]$ ]] || { echo "🚫 Cancelled."; return; }
-    rm -f "$arc_path"
-  fi
-
-  # ── Hidden files inside the chosen folders (Settings → Zip hidden) ───────
-  _hidden_decide "${zip_hidden_mode:-follow}" "the archive" "${paths[@]}" || return
-  local hid_inc="$_hid_inc"
+  # ── Four questions, one step each (_mc_steps: u = ONE QUESTION BACK, never out of the whole archive) ─────────
+  #   format (only when Settings says "ask") → name → overwrite (only when the name exists) → hidden files (only when asked)
+  local fmt="" ext="" arc_name="" arc_path="" _arc_rm=0 _arc_rc=0 hid_inc="" _arc_stp
+  _mc_steps _arc_s_fmt _arc_s_name _arc_s_over _arc_s_hidden; _arc_stp=$?
+  (( _arc_stp == 0 )) || return "$_arc_rc"
+  [ "$_arc_rm" = 1 ] && rm -f "$arc_path"     # only now: a u at the hidden-files question must not have deleted the old archive
 
   # ── Build the item list (relative to workdir) ────────────────────────────
   local base="${path%/}/" outside=false

@@ -21,10 +21,13 @@ class App(PtyApp):
         open(os.path.join(d, 'active'), 'w').write(pid)
         open(os.path.join(d, 'profiles', pid), 'w').write('MAIL=test@example.com\nDISEPS=%s\nDINONS=%s\nAPIKEY=%s\nSEALKEY=%s\nCREATED=2026-10-21T00:00:00Z\n' % (
             codes(270), codes(290), 'k' * 512, 's' * 50))
-    def __init__(self, user=True):
+    def __init__(self, user=True, cfg=''):
         def populate(home, work):
             for n in ('alpha.txt', 'beta.txt'): open(os.path.join(work, n), 'w').write('x')
             if user: self.fake_user(home)
+            if cfg:   # settings of the app (Settings -> File API ...), e.g. backup_mode=ask
+                d = os.path.join(home, '.config', 'bashbasicsbyvk'); os.makedirs(d, exist_ok=True)
+                open(os.path.join(d, 'config'), 'a').write(cfg + '\n')
         super().__init__(root, COLS, ROWS, populate)
 
 def on_main(a):  return a.alive and 'nav path:' in a.text().split('Select')[-2 if False else 0] or (a.alive and 'nav path:' in a.text())
@@ -34,9 +37,9 @@ def last_screen(a):
     return t
 
 results = []
-def case(name, steps, expect, why):
+def case(name, steps, expect, why, cfg=''):
     if only and only not in name: return
-    a = App(user=True)
+    a = App(user=True, cfg=cfg)
     try:
         for s in steps: a.line(s) if s != '<wait>' else a.settle(0.5)         # each line returns when the app went quiet, never after a guessed time
         ok = a.wait(lambda: expect(a), 8)                                      # the expected screen must appear ...
@@ -71,7 +74,7 @@ case('Settings > q  = main loop', ['s', 'q'], lambda a: a.alive and last_header(
 case('main > q  exits the app', ['q'], lambda a: not a.alive, 'q on the main loop must exit')
 # --- u inside a flow = ONE question / menu back (never the file list, never the whole flow)
 TITLES = ['Where?', 'Match case?', 'Pattern type?', 'Find mode in', 'Create:', 'Organise files in', 'Number of years to group',
-          'Extract what?', 'Which lines?', 'Step 1: Choose mode', 'SELECT SOURCE', 'Compress as', 'How many lines', '\u270f\ufe0f Rename', 'Old:', 'nav path:']
+          'Extract what?', 'Which lines?', 'Step 1: Choose mode', 'SELECT SOURCE', 'Compress as', 'How many lines', '\u270f\ufe0f Rename', 'Old:', 'Confirm delete', 'Back up before deleting', 'DELETE (ranges', 'nav path:']
 def last_title(a):
     best, bi = '', -1
     for i, l in enumerate(a.scr.lines()):
@@ -94,4 +97,10 @@ case('Transfer > Step 2 > z  = Step 1', ['sw', 't', '1', 'z'], at('Step 1: Choos
 case('Transfer > Step 1 > u  = where it was opened', ['sw', 't', 'u'], lambda a: a.alive and 'Choose mode' not in ' '.join([l for l in a.scr.lines() if l.strip()][-8:]), 'u at Step 1 must leave transfer')
 case('Transfer source > u  = one folder up (still in the navigator)', ['sw', 't', '1', 'u'], at('SELECT SOURCE'), 'u in a navigator must go one folder up, not leave the transfer')
 case('Archive > name prompt > u  = format menu', ['z-1', '1', 'u'], at('Compress as'), 'u at the archive name must show the format menu')
+# --- delete: Confirm delete -> Back up before deleting; u = ONE question back (BB-121120261200-1)
+ASK = 'backup_mode=ask'
+case('Delete > Back up before deleting > u  = Confirm delete', ['d', '1', 'y', 'u'], at('Confirm delete'), 'u at the backup question must show Confirm delete again', ASK)
+case('Delete > Confirm delete > u  = the item picker', ['d', '1', 'u'], at('DELETE (ranges'), 'u at Confirm delete must show the item picker again', ASK)
+case('Delete > Back up > u > u  = the item picker', ['d', '1', 'y', 'u', 'u'], at('DELETE (ranges'), 'two u must walk back two questions, not leave the delete', ASK)
+case('Delete > Back up > c  = nothing deleted', ['d', '1', 'y', 'c'], lambda a: a.alive and at('nav path:')(a) and os.path.exists(os.path.join(a.work, 'alpha.txt')), 'c must cancel and keep the file', ASK)
 print('ALL OK' if all(results) else 'FAILED'); sys.exit(0 if all(results) else 1)

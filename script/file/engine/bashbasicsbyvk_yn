@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_yn — THE yes/no question for every tool that runs as its own process (bash or python): the app's native choice menu.
 #
-#   bashbasicsbyvk_yn "Question?" [-t "Title"] [-i "emoji"] [-c]
+#   bashbasicsbyvk_yn "Question?" [-t "Title"] [-i "emoji"] [-c] [-b]
 #
 #   exit 0 = Yes · 1 = No · 2 = no answer (the menu was left with q / u / Ctrl-D; -c adds a Cancel answer, also 2) · 3 = cannot ask (the menu is not installed)
+#   -b  a caller that chains questions: u (back) exits 4 instead of 2, so it can ask the question before again
 #
 # A yes/no question has NO default: nothing is highlighted and a bare Enter does nothing (see bashbasicsbyvk_choose.sh).  The menu is drawn on the
 # terminal even when the caller's stdin / stdout are pipes (a tool that reads data from stdin, or whose stdout is captured).  Callers keep their own
@@ -14,6 +15,7 @@ declare -F _bvk_yn >/dev/null 2>&1 || { echo "bashbasicsbyvk_yn: the choice menu
 [ -n "${1:-}" ] || { echo 'usage: bashbasicsbyvk_yn "Question?" [-t Title] [-i emoji] [-c]' >&2; exit 3; }
 [ -t 0 ] || { [ -r /dev/tty ] && exec </dev/tty; }
 [ -t 1 ] || { [ -w /dev/tty ] && exec >/dev/tty; }
-ans=""
-_bvk_yn ans "$@" || exit 2
+ans=""; _yn_b=0; _yn_args=()
+for _yn_a in "$@"; do if [ "$_yn_a" = -b ]; then _yn_b=1; else _yn_args+=("$_yn_a"); fi; done
+_bvk_yn ans "${_yn_args[@]}" || { [ "$_yn_b" = 1 ] && _bvk_back && exit 4; exit 2; }
 case "$ans" in y) exit 0 ;; n) exit 1 ;; *) exit 2 ;; esac

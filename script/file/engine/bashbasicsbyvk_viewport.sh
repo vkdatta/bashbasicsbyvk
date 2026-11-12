@@ -177,7 +177,7 @@ _bvk_fit_input() {
   _bvk_cols; cols=$(( _BVK_COLS - lm ))
   _bvk_dispw "$p"; pw=$_BVK_W
   while (( pw > cols - 12 && ${#p} > 1 )); do p="${p:1}"; _bvk_dispw "$p"; pw=$_BVK_W; done   # tiny screen: keep the prompt's tail
-  _BVK_FIT_PROMPT="$p"
+  _BVK_FIT_PROMPT="$p"; _BVK_FIT_PW=$pw
   avail=$(( cols - pw - 1 ))                      # one spare cell so the cursor never sits in the "pending wrap" column
   (( avail < 4 )) && avail=4
   len=${#b}; (( pos > len )) && pos=$len; (( pos < 0 )) && pos=0
@@ -944,7 +944,7 @@ _bvk_row_multi() {
     i=$(( i + ll + 1 ))
     (( i > len )) && break
   done
-  R=${#rs[@]}
+  R=${#rs[@]}; _BLK_RS=("${rs[@]}"); _BLK_RL=("${rl[@]}"); _BLK_PW=$pw      # row geometry, for a tap on the text (_bvk_click_pos)
   for (( k=0; k<R; k++ )); do                          # which row holds the cursor
     if (( pos < rs[k] + rl[k] )) || { (( pos == rs[k] + rl[k] )) && (( rc[k] == 0 )); }; then crow=$k; found=1; break; fi
   done
@@ -974,6 +974,25 @@ _bvk_row_multi() {
   builtin printf '%s' "$out"
   _BLK_ROWS=$nvis; _BLK_CROW=$(( crow - top )); _hint_cur=""; _BVK_FIT_COL=$ccol
   return 0
+}
+
+# _bvk_click_pos CLICKED_ROW FIRST_PROMPT_ROW CLICKED_COL(1-based) -> _BVK_CLICK_POS = the character of _buf that cell is on (end of text if past it)
+_bvk_click_pos() {
+  local y=$1 crow=$2 x=$3 r s l c ch w=0 i=0
+  if (( ${_BLK_ROWS:-1} > 1 )); then
+    r=$(( ${_BLK_TOP:-0} + y - crow ))
+    (( r >= 0 && r < ${#_BLK_RS[@]} )) || return 1
+    s=${_BLK_RS[r]}; l=${_BLK_RL[r]}; c=$(( x - 1 - (r == 0 ? ${_BLK_PW:-8} : 0) ))
+  else
+    s=${_BVK_FIT_S:-0}; l=$(( ${#_buf} - s )); c=$(( x - 1 - ${_BVK_FIT_PW:-8} - (s > 0 ? 1 : 0) ))
+  fi
+  (( c < 0 )) && c=0
+  while (( i < l )); do
+    ch="${_buf:s+i:1}"; _bvk_dispw "$ch"
+    (( w + _BVK_W > c )) && break
+    w=$(( w + _BVK_W )); i=$(( i + 1 ))
+  done
+  _BVK_CLICK_POS=$(( s + i ))
 }
 
 # moving the cursor inside the text: a plain one-row text just steps the cursor; a block is redrawn (it may scroll / change row)
@@ -1016,13 +1035,13 @@ _bvk_hint_leave() {   # the prompt is being left (cursor on the block's LAST row
 }
 _bvk_notice() {
   if [ "${_vp_hint_row:-0}" = 1 ]; then
-    _bvk_hint_paint "$1" "1;31"
+    _bvk_hint_paint "$1"
     (( ${_BVK_FIT_COL:-0} > 0 )) && builtin printf '\033[%dC' "$_BVK_FIT_COL"
     _hint_cur="__notice__"; return 0
   fi
   local down=$(( ${_BLK_ROWS:-1} - 1 - ${_BLK_CROW:-0} ))
   (( down > 0 )) && builtin printf '\033[%dB' "$down"
-  builtin printf '\n\r\033[2K\033[1;31m%s\033[0m\033[%dA\r' "$1" $(( down + 1 ))
+  builtin printf '\n\r\033[2K%s\033[%dA\r' "$1" $(( down + 1 ))
   (( ${_BVK_FIT_COL:-0} > 0 )) && builtin printf '\033[%dC' "$_BVK_FIT_COL"
   _hint_cur="__notice__"
 }

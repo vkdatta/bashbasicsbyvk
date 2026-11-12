@@ -7,6 +7,7 @@ fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }; skip() 
 source "$(bvk_need bashbasicsbyvk_deps.sh)"; source "$(bvk_need bashbasicsbyvk_archive_formats.sh)"; source "$(bvk_need bashbasicsbyvk_hidefiles.sh)" 2>/dev/null
 source "$(bvk_need bashbasicsbyvk_staging_archive.sh)"
 source "$(bvk_need bashbasicsbyvk_viewport.sh)" 2>/dev/null
+source "$(bvk_need bashbasicsbyvk_menuchrome.sh)" 2>/dev/null; _bvk_back() { return 1; }     # _mc_steps: the flow of _compress_paths is a step list (u = one question back)
 declare -F _bvk_name_too_long >/dev/null || { _bvk_name_too_long() { return 1; }; }
 _bvk_yn() { printf -v "$1" y; }; _bvk_menu() { printf -v "$1" '%s' "${_MENU_PICK:-zip}"; }
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT; export TMPDIR="$W"

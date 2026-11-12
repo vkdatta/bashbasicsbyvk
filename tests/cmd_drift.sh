@@ -87,8 +87,8 @@ ANS=y; _sw_remove_paths "b-1,3" >/dev/null; { [ ! -e "$T/a.swlink" ] && [ ! -e "
 
 # ---- (5) -------------------------------------------------------------------------------
 BK="$F/staging/!buffer/fileapi/3 backup/bashbasicsbyvk_staging_backup.sh"
-n=$(grep -c 'read -e -r -p "Name this backup' "$BK"); m=$(grep 'read -e -r -p "Name this backup' "$BK" | grep -c '|| return 1')
-[ "$n" = "$m" ] && [ "$n" -ge 1 ] && ok "backup: every 'Name this backup' prompt returns when cancelled" || bad "backup: a name prompt ignores a cancel ($m of $n)"
+n=$(grep -c 'read -e -r -p "Name this backup' "$BK"); m=$(grep 'read -e -r -p "Name this backup' "$BK" | grep -c '|| {.*_CM_BACKED.*return 1.*return 3')   # the one prompt (_bkd_read_name): u = 1 (back), anything else = 3 (cancel)
+[ "$n" = "$m" ] && [ "$n" -ge 1 ] && ok "backup: every 'Name this backup' prompt returns when cancelled (u = back, else cancel)" || bad "backup: a name prompt ignores a cancel ($m of $n)"
 grep -A2 'Name this backup' "$BK" | grep -q '_CM_ABORT' && ok "backup: checks _CM_ABORT after the name prompt" || bad "backup: no _CM_ABORT check"
 
 # ---- (6) footers are derived, not retyped ---------------------------------------------------

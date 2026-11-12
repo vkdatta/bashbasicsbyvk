@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+On the main list Select: prompt: (a) typing sys or sys --device gave "Invalid selection"; (b) the "Too large" paste notice was red; (c) with text selected the first character looked blank (the terminal's block cursor sat on it); (d) tapping on the typed text did not move the cursor there.
+
+1. HOW DID YOU DEBUG
+Reproduced (a) and (b) in the pty harness (tests/paste_input/ptyapp.py): the raw output had ESC[1;31m, and sys reached the case in script/o that had no sys line (the main map is treated as local by _cm_resolve, so o's own case must handle every main command). For (c) the selection highlight itself was verified correct for single row, multi row and multi line, so the cause is the cursor on the first selected cell (screenshot from the phone). Ctrl+V latency was measured with a fake xclip: 8 ms / 0.2 s / 0.47 s for 300 chars / 100 KB / 1 MB, so no slowness reproduced here; not changed. Not run on a real phone.
+
+1. CAUSE
+(a) no sys line in the case of script/o; also bashbasicsbyvk_sys had no execute bit; arguments were not passed. (b) hard-coded 1;31 in _bvk_notice. (c) the terminal cursor shown over reverse video. (d) a tap on the prompt row only handed the touch back to the terminal.
+
+1. FIX
+script/o: sys|sys\ * passes arguments. chmod +x script/cmd/bashbasicsbyvk_sys. viewport.sh: _bvk_notice uses the default hint style (no red); _bvk_click_pos (+ row geometry kept by _bvk_fit_input / _bvk_row_multi). browse.sh: _rc_click prompt case moves the cursor to the tapped character when the prompt has text (empty prompt keeps the old hand-back so the keyboard opens); _print_input_line hides the cursor while a selection is shown and shows it again after.

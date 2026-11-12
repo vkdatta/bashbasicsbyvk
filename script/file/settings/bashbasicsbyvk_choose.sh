@@ -91,6 +91,7 @@ _bc_act() {
 _bc_leave() {
   local _bc_t="$1" _bc_st=0
   _bc_aborted=1; _st_back=1
+  _BVK_LEFT="$_bc_t"                       # which key left the box: u = back (one question before), q = close. A flow that chains questions reads it (_bvk_back)
   if declare -F _cm_on >/dev/null 2>&1 && _cm_on && declare -F _cm_gate_dispatch >/dev/null 2>&1; then
     _st_wipe; _st_tty_cooked
     declare -F _cm_ctx_find >/dev/null 2>&1 && _cm_ctx_find
@@ -172,6 +173,7 @@ _bc_plain() {
   # not one of the answers: a yes/no question takes the safe answer (u / back = cancel when there is a Cancel), a menu backs out
   if (( _bc_yn )); then
     _bc_pick="n"
+    if [ "$_bc_a" = u ] || [ "$_bc_a" = back ]; then _BVK_LEFT=u; fi
     if (( _bc_cancel )) && { [ "$_bc_a" = u ] || [ "$_bc_a" = back ]; }; then _bc_pick="c"; fi
     return 0
   fi
@@ -206,6 +208,7 @@ _bvk_menu() {
   done
   for _bc_i in "${!_bc_alt[@]}"; do _bc_alt[$_bc_i]="${_bc_alt[$_bc_i],,}"; done
   local _bc_pick="" _bc_text="" _bc_done=0 _bc_aborted=0 _bc_ix=0
+  _BVK_LEFT=""
   [ -z "$_bc_title" ] && _bc_title="Select Option"
   # a flow that is being cancelled: every question answers at once (same rule as the read shim)
   if [ "${_CM_ABORT:-0}" = 1 ] && [ -t 0 ] && declare -F _cm_abort_swallow >/dev/null 2>&1 && _cm_abort_swallow; then
@@ -264,6 +267,19 @@ _bvk_menu() {
   printf -v "$_bc_var" '%s' "$_bc_pick"
   (( _bc_receipt )) && echo "   → $_bc_text"
   return 0
+}
+
+# _bvk_back   true when the LAST _bvk_menu / _bvk_yn that returned 1 was left with u (back), not q / Ctrl-D / a blocked command.
+#   A flow that chains questions uses it to go ONE question back instead of leaving (see _bvk_ask, _mc_steps).
+_bvk_back() { [ "${_BVK_LEFT:-}" = u ] && [ "${_CM_ABORT:-0}" != 1 ]; }
+
+# _bvk_ask VAR "question" [flags of _bvk_yn]   ONE yes/no question of a flow that chains questions (a _mc_steps step):
+#   0 answered · 1 u (back: the question before) · 3 left with q / cancelled (VAR empty)
+_bvk_ask() {
+  local _ba_v="$1"; shift
+  _bvk_yn "$_ba_v" "$@" && return 0
+  _bvk_back && return 1
+  return 3
 }
 
 # _bvk_yn VAR "Question" [-c] [-t Title] [-i Icon]    → VAR = y | n | c

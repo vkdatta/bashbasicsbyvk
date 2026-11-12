@@ -600,34 +600,38 @@ _api_resolve_time() {
   printf '%s' "$base"
 }
 
-_api_do_edit() {         # _api_do_edit <idx> [spec]
-  local k="$1" spec="$2" total ans id="${_API_ID[$k]}"
-  if [ -z "$spec" ]; then
-    _api_show "$k"
-    echo "   Enter the NEW TOTAL life counted from creation (2d · 36h · 1 week), or +12h to extend / -1d to shorten."
-    echo "   Extending charges the extra time now; shortening refunds whole days only (time used rounds UP to a day)."
-    read -e -r -p "   New time (u = back): " spec
-    case "${spec,,}" in u|q|"") echo "↩️  Back"; return 0 ;; esac
-  fi
-  total=$(_api_resolve_time "$k" "$spec") || return 1
-  local nexp=$(( ${_API_CREATED[$k]} + total * 1000 )) dir="extends"
+# _api_do_edit: three steps (_mc_steps: u = ONE QUESTION BACK):  the new time → "use the longest you can afford?" (only when short of credits) → Continue?
+#   They share _api_do_edit's locals (k spec total ans id nexp dir costnote _given).
+_api_s_ed_time() {
+  [ -n "$_given" ] && return 5
+  _api_show "$k"
+  echo "   Enter the NEW TOTAL life counted from creation (2d · 36h · 1 week), or +12h to extend / -1d to shorten."
+  echo "   Extending charges the extra time now; shortening refunds whole days only (time used rounds UP to a day)."
+  read -e -r -p "   New time (u = back): " spec || return 1
+  case "${spec,,}" in u|q|"") return 1 ;; esac
+  return 0
+}
+_api_s_ed_cost() {
+  total=$(_api_resolve_time "$k" "$spec") || return 3
+  nexp=$(( ${_API_CREATED[$k]} + total * 1000 )); dir="extends"; costnote=""
   [ "$nexp" -lt "${_API_EXPIRES[$k]}" ] && dir="shortens"
   [ "$nexp" -eq "${_API_EXPIRES[$k]}" ] && dir="keeps"
-  local costnote=""
   if [ "$dir" = extends ] && [ "$(_bb_cfg_val credit_prompts show)" != skip ]; then
-    _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total,\"dryRun\":true}" || return 1
+    _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total,\"dryRun\":true}" || return 3
     if [ "$_API_STATUS" = 200 ]; then
-      local ch0 bal0 mx0
+      local ch0 bal0 mx0 rc
       ch0=$(_bb_json_get "$_API_BODY" charge); bal0=$(_bb_json_get "$_API_BODY" balance); mx0=$(_bb_json_get "$_API_BODY" maxTotalSeconds)
       if [[ "$ch0" =~ ^[0-9]+$ && "$bal0" =~ ^[0-9]+$ ]]; then
         if [ "$ch0" -gt "$bal0" ]; then
           local cur0=$(( (${_API_EXPIRES[$k]} - ${_API_CREATED[$k]}) / 1000 ))
           if [[ "$mx0" =~ ^[0-9]+$ ]] && [ "$mx0" -gt "$cur0" ]; then
             echo "💳 Not enough credits: that extension costs $ch0, you have $bal0."
-            _bvk_yn ans "Longest you can afford: total life $(_bb_fmt_duration "$mx0"). Use that instead?"
-            case "$ans" in [yY]|[yY][eE][sS]) total="$mx0"; nexp=$(( ${_API_CREATED[$k]} + total * 1000 )) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+            _bvk_ask ans "Longest you can afford: total life $(_bb_fmt_duration "$mx0"). Use that instead?"; rc=$?
+            (( rc == 1 )) && return 1
+            case "$ans" in [yY]|[yY][eE][sS]) total="$mx0"; nexp=$(( ${_API_CREATED[$k]} + total * 1000 )); return 0 ;; esac
+            echo "🚫 Cancelled"; return 3
           else
-            echo "❌ Not enough credits: that extension costs $ch0, you have $bal0 — and there is nothing you can afford to add."; return 1
+            echo "❌ Not enough credits: that extension costs $ch0, you have $bal0 — and there is nothing you can afford to add."; return 3
           fi
         else
           costnote=" Costs $ch0 credit(s) (balance $bal0 → $((bal0 - ch0)))."
@@ -635,8 +639,19 @@ _api_do_edit() {         # _api_do_edit <idx> [spec]
       fi
     fi
   fi
-  _bvk_yn ans "$(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it.$costnote Continue?"
-  case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+  return 5                       # no question was asked here
+}
+_api_s_ed_go() {
+  local rc
+  _bvk_ask ans "$(_api_name "$k"): total life → $(_bb_fmt_duration "$total") (gone at $(_bb_fmt_when "$nexp")) — this $dir it.$costnote Continue?"; rc=$?
+  (( rc == 1 )) && return 1
+  case "$ans" in [yY]|[yY][eE][sS]) return 0 ;; esac
+  echo "🚫 Cancelled"; return 3
+}
+_api_do_edit() {         # _api_do_edit <idx> [spec]
+  local k="$1" spec="$2" total="" ans="" id="${_API_ID[$k]}" nexp="" dir="" costnote="" _given="$2" rc
+  _mc_steps _api_s_ed_time _api_s_ed_cost _api_s_ed_go; rc=$?
+  case "$rc" in 0) ;; 1) echo "↩️  Back"; return 0 ;; *) return 1 ;; esac
   _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total}" || return 1
   if [ "$_API_STATUS" != "200" ]; then _api_fail; return 1; fi
   local ch rf rd bal ex

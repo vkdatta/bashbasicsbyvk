@@ -62,7 +62,7 @@ _hidden_any() {
 }
 
 # _hidden_decide MODE LABEL PATH...
-#   sets _hid_inc=true|false ; returns 1 when the user cancels (u) — q quits.
+#   sets _hid_inc=true|false ; returns 6 when u was typed (one question back, nothing printed), 1 when q / the flow was cancelled.
 _hidden_decide() {
   local mode="$1" what="$2" a; shift 2
   _hid_inc=true
@@ -72,8 +72,8 @@ _hidden_decide() {
     ask)
       _hid_inc=false
       _hidden_any "$@" || return 0            # nothing hidden in there: no need to ask
-      # u (back) and q (close) are the menu's own keys: they cancel the whole flow and make _bvk_yn return 1
-      _bvk_yn a "Include hidden files in $what?" -i "👁️" || { echo "🚫 Cancelled."; return 1; }
+      # u (back) and q (close) are the menu's own keys and make _bvk_yn return 1: u = ONE question back (6), q = cancel (1)
+      _bvk_yn a "Include hidden files in $what?" -i "👁️" || { _bvk_back && return 6; echo "🚫 Cancelled."; return 1; }
       [ "$a" = y ] && _hid_inc=true
       return 0 ;;
     *) [ "${show_hidden_files:-false}" = true ] && _hid_inc=true || _hid_inc=false ;;

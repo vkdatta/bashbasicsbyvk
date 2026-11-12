@@ -173,82 +173,119 @@ _lk_join() {                 # "a, b, c, … (+N more)"  (max 8 names)
 }
 
 # ── the delete gate ─────────────────────────────────────────────────────────
+# u = ONE QUESTION BACK everywhere in this flow (Confirm delete → Locked items → Delete N? → number → Backup).  It is built on _mc_steps
+# (STEPS-01), never on `|| return` after the first u: that is what made u at "Back up before deleting" fall out to the file list.
+
+# the questions of _lk_confirm_delete (_mc_steps steps: they share its locals prompt ans choice prot free final)
+_lcd_first() {
+  local rc
+  _bvk_ask ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑️"; rc=$?
+  (( rc == 1 )) && return 1
+  [ "$rc" = 0 ] && [[ "$ans" == [yY] ]] && return 0
+  echo "🚫 Deletion cancelled"; return 3
+}
+_lcd_key_one() {                # exactly one item selected, and it is locked: the 6-digit key
+  local it="${selected_items[0]}" rc
+  local -a detail=()
+  if _lk_is_locked "$it"; then
+    detail+=("🔒 You selected a LOCKED $( [ -d "$it" ] && echo folder || echo file ): ${it##*/}")
+  else
+    _lk_count_inside "$it"
+    detail+=("🔒 This folder holds $_lk_inside locked item(s): ${it##*/}")
+  fi
+  detail+=("Deleting it will erase its content PERMANENTLY if a backup has not been taken.")
+  action_confirm_key "LOCKED ITEM — confirmation required" "${detail[@]}"; rc=$?
+  (( rc == 0 )) && return 0
+  (( rc == 2 )) && return 1
+  echo "🚫 Deletion cancelled — locked item kept"; return 3
+}
+_lcd_choice() {                 # several items, some locked: what happens to the locked ones
+  _bvk_menu ans -q "What should happen to the locked items?" -t "Locked items" -i "🔒" "1:Don't delete locked items" "2:Delete locked items" || {
+    _bvk_back && return 1
+    echo "🚫 Deletion cancelled"; return 3; }
+  case "$ans" in
+    1) choice=skip ;;
+    2) choice=all ;;
+    *) echo "🚫 Deletion cancelled"; return 3 ;;
+  esac
+  return 0
+}
+_lcd_final() {
+  local rc
+  if [ "$choice" = skip ]; then
+    final=("${free[@]}")
+    if [ "${#final[@]}" -eq 0 ]; then echo "📜  Everything selected is locked — nothing to delete"; return 3; fi
+    _bvk_ask ans "Delete ${#final[@]} unlocked item(s), keeping ${#prot[@]} locked?" -d none; rc=$?
+  else
+    final=("${selected_items[@]}")
+    _bvk_ask ans "Delete ALL ${#final[@]} item(s), including ${#prot[@]} locked?" -d none; rc=$?
+  fi
+  (( rc == 1 )) && return 1
+  [ "$rc" = 0 ] && [[ "$ans" == [yY] ]] && return 0
+  echo "🚫 Deletion cancelled"; return 3
+}
+_lcd_key_all() {                # only when the locked items go too
+  [ "$choice" = all ] || return 5
+  local rc
+  action_confirm_key "LOCKED ITEMS — confirmation required" \
+    "🔒 ${#prot[@]} locked item(s) will be deleted: $(_lk_join "${prot[@]##*/}")" \
+    "This will erase their content PERMANENTLY if a backup has not been taken."; rc=$?
+  (( rc == 0 )) && return 0
+  (( rc == 2 )) && return 1
+  echo "🚫 Deletion cancelled — nothing was deleted"; return 3
+}
+
 # _lk_confirm_delete "<normal first prompt, ending in (y/n): >"
 #   Works on the global selected_items[].
 #   0 → go ahead and delete selected_items (it may have been reduced)
-#   1 → cancelled / nothing left   (message already printed)
+#   1 → u on the first question: the caller goes back one level   (nothing printed)
+#   2 → q   ·   3 → cancelled / nothing left   (message already printed)
 # With no locked item in the selection this is exactly the old single y/n.
 _lk_confirm_delete() {
-  local prompt="$1" ans
+  local prompt="$1" ans="" choice="" it rc
   _lk_load
 
-  local -a prot=() free=()
-  local it
+  local -a prot=() free=() final=() steps=(_lcd_first)
   for it in "${selected_items[@]}"; do
     if _lk_is_protected "$it"; then prot+=("$it"); else free+=("$it"); fi
   done
 
-  if [ "${#prot[@]}" -eq 0 ]; then
-    _bvk_yn ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑️"
-    [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
-    return 0
-  fi
-
-  # ── exactly one item selected, and it is locked ──
-  if [ "${#selected_items[@]}" -eq 1 ]; then
-    it="${selected_items[0]}"
-    _bvk_yn ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑️"
-    [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
-    local -a detail=()
-    if _lk_is_locked "$it"; then
-      detail+=("🔒 You selected a LOCKED $( [ -d "$it" ] && echo folder || echo file ): ${it##*/}")
+  if [ "${#prot[@]}" -gt 0 ]; then
+    if [ "${#selected_items[@]}" -eq 1 ]; then
+      steps+=(_lcd_key_one)
     else
-      _lk_count_inside "$it"
-      detail+=("🔒 This folder holds $_lk_inside locked item(s): ${it##*/}")
+      echo "🔒 ${#prot[@]} of ${#selected_items[@]} selected item(s) are locked (or hold locked items) — this might not be what you intended:"
+      for it in "${prot[@]}"; do
+        if _lk_is_locked "$it"; then echo "   🔒 ${it##*/}"
+        else _lk_count_inside "$it"; echo "   🔒 ${it##*/}  (contains $_lk_inside locked item(s))"; fi
+      done
+      steps+=(_lcd_choice _lcd_final _lcd_key_all)
     fi
-    detail+=("Deleting it will erase its content PERMANENTLY if a backup has not been taken.")
-    action_confirm_key "LOCKED ITEM — confirmation required" "${detail[@]}" \
-      || { echo "🚫 Deletion cancelled — locked item kept"; return 1; }
-    return 0
   fi
 
-  # ── several items, some of them locked ──
-  echo "🔒 ${#prot[@]} of ${#selected_items[@]} selected item(s) are locked (or hold locked items) — this might not be what you intended:"
-  for it in "${prot[@]}"; do
-    if _lk_is_locked "$it"; then echo "   🔒 ${it##*/}"
-    else _lk_count_inside "$it"; echo "   🔒 ${it##*/}  (contains $_lk_inside locked item(s))"; fi
-  done
-  _bvk_yn ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑️"
-  [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
-
-  echo
-  _bvk_menu ans -q "What should happen to the locked items?" -t "Locked items" -i "🔒" "1:Don't delete locked items" "2:Delete locked items"
-  local choice
-  case "$ans" in
-    1) choice=skip ;;
-    2) choice=all ;;
-    *) echo "🚫 Deletion cancelled"; return 1 ;;
-  esac
-
-  local -a final=()
-  if [ "$choice" = skip ]; then
-    final=("${free[@]}")
-    if [ "${#final[@]}" -eq 0 ]; then echo "📜  Everything selected is locked — nothing to delete"; return 1; fi
-    _bvk_yn ans "Delete ${#final[@]} unlocked item(s), keeping ${#prot[@]} locked?" -d none
-  else
-    final=("${selected_items[@]}")
-    _bvk_yn ans "Delete ALL ${#final[@]} item(s), including ${#prot[@]} locked?" -d none
-  fi
-  [[ "$ans" == [yY] ]] || { echo "🚫 Deletion cancelled"; return 1; }
-
-  if [ "$choice" = all ]; then
-    action_confirm_key "LOCKED ITEMS — confirmation required" \
-      "🔒 ${#prot[@]} locked item(s) will be deleted: $(_lk_join "${prot[@]##*/}")" \
-      "This will erase their content PERMANENTLY if a backup has not been taken." \
-      || { echo "🚫 Deletion cancelled — nothing was deleted"; return 1; }
-  fi
-  selected_items=("${final[@]}")
+  _mc_steps "${steps[@]}"; rc=$?
+  (( rc == 0 )) || return "$rc"
+  [ "${#final[@]}" -gt 0 ] && selected_items=("${final[@]}")
   return 0
+}
+
+# _lk_delete_gate "<normal first prompt>"   THE delete flow of every delete path: Confirm delete (lock gate) → Back up before deleting.
+#   u at the backup question goes back to Confirm delete; u at Confirm delete returns 1 (the caller goes back one level).
+#   0 → delete selected_items now · 1 → back (nothing printed) · anything else → cancelled (message printed)
+_lk_delete_gate() {
+  local _ldg_prompt="$1" _ldg_rc
+  local -a _ldg_orig=("${selected_items[@]}")        # a u from the backup question re-asks Confirm delete on the FULL selection, not the reduced one
+  _mc_steps _ldg_confirm _ldg_backup; _ldg_rc=$?
+  (( _ldg_rc == 0 )) || selected_items=("${_ldg_orig[@]}")
+  return "$_ldg_rc"
+}
+_ldg_confirm() { selected_items=("${_ldg_orig[@]}"); _lk_confirm_delete "$_ldg_prompt"; }
+_ldg_backup() {
+  local rc
+  _bk_before_delete "${selected_items[@]}"; rc=$?
+  (( rc == 0 )) && return 0
+  (( rc == 6 )) && return 1                          # 6 = u at a backup question (see _bk_before_delete)
+  return 3
 }
 
 # lock / unlock ONE path (the rloop file menu: "Lock File" / "Unlock File")

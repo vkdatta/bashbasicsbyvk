@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_staging_backup.sh — Service 2: a copy goes to the backend BEFORE anything is deleted.
 #
-#   _bk_before_delete <item>...     call it right before rm.   return 0 = go ahead · 1 = do NOT delete
+#   _bk_before_delete <item>...     call it right before rm.   return 0 = go ahead · 1 = do NOT delete · 6 = u at the first question (go back one step)
 #
 # Settings → File API → Backup:
 #   Backup before delete   yes (default) · no · ask every time
@@ -33,26 +33,52 @@ _bk_before_delete() {
   fi
   _crypto_check >/dev/null 2>&1 || { echo "📜  No backup was taken — node is missing. Deleting without one."; return 0; }
 
-  local a nm alias
-  if [ "$mode" = ask ]; then
-    # A menu that was cancelled (u = go back, or a command that is not allowed here) returns 1 and
-    # raises _CM_ABORT: the whole flow stops RIGHT HERE — nothing is packed, uploaded or deleted.
-    _bvk_yn a "Back up ${#real[@]} item(s) to the cloud before deleting?" -d none -c -t "Back up before deleting" -i "🗄️" || return 1
-    [ "${_CM_ABORT:-0}" = 1 ] && return 1
-    case "$a" in
-      c) echo "🚫 Nothing deleted."; return 1 ;;
-      n) return 0 ;;
-    esac
-  fi
+  # three questions, so u = ONE QUESTION BACK (_mc_steps), never a way out of the whole delete:
+  #   ask (mode "ask" only) → name → upload (a failed upload ends in "Delete anyway?").   u on the first one = 6.
+  local a="" nm="" alias="" _bkd_skip=0 _bkd_rc
+  _mc_steps _bkd_ask _bkd_name _bkd_upload; _bkd_rc=$?
+  case "$_bkd_rc" in
+    0) return 0 ;;
+    1) return 6 ;;
+    *) return 1 ;;
+  esac
+}
 
-  read -e -r -p "Name this backup (Enter = just the date and time): " nm || return 1
-  [ "${_CM_ABORT:-0}" = 1 ] && return 1
+# the steps of _bk_before_delete (they share its locals mode real a nm alias _bkd_skip): 0 answered · 1 u (back) · 3 cancelled · 5 not asked
+_bkd_ask() {
+  [ "$mode" = ask ] || return 5
+  # A menu that was cancelled (u = go back, or a command that is not allowed here) returns 1 and
+  # raises _CM_ABORT: the whole flow stops RIGHT HERE — nothing is packed, uploaded or deleted.
+  _bvk_yn a "Back up ${#real[@]} item(s) to the cloud before deleting?" -d none -c -t "Back up before deleting" -i "🗄️" || {
+    _bvk_back && return 1
+    return 3; }
+  [ "${_CM_ABORT:-0}" = 1 ] && return 3
+  case "$a" in
+    c) echo "🚫 Nothing deleted."; return 3 ;;
+    n) _bkd_skip=1 ;;
+  esac
+  return 0
+}
+
+# one name prompt: 0 answered (nm) · 1 u · 3 EOF / flow cancelled
+_bkd_read_name() {
+  _CM_BACKED=0
+  read -e -r -p "Name this backup (Enter = just the date and time): " nm || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 1; }; return 3; }
+  [ "${_CM_ABORT:-0}" = 1 ] && return 3
+  return 0
+}
+_bkd_name() {
+  [ "$_bkd_skip" = 1 ] && return 0
+  local rc
+  _bkd_read_name; rc=$?; (( rc )) && return "$rc"
   while ! alias=$(_bb_svc_alias "$nm"); do
     echo "   🔴  A name may use letters, digits, spaces and . _ @ + -  (up to ~34 characters after the date)."
-    read -e -r -p "Name this backup (Enter = just the date and time): " nm || return 1
-    [ "${_CM_ABORT:-0}" = 1 ] && return 1
+    _bkd_read_name; rc=$?; (( rc )) && return "$rc"
   done
-
+  return 0
+}
+_bkd_upload() {
+  [ "$_bkd_skip" = 1 ] && return 0
   _svc_upload backup "$alias" "${real[@]}"
   case $? in
     0)
@@ -64,9 +90,11 @@ _bk_before_delete() {
     4) echo "⏸  The backup was interrupted. It is KEPT — finish it from Pending (pn). Nothing is deleted yet." ;;
     *) echo "🔴  The backup FAILED — nothing was saved to the cloud." ;;
   esac
-  _bvk_yn a "Delete anyway, without a backup?" -d none || { echo "🚫 Nothing deleted."; return 1; }
+  _bvk_yn a "Delete anyway, without a backup?" -d none || {
+    _bvk_back && return 1                     # u = the name question again
+    echo "🚫 Nothing deleted."; return 3; }
   case "${a,,}" in
     y|yes) return 0 ;;
-    *)     echo "🚫 Nothing deleted."; return 1 ;;
+    *)     echo "🚫 Nothing deleted."; return 3 ;;
   esac
 }

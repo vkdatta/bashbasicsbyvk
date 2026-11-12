@@ -218,6 +218,7 @@ while true; do
     rf)          if [ "${_GD_ACTIVE:-0}" = 1 ]; then _gd_refresh "$path"; else handle_refresh; fi ;;
     scr-sync)    handle_scr_sync ;;
     sast)        bashbasicsbyvk_sast ;;
+    sys|sys\ *)  bashbasicsbyvk_sys ${choice#sys} ;;   # `sys` and `sys --device` (arguments pass through)
     .s|.s.*|.s\ *|.us|.us.*|.us\ *|.r|.r.*|.r\ *)  handle_select_cmd "$choice" ;;
     -auth)       auth_menu ;;
     .ai|.ai\ *)  handle_ai_cmd "$choice" ;;

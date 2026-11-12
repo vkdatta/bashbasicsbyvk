@@ -263,138 +263,242 @@ _ghx_ask_field() {
 }
 
 # ── actions ─────────────────────────────────────────────────────────────────
-_ghx_edit() {
-  local fields k ans any=0 rc
+# Every wizard below is a step list (_mc_steps: u = ONE QUESTION BACK, never out of the whole wizard).  A step returns
+#   0 answered · 1 u (back) · 3 cancelled (message printed) · 5 not asked now.   The steps share the wizard's locals.
+# _ghx_yes_rc RC [ANS]: the rc of a yes/no step from _bvk_ask's rc and the answer (yes → 0, no → "Cancelled" 3, u → 1)
+_ghx_yes_rc() {
+  case "$1" in 1) return 1 ;; 0) case "${2:-}" in [yY]|[yY][eE][sS]) return 0 ;; esac ;; esac
+  echo "🚫 Cancelled"; return 3
+}
+
+# ---- edit -------------------------------------------------------------------------------------------------------
+_ghx_s_ed_fields() {
   _bvk_menu fields -m -t "Edit ${#_GHX_PICK[@]} item(s)" -i "✏️" -q "What do you want to change?" \
-    "t:Release title" "n:Release notes" "m:Tag message" "c:Commit message" || return 1
-  [ -n "$fields" ] || { echo "🚫 Nothing chosen."; return 1; }
-  _ghx_job_new || return 1
+    "t:Release title" "n:Release notes" "m:Tag message" "c:Commit message" || { _bvk_back && return 1; return 3; }
+  [ -n "$fields" ] || { echo "🚫 Nothing chosen."; return 3; }
+  return 0
+}
+_ghx_s_ed_ask() {                # one question per chosen field; u at any of them = the field menu again
+  local k rc
+  any=0
+  [ -n "${_GHX_JOB:-}" ] && rm -rf "$_GHX_JOB"; _GHX_JOB=""
+  _ghx_job_new || return 3
   for k in $fields; do
     _ghx_ask_field "$k"; rc=$?
-    [ "$rc" = 1 ] && { rm -rf "$_GHX_JOB"; echo "🚫 Cancelled"; return 1; }
+    [ "$rc" = 1 ] && return 1
     [ "$rc" = 0 ] && any=1
   done
-  [ "$any" = 1 ] || { rm -rf "$_GHX_JOB"; echo "📜  Nothing to change."; return 1; }
+  [ "$any" = 1 ] || { echo "📜  Nothing to change."; return 3; }
   _ghx_job_tags
   echo; echo "✏️  Change:"
   for k in t n m c; do [ -f "$_GHX_JOB/$(_ghx_field_file "$k").mode" ] && echo "   • $(_ghx_field_name "$k")  ($(<"$_GHX_JOB/$(_ghx_field_file "$k").mode"))"; done
   echo "   on:"; _ghx_show_picked
-  if [ -f "$_GHX_JOB/commit_message.mode" ]; then
-    echo
-    echo "⚠️  A commit cannot be edited in place: this makes a NEW commit with the same files and parents"
-    echo "   (signatures are lost) and moves the tag(s) to it. Branches keep the old commit unless you say so."
-    _bvk_yn ans "Also move any branch that ends exactly at the old commit?"
-    case "$ans" in [yY]*) printf '1' > "$_GHX_JOB/move_branch" ;; esac
-  fi
+  return 0
+}
+_ghx_s_ed_move() {
+  [ -f "$_GHX_JOB/commit_message.mode" ] || return 5
+  echo
+  echo "⚠️  A commit cannot be edited in place: this makes a NEW commit with the same files and parents"
+  echo "   (signatures are lost) and moves the tag(s) to it. Branches keep the old commit unless you say so."
+  local rc; rm -f "$_GHX_JOB/move_branch"
+  _bvk_ask ans "Also move any branch that ends exactly at the old commit?"; rc=$?
+  (( rc == 0 )) && { case "$ans" in [yY]*) printf '1' > "$_GHX_JOB/move_branch" ;; esac; return 0; }
+  (( rc == 1 )) && return 1
+  echo "🚫 Cancelled"; return 3
+}
+_ghx_s_ed_apply() {
+  local rc
   if [ -f "$_GHX_JOB/tag_message.mode" ]; then echo "   📜 A tag message change replaces the tag (same commit); a lightweight tag becomes annotated."; fi
-  _bvk_yn ans "Apply to ${#_GHX_PICK[@]} item(s)?"
-  case "$ans" in [yY]|[yY][eE][sS]) ;; *) rm -rf "$_GHX_JOB"; echo "🚫 Cancelled"; return 1 ;; esac
+  _bvk_ask ans "Apply to ${#_GHX_PICK[@]} item(s)?"; rc=$?
+  _ghx_yes_rc "$rc" "$ans"
+}
+_ghx_edit() {
+  local fields="" ans="" any=0 rc
+  _mc_steps _ghx_s_ed_fields _ghx_s_ed_ask _ghx_s_ed_move _ghx_s_ed_apply; rc=$?
+  if (( rc )); then [ -n "${_GHX_JOB:-}" ] && rm -rf "$_GHX_JOB"; _GHX_JOB=""; return 1; fi
   _ghx_job_run edit
   _ghx_reload
 }
 
+# ---- rename -----------------------------------------------------------------------------------------------------
+_ghx_s_rn_rule() {
+  [ "${#_GHX_PICK[@]}" -eq 1 ] && { rule=m; return 5; }
+  _bvk_menu rule -t "Rename ${#_GHX_PICK[@]} items" -i "🔤" \
+    "p:Add a prefix to every name" "s:Add a suffix to every name" "f:Find and replace text in every name" "x:Regex replace (\\1 = a group)" "m:Type each new name" || { _bvk_back && return 1; return 3; }
+  return 0
+}
+_ghx_s_rn_a() {                  # prefix / suffix / the text to find / the pattern
+  local q
+  case "$rule" in
+    p) q="Prefix" ;; s) q="Suffix" ;; f) q="Find" ;; x) q='Pattern (python regex, e.g.  ^v(.*)$ )' ;; *) return 5 ;;
+  esac
+  _xui_ask "$q" || return 1
+  a="$_XUI_IN"
+  case "$rule" in
+    p) printf '%s' prefix > "$_GHX_JOB/rule.mode"; printf '%s' "$a" > "$_GHX_JOB/rule.a" ;;
+    s) printf '%s' suffix > "$_GHX_JOB/rule.mode"; printf '%s' "$a" > "$_GHX_JOB/rule.a" ;;
+  esac
+  return 0
+}
+_ghx_s_rn_b() {                  # the replacement of find / regex (empty = remove it)
+  case "$rule" in
+    f) IFS= read -e -r -p "   Replace with (empty = remove it): " b || return 1
+       printf '%s' replace > "$_GHX_JOB/rule.mode" ;;
+    x) IFS= read -e -r -p "   Replacement (e.g.  release-\\1 ): " b || return 1
+       printf '%s' regex > "$_GHX_JOB/rule.mode" ;;
+    *) return 5 ;;
+  esac
+  printf '%s' "$a" > "$_GHX_JOB/rule.a"; printf '%s' "$b" > "$_GHX_JOB/rule.b"
+  return 0
+}
+_ghx_s_rn_map() {                # type each new name
+  [ "$rule" = m ] || return 5
+  local t new
+  printf '%s' manual > "$_GHX_JOB/rule.mode"; : > "$_GHX_JOB/map"
+  for t in "${_GHX_PICK[@]}"; do
+    IFS= read -e -r -i "$t" -p "   $t → " new || return 1
+    printf '%s\t%s\n' "$t" "$new" >> "$_GHX_JOB/map"
+  done
+  return 0
+}
+_ghx_s_rn_ok() {
+  local rc
+  echo; echo "🔤 Checking every new name against the tags and releases of $_GHX_REPO …"
+  _gh_run rename --job "$_GHX_JOB" --plan || { echo; return 3; }
+  echo "   Releases follow their tags; a release title that equals the old tag name is renamed too."
+  _bvk_ask ans "Rename now?"; rc=$?
+  _ghx_yes_rc "$rc" "$ans"
+}
 _ghx_rename() {
-  local rule a b t new n=0 ans rc
-  local one=""; [ "${#_GHX_PICK[@]}" -eq 1 ] && one="m:Type the new name"
-  if [ -n "$one" ]; then rule=m
-  else
-    _bvk_menu rule -t "Rename ${#_GHX_PICK[@]} items" -i "🔤" \
-      "p:Add a prefix to every name" "s:Add a suffix to every name" "f:Find and replace text in every name" "x:Regex replace (\\1 = a group)" "m:Type each new name" || return 1
-  fi
+  local rule="" a="" b="" ans="" rc
   _ghx_job_new || return 1
   _ghx_job_tags
-  case "$rule" in
-    p) _xui_ask "Prefix" || { rm -rf "$_GHX_JOB"; return 1; }; printf '%s' prefix > "$_GHX_JOB/rule.mode"; printf '%s' "$_XUI_IN" > "$_GHX_JOB/rule.a" ;;
-    s) _xui_ask "Suffix" || { rm -rf "$_GHX_JOB"; return 1; }; printf '%s' suffix > "$_GHX_JOB/rule.mode"; printf '%s' "$_XUI_IN" > "$_GHX_JOB/rule.a" ;;
-    f) _xui_ask "Find" || { rm -rf "$_GHX_JOB"; return 1; }; a="$_XUI_IN"
-       IFS= read -e -r -p "   Replace with (empty = remove it): " b || { rm -rf "$_GHX_JOB"; return 1; }       # u = cancel
-       printf '%s' replace > "$_GHX_JOB/rule.mode"; printf '%s' "$a" > "$_GHX_JOB/rule.a"; printf '%s' "$b" > "$_GHX_JOB/rule.b" ;;
-    x) _xui_ask "Pattern (python regex, e.g.  ^v(.*)\$ )" || { rm -rf "$_GHX_JOB"; return 1; }; a="$_XUI_IN"
-       IFS= read -e -r -p "   Replacement (e.g.  release-\\1 ): " b || { rm -rf "$_GHX_JOB"; return 1; }       # u = cancel
-       printf '%s' regex > "$_GHX_JOB/rule.mode"; printf '%s' "$a" > "$_GHX_JOB/rule.a"; printf '%s' "$b" > "$_GHX_JOB/rule.b" ;;
-    m) printf '%s' manual > "$_GHX_JOB/rule.mode"; : > "$_GHX_JOB/map"
-       for t in "${_GHX_PICK[@]}"; do
-         IFS= read -e -r -i "$t" -p "   $t → " new || { rm -rf "$_GHX_JOB"; echo "🚫 Cancelled"; return 1; }
-         printf '%s\t%s\n' "$t" "$new" >> "$_GHX_JOB/map"
-       done ;;
-    *) rm -rf "$_GHX_JOB"; return 1 ;;
-  esac
-  echo; echo "🔤 Checking every new name against the tags and releases of $_GHX_REPO …"
-  _gh_run rename --job "$_GHX_JOB" --plan; rc=$?
-  if [ "$rc" != 0 ]; then rm -rf "$_GHX_JOB"; echo; return 1; fi
-  echo "   Releases follow their tags; a release title that equals the old tag name is renamed too."
-  _bvk_yn ans "Rename now?"
-  case "$ans" in [yY]|[yY][eE][sS]) ;; *) rm -rf "$_GHX_JOB"; echo "🚫 Cancelled"; return 1 ;; esac
+  _mc_steps _ghx_s_rn_rule _ghx_s_rn_a _ghx_s_rn_b _ghx_s_rn_map _ghx_s_rn_ok; rc=$?
+  (( rc )) && { rm -rf "$_GHX_JOB"; _GHX_JOB=""; return 1; }
   _ghx_job_run rename
   _ghx_reload
 }
 
-_ghx_delete() {
-  local what ans
+# ---- delete -----------------------------------------------------------------------------------------------------
+_ghx_s_del_what() {
   if [ "$_GHX_TAB" = stable ]; then
     _bvk_menu what -t "Delete ${#_GHX_PICK[@]} stable release(s)" -i "🗑️" \
-      "r:Delete the release only (the git tag stays)" "b:Delete the release AND its git tag" || return 1
+      "r:Delete the release only (the git tag stays)" "b:Delete the release AND its git tag" || { _bvk_back && return 1; return 3; }
   else
     _bvk_menu what -t "Delete ${#_GHX_PICK[@]} tag(s)" -i "🗑️" \
-      "t:Delete the tag only (a release on it becomes a draft on GitHub)" "b:Delete the tag AND its release" || return 1
+      "t:Delete the tag only (a release on it becomes a draft on GitHub)" "b:Delete the tag AND its release" || { _bvk_back && return 1; return 3; }
   fi
+  return 0
+}
+_ghx_s_del_ok() {
+  local rc
   echo; echo "🗑️  Delete from $_GHX_REPO  (cannot be undone from here):"; _ghx_show_picked
   case "$what" in r) echo "   → release only" ;; t) echo "   → tag only" ;; b) echo "   → release and tag" ;; esac
-  _bvk_yn ans "Delete ${#_GHX_PICK[@]} item(s)?" -d none
-  case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+  _bvk_ask ans "Delete ${#_GHX_PICK[@]} item(s)?" -d none; rc=$?
+  _ghx_yes_rc "$rc" "$ans"
+}
+_ghx_delete() {
+  local what="" ans=""
+  _mc_steps _ghx_s_del_what _ghx_s_del_ok || return 1
   _ghx_job_new || return 1; _ghx_job_tags
   case "$what" in r) printf 1 > "$_GHX_JOB/release" ;; t) printf 1 > "$_GHX_JOB/tag" ;; b) printf 1 > "$_GHX_JOB/release"; printf 1 > "$_GHX_JOB/tag" ;; esac
   _ghx_job_run delete
   _ghx_reload
 }
 
-_ghx_download() {
-  local how depth=0 withrel ans dest
+# ---- download ---------------------------------------------------------------------------------------------------
+_ghx_s_dl_how() {
   _bvk_menu how -t "Download ${#_GHX_PICK[@]} item(s) — clone at the tag" -i "⬇️" \
-    "d:With depth — only the last N commits (fast, small)" "f:Without depth — the full history" || return 1
-  if [ "$how" = d ]; then
-    _xui_ask "Depth (number of commits)" 1 || return 1
-    [[ "$_XUI_IN" =~ ^[0-9]+$ ]] && [ "$_XUI_IN" -ge 1 ] || { echo "❌ Depth must be a number, 1 or more."; return 1; }
-    depth="$_XUI_IN"
-  fi
-  _bvk_yn withrel "Also download the release notes and files (assets) of tags that have a release?"
+    "d:With depth — only the last N commits (fast, small)" "f:Without depth — the full history" || { _bvk_back && return 1; return 3; }
+  return 0
+}
+_ghx_s_dl_depth() {
+  depth=0
+  [ "$how" = d ] || return 5
+  _xui_ask "Depth (number of commits)" 1 || return 1
+  [[ "$_XUI_IN" =~ ^[0-9]+$ ]] && [ "$_XUI_IN" -ge 1 ] || { echo "❌ Depth must be a number, 1 or more."; return 3; }
+  depth="$_XUI_IN"
+  return 0
+}
+_ghx_s_dl_rel() {
+  local rc
+  _bvk_ask withrel "Also download the release notes and files (assets) of tags that have a release?"; rc=$?
+  (( rc == 0 )) && return 0
+  (( rc == 1 )) && return 1
+  echo "🚫 Cancelled"; return 3
+}
+_ghx_s_dl_dest() {
   _xui_ask "Download into" "$_GHX_NAV" || return 1
   dest="${_XUI_IN/#\~/$HOME}"
+  return 0
+}
+_ghx_s_dl_go() {
+  local rc
   echo; echo "⬇️  ${#_GHX_PICK[@]} item(s) → $dest/$(_xui_trunc "${_GHX_REPO#*/}" 30)-<tag>/   ($([ "$depth" -gt 0 ] && echo "depth $depth" || echo "full history")$([[ "$withrel" == [yY]* ]] && echo ", with release notes and files"))"
   _ghx_show_picked
-  _bvk_yn ans "Start?"
-  case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+  _bvk_ask ans "Start?"; rc=$?
+  _ghx_yes_rc "$rc" "$ans"
+}
+_ghx_download() {
+  local how="" depth=0 withrel="" ans="" dest=""
+  _mc_steps _ghx_s_dl_how _ghx_s_dl_depth _ghx_s_dl_rel _ghx_s_dl_dest _ghx_s_dl_go || return 1
   _ghx_job_new || return 1; _ghx_job_tags
   printf '%s' "$dest" > "$_GHX_JOB/dest"; printf '%s' "$depth" > "$_GHX_JOB/depth"
   [[ "$withrel" == [yY]* ]] && printf 1 > "$_GHX_JOB/with_release"
   _ghx_job_run clone
 }
 
-_ghx_create() {
-  local tag target title ans msg="" body="" exists=0 t
-  if [ "$_GHX_TAB" = stable ]; then echo; echo "📦 New stable release in $_GHX_REPO"; else echo; echo "🔖 New tag in $_GHX_REPO"; fi
+# ---- create a tag / a stable release ----------------------------------------------------------------------------
+_ghx_s_cr_tag() {
+  local t
   _xui_ask "Tag name (e.g. v1.2.0)" || return 1
-  tag="$_XUI_IN"
+  tag="$_XUI_IN"; exists=0
   for t in "${_GHX_T_TAG[@]}"; do [ "$t" = "$tag" ] && exists=1; done
   if [ "$exists" = 1 ]; then
-    if [ "$_GHX_TAB" = tags ]; then echo "❌ The tag '$tag' already exists."; return 1; fi
+    if [ "$_GHX_TAB" = tags ]; then echo "❌ The tag '$tag' already exists."; return 3; fi
     echo "   '$tag' is an existing tag — the release is attached to it."
-  else
-    IFS= read -e -r -p "   Branch, tag or commit to build it from (Enter = the default branch): " target || return 1       # u = cancel, never "use the default"
-    _bvk_yn ans "Make it an annotated tag with a message?"
-    case "$ans" in [yY]*) echo "   ✏️  the editor opens: write the tag message."; _ghx_editor "" && msg="$_GHX_TEXT" ;; esac
   fi
+  return 0
+}
+_ghx_s_cr_target() {
+  [ "$exists" = 1 ] && return 5
+  IFS= read -e -r -p "   Branch, tag or commit to build it from (Enter = the default branch): " target || return 1       # u = back, never "use the default"
+  return 0
+}
+_ghx_s_cr_tagmsg() {
+  [ "$exists" = 1 ] && return 5
+  local rc; msg=""
+  _bvk_ask ans "Make it an annotated tag with a message?"; rc=$?
+  (( rc == 1 )) && return 1
+  (( rc == 0 )) || { echo "🚫 Cancelled"; return 3; }
+  case "$ans" in [yY]*) echo "   ✏️  the editor opens: write the tag message."; _ghx_editor "" && msg="$_GHX_TEXT" ;; esac
+  return 0
+}
+_ghx_s_cr_title() {
+  IFS= read -e -r -p "   Release title (Enter = the tag name): " title || return 1       # u = back, never "use the default"
+  return 0
+}
+_ghx_s_cr_notes() {
+  local rc; body=""
+  _bvk_ask ans "Write the release notes now (opens the editor)?"; rc=$?
+  (( rc == 1 )) && return 1
+  (( rc == 0 )) || { echo "🚫 Cancelled"; return 3; }
+  case "$ans" in [yY]*) _ghx_editor "" && body="$_GHX_TEXT" ;; esac
+  return 0
+}
+_ghx_create() {
+  local tag="" target="" title="" ans="" msg="" body="" exists=0 rc
+  if [ "$_GHX_TAB" = stable ]; then echo; echo "📦 New stable release in $_GHX_REPO"; else echo; echo "🔖 New tag in $_GHX_REPO"; fi
   if [ "$_GHX_TAB" = tags ]; then
+    _mc_steps _ghx_s_cr_tag _ghx_s_cr_target _ghx_s_cr_tagmsg || return 1
     _ghx_job_new || return 1
     printf '%s' "$tag" > "$_GHX_JOB/tag"; printf '%s' "$target" > "$_GHX_JOB/target"; printf '%s' "$msg" > "$_GHX_JOB/tag_message"
     _ghx_job_run create-tag && {
-      _bvk_yn ans "Also publish a stable release for it?"
+      _bvk_ask ans "Also publish a stable release for it?"
       case "$ans" in [yY]*) _ghx_create_release_for "$tag" ;; esac; }
     _ghx_reload; return 0
   fi
-  IFS= read -e -r -p "   Release title (Enter = the tag name): " title || return 1       # u = cancel, never "use the default"
-  _bvk_yn ans "Write the release notes now (opens the editor)?"
-  case "$ans" in [yY]*) _ghx_editor "" && body="$_GHX_TEXT" ;; esac
+  _mc_steps _ghx_s_cr_tag _ghx_s_cr_target _ghx_s_cr_tagmsg _ghx_s_cr_title _ghx_s_cr_notes || return 1
   _ghx_job_new || return 1
   printf '%s' "$tag" > "$_GHX_JOB/tag"; printf '%s' "$target" > "$_GHX_JOB/target"; printf '%s' "$msg" > "$_GHX_JOB/tag_message"
   printf '%s' "$title" > "$_GHX_JOB/title"; printf '%s' "$body" > "$_GHX_JOB/body"
@@ -402,11 +506,9 @@ _ghx_create() {
   _ghx_reload
 }
 
-_ghx_create_release_for() {      # a tag that was just made → its stable release
-  local title body="" ans
-  IFS= read -e -r -p "   Release title (Enter = the tag name): " title || return 1       # u = cancel, never "use the default"
-  _bvk_yn ans "Write the release notes now (opens the editor)?"
-  case "$ans" in [yY]*) _ghx_editor "" && body="$_GHX_TEXT" ;; esac
+_ghx_create_release_for() {      # a tag that was just made → its stable release (title, then notes: u = one back)
+  local title="" body="" ans=""
+  _mc_steps _ghx_s_cr_title _ghx_s_cr_notes || return 1
   _ghx_job_new || return 1
   printf '%s' "$1" > "$_GHX_JOB/tag"; printf '%s' "$title" > "$_GHX_JOB/title"; printf '%s' "$body" > "$_GHX_JOB/body"
   _ghx_job_run create-release

@@ -27,15 +27,14 @@ _fxdel_pick_indices() {
 
 # Confirm, then remove everything in $selected_items.
 # Prints "Deleted x out of n item(s)" and lists failed items only.
+# Returns 1 when u was typed at Confirm delete (the caller goes back to the question before it), 2 for q, 3 when cancelled, else 0.
 _fxdel_run_selected() {
   local total=${#selected_items[@]}
   [ "$total" -eq 0 ] && { echo "❌ Nothing to delete"; return; }
 
-  # lock gate (l-N): plain y/n when nothing is locked; extra confirmations otherwise
-  _lk_confirm_delete "Are you really sure you want to delete $total item(s)? This action can't be undone. (y/n): " || return
+  # ONE gate: Confirm delete (lock gate l-N) → Back up before deleting (Settings → File API → Backup); u = one question back
+  _lk_delete_gate "Are you really sure you want to delete $total item(s)? This action can't be undone. (y/n): " || return $?
   total=${#selected_items[@]}
-  # Backup service: a copy goes to the cloud first (Settings → File API → Backup); a failed backup asks before deleting
-  _bk_before_delete "${selected_items[@]}" || return
 
   local ok=0 item err
   local -a failed=()

@@ -480,13 +480,20 @@ _au_recharge_action() {  # $1 = 0-based slot
 }
 
 # ---- talking to the payments worker
-_bvk_pay_amount() {  # asks currency, then amount; sets _PAY_CUR (USD|INR) and _PAY_AMOUNT (>= US$1 worth) ; returns 1 on cancel
-  local a min
-  _bvk_menu _PAY_CUR -t "Pay in" -i "💳" -q "Which currency?" "USD:US dollars (US\$)" "INR:Indian rupees (₹, UPI via Razorpay)" || return 1
+_bvk_pay_amount() {  # asks currency, then amount; sets _PAY_CUR (USD|INR) and _PAY_AMOUNT (>= US$1 worth) ; returns 1 on cancel (u at the currency menu / q)
+  local min=""
+  _mc_steps _pay_s_cur _pay_s_amt
+}
+_pay_s_cur() {                                  # steps of _bvk_pay_amount (u = ONE QUESTION BACK): 0 answered · 1 u · 3 cancelled
+  _bvk_menu _PAY_CUR -t "Pay in" -i "💳" -q "Which currency?" "USD:US dollars (US\$)" "INR:Indian rupees (₹, UPI via Razorpay)" || { _bvk_back && return 1; return 3; }
   min=$(_bvk_rate_min "$_PAY_CUR")
+  return 0
+}
+_pay_s_amt() {                                  # blank or u = back to the currency menu
+  local a
   while :; do
-    read -e -r -p "   Amount in $_PAY_CUR (min $min, blank = cancel): " a </dev/tty || return 1
-    [ -z "$a" ] && return 1
+    read -e -r -p "   Amount in $_PAY_CUR (min $min, blank = back): " a </dev/tty || return 1
+    case "${a,,}" in ""|u) return 1 ;; esac
     if [[ "$a" =~ ^[0-9]{1,7}(\.[0-9]{1,2})?$ ]] && awk "BEGIN{exit !($a>=$min)}"; then _PAY_AMOUNT="$a"; return 0; fi
     echo "   ❌ Enter a number of at least $min (up to 2 decimals)."
   done
@@ -521,13 +528,15 @@ _bvk_pay_open() {  # best-effort browser open
   elif command -v open >/dev/null 2>&1; then open "$1" >/dev/null 2>&1
   else return 1; fi
 }
-_bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary line
+_bvk_pay_create() {  # $1=kind $2=amount $3=accounts-json(optional) $4=summary line   rc 6 = u at "Create the payment link?" (ask the amount again)
   local kind="$1" amount="$2" accts="${3:-}" ans body link exp total cur
   [ -n "$(_bvk_bill_get name)" ] && [ -n "$(_bvk_bill_get email)" ] || {
     echo "   🔴  Fill Billing details first (at least NAME and EMAIL), then try again."; return 1; }
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
   body=$(_bvk_pay_build "$kind" "$amount" "$accts") || { echo "   ❌ Could not build the request (node is required)."; return 1; }
-  echo "   $4"; _bvk_yn ans "Create the payment link?" </dev/tty
+  local _pc
+  echo "   $4"; _bvk_ask ans "Create the payment link?" </dev/tty; _pc=$?
+  (( _pc == 1 )) && return 6                    # u: the caller asks the amount again
   [[ "${ans,,}" == y* ]] || { echo "   Cancelled."; return 1; }
   echo "   ⏳ Creating link…"
   if ! _bvk_auth_call POST /api/orders "$body" creds "$_BVK_PAY_URL"; then _bvk_auth_err; return 1; fi
@@ -547,8 +556,11 @@ _bvk_pay_recharge() {  # $1=self|others
   echo
   if [ "$1" = self ]; then
     echo "   Recharging: $P_MAIL"
-    _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
-    _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "$(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") → $(_bvk_grp "$(_bvk_credits_for "$_PAY_CUR" "$_PAY_AMOUNT")") credits to $P_MAIL"
+    while :; do                                    # u at "Create the payment link?" = the amount again
+      _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
+      _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "$(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") → $(_bvk_grp "$(_bvk_credits_for "$_PAY_CUR" "$_PAY_AMOUNT")") credits to $P_MAIL"
+      [ $? = 6 ] || break
+    done
   else
     echo "   File (.csv / .txt): one account per line, as  email,diseps"
     read -e -r -p "   Path (blank = cancel): " f </dev/tty; f="${f/#\~/$HOME}"
@@ -558,17 +570,23 @@ _bvk_pay_recharge() {  # $1=self|others
     accts=$(_bvk_pay_accounts_json "$f") || { echo "   ❌ $f"; _au_pause; return 0; }
     n=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).length))' "$accts")
     echo "   Found $n account(s). The SAME amount is credited to each."
-    _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
-    n_ct=$(awk "BEGIN{printf \"%.2f\", $_PAY_AMOUNT*$n}")
-    _bvk_pay_create recharge_others "$_PAY_AMOUNT" "$accts" "$n account(s) × $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") = $(_bvk_money_fmt "$_PAY_CUR" "$n_ct") total ($(_bvk_grp "$(_bvk_credits_for "$_PAY_CUR" "$_PAY_AMOUNT")") credits each)"
+    while :; do                                    # u at "Create the payment link?" = the amount again
+      _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
+      n_ct=$(awk "BEGIN{printf \"%.2f\", $_PAY_AMOUNT*$n}")
+      _bvk_pay_create recharge_others "$_PAY_AMOUNT" "$accts" "$n account(s) × $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") = $(_bvk_money_fmt "$_PAY_CUR" "$n_ct") total ($(_bvk_grp "$(_bvk_credits_for "$_PAY_CUR" "$_PAY_AMOUNT")") credits each)"
+      [ $? = 6 ] || break
+    done
   fi
   _au_pause
 }
 _bvk_pay_sponsorship() {
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 0
   echo; echo "   Sponsor bashbasicsbyvk. No account is recharged; you receive an invoice."
-  _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
-  _bvk_pay_create sponsorship "$_PAY_AMOUNT" "" "Sponsorship of $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT")"
+  while :; do                                    # u at "Create the payment link?" = the amount again
+    _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
+    _bvk_pay_create sponsorship "$_PAY_AMOUNT" "" "Sponsorship of $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT")"
+    [ $? = 6 ] || break
+  done
   _au_pause
 }
 

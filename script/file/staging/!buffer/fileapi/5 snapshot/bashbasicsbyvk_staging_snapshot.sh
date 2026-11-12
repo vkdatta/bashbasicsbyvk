@@ -400,32 +400,45 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
   done
 }
 
-_snap_extend() {             # _snap_extend <id> <taken-ms> <expires-ms> [spec]   (total life counted from when it was taken)
-  local id="$1" taken="$2" exp="$3" spec="$4" cur total ans
-  cur=$(( (exp - taken) / 1000 ))
-  if [ -z "$spec" ]; then
-    echo "   Total life now $(_bb_fmt_duration "$cur"). Enter the NEW TOTAL (2d · 36h), or +12h to extend / -1d to shorten."
-    read -e -r -p "   New time (u = back): " spec
-    case "${spec,,}" in u|q|"") return 0 ;; esac
-  fi
-  total=$(_bb_resolve_time "$cur" "$spec"); case $? in 1) echo "🔴  Use e.g. 2d · +12h · -1d."; return 1 ;; 2) echo "🔴  Between 1 minute and 30 days."; return 1 ;; esac
+# _snap_extend: two steps (_mc_steps: u = ONE QUESTION BACK): the new time → the cost question (only when it asks one).
+#   They share _snap_extend's locals (id taken exp spec cur total ans _given).
+_snap_s_time() {
+  [ -n "$_given" ] && return 5
+  echo "   Total life now $(_bb_fmt_duration "$cur"). Enter the NEW TOTAL (2d · 36h), or +12h to extend / -1d to shorten."
+  read -e -r -p "   New time (u = back): " spec || return 1
+  case "${spec,,}" in u|q|"") return 1 ;; esac
+  return 0
+}
+_snap_s_cost() {
+  total=$(_bb_resolve_time "$cur" "$spec"); case $? in 1) echo "🔴  Use e.g. 2d · +12h · -1d."; return 3 ;; 2) echo "🔴  Between 1 minute and 30 days."; return 3 ;; esac
   if [ "$(_bb_cfg_val credit_prompts show)" != skip ] && [ "$total" -gt "$cur" ]; then
     _BB_CALL_HDRS=(); _bb_call POST "/links/$id/expiry" "{\"totalSeconds\":$total,\"dryRun\":true}"
     if [ "$_BB_STATUS" = 200 ]; then
-      local ch bal mx; ch=$(_bb_json_get "$_BB_BODY" charge); bal=$(_bb_json_get "$_BB_BODY" balance); mx=$(_bb_json_get "$_BB_BODY" maxTotalSeconds)
+      local ch bal mx rc; ch=$(_bb_json_get "$_BB_BODY" charge); bal=$(_bb_json_get "$_BB_BODY" balance); mx=$(_bb_json_get "$_BB_BODY" maxTotalSeconds)
       if [[ "$ch" =~ ^[0-9]+$ && "$bal" =~ ^[0-9]+$ ]]; then
         if [ "$ch" -gt "$bal" ]; then
           echo "💳 Not enough credits: that costs $ch, you have $bal."
-          [[ "$mx" =~ ^[0-9]+$ ]] && [ "$mx" -gt "$cur" ] || { echo "❌ Nothing more can be afforded."; return 1; }
-          _bvk_yn ans "Longest you can afford: total $(_bb_fmt_duration "$mx"). Use that?"
-          case "${ans,,}" in y|yes) total="$mx" ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+          [[ "$mx" =~ ^[0-9]+$ ]] && [ "$mx" -gt "$cur" ] || { echo "❌ Nothing more can be afforded."; return 3; }
+          _bvk_ask ans "Longest you can afford: total $(_bb_fmt_duration "$mx"). Use that?"; rc=$?
+          (( rc == 1 )) && return 1
+          case "${ans,,}" in y|yes) total="$mx"; return 0 ;; esac
+          echo "🚫 Cancelled"; return 3
         elif [ "$ch" -gt 0 ]; then
-          _bvk_yn ans "Costs $ch credit(s) (balance $bal → $((bal-ch))). Continue?"
-          case "${ans,,}" in y|yes) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+          _bvk_ask ans "Costs $ch credit(s) (balance $bal → $((bal-ch))). Continue?"; rc=$?
+          (( rc == 1 )) && return 1
+          case "${ans,,}" in y|yes) return 0 ;; esac
+          echo "🚫 Cancelled"; return 3
         fi
       fi
     fi
   fi
+  return 5
+}
+_snap_extend() {             # _snap_extend <id> <taken-ms> <expires-ms> [spec]   (total life counted from when it was taken)
+  local id="$1" taken="$2" exp="$3" spec="$4" cur total="" ans="" _given="$4" rc
+  cur=$(( (exp - taken) / 1000 ))
+  _mc_steps _snap_s_time _snap_s_cost; rc=$?
+  case "$rc" in 0) ;; 1) return 0 ;; *) return 1 ;; esac
   _BB_CALL_HDRS=(); _bb_call POST "/links/$id/expiry" "{\"totalSeconds\":$total}"
   if [ "$_BB_STATUS" = 200 ]; then echo "💫 Now gone at $(_bb_fmt_when "$(_bb_json_get "$_BB_BODY" expiresAt)")   |   Balance: $(_bb_json_get "$_BB_BODY" balance)"
   else echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")"; fi

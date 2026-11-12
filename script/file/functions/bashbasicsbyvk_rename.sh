@@ -132,7 +132,7 @@ _rn_ext_of() {
   return 0
 }
 
-# _rn_finalize ITEM NEWNAME → _RN_FINAL.  rc 1 = the question was backed out (u / q): skip this item.
+# _rn_finalize ITEM NEWNAME → _RN_FINAL.  rc 1 = backed out with q (skip this item) · 6 = u (ask New: again).
 _rn_finalize() {
   local item="$1" new="$2" oext
   _RN_FINAL="$new"
@@ -143,7 +143,7 @@ _rn_finalize() {
   local mode="${rename_noext_mode:-ask}" ans
   if [ "$mode" = ask ]; then
     _bvk_menu ans -t "No extension" -i "✏️" -q "'${new}' has no extension. The old one is ${oext}" \
-      old:"Use old extension  →  ${new%.}${oext}" none:"Create without extension  →  ${new}" || return 1
+      old:"Use old extension  →  ${new%.}${oext}" none:"Create without extension  →  ${new}" || { _bvk_back && return 6; return 1; }
     mode="$ans"
   fi
   [ "$mode" = old ] && _RN_FINAL="${new%.}${oext}"
@@ -199,13 +199,17 @@ _rn_name_prompt() {
   _BVK_SCR_EXTRA+="$out"; _BVK_SCR_PROMPT="New:"
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   local in
-  _CE_FILL="$bn"
-  read -e -p "New: " in; local rc=$?
-  _CE_FILL=""
-  (( rc == 0 )) || return 2                    # u: one step back = the item picker
-  [ -n "$in" ] || return 1
-  _rn_finalize "$item" "$in" || return 1
-  return 0
+  while :; do                                  # u at the "No extension" menu comes back here: New: again
+    _CE_FILL="$bn"
+    read -e -p "New: " in; local rc=$?
+    _CE_FILL=""
+    (( rc == 0 )) || return 2                  # u: one step back = the item picker
+    [ -n "$in" ] || return 1
+    _rn_finalize "$item" "$in"; rc=$?
+    (( rc == 6 )) && continue
+    (( rc == 0 )) || return 1
+    return 0
+  done
 }
 
 # ---------------------------------------------------------------------------

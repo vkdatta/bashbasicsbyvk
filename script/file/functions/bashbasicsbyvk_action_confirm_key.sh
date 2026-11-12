@@ -7,7 +7,8 @@
 #
 #  Usage (sourced):
 #      action_confirm_key "<heading>" ["<detail line>" ...]   → 0 = number typed
-#                                                                 correctly, 1 = not
+#                                                                 correctly, 1 = not,
+#                                                                 2 = u (back: the question before)
 #  Usage (run as a command, e.g. from another process):
 #      bash bashbasicsbyvk_action_confirm_key.sh "<heading>" ["<detail line>" ...]; echo $?
 #
@@ -43,7 +44,8 @@ action_confirm_key() {
   echo
   echo "  $key"
   echo
-  read -e -r -p "Confirmation number: " typed || return 1
+  _CM_BACKED=0
+  read -e -r -p "Confirmation number: " typed || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 2; }; return 1; }
 
   if [[ "$typed" == "$key" ]]; then
     echo "OK: Confirmation accepted."

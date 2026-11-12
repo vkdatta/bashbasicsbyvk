@@ -8,11 +8,15 @@
 # ════════════════════════════════════════════════════════════════════════════
 
 _fx_adf_delete_select_csv() {
-  open_csv_menu || return
-  [ -z "$csv_file" ] && return
-  _csv_resolve_report "Deleting" || return
-  _sel_summary selected_items "🗑️  About to delete"
-  _sel_preview selected_items
-  _fxdel_run_selected
+  local _rc
+  while :; do                                   # u at Confirm delete / Back up = the CSV picker again
+    open_csv_menu || return
+    [ -z "$csv_file" ] && return
+    _csv_resolve_report "Deleting" || return
+    _sel_summary selected_items "🗑️  About to delete"
+    _sel_preview selected_items
+    _fxdel_run_selected; _rc=$?
+    [ "$_rc" = 1 ] || return "$_rc"
+  done
 }
 _fx_adf_register_fx "delete.select.items.csv" "_fx_adf_delete_select_csv"
