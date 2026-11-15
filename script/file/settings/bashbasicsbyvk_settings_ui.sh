@@ -567,13 +567,15 @@ _st_byte() {          # Enter and Space; every other byte is typed by _st_type_k
           _st_tty_raw; buf=""; return 0 ;;
         print|loadtime|loadtime\ *)
           _st_wipe; _st_tty_cooked
-          bvk_main_exec "${buf,,}"
+          if declare -F bvk_main_exec >/dev/null 2>&1; then bvk_main_exec "${buf,,}"
+          else echo "  (\"${buf%% *}\" needs the full app: here type a number, u = back, q = close)"; fi   # a stand-alone door has no command runner
           _st_tty_raw; buf=""; cur=-1; return 0 ;;
         cc)
           # cheat codes: the list of what this screen accepts; the pick is typed into the line below
           [ "${_CC_OPEN:-0}" = 1 ] && { buf=""; return 0; }
           _st_wipe; _st_tty_cooked
-          _CC_CTX=st bvk_main_exec cc
+          if declare -F bvk_main_exec >/dev/null 2>&1; then _CC_CTX=st bvk_main_exec cc
+          else echo "  (cheat codes need the full app: here type a number, u = back, q = close)"; fi   # a stand-alone door has no command runner
           _st_tty_raw
           buf="${_CC_PREFILL:-}"; _CC_PREFILL=""; fq=""
           [[ "$buf" == =* ]] && fq="${buf:1}"

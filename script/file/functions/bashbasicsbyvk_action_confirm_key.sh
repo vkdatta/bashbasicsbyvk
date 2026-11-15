@@ -45,7 +45,18 @@ action_confirm_key() {
   echo "  $key"
   echo
   _CM_BACKED=0
-  _bvk_read typed "Confirmation number: " || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 2; }; return 1; }
+  if declare -F _bvk_read >/dev/null 2>&1; then                  # inside the app
+    _bvk_read typed "Confirmation number: " || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 2; }; return 1; }
+  else                                                           # a tool that runs as its own process (gitpush): THE ask door, u = back (exit 4), q = no
+    local _ack_rc=0
+    typed="$(bashbasicsbyvk_ask "Confirmation number: " -b)" || _ack_rc=$?
+    case "$_ack_rc" in
+      0) ;;
+      4) return 2 ;;
+      3) read -e -r -p "Confirmation number: " typed || return 1 ;;   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+      *) return 1 ;;
+    esac
+  fi
 
   if [[ "$typed" == "$key" ]]; then
     echo "OK: Confirmation accepted."
