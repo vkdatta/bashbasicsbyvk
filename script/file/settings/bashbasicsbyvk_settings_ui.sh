@@ -636,6 +636,10 @@ _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}" cmdfn="${5:-}"
   local cur=-1 top=0 prev=0 n buf="" pos=0 posb="" _st_wasf=0 num path_title fq="" _sdq="" need=1 page="${_vp_page_step:-10}" navbuf=0 typed=0
   local parent_title="${_st_title_now:-}"
+  # This screen draws its suggestion INSIDE its own block (_st_draw, _ST_HINT).  _vp_hint_row is the main menu's global flag "the prompt has the
+  # suggestion area above it": left on, the shared drawer (_bvk_draw_input -> _input_hint_sync) painted a second copy on the blank row under
+  # the first one (from 100 columns up, where the area is 1 row).  Local = the menu's value is back when the screen closes.
+  local _vp_hint_row=0 _vp_hint_n=0 _hint_cur=""
   _st_depth=$(( _st_depth + 1 ))
   # a sub screen shows its way in ("Settings › Sort order"); _st_crumb="" drops the prefix (cc)
   if (( _st_depth > 1 )) && [ -n "${_st_crumb-Settings}" ]; then path_title="${_st_crumb-Settings} › $title"; else path_title="$title"; fi

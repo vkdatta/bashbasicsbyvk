@@ -28,7 +28,7 @@ script/file/	smartload settings_desc delete_confirm rename_screen
 fx/github_fx/	github_engine github_ui github_upgrade_shared choose_plain
 functions/bashbasicsbyvk_ghlib|loops/iloop/upgrade/	github_engine github_upgrade_shared
 cmdmap/xui_ghp|cmdmap/xui_ghr	github_ui cmd_drift
-settings/bashbasicsbyvk_settings_ui	cc_truth cmd_drift nav_back hints settings_keys settings_deep prompt_template prompt_drift
+settings/bashbasicsbyvk_settings_ui	cc_footer cc_truth cmd_drift nav_back hints settings_keys settings_deep prompt_template prompt_drift
 settings/bashbasicsbyvk_deepsearch	settings_deep loadmap
 settings/bashbasicsbyvk_settings_desc	settings_desc settings_deep
 cmdmap/(settings|home)	cc_truth cmd_drift
@@ -51,3 +51,5 @@ functions/bashbasicsbyvk_(track|carry|rename)|select/bashbasicsbyvk_track_lib|lo
 cmd/bashbasicsbyvk_sys	sys deps
 # ONE typed-line prompt (AGENTS.md rule 16): any shell / python file under script/ can add a bare read, so every script change runs the lint
 (^|/)(bashbasicsbyvk_|_3bvk_import_|o$)	read_lint
+engine/bashbasicsbyvk_(cheatcode|menuchrome)	cc_footer cheatcode
+engine/bashbasicsbyvk_(cheatcode|menuchrome)	cc_footer cc_truth cheatcode

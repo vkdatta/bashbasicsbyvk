@@ -125,7 +125,7 @@ _mc_footer() {
     elif [ -n "${_MC_KEYLABEL[$it]-}" ]; then cell="${it%%.*}) ${_MC_KEYLABEL[$it]}"
     else cell="${it}) ${it}"; fi
     (( unders )) && cell="${cell//_/ }"
-    [[ "$cell" =~ ^([A-Za-z0-9_-]{1,5})\) ]] && _MC_PRINTED["${BASH_REMATCH[1],,}"]=1
+    [[ "$cell" =~ ^([A-Za-z0-9_-]{1,5})\)[[:space:]]*(.*)$ ]] && _MC_PRINTED["${BASH_REMATCH[1],,}"]="${BASH_REMATCH[2]:-printed in the footer}"
     if [ -z "$line" ]; then
       line="$cell"
     elif _vp_cells "$line"; local _lw=$_vp_w; _vp_cells "$cell"; (( _lw + 3 + _vp_w >= cols )); then
@@ -194,7 +194,9 @@ _mc_footer_std() {
 _mc_std_key() {
   case "${1,,}" in
     h)  _CM_RUN_MODE=menu bvk_main_exec h ;;
-    cc) _CM_RUN_MODE=menu bvk_main_exec cc ;;
+    # _CC_FOOTER=1: cc is run AFTER the read that took it, so _CM_LOCAL (the prompt's own keys) is already gone; the footer that is still on
+    # screen (_MC_PRINTED, key -> label) is what cc lists as this screen's own keys
+    cc) _CC_FOOTER=1 _CM_RUN_MODE=menu bvk_main_exec cc ;;
     *)  return 1 ;;
   esac
   return 0

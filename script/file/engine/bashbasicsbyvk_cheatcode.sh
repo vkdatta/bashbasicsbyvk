@@ -96,6 +96,14 @@ _cc_collect() {
   if [ "${#lk[@]}" -gt 0 ]; then
     while IFS= read -r k; do _cc_add "$k" "${_CM_LOCAL[$k]}"; done < <(printf '%s\n' "${lk[@]}" | sort)
   fi
+  # cc was typed as a template's footer key (_mc_std_key): the read is over and _CM_LOCAL is empty, but the footer on screen is still known
+  if [ "${_CC_FOOTER:-0}" = 1 ]; then
+    local -a fk=()
+    for k in "${!_MC_PRINTED[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] || fk+=("$k"); done
+    if [ "${#fk[@]}" -gt 0 ]; then
+      while IFS= read -r k; do _cc_add "$k" "${_MC_PRINTED[$k]}"; done < <(printf '%s\n' "${fk[@]}" | sort)
+    fi
+  fi
   return 0
 }
 
