@@ -177,7 +177,8 @@ _cm_parse_map() {   # $1 file  $2 = head (directives only, stop at the first wir
 }
 
 # ------------------------------------------------------------ context: which map owns this prompt?
-# Walks the call stack outwards and takes the nearest function that a .map claims.
+# Walks the call stack outwards and takes the nearest function that a .map claims.  The frames of the typed-line engine (_bvk_edit_*) and the hooks
+# a loop hands it are PLUMBING (skipped below): a new hook that can reach the gate goes on that list, or a command typed in a question is read as "inside a flow".
 # _CM_MAP    the map (nearest, any kind)         _CM_MDEPTH  stack depth of the nearest MENU function
 # _CM_FLOW   number of non-plumbing frames between the reader and that menu (0 = the menu's own prompt)
 _cm_ctx_find() {
@@ -186,7 +187,7 @@ _cm_ctx_find() {
   for (( i=1; i<n; i++ )); do
     fn="${FUNCNAME[i]}"
     case "$fn" in
-      _cm_*|_lt_*|_multi_*|_rc_click|_rc_wheel|_bvk_mouse_*|_st_click|_sm_click|_sm_wheel|select_items_common|select_imaginary_items_common|_read_choice|_read_choice_raw|_read_choice_filtered|read|_sm_*|_vp_*|_input_*|_print_input_line|_mc_ask|source|main) continue ;;
+      _cm_*|_lt_*|_multi_*|_rc_click|_rc_wheel|_bvk_mouse_*|_st_click|_sm_click|_sm_wheel|_bvk_edit_*|_bvk_draw_input|_bvk_tty_*|_rc_nav|_rc_byte|_rc_pre|_rc_turn|_rc_tick|_rc_start|_st_byte|_st_nav|_st_turn|_st_pre|_st_tick|_st_type_key|_st_click_hook|_st_wheel_hook|_st_toolarge|_st_ev|select_items_common|select_imaginary_items_common|_read_choice|_read_choice_raw|_read_choice_filtered|read|_sm_*|_vp_*|_input_*|_print_input_line|_mc_ask|source|main) continue ;;
     esac
     m="${_CM_MAP_FUNC[$fn]-}"
     if [ -n "$m" ]; then
@@ -676,15 +677,6 @@ _cm_gate_text() {   # $1 typed  $2 initial text ; sets _CM_OUT ; 0 accept · 3 r
 }
 
 # ---- tiny line editor with a live hint row (replaces `read -e` for plain text prompts)
-_cm_hint_row() {   # paints _hint_want on the row under the prompt; leaves the cursor at column 0 of the prompt row
-  local want="$1"
-  [ "$want" = "$_CM_HINT_CUR" ] && { builtin printf '\r'; return 0; }
-  _CM_HINT_CUR="$want"
-  if [ -n "$want" ]; then
-    declare -F _bvk_clip >/dev/null 2>&1 && { _bvk_clip "$want"; want="$_BVK_CLIP"; }      # a hint longer than the row would wrap and scroll the screen
-    builtin printf '\n\r\033[2K\033[2m%s\033[0m\033[1A\r' "$want"
-  else builtin printf '\n\r\033[2K\033[1A\r'; fi
-}
 _cm_complete() {   # path completion for the word before the cursor  → sets _ce_buf/_ce_pos
   local before="${_ce_buf:0:_ce_pos}" after="${_ce_buf:_ce_pos}" word pre
   word="${before##*[[:space:]]}"; pre="${before%"$word"}"
@@ -703,161 +695,66 @@ _cm_complete() {   # path completion for the word before the cursor  → sets _c
   _ce_buf="${pre}${pick}${after}"; _ce_pos=$(( ${#pre} + ${#pick} ))
   return 0
 }
-_CE_ROW=0     # rows between the first row of the prompt and the row the cursor is on (after the last draw)
-_cm_edit_draw() {   # redraw the whole prompt + text; long text WRAPS onto the next rows like `read -e` does
-  local lastp="${_ce_prompt##*$'\n'}" W pw bw T tp erow ecol trow tcol hint="${_CM_HINT_SHOW:-}"
-  _te_cursor "$_ce_buf" "$_ce_pos"                       # no block cursor over a selection
-  if ! declare -F _bvk_dispw >/dev/null 2>&1; then          # helper not loaded: old single-row redraw
-    local shown0="$_ce_buf"
-    (( ${_TE_ANC:--1} >= 0 )) && { _te_hl "$_ce_buf" "$_ce_pos" 0 "${#_ce_buf}"; shown0="$_TE_OUT"; }
-    builtin printf '\r\033[K%s%s' "$lastp" "$shown0"
-    local back=$(( ${#_ce_buf} - _ce_pos )); [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
-    return 0
-  fi
-  _bvk_cols; W=$_BVK_COLS
-  # a very long text (a big paste) is not wrapped over hundreds of rows: it stays ONE row that scrolls with the cursor
-  if (( ${#_ce_buf} > W * ( ${_vp_rows_now:-24} > 14 ? ${_vp_rows_now:-24} - 8 : 6 ) )); then
-    _bvk_fit_input "$lastp" "$_ce_buf" "$_ce_pos"
-    builtin printf '\r'; [ "$_CE_ROW" -gt 0 ] && builtin printf '\033[%dA' "$_CE_ROW"
-    builtin printf '\033[J%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"
-    [ "$_BVK_FIT_BACK" -gt 0 ] && builtin printf '\033[%dD' "$_BVK_FIT_BACK"
-    _bvk_dispw "${_BVK_FIT_PROMPT}${_BVK_FIT}"
-    _CE_ROW=0; _CE_ENDROW=0; _CE_ENDCOL=$(( _BVK_W % W )); _CE_FULL=0
-    return 0
-  fi
-  _bvk_dispw "$lastp"; pw=$_BVK_W
-  _bvk_dispw "$_ce_buf"; bw=$_BVK_W
-  T=$(( pw + bw ))
-  _bvk_dispw "${_ce_buf:0:_ce_pos}"; tp=$(( pw + _BVK_W ))
-  # 1. back to the first row of the prompt, wipe everything from there down (old text, old hint row)
-  builtin printf '\r'; [ "$_CE_ROW" -gt 0 ] && builtin printf '\033[%dA' "$_CE_ROW"
-  local shown="$_ce_buf"
-  (( ${_TE_ANC:--1} >= 0 )) && { _te_hl "$_ce_buf" "$_ce_pos" 0 "${#_ce_buf}"; shown="$_TE_OUT"; }     # the selected part, in reverse video
-  builtin printf '\033[J%s%s' "$lastp" "$shown"
-  # text that ends exactly at the right edge leaves the cursor in the "pending wrap" state: force it onto the next row
-  (( T > 0 && T % W == 0 )) && builtin printf ' \r'
-  erow=$(( T / W )); ecol=$(( T % W )); trow=$(( tp / W )); tcol=$(( tp % W ))
-  # 2. cursor from the end of the text to where it belongs
-  (( erow > trow )) && builtin printf '\033[%dA' $(( erow - trow ))
-  builtin printf '\r'; (( tcol > 0 )) && builtin printf '\033[%dC' "$tcol"
-  _CE_ROW=$trow
-  # 3. dim hint on the rows below the text (a long one expands onto more rows), then back
-  if [ -n "$hint" ]; then
-    local hl hn=1
-    if declare -F _bvk_hint_wrap >/dev/null 2>&1; then _bvk_hint_wrap "$hint" "${_CE_HINT_MAX:-3}"; hn=$_BVK_HINT_N; else _bvk_clip "$hint"; _BVK_HINT_LN=("$_BVK_CLIP"); fi
-    (( erow > trow )) && builtin printf '\033[%dB' $(( erow - trow ))
-    for hl in "${_BVK_HINT_LN[@]}"; do builtin printf '\n\r\033[2K\033[2m%s\033[0m' "$hl"; done
-    builtin printf '\033[%dA\r' $(( erow + hn - trow ))
-    (( tcol > 0 )) && builtin printf '\033[%dC' "$tcol"
-  fi
-  _CE_ENDROW=$erow; _CE_ENDCOL=$ecol; _CE_FULL=$(( T > 0 && T % W == 0 ? 1 : 0 ))
-}
-# leave the editor: wipe the hint row, put the cursor after the text on a fresh row
-_cm_edit_leave() {
-  if ! declare -F _bvk_dispw >/dev/null 2>&1; then builtin printf '\033[%dC\n' "$(( ${#_ce_buf} - _ce_pos ))" 2>/dev/null; return 0; fi
-  [ "${_CE_ENDROW:-0}" -gt "$_CE_ROW" ] && builtin printf '\033[%dB' $(( _CE_ENDROW - _CE_ROW ))
-  builtin printf '\r'; [ "${_CE_ENDCOL:-0}" -gt 0 ] && builtin printf '\033[%dC' "$_CE_ENDCOL"
-  builtin printf '\033[J'
-  [ "${_CE_FULL:-0}" = 1 ] || builtin printf '\n'
-  _CE_ROW=0
-}
 
-_cm_edit_paste() {   # insert a pasted text at the cursor (the caller's _ce_buf/_ce_pos)
-  local t="$1"
-  [ -z "$t" ] && return 0
-  _te_sel_len "$_ce_buf" "$_ce_pos"                    # a selected text is replaced by the paste: it does not count
-  if (( ${#_ce_buf} - _TE_N + ${#t} > ${_BVK_MAX_INPUT:-512} )); then
-    _ce_deny="Too large: $(( ${#_ce_buf} - _TE_N + ${#t} )) characters (limit ${_BVK_MAX_INPUT:-512}). Not accepted; nothing was changed."
-    _bvk_paste_drain
-    return 0
-  fi
-  t="${t//$'\n'/ }"                                   # a typed-line prompt is one logical line: its line breaks become spaces
-  _te_insert _ce_buf _ce_pos "$t"
-}
 
 # hint row + the line, drawn again (after every key; also what Ctrl-C / Ctrl-Z of the template call, see bashbasicsbyvk_textedit.sh)
-_cm_edit_refresh() {
-  if [ "$no_cmds" = 0 ]; then _cm_hint "$_ce_buf" text; else _hint_want=""; fi
-  _CM_HINT_SHOW="$_hint_want"; [ -n "$_ce_deny" ] && { _CM_HINT_SHOW="$_ce_deny"; _ce_deny=""; }
+
+# ---- the line editor: HOOKS around THE loop (_bvk_edit_run) and THE drawer (_bvk_draw_input), both in bashbasicsbyvk_viewport.sh ----
+# The text is drawn, wrapped, scrolled and tapped by the same code as every menu prompt (a paste with line breaks shows as rows, like on Select:),
+# and the live suggestion sits ABOVE the prompt, painted by _bvk_hint_paint, as on every menu.  This file only supplies what is the editor's own.
+_cm_edit_draw() { _bvk_draw_input "$_ce_dp" "$_ce_buf" "$_ce_pos"; }
+_cm_edit_fill() { _ce_buf="$_CE_FILL"; _ce_pos=${#_ce_buf}; _cm_edit_draw; }    # _CE_FILL: a text the caller offers (the rename screen: the old name)
+_cm_edit_click() {     # a press that is not on the typed text: the row just above the prompt ("Old:" of the rename screen; the suggestion rows are in between) fills the line
+  [ -n "${_CE_FILL:-}" ] && (( _BVK_CROW - _MS_Y == 1 + ( ${_vp_hint_row:-0} == 1 ? ${_vp_hint_n:-0} : 0 ) )) && _cm_edit_fill
+  return 0
+}
+_cm_edit_start() {     # the text the caller offered (-S) starts SELECTED: typing replaces it, Enter keeps it
+  [ "${_CE_SELECT:-0}" = 1 ] && [ -n "$_ce_buf" ] && { _TE_ANC=0; _TE_ABUF="$_ce_buf"; }
   _cm_edit_draw
+}
+_cm_edit_nav()  { [ "$1" = up ] && [ -n "${_CE_FILL:-}" ] && _cm_edit_fill; return 0; }
+_cm_edit_byte() {      # the bytes the editing keys did not take
+  case "$1" in
+    $'\x04') _ce_rc=1; return 1 ;;                                  # Ctrl-D on an empty line: end of input
+    $'\t')   [ "$can_complete" = 1 ] && { _cm_complete; _cm_edit_draw; }; return 0 ;;
+  esac
+  return 2
 }
 
 # _cm_line_edit PROMPT INITIAL VAR EDIT(1|0)   ->  0 ok · 1 EOF/aborted
 _cm_line_edit() {
   local _ce_prompt="$1" init="$2" var="$3" can_complete="$4"
-  local _ce_buf="$init" _ce_pos=${#init} key seq rc stty_orig mode=text
-  local no_cmds=0 _ce_deny=""
+  local _ce_buf="$init" _ce_pos=${#init} _ce_rc=0
+  local no_cmds=0
   _cm_prompt_has_choices "$_ce_prompt" && no_cmds=1
-  [ "${_CM_ON:-0}" = 1 ] || no_cmds=1                        # no command layer (a stand-alone tool, bashbasicsbyvk_ask): no command words, no hint row
-  _CM_HINT_CUR=""
-  stty_orig=$(stty -g 2>/dev/null)
-  _te_begin _ce_buf _ce_pos text _cm_edit_refresh _cm_edit_refresh _cm_edit_paste   # raw keys, a clean selection / undo, Ctrl-C / Ctrl-Z (bashbasicsbyvk_textedit.sh)
+  [ "${_CM_ON:-0}" = 1 ] || no_cmds=1                        # no command layer (a stand-alone tool, bashbasicsbyvk_ask): no command words, no suggestion row
+  # the suggestion area above the prompt (one row, two on a narrow screen): the same area, painter and wipe as a menu's
+  local _vp_hint_row=0 _vp_hint_n=0 _hint_cur="" _hint_want="" _i
+  _bvk_hint_area_on                                          # also without a command layer: the notices (too large) go here, as on every menu; _cm_hint says nothing then
   _BVK_SCR_PROMPT="${_ce_prompt##*$'\n'}"
-  _CE_ROW=0; _CM_HINT_SHOW=""
-  # lines above the prompt row are printed once; the prompt row + text are (re)drawn by _cm_edit_draw, which counts wrapped rows
+  _BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0
+  # lines above the prompt row are printed once; then the (blank) suggestion rows; the prompt row + text are (re)drawn by _bvk_draw_input
   [[ "$_ce_prompt" == *$'\n'* ]] && builtin printf '%s\n' "${_ce_prompt%$'\n'*}"
-  _bvk_paste_on
-  # _CE_FILL: a text the caller offers (the rename screen: the old name).  The Up arrow, or a tap / click on the row just above the
-  # prompt (the "Old:" line), puts it into the line.  Reports for the tap are asked for only while such a text is offered.
-  [ -n "${_CE_FILL:-}" ] && declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on
-  _cm_edit_draw
-  # text that cc just typed in for you: show what it does, like any typed command
-  if [ "${_CC_HINT_NOW:-0}" = 1 ]; then
-    _CC_HINT_NOW=0
-    if [ "$no_cmds" = 0 ] && [ -n "$_ce_buf" ]; then _cm_hint "$_ce_buf" text; _CM_HINT_SHOW="$_hint_want"; _cm_edit_draw; fi
+  # a prompt wider than the screen (a tool's long question on a phone) is printed on its own row(s), and the text row starts under it: the drawer
+  # (_bvk_draw_input) assumes the prompt fits next to some text, like "Select: " does
+  local _ce_dp="${_ce_prompt##*$'\n'}"
+  if declare -F _bvk_dispw >/dev/null 2>&1; then
+    _bvk_cols; _bvk_dispw "$_ce_dp"
+    (( _BVK_W > _BVK_COLS - 16 )) && { builtin printf '%s\n' "$_ce_dp"; _ce_dp="> "; }
   fi
-  while :; do
-    IFS= builtin read -rsn1 key; rc=$?
-    if [ "$rc" -ne 0 ]; then _ce_buf=""; _CM_OUT=""; break; fi
-    if [[ "$key" == $'\x1b' ]]; then
-      seq=""
-      while IFS= builtin read -rsn1 -t 0.02 key; do
-        seq+="$key"
-        case "$seq" in '['*[A-Za-z~]|O[A-Za-z]) break ;; esac
-      done
-      case "$seq" in
-        '[200~') _bvk_paste_bracketed; _cm_edit_paste "$_BVK_PASTE" ;;   # a paste: ONE insert, ONE redraw (line breaks are text)
-        '[A') [ -n "${_CE_FILL:-}" ] && { _ce_buf="$_CE_FILL"; _ce_pos=${#_ce_buf}; } ;;
-        '[<'*) if [ -n "${_CE_FILL:-}" ] && declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$seq" && [ "$_MS_ACT" = press ] && _bvk_mouse_prow; then
-                 (( _BVK_CROW - _MS_Y == _CE_ROW + 1 )) && { _ce_buf="$_CE_FILL"; _ce_pos=${#_ce_buf}; }
-               fi ;;
-        # the shared editing keys (← → Home End Delete, Shift / Ctrl variants, copy / cut / paste, undo ...): bashbasicsbyvk_textedit.sh.
-        # The hint and the line are redrawn below after every key, so REDRAW / EDIT are no-ops here.
-        *) _te_esc "$seq" text _ce_buf _ce_pos : : _cm_edit_paste ;;
-      esac
-    else
-      # a paste that came without the bracketed-paste markers: the bytes already waiting are part of it (see viewport.sh)
-      if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
-        if _bvk_paste_burst "${key:-$'\n'}"; then
-          _cm_edit_paste "$_BVK_PASTE"
-          [ "$_BVK_PASTE_ENTER" = 1 ] && break
-          _cm_edit_refresh
-          continue
-        fi
-      fi
-      # a single-byte editing key (Ctrl-A select all, Ctrl-C / X / V, Backspace, Ctrl-W / U / K / D / Z / Y ...): bashbasicsbyvk_textedit.sh
-      if ! _te_byte "$key" text _ce_buf _ce_pos : : _cm_edit_paste; then
-      case "$key" in
-        ""|$'\r'|$'\n') break ;;
-        $'\x04') { _CM_OUT=""; rc=1; break; } ;;                  # Ctrl-D on an empty line: end of input
-        $'\t') [ "$can_complete" = 1 ] && _cm_complete ;;
-        [[:cntrl:]]) : ;;
-        *) _te_sel_len "$_ce_buf" "$_ce_pos"                       # a selected text is replaced by what is typed
-           if (( ${#_ce_buf} - _TE_N >= ${_BVK_MAX_INPUT:-512} )); then _ce_deny="Too large: over ${_BVK_MAX_INPUT:-512} characters. Not accepted."
-           else _te_insert _ce_buf _ce_pos "$key"; fi ;;
-      esac
-      fi
-    fi
-    _cm_edit_refresh
-  done
-  # leave: wipe the hint row, put the cursor after the text, newline
-  _bvk_paste_off
-  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
-  _CM_HINT_SHOW=""
-  _cm_edit_leave
-  _te_end
-  [ -n "$stty_orig" ] && stty "$stty_orig" 2>/dev/null
-  if [ "$rc" -ne 0 ]; then return 1; fi
+  for (( _i=0; _i<_vp_hint_n; _i++ )); do builtin printf '\n'; done
+  # THE typed-line loop: keys, selection, paste + its limit, tap, mouse on / off, teardown (bashbasicsbyvk_viewport.sh).
+  local $_BVK_ED_HOOKS
+  local _ED_BUF=_ce_buf _ED_POS=_ce_pos _ED_MODE=text _ED_REDRAW=_cm_edit_draw _ED_EDITED=_cm_edit_draw
+  local _ED_START=_cm_edit_start _ED_CLICK=_cm_edit_click _ED_NAV=_cm_edit_nav _ED_BYTE=_cm_edit_byte
+  _bvk_edit_run
+  (( _ED_EOF )) && { _ce_buf=""; _CM_OUT=""; _ce_rc=1; }
+  _bvk_blk_leave                                             # the cursor to the last row of the text, then the suggestion rows are wiped, as a menu does
+  [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ] && { _hint_cur=""; _bvk_hint_leave; }
+  builtin echo
+  _BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0
+  if [ "$_ce_rc" -ne 0 ]; then return 1; fi
+  [ "${_CE_MULTI:-0}" = 1 ] || _ce_buf="${_ce_buf//$'\n'/ }"   # a typed-line answer is ONE line (a paste with line breaks is shown as rows, returned joined by spaces) unless the caller asked for rows (-m)
   _CM_OUT="$_ce_buf"
   return 0
 }

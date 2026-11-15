@@ -258,7 +258,7 @@ def run(args, keys, tty=True):
                 if not d: return
                 buf += d
             if stop(): return
-    pump(10, lambda: len(buf) > 0)
+    pump(10, lambda: args[0].rstrip().encode() in buf)         # type once the PROMPT is up (the footer line above it is printed first)
     for k in keys:
         n = len(buf); os.write(fd, k)
         pump(3, lambda: len(buf) > n or b'[[RC=' in buf)

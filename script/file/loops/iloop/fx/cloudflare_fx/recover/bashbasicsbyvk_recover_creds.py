@@ -26,13 +26,21 @@ _LINE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$"
 
 try:
     import bashbasicsbyvk_ask as _bvk_ask        # THE native line editor for every typed prompt (AGENTS.md rule 16)
-except ImportError:                              # a broken install
+    Back, steps = _bvk_ask.Back, _bvk_ask.steps  # u = one question back (AGENTS.md rule 17)
+except ImportError:                              # a broken install: no back, the questions are asked in order
     _bvk_ask = None
 
+    class Back(EOFError):
+        pass
 
-def _ask(prompt, secret=False):
+    def steps(*fns):
+        for f in fns:
+            f()
+
+
+def _ask(prompt, secret=False, back=False):
     if _bvk_ask is not None:
-        return _bvk_ask.ask(prompt, secret=secret)
+        return _bvk_ask.ask(prompt, secret=secret, back=back)
     if secret:
         return getpass.getpass(prompt)           # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
     sys.stderr.write(prompt); sys.stderr.flush()
@@ -118,38 +126,58 @@ def resolve(nav):
 
 
 def credentials(nav, interactive=True):
-    """Return (token, account). Looks in the navigation path first; asks only for what is still missing."""
+    """Return (token, account). Looks in the navigation path first; asks only for what is still missing.  The questions are steps: u = one question back
+    (u on the first one that asks leaves: Back, an EOFError); a step that finds its answer asks nothing."""
+    found = {}
     token, account, tsrc, asrc = resolve(nav)
-    if token:
-        _err(f"  API token  : from {tsrc}")
-    elif interactive:
+
+    def s_token():
+        if token:
+            _err(f"  API token  : from {tsrc}")
+            found["token"] = token
+            return False
+        t = ""
+        if interactive:
+            try:
+                t = _ask(f"Cloudflare API token (hidden) - not found in {nav}: ", secret=True, back=True).strip()
+            except Back:
+                raise
+            except EOFError:
+                t = ""
+        if not t:
+            raise RecoverError(
+                f"No Cloudflare API token. Put CLOUDFLARE_API_TOKEN=... in {Path(nav) / '.dev.vars'} (or .env) in this folder.")
+        found["token"] = t
+
+    def s_account():
+        if account:
+            _err(f"  Account ID : from {asrc}")
+            found["account"] = account
+            return False
+        a, asked = "", False
         try:
-            token = _ask(f"Cloudflare API token (hidden) - not found in {nav}: ", secret=True).strip()
-        except EOFError:
-            token = ""
-    if not token:
-        raise RecoverError(
-            f"No Cloudflare API token. Put CLOUDFLARE_API_TOKEN=... in {Path(nav) / '.dev.vars'} (or .env) in this folder.")
-    if account:
-        _err(f"  Account ID : from {asrc}")
-    else:
-        try:
-            accts = get_json("/accounts", token).get("result", [])
+            accts = get_json("/accounts", found["token"]).get("result", [])
         except ApiError as e:
             raise RecoverError(f"Could not read your accounts with this token: {e}")
         if len(accts) == 1:
-            account = accts[0]["id"]
-            _err(f"  Account    : {accts[0].get('name', account)} (auto-detected)")
+            a = accts[0]["id"]
+            _err(f"  Account    : {accts[0].get('name', a)} (auto-detected)")
         elif accts and interactive:
-            for i, a in enumerate(accts):
-                _err(f"  [{i}] {a.get('name')}  {a['id']}")
+            for i, x in enumerate(accts):
+                _err(f"  [{i}] {x.get('name')}  {x['id']}")
+            asked = True
             try:
-                account = accts[int(_ask("Choose account number: ").strip())]["id"]
+                a = accts[int(_ask("Choose account number: ", back=True).strip())]["id"]
             except (ValueError, IndexError):
                 raise RecoverError("Invalid account number.")
         elif interactive:
-            account = _ask("Cloudflare account ID: ").strip()
-    if not account:
-        raise RecoverError(
-            f"No Cloudflare account ID. Put CLOUDFLARE_ACCOUNT_ID=... in {Path(nav) / '.dev.vars'} (or .env) in this folder.")
-    return token, account
+            asked = True
+            a = _ask("Cloudflare account ID: ", back=True).strip()
+        if not a:
+            raise RecoverError(
+                f"No Cloudflare account ID. Put CLOUDFLARE_ACCOUNT_ID=... in {Path(nav) / '.dev.vars'} (or .env) in this folder.")
+        found["account"] = a
+        return None if asked else False              # an auto-detected account asked nothing: u skips it on the way back
+
+    steps(s_token, s_account)
+    return found["token"], found["account"]

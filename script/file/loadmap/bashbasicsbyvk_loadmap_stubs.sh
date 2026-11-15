@@ -350,8 +350,6 @@ _st_number() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_number "$@"; }
 _st_move() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_move "$@"; }
 _st_tty_raw() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_tty_raw "$@"; }
 _st_tty_cooked() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_tty_cooked "$@"; }
-_st_edit_chord() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_edit_chord "$@"; }
-_st_readkey() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_readkey "$@"; }
 _st_draw() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_draw "$@"; }
 _st_deep_on() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_deep_on "$@"; }
 _st_fq_sync() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_fq_sync "$@"; }
@@ -371,6 +369,16 @@ _st_sig_cursor() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_sig_cursor "$@"; }
 _st_sig_edited() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_sig_edited "$@"; }
 _st_edited() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_edited "$@"; }
 _st_paste_text() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_paste_text "$@"; }
+_st_ev() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_ev "$@"; }
+_st_turn() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_turn "$@"; }
+_st_tick() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_tick "$@"; }
+_st_pre() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_pre "$@"; }
+_st_nav() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_nav "$@"; }
+_st_click_hook() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_click_hook "$@"; }
+_st_wheel_hook() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_wheel_hook "$@"; }
+_st_toolarge() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_toolarge "$@"; }
+_st_byte() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_byte "$@"; }
+_st_type_key() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_type_key "$@"; }
 _st_run() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_run "$@"; }
 _st_ask() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_ask "$@"; }
 _st_note() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_note "$@"; }

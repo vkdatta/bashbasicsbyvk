@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_ask — THE typed-line prompt for every tool that runs as its own process (bash or python): the app's native line editor.
 #
-#   answer=$(bashbasicsbyvk_ask "Prompt: " [-i "text the line starts with"] [-s])
+#   answer=$(bashbasicsbyvk_ask "Prompt: " [-i "text the line starts with"] [-S] [-s] [-b] [-m])
 #
 #   stdout = the typed line (so command substitution works); the prompt and the editor are drawn on the TERMINAL, also when the caller's stdin / stdout are pipes.
-#   exit 0 = a line came back · 2 = no answer (Ctrl-D / EOF) · 3 = cannot ask (the editor is not installed: a broken install)
+#   exit 0 = a line came back · 2 = no answer (q / u / Ctrl-D / EOF) · 3 = cannot ask (the editor is not installed: a broken install) · 4 = u, with -b
+#   -m  a multi-line answer (a commit message): without it the answer is ONE line, a pasted line break comes back as a space
+#   -S  the -i text starts SELECTED: typing replaces it, Enter keeps it (a question that is asked again after u: so u can be typed again at once)
 #   -s  a secret (a key, a token): nothing is echoed
+#   -b  a caller that chains questions (a _mc_steps flow): u (back) exits 4 instead of 2, so it can ask the question before again (same as bashbasicsbyvk_yn -b)
+#   u / q  typed alone are the two navigation words of every menu (footer "u) Back   q) Quit", printed above the prompt); @u / @q is that text, typed literally.
+#          A prompt that lists its own answers ([y/n], [1-3]) is not given the words: they may be answers there.
 #
 # It is the SAME editor as every prompt inside the app (_cm_line_edit, bashbasicsbyvk_textedit.sh): selection, Shift / Ctrl keys, cut / copy / paste, undo.
 # A change to how a typed line behaves is made there once and reaches this tool too.  Callers keep a plain `read` only as the last fallback for exit 3
@@ -14,18 +19,28 @@
 declare -F _cm_line_edit >/dev/null 2>&1 || source "_3bvk_import_ask.sh" 2>/dev/null
 declare -F _cm_line_edit >/dev/null 2>&1 || { echo "bashbasicsbyvk_ask: the line editor is not installed (reinstall bashbasicsbyvk)." >&2; exit 3; }
 [ -n "${1:-}" ] || { echo 'usage: bashbasicsbyvk_ask "Prompt: " [-i text] [-s]' >&2; exit 3; }
-_ak_p="$1"; shift; _ak_i=""; _ak_s=0
-while [ "$#" -gt 0 ]; do case "$1" in -i) _ak_i="${2-}"; shift 2 ;; -s) _ak_s=1; shift ;; *) shift ;; esac; done
+_ak_p="$1"; shift; _ak_i=""; _ak_s=0; _ak_b=0; _ak_sel=0; _ak_multi=0
+while [ "$#" -gt 0 ]; do case "$1" in -i) _ak_i="${2-}"; shift 2 ;; -s) _ak_s=1; shift ;; -b) _ak_b=1; shift ;; -S) _ak_sel=1; shift ;; -m) _ak_multi=1; shift ;; *) shift ;; esac; done
 exec 3>&1                                                   # the caller's stdout: only the answer goes there
 [ -t 0 ] || { [ -r /dev/tty ] && exec </dev/tty; }
 [ -t 1 ] || { [ -w /dev/tty ] && exec >/dev/tty; }
 if [ -t 0 ] && [ -t 1 ]; then
+  _ak_nav=1; _cm_prompt_has_choices "$_ak_p" && _ak_nav=0
+  [ "$_ak_nav" = 1 ] && _mc_footer u q                      # the footer every menu prints above its prompt
   if [ "$_ak_s" = 1 ]; then
     IFS= read -rs -p "$_ak_p" _ak_a || exit 2; echo >&2     # bvk-read-ok: a secret is read silently: nothing is drawn, so there is no line to edit
   else
-    _CM_ON=0                                                # no command layer in a stand-alone process: plain text, no hint row
+    _CM_ON=0                                                # no full command layer in a stand-alone process (s, h, cd ... need the app): only u and q, below
+    _CE_SELECT=$_ak_sel; _CE_MULTI=$_ak_multi
     _cm_line_edit "$_ak_p" "$_ak_i" _ak_a 0 || exit 2
     _ak_a="$_CM_OUT"
+  fi
+  if [ "$_ak_nav" = 1 ]; then                               # the same two words for a typed line and a secret
+    case "${_ak_a,,}" in
+      u) [ "$_ak_b" = 1 ] && exit 4; exit 2 ;;              # u: one question back (the caller chains with _mc_steps) / leave
+      q) exit 2 ;;                                          # q: quit
+      @u|@q) _ak_a="${_ak_a#@}" ;;                          # @word: that text, literally
+    esac
   fi
 else
   IFS= read -r _ak_a || exit 2                              # bvk-read-ok: no terminal at all (a pipe, a test harness): the piped answer

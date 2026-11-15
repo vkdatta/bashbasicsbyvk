@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# The questions of one flow are STEPS (_mc_steps: u = ONE QUESTION BACK, q = quit).  Only the step helper is needed here (flat pip install: it sits next to this script on PATH);
+# the engine import is NOT sourced: it hooks echo / printf and does not run under set -u.
+# shellcheck disable=SC1090
+set +eu; source "bashbasicsbyvk_menuchrome.sh" 2>/dev/null; set -eu
+declare -F _mc_steps >/dev/null 2>&1 || { echo "ERROR: cannot load bashbasicsbyvk_menuchrome.sh (reinstall bashbasicsbyvk)." >&2; exit 1; }
+
 TARGET="${1:-$(pwd)}"
 DEFAULT_COMMIT_MESSAGE="Codebase Updated"
 
@@ -128,14 +134,16 @@ Run:
 
 # Asks whether the new GitHub repository is private (default) or public; sets VISIBILITY for  gh repo create.
 # A yes/no question has NO default: it asks again until the answer is y or n (a bare Enter is not an answer).  Sets ANS to y | n.
-ask_yn() {
-    local a rc=3
+ask_yn() {   # ask_yn "Question?" [-b]   -b: u = one question back (returns 4, ANS empty); without it every non-answer ends the tool
+    local a rc=3 yn_args=(-t "Git push" -i "🚀")
+    [ "${2:-}" = -b ] && yn_args+=(-b)
     # THE native yes/no menu (bashbasicsbyvk_yn); the plain question below is only the fallback of a broken install
     if command -v bashbasicsbyvk_yn >/dev/null 2>&1; then
-        bashbasicsbyvk_yn "$1" -t "Git push" -i "🚀" && rc=0 || rc=$?
+        bashbasicsbyvk_yn "$1" "${yn_args[@]}" && rc=0 || rc=$?
         case "$rc" in
             0) ANS=y; return 0 ;;
             1) ANS=n; return 0 ;;
+            4) ANS=""; return 4 ;;
             2) die "No answer." ;;
         esac
     fi
@@ -325,8 +333,8 @@ ensure_origin() {
 # Version selection
 # ============================================================
 
-select_version() {
-    local choice
+select_version() {   # a STEP of create_commit: 0 answered (VERSION set) · 1 u (back) · 3 q / no answer
+    local choice rc=3
 
     echo
     echo "Select version bump type:"
@@ -336,7 +344,14 @@ select_version() {
     echo "4) None   (Skip version tag)"
     echo
 
-    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then choice="$(bashbasicsbyvk_ask "Enter choice [1-4, Default: 1]: ")"      # THE native line editor
+    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then      # THE native line editor: u = back, q = quit
+        choice="$(bashbasicsbyvk_ask "Enter choice [1-4, Default: 1]: " -b)" && rc=0 || rc=$?
+        case "$rc" in
+            0) ;;
+            4) return 1 ;;
+            3) read -e -r -p "Enter choice [1-4, Default: 1]: " choice ;;   # bvk-read-ok: fallback of a broken install (no editor)
+            *) return 3 ;;
+        esac
     else read -e -r -p "Enter choice [1-4, Default: 1]: " choice; fi   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
 
     case "$choice" in
@@ -357,35 +372,33 @@ select_version() {
             VERSION="#patch"
             ;;
     esac
+    return 0
 }
 
 # ============================================================
 # Commit
 # ============================================================
 
-create_commit() {
-    local user_msg
-    local final_msg
-    local answer
-
-    # FIRST check for actual working-tree/index changes.
-    # This must happen BEFORE asking for version bump or commit message.
-    git add .
-
-    if git diff --cached --quiet; then
-        return 1
-    fi
-
-    check_git_identity
-    select_version
-
+# The three questions of a commit, one step each (they share create_commit's locals):  version → message → "Create this commit?".
+# Each returns 0 answered · 1 u (the question before) · 3 q / no / cancelled.
+_gc_s_version() { select_version; }
+_gc_s_message() {
+    local rc=3
     echo
-    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then user_msg="$(bashbasicsbyvk_ask "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: ")"      # THE native line editor
+    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then      # THE native line editor: u = back, q = quit; what was typed is kept when u comes back here
+        user_msg="$(bashbasicsbyvk_ask "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " -b -S -m -i "$user_msg")" && rc=0 || rc=$?
+        case "$rc" in
+            0) ;;
+            4) return 1 ;;
+            3) read -e -r -p "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " user_msg ;;   # bvk-read-ok: fallback of a broken install (no editor)
+            *) return 3 ;;
+        esac
     else read -e -r -p "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " user_msg; fi   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
-
-    user_msg="${user_msg:-$DEFAULT_COMMIT_MESSAGE}"
-    final_msg="$user_msg"
-
+    return 0
+}
+_gc_s_confirm() {
+    local rc=0
+    final_msg="${user_msg:-$DEFAULT_COMMIT_MESSAGE}"
     if [[ -n "$VERSION" ]]; then
         if [[ "$final_msg" =~ (^|[[:space:]])#(patch|minor|major)([[:space:]]|$) ]]; then
             info "Commit message already contains a version tag."
@@ -402,14 +415,34 @@ create_commit() {
     git status --short
     echo
 
-    ask_yn "Create this commit?"; answer="$ANS"
+    ask_yn "Create this commit?" -b || rc=$?
+    case "$rc" in
+        0) [[ "$ANS" == y ]] && return 0 || return 3 ;;
+        4) return 1 ;;
+    esac
+    return 3
+}
 
-    case "$answer" in
-        y)
-            ;;
-        *)
-            die "Commit cancelled."
-            ;;
+create_commit() {
+    local user_msg=""
+    local final_msg=""
+    local rc=0
+
+    # FIRST check for actual working-tree/index changes.
+    # This must happen BEFORE asking for version bump or commit message.
+    git add .
+
+    if git diff --cached --quiet; then
+        return 1
+    fi
+
+    check_git_identity
+
+    _mc_steps _gc_s_version _gc_s_message _gc_s_confirm || rc=$?
+    case "$rc" in
+        0) ;;
+        1) echo "Commit cancelled (back)."; exit 0 ;;      # u on the FIRST question: out of the tool, back to the menu it was opened from
+        *) die "Commit cancelled." ;;
     esac
 
     git commit -m "$final_msg" ||

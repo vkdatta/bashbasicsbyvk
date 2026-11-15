@@ -32,7 +32,7 @@
 #               (a loop that redraws after every key itself passes `:` for REDRAW / EDIT)
 #     _te_insert BUFVAR POSVAR TEXT                    type / paste TEXT at the cursor; a selection is replaced
 #     _te_del_sel BUFVAR POSVAR                        delete the selection (rc 0 = there was one)
-#  Drawing: the line drawers (_bvk_fit_input, _bvk_row_multi, _cm_edit_draw) ask _te_hl for the selected part in reverse video, and
+#  Drawing: the line drawers (_bvk_draw_input: _bvk_fit_input, _bvk_row_multi) ask _te_hl for the selected part in reverse video, and
 #  every drawer calls _te_cursor first (no block cursor over a selection).  A tap on the typed text is _bvk_prompt_tap (viewport.sh).
 #  A selection belongs to ONE text: it counts only while the line still IS that text (_TE_ABUF), so a loop that sets its
 #  buffer by hand (an arrow that types a number) drops it by itself.

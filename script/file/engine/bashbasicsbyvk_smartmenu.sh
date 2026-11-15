@@ -469,19 +469,8 @@ _sm_compute_msel() {
 _sm_is_hl_multi() { [ -n "${_msel_set[$1]+x}" ]; }
 
 _sm_input_fn() {
-  _te_cursor "$_buf" "$_pos"                             # no block cursor over a selection
   _BVK_SCR_PROMPT="${_sm_prompt##*$'\n'}"
-  if declare -F _bvk_row_multi >/dev/null 2>&1 && _bvk_row_multi "$_sm_prompt" "$_buf" "$_pos"; then return 0; fi   # too long for one row: shown in full
-  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
-  local back
-  if declare -F _bvk_fit_input >/dev/null 2>&1; then
-    _bvk_fit_input "$_sm_prompt" "$_buf" "$_pos"        # one row only (see _bvk_fit_input in viewport.sh)
-    builtin printf '\r\033[K%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
-  else
-    builtin printf '\r\033[K%s%s' "$_sm_prompt" "$_buf"; back=$(( ${#_buf} - _pos ))
-  fi
-  [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
-  return 0
+  _bvk_draw_input "$_sm_prompt" "$_buf" "$_pos"
 }
 
 # rows that are only spacing are not selectable
@@ -651,10 +640,7 @@ _sm_range() { if [ "$1" = "$2" ]; then builtin echo "$1"; else builtin echo "$1-
 # ------------------------------------------------------------
 # click a row: single menu = select it (its token is typed), double click = and Enter.  multi / command menu = move the cursor row
 # there and toggle it like Space; double click = make sure it is in, and Enter.  ▲ / ▼ / wheel scroll.   returns 2 = accept now.
-_sm_click() {
-  _bvk_blk_park
-  if ! _bvk_mouse_prow; then _sm_input_fn; return 0; fi
-  _bvk_mouse_hit "$_MS_Y" "$_BVK_CROW"
+_sm_click() {      # called by _bvk_edit_run for a press that is not on the typed text (_MS_KIND / _MS_ITEM are set)
   local rc=0 it
   case "$_MS_KIND" in
     item)
@@ -672,7 +658,6 @@ _sm_click() {
       return $rc ;;
     pgup) _BVK_LAST_ITEM=""; _bvk_mouse_scroll $(( - _vp_page )) ;;
     pgdn) _BVK_LAST_ITEM=""; _bvk_mouse_scroll "$_vp_page" ;;
-    prompt) _bvk_prompt_tap "$_buf" _pos || _bvk_mouse_other "$_MS_Y" "$_BVK_CROW" ;;   # same as every read loop
     *)
       if _bvk_mouse_other "$_MS_Y" "$_BVK_CROW"; then           # a footer key (double tap only) or the prompt row (hands the touch back)
         case "$_MS_FACT" in
@@ -709,11 +694,42 @@ _sm_type_key() {
 }
 _sm_type_text() { _buf="$1"; _pos=${#_buf}; _sm_after_edit; }
 # a paste: ONE insert, ONE redraw
-_sm_paste_text() {
-  local t="$1"
-  [ -z "$t" ] && return 0
-  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _sm_input_fn drain; return 0; }
-  _te_insert _buf _pos "$t"; _sm_after_edit
+
+_sm_start() { _lt_ready smart; [ -n "${_CC_PREFILL:-}" ] && _cc_replay _sm_type_key _sm_type_text; return 0; }
+_sm_tick()  { if _vp_check_resize; then _vp_cache_reset; _vp_redraw_in_place; _vp_poll_active; fi; return 0; }
+_sm_wheel_hook() { _sm_wheel "$([ "$1" = up ] && echo -1 || echo 1)"; }
+# arrows: a multi / command menu moves a cursor row (they do NOT overwrite the buffer); a single menu moves the selection
+_sm_nav() {
+  local n="$_SM_N" mv=_sm_set_index
+  $_SM_MULTI && mv=_sm_move_cursor
+  case "$1" in
+    up)   $mv "$(_sm_next_selectable $(( ${_hl_index:-1} <= 1 ? n : _hl_index - 1 )) -1)" ;;
+    down) $mv "$(_sm_next_selectable $(( ${_hl_index:-0} >= n ? 1 : _hl_index + 1 )) 1)" ;;
+    pgup) $mv "$(_sm_next_selectable $(( ${_hl_index:-1} - ${_vp_page_step:-10} < 1 ? 1 : _hl_index - _vp_page_step )) 1)" ;;
+    pgdn) $mv "$(_sm_next_selectable $(( ${_hl_index:-0} + ${_vp_page_step:-10} > n ? n : _hl_index + _vp_page_step )) -1)" ;;
+    home) $mv "$(_sm_next_selectable 1 1)" ;;
+    end)  $mv "$(_sm_next_selectable "$n" -1)" ;;
+  esac
+  return 0
+}
+# the bytes the editing keys did not take: Space (toggles the cursor row in a multi menu), Ctrl-A / Ctrl-E on an empty line
+_sm_byte() {
+  local n="$_SM_N" __i
+  case "$1" in
+    ' ') $_SM_MULTI || return 2; _sm_toggle_cursor; return 0 ;;
+    $'\x01')   # first item (single) / select-all rows (multi); with text Ctrl-A selects all of it (bashbasicsbyvk_textedit.sh)
+      if $_SM_MULTI; then
+        _msel_set=()
+        for ((__i=1; __i<=n; __i++)); do _sm_row_selectable "$__i" && _msel_set[$__i]=1; done
+        _sm_cmd_prefix=""
+        [ "$_sm_mode" = "command" ] && { _sm_split_command "$_buf"; }
+        _buf="${_sm_cmd_prefix}$(_sm_render_set)"; _pos=${#_buf}
+        _sm_sync_multi
+      else _sm_set_index "$(_sm_next_selectable 1 1)"; fi
+      return 0 ;;
+    $'\x05') $_SM_MULTI || _sm_set_index "$(_sm_next_selectable "$n" -1)"; return 0 ;;
+  esac
+  return 2
 }
 
 _sm_run() {
@@ -764,113 +780,11 @@ _sm_run() {
     _sm_input_fn
   fi
 
-  _te_begin _buf _pos list _sm_input_fn _sm_after_edit _sm_paste_text
-  _bvk_paste_on
-  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
-  _lt_ready smart
-  [ -n "${_CC_PREFILL:-}" ] && _cc_replay _sm_type_key _sm_type_text
-  while true; do
-    IFS= builtin read -rsn1 -t "${_vp_poll_cur:-0.5}" key
-    _rc=$?
-    if [ "$_rc" -gt 128 ]; then
-      _vp_poll_tick
-      if _vp_check_resize; then
-        _vp_cache_reset
-        _vp_redraw_in_place
-        _vp_poll_active
-      fi
-      continue
-    fi
-    [ "$_rc" -ne 0 ] && break
-    _vp_poll_active
-
-    if [[ "$key" == $'\x1b' ]]; then
-      _read_key_seq || continue
-      if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _sm_paste_text "$_BVK_PASTE"; continue; fi
-      if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
-        case "$_MS_ACT" in
-          press)     _sm_click; (( $? == 2 )) && break ;;       # double click / double tap = Enter
-          wheelup)   _sm_wheel -1 ;;
-          wheeldown) _sm_wheel 1 ;;
-        esac
-        continue
-      fi
-      # the shared editing keys (← → Shift/Ctrl+arrows, Delete, copy / cut / paste, undo ...): bashbasicsbyvk_textedit.sh
-      _te_esc "$_esc" list _buf _pos _sm_input_fn _sm_after_edit _sm_paste_text && continue
-      _key_name "$_esc"
-      case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
-      if $multi; then
-        # arrows move a cursor row; they do NOT overwrite the buffer
-        case "$_kname" in
-          up)   _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-1} <= 1 ? n : _hl_index - 1 )) -1)" ;;
-          down) _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-0} >= n ? 1 : _hl_index + 1 )) 1)" ;;
-          pgup) _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-1} - ${_vp_page_step:-10} < 1 ? 1 : _hl_index - _vp_page_step )) 1)" ;;
-          pgdn) _sm_move_cursor "$(_sm_next_selectable $(( ${_hl_index:-0} + ${_vp_page_step:-10} > n ? n : _hl_index + _vp_page_step )) -1)" ;;
-          home) _sm_move_cursor "$(_sm_next_selectable 1 1)" ;;
-          end)  _sm_move_cursor "$(_sm_next_selectable "$n" -1)" ;;
-          *) : ;;
-        esac
-      else
-        case "$_kname" in
-          up)   _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-1} <= 1 ? n : _hl_index - 1 )) -1)" ;;
-          down) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-0} >= n ? 1 : _hl_index + 1 )) 1)" ;;
-          pgup) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-1} - ${_vp_page_step:-10} < 1 ? 1 : _hl_index - _vp_page_step )) 1)" ;;
-          pgdn) _sm_set_index "$(_sm_next_selectable $(( ${_hl_index:-0} + ${_vp_page_step:-10} > n ? n : _hl_index + _vp_page_step )) -1)" ;;
-          home) _sm_set_index "$(_sm_next_selectable 1 1)" ;;
-          end)  _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
-          *) : ;;
-        esac
-      fi
-      case "$_kname" in up|down|pgup|pgdn|home|end) (( ${_BLK_ROWS:-1} > 1 )) && _sm_input_fn ;; esac
-      continue
-    fi
-
-    if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
-      if _bvk_paste_burst "${key:-$'\n'}"; then
-        _sm_paste_text "$_BVK_PASTE"
-        [ "$_BVK_PASTE_ENTER" = 1 ] && break
-        continue
-      fi
-    fi
-
-    _te_byte "$key" list _buf _pos _sm_input_fn _sm_after_edit _sm_paste_text && continue
-    case "$key" in
-      "") break ;;                                 # Enter — accept
-      ' ')
-        if $multi; then _sm_toggle_cursor          # Space toggles cursor row
-        else
-          _is_ctrl_char " " && continue
-          _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _sm_input_fn; continue; }
-          _te_insert _buf _pos " "; _sm_after_edit
-        fi
-        ;;
-      $'\x01')  # Ctrl-A on an empty line — first item (single) / select-all rows (multi); with text it selects all of it
-        if $multi; then
-          local __i
-          _msel_set=()
-          for ((__i=1; __i<=n; __i++)); do _sm_row_selectable "$__i" && _msel_set[$__i]=1; done
-          _sm_cmd_prefix=""
-          [ "$_sm_mode" = "command" ] && { _sm_split_command "$_buf"; }
-          _buf="${_sm_cmd_prefix}$(_sm_render_set)"; _pos=${#_buf}
-          _sm_sync_multi
-        else
-          _sm_set_index "$(_sm_next_selectable 1 1)"
-        fi
-        ;;
-      $'\x05') $multi || _sm_set_index "$(_sm_next_selectable "$n" -1)" ;;
-      *)
-        _is_ctrl_char "$key" && continue
-        _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _sm_input_fn; continue; }
-        _te_insert _buf _pos "$key"
-        _sm_after_edit
-        ;;
-    esac
-  done
-
-  _bvk_paste_off
-  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
-  _te_end
-  [ -n "${_orig_stty:-}" ] && stty "$_orig_stty" 2>/dev/null
+  _SM_N="$n"; _SM_MULTI=$multi
+  local $_BVK_ED_HOOKS
+  local _ED_BUF=_buf _ED_POS=_pos _ED_MODE=list _ED_REDRAW=_sm_input_fn _ED_EDITED=_sm_after_edit
+  local _ED_START=_sm_start _ED_TICK=_sm_tick _ED_CLICK=_sm_click _ED_WHEEL=_sm_wheel_hook _ED_NAV=_sm_nav _ED_NAVPARK=1 _ED_BYTE=_sm_byte _ED_STTY="${_orig_stty:-}"
+  _bvk_edit_run
   _bvk_blk_leave
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; _bvk_hint_leave; fi
   builtin echo
@@ -966,11 +880,12 @@ _bvk_noemoji() {
 #   `tests/prompt_template/read_lint.sh` fails on a bare `read` anywhere else (AGENTS.md rule 16).
 _bvk_read() {
   local __br_v="$1" __br_p="$2"; shift 2
-  local -a __br_f=(-r); local __br_ifs=0 __br_e=1
+  local -a __br_f=(-r); local __br_ifs=0 __br_e=1 _CE_MULTI=0          # _CE_MULTI: read by the line editor: 1 = the answer keeps its line breaks
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -i) __br_f+=(-i "${2-}"); shift 2 ;;
       -I) __br_ifs=1; shift ;;
+      -m) _CE_MULTI=1; shift ;;                     # a multi-line answer (a commit message): the default is ONE line, a pasted line break becomes a space
       -s) __br_f+=(-s); __br_e=0; shift ;;          # a secret / one key: the plain silent read (nothing is drawn, so nothing to edit)
       -1) __br_f+=(-s -n1); __br_e=0; shift ;;
       *)  shift ;;

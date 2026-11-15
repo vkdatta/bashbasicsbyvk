@@ -25,6 +25,7 @@ cheatcode|slow|90|bash tests/cheatcode.sh|
 resume_inflight|slow|90|bash tests/resume_inflight.sh|node
 nav_back|slow|300|python3 tests/nav_back/nav_test.py|python3
 prompt_template|slow|240|python3 tests/prompt_template/prompt_test.py|python3
+prompt_chain|slow|120|python3 tests/prompt_template/chain_test.py|python3
 prompt_drift|fast|20|bash tests/prompt_template/drift.sh|
 read_lint|fast|90|python3 tests/prompt_template/read_lint.py|python3
 paste_input|slow|180|bash tests/paste_input/run.sh|python3

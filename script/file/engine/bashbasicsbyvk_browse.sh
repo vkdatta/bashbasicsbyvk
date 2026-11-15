@@ -640,37 +640,10 @@ _render_items_with_highlight() {
 # The line being typed on is never touched.  _hint_cur = what is on screen now ("?" = unknown).
 _hint_cur=""
 _hint_want=""
-_input_hint_sync() {
-  _hint_want=""
-  if [ "${_vp_hint_row:-0}" = 1 ]; then
-    # "=" has its own hint (live filter); everything else is the command map's live suggestion
-    [ "${_vp_input_fn:-}" = "_print_input_line" ] && declare -F _filter_hint_text >/dev/null 2>&1 && _filter_hint_text
-    if [ -z "$_hint_want" ] && declare -F _cm_hint >/dev/null 2>&1; then if [ "${_vp_input_fn:-}" = _multi_print_input_line ]; then _cm_hint "${_buf:-}" text; else _cm_hint "${_buf:-}" menu; fi; fi
-  fi
-  [ "$_hint_want" = "$_hint_cur" ] && return 0
-  _hint_cur="$_hint_want"
-  if [ -n "$_hint_want" ]; then
-    _bvk_hint_paint "$_hint_want"                      # the painter expands a long suggestion onto the next row (_bvk_hint_wrap)
-  else
-    _bvk_hint_paint ""
-  fi
-}
 
 _print_input_line() {
   _BVK_SCR_PROMPT="Select:"
-  _te_cursor "$_buf" "$_pos"                            # no block cursor over a selection (the template, textedit.sh)
-  # a text that does not fit one row (a paste, line breaks) is shown in full as a block of rows (see _bvk_row_multi)
-  if declare -F _bvk_row_multi >/dev/null 2>&1 && _bvk_row_multi "Select: " "$_buf" "$_pos"; then return 0; fi
-  _input_hint_sync
-  builtin printf '\r\033[K'
-  local back
-  if declare -F _bvk_fit_input >/dev/null 2>&1; then
-    _bvk_fit_input "Select: " "$_buf" "$_pos"            # one row only (see _bvk_fit_input in viewport.sh)
-    builtin printf '%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
-  else
-    builtin printf "Select: %s" "$_buf"; back=$(( ${#_buf} - _pos ))
-  fi
-  [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
+  _bvk_draw_input "Select: " "$_buf" "$_pos"
 }
 
 _update_highlight() {
@@ -840,18 +813,12 @@ _rc_wheel() {
 # a left click / tap at (_MS_X, _MS_Y).   returns 2 = double click: accept the line now (Enter)
 #                                         3 = a header tap: the line (_buf) is already set, accept it
 #                                         0 = handled
-_rc_click() {
-  _bvk_blk_park                                              # cursor onto the first prompt row, so its screen row IS the prompt row
-  if ! _bvk_mouse_prow; then (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line; return 0; fi
-  _bvk_mouse_hit "$_MS_Y" "$_BVK_CROW"
+_rc_click() {      # called by _bvk_edit_run for a press that is not on the typed text (the tap on the text is the engine's)
   local rc=0
   case "$_MS_KIND" in
     item)
       _bvk_mouse_dbl "i:$_MS_ITEM" && rc=2
       _nav_jump_to "$_MS_ITEM" ;;                            # highlight + type its number in the prompt (exactly what the arrow keys do)
-    prompt)                                                  # a tap on the typed text puts the cursor there (empty prompt: the touch goes back to the terminal, keyboard)
-      if _bvk_prompt_tap "$_buf" _pos; then _print_input_line
-      else _bvk_mouse_other "$_MS_Y" "$_BVK_CROW"; fi ;;
     pgup) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-1} - _vp_page_step )) ;;
     pgdn) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-0} + _vp_page_step )) ;;
     *)
@@ -874,6 +841,78 @@ _rc_click() {
   return $rc
 }
 
+_rc_start() {
+  _print_input_line
+  _lt_ready menu
+  # cc: the command picked from the cheat-code list is typed in for you (it does not run until Enter)
+  [ -n "${_CC_PREFILL:-}" ] && _cc_replay _rc_type_key _rc_type_text
+  return 0
+}
+_rc_pre() { _rc_wasf=0; [[ "$_buf" == =* ]] && _rc_wasf=1; return 0; }
+# a tab was tapped (bashbasicsbyvk_mouse.sh): feed the ←/→ sentinel once per turn, exactly as if the arrow key had been pressed
+_rc_turn() {
+  if (( ${_BVK_TAB_STEPS:-0} != 0 )); then
+    if [ "${_sw_in_mode:-0}" = 1 ] && [ "${_BVK_TAB_SCREEN:-}" = "${_vp_header_fn:-}" ]; then
+      if (( _BVK_TAB_STEPS > 0 )); then choice="__sw_tab_right__"; _BVK_TAB_STEPS=$(( _BVK_TAB_STEPS - 1 ))
+      else choice="__sw_tab_left__"; _BVK_TAB_STEPS=$(( _BVK_TAB_STEPS + 1 )); fi
+      _buf=""; _pos=0; _hl_index=0
+      return 1
+    fi
+    _BVK_TAB_STEPS=0                                      # not this screen any more: forget it
+  fi
+  return 0
+}
+_rc_tick() {
+  # a screen can ask for a callback on every idle tick (e.g. Links → live "time left" column)
+  [ -n "${_vp_tick_fn:-}" ] && "$_vp_tick_fn"
+  if declare -F _dir_size_job_poll >/dev/null 2>&1; then
+    if _dir_size_job_poll; then _vp_cache_reset; _vp_prime_rows; _vp_redraw_in_place; _vp_poll_active; fi
+  fi
+  if _vp_check_resize; then _vp_cache_reset; _vp_prime_rows; _vp_redraw_in_place; _vp_poll_active; fi
+  return 0
+}
+_rc_nav() {         # rc 1 = leave the prompt (a tab switch)
+  local old
+  case "$1" in
+    up)
+      if $_can_nav; then
+        old="$_hl_index"
+        if [ "$_hl_index" -lt 1 ]; then _hl_index="$_vp_n"
+        else
+          _hl_index=$(( _hl_index - 1 ))
+          [ "$_hl_index" -lt 1 ] && _hl_index="$_vp_n"
+        fi
+        _buf="$_hl_index"; _pos=${#_buf}
+        _vp_goto "$old" "$_hl_index"
+      fi ;;
+    down)
+      if $_can_nav; then
+        old="$_hl_index"
+        if [ "$_hl_index" -lt 1 ]; then _hl_index=1
+        else
+          _hl_index=$(( _hl_index + 1 ))
+          [ "$_hl_index" -gt "$_vp_n" ] && _hl_index=1
+        fi
+        _buf="$_hl_index"; _pos=${#_buf}
+        _vp_goto "$old" "$_hl_index"
+      fi ;;
+    pgup)   _nav_jump_to $(( _hl_index - _vp_page_step )) ;;
+    pgdn)   _nav_jump_to $(( _hl_index + _vp_page_step )) ;;
+    home)   _nav_jump_to 1 ;;
+    end)    _nav_jump_to "$_vp_n" ;;
+    right) [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ] && { choice="__sw_tab_right__"; return 1; } ;;
+    left)  [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ] && { choice="__sw_tab_left__"; return 1; } ;;
+  esac
+  return 0
+}
+_rc_byte() {        # Ctrl-A / Ctrl-E on an empty line (with text they select all / move: bashbasicsbyvk_textedit.sh)
+  case "$1" in
+    $'\x01') _nav_jump_to 1; return 0 ;;
+    $'\x05') _nav_jump_to "$_vp_n"; return 0 ;;
+  esac
+  return 2
+}
+
 _read_choice_raw() {
   choice=""
   _can_nav=false
@@ -885,130 +924,14 @@ _read_choice_raw() {
     _hl_index=0
   fi
 
-  _te_begin _buf _pos list _print_input_line _rc_edited _rc_paste_text
-  trap '_vp_on_resize' WINCH
-  _bvk_paste_on
-  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
-
   _buf=""
   _pos=0
-  local key seq _rc _rc_wasf=0
-  _print_input_line
-  _lt_ready menu
-  # cc: the command picked from the cheat-code list is typed in for you (it does not run until Enter)
-  [ -n "${_CC_PREFILL:-}" ] && _cc_replay _rc_type_key _rc_type_text
-
-  while true; do
-    # a tab was tapped (bashbasicsbyvk_mouse.sh): feed the ←/→ sentinel once per turn, exactly as if the arrow key had been pressed
-    if (( ${_BVK_TAB_STEPS:-0} != 0 )); then
-      if [ "${_sw_in_mode:-0}" = 1 ] && [ "${_BVK_TAB_SCREEN:-}" = "${_vp_header_fn:-}" ]; then
-        if (( _BVK_TAB_STEPS > 0 )); then choice="__sw_tab_right__"; _BVK_TAB_STEPS=$(( _BVK_TAB_STEPS - 1 ))
-        else choice="__sw_tab_left__"; _BVK_TAB_STEPS=$(( _BVK_TAB_STEPS + 1 )); fi
-        _buf=""; _pos=0; _hl_index=0
-        break
-      fi
-      _BVK_TAB_STEPS=0                                      # not this screen any more: forget it
-    fi
-    IFS= read -rsn1 -t "$_vp_poll_cur" key
-    _rc=$?
-    if [ "$_rc" -gt 128 ]; then
-      _vp_poll_tick
-      # a screen can ask for a callback on every idle tick (e.g. Links → live "time left" column)
-      [ -n "${_vp_tick_fn:-}" ] && "$_vp_tick_fn"
-      if declare -F _dir_size_job_poll >/dev/null 2>&1; then
-        if _dir_size_job_poll; then
-          _vp_cache_reset
-          _vp_prime_rows
-          _vp_redraw_in_place
-          _vp_poll_active
-        fi
-      fi
-      if _vp_check_resize; then
-        _vp_cache_reset
-        _vp_prime_rows
-        _vp_redraw_in_place
-        _vp_poll_active
-      fi
-      continue
-    fi
-    [ "$_rc" -ne 0 ] && break
-    _vp_poll_active
-    if [[ "$key" == $'\x1b' ]]; then
-      _read_key_seq || continue
-      if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _rc_paste_text "$_BVK_PASTE"; continue; fi
-      if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
-        case "$_MS_ACT" in
-          press)     _rc_click; case $? in 2|3) break ;; esac ;;    # double click / double tap = Enter · a header tap = the command is typed
-          wheelup)   _rc_wheel up ;;
-          wheeldown) _rc_wheel down ;;
-        esac
-        continue
-      fi
-      # the shared editing keys (← → Shift/Ctrl+arrows, Delete, copy / cut / paste, undo ...): bashbasicsbyvk_textedit.sh
-      _rc_wasf=0; [[ "$_buf" == =* ]] && _rc_wasf=1
-      _te_esc "$_esc" list _buf _pos _print_input_line _rc_edited _rc_paste_text && continue
-      _key_name "$_esc"
-      case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
-      case "$_kname" in
-        up)
-          if $_can_nav; then
-            local old="$_hl_index"
-            if [ "$_hl_index" -lt 1 ]; then _hl_index="$_vp_n"
-            else
-              _hl_index=$(( _hl_index - 1 ))
-              [ "$_hl_index" -lt 1 ] && _hl_index="$_vp_n"
-            fi
-            _buf="$_hl_index"; _pos=${#_buf}
-            _vp_goto "$old" "$_hl_index"
-          fi ;;
-        down)
-          if $_can_nav; then
-            local old="$_hl_index"
-            if [ "$_hl_index" -lt 1 ]; then _hl_index=1
-            else
-              _hl_index=$(( _hl_index + 1 ))
-              [ "$_hl_index" -gt "$_vp_n" ] && _hl_index=1
-            fi
-            _buf="$_hl_index"; _pos=${#_buf}
-            _vp_goto "$old" "$_hl_index"
-          fi ;;
-        pgup)   _nav_jump_to $(( _hl_index - _vp_page_step )) ;;
-        pgdn)   _nav_jump_to $(( _hl_index + _vp_page_step )) ;;
-        home)   _nav_jump_to 1 ;;
-        end)    _nav_jump_to "$_vp_n" ;;
-        right) [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ] && { choice="__sw_tab_right__"; break; } ;;
-        left)  [ -z "$_buf" ] && [ "${_sw_in_mode:-0}" = "1" ] && { choice="__sw_tab_left__"; break; } ;;
-        *) : ;;
-      esac
-      case "$_kname" in up|down|pgup|pgdn|home|end) (( ${_BLK_ROWS:-1} > 1 )) && _print_input_line ;; esac
-      continue
-    fi
-
-    # a paste that came without the bracketed-paste markers: the bytes already waiting are part of it (see viewport.sh)
-    if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
-      if _bvk_paste_burst "${key:-$'\n'}"; then
-        _rc_paste_text "$_BVK_PASTE"
-        [ "$_BVK_PASTE_ENTER" = 1 ] && break
-        continue
-      fi
-    fi
-
-    _rc_wasf=0; [[ "$_buf" == =* ]] && _rc_wasf=1
-    _te_byte "$key" list _buf _pos _print_input_line _rc_edited _rc_paste_text && continue
-    case "$key" in
-      ""|$'\r') break ;;
-      $'\x01') _nav_jump_to 1 ;;                 # Ctrl-A on an empty line (with text it selects all: bashbasicsbyvk_textedit.sh)
-      $'\x05') _nav_jump_to "$_vp_n" ;;          # Ctrl-E on an empty line
-      *)
-        _rc_type_key "$key" ;;
-    esac
-  done
-
-  trap - WINCH
-  _bvk_paste_off
-  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
-  _te_end
-  stty "$_orig_stty" 2>/dev/null
+  local _rc_wasf=0
+  local $_BVK_ED_HOOKS
+  local _ED_BUF=_buf _ED_POS=_pos _ED_MODE=list _ED_REDRAW=_print_input_line _ED_EDITED=_rc_edited _ED_PASTE=_rc_paste_text
+  local _ED_START=_rc_start _ED_TURN=_rc_turn _ED_TICK=_rc_tick _ED_WINCH=1 _ED_PRE=_rc_pre _ED_CLICK=_rc_click _ED_WHEEL=_rc_wheel
+  local _ED_NAV=_rc_nav _ED_NAVPARK=1 _ED_BYTE=_rc_byte _ED_TYPE=_rc_type_key _ED_STTY="$_orig_stty"
+  _bvk_edit_run
   _bvk_blk_leave
   # prompt is being left: wipe the hint row (the cursor-hide from a loader, if any, is undone too)
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "$_hint_cur" ]; then

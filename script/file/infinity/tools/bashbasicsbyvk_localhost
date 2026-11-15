@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# The questions of this tool are STEPS (_mc_steps: u = ONE QUESTION BACK, q = quit).  Only the step helper is needed (flat pip install: it sits next to this script on PATH).
+# shellcheck disable=SC1090
+source "bashbasicsbyvk_menuchrome.sh" 2>/dev/null
+declare -F _mc_steps >/dev/null 2>&1 || { echo "ERROR: cannot load bashbasicsbyvk_menuchrome.sh (reinstall bashbasicsbyvk)." >&2; exit 1; }
+
 clear
 
 echo "=============================================="
@@ -38,30 +43,14 @@ fi
 
 echo
 
-if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then        # THE native line editor; the plain line below is only the fallback of a broken install
-    PORT="$(bashbasicsbyvk_ask "Enter localhost port: ")"
-else
-    read -e -rp "Enter localhost port: " PORT   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
-fi
-
-if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
-    echo
-    echo "Invalid port."
-    exit 1
-fi
-
-if ((PORT < 1 || PORT > 65535)); then
-    echo
-    echo "Port must be between 1 and 65535."
-    exit 1
-fi
-
-# THE yes/no question: the app's native menu (bashbasicsbyvk_yn).  rc 0 = yes · 1 = no or no answer.  A plain line only if the menu is not installed.
+# THE yes/no question: the app's native menu (bashbasicsbyvk_yn).  ask_yes "Question?" [-b]:  rc 0 = yes · 1 = no or no answer · 4 = u (only with -b: one question back).
+# A plain line only if the menu is not installed.
 ask_yes() {
-    local rc=3 a
+    local rc=3 a yn_args=(-t "Localhost" -i "🌐")
+    [ "${2:-}" = -b ] && yn_args+=(-b)
     if command -v bashbasicsbyvk_yn >/dev/null 2>&1; then
-        bashbasicsbyvk_yn "$1" -t "Localhost" -i "🌐"; rc=$?
-        case "$rc" in 0) return 0 ;; 1|2) return 1 ;; esac
+        bashbasicsbyvk_yn "$1" "${yn_args[@]}"; rc=$?
+        case "$rc" in 0) return 0 ;; 1|2) return 1 ;; 4) return 4 ;; esac
     fi
     read -e -rp "$1 (y/n): " a   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_yn)
     [[ "$a" == [Yy]* ]]
@@ -129,30 +118,52 @@ kill_port() {
     return 0
 }
 
-if port_busy "$PORT"; then
-
+# Step 1: the port.  rc 0 answered · 1 u · 3 q / not a usable port (the message is printed here)
+_lh_s_port() {
+    local rc=3
     echo
-    ANS=n; ask_yes "Port $PORT is already in use. Force it?" && ANS=y
+    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then        # THE native line editor: u = back, q = quit; the port typed before is kept when u comes back here
+        PORT="$(bashbasicsbyvk_ask "Enter localhost port: " -b -S -i "${PORT:-}")" && rc=0 || rc=$?
+        case "$rc" in
+            0) ;;
+            4) return 1 ;;
+            3) read -e -rp "Enter localhost port: " PORT ;;   # bvk-read-ok: fallback of a broken install (no editor)
+            *) return 3 ;;
+        esac
+    else
+        read -e -rp "Enter localhost port: " PORT   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+    fi
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+        echo; echo "Invalid port."; return 3
+    fi
+    if ((PORT < 1 || PORT > 65535)); then
+        echo; echo "Port must be between 1 and 65535."; return 3
+    fi
+    return 0
+}
 
-    case "$ANS" in
-
-        [Yy]*)
-
-            kill_port "$PORT"
-
-            ;;
-
-        *)
-
-            echo
-            echo "Operation cancelled."
-            exit 0
-
-            ;;
-
+# Step 2: "Force it?" - asked only when the port is busy (a free port: nothing to ask, also when u comes back here from a later step)
+_lh_s_force() {
+    local rc=0
+    port_busy "$PORT" || return 0
+    echo
+    ask_yes "Port $PORT is already in use. Force it?" -b || rc=$?
+    case "$rc" in
+        0) kill_port "$PORT"; return 0 ;;
+        4) return 1 ;;
     esac
+    echo
+    echo "Operation cancelled."
+    exit 0
+}
 
-fi
+_lh_rc=0
+_mc_steps _lh_s_port _lh_s_force || _lh_rc=$?
+case "$_lh_rc" in
+    0) ;;
+    1) echo; echo "Operation cancelled."; exit 0 ;;      # u on the FIRST question: out of the tool, back to the menu it was opened from
+    *) exit 1 ;;
+esac
 
 if command -v python3 >/dev/null 2>&1; then
     PYTHON="python3"

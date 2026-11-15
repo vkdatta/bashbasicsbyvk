@@ -620,10 +620,7 @@ _vp_geometry() {
   # It is one row on a wide screen and two on a narrow one (a phone): a suggestion longer than the row expands onto the second row
   # (_bvk_hint_wrap) instead of being cut.  _vp_hint_row stays the 0/1 flag "this prompt has the area", _vp_hint_n is its height.
   _vp_hint_row=0; _vp_hint_n=0
-  if _vp_wants_hint_row; then
-    _vp_hint_row=1; _vp_hint_n=1
-    (( _vp_cols_now < ${BVK_HINT_WIDE:-100} && rows >= 24 )) && _vp_hint_n=2
-  fi
+  if _vp_wants_hint_row; then _bvk_hint_area_on "$rows"; fi
 
   min_rows=3
   (( _vp_R > 0 && _vp_R < min_rows )) && min_rows=$_vp_R
@@ -1005,6 +1002,184 @@ _bvk_prompt_tap() {
   return 0
 }
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+# THE typed-line DRAWER.  _bvk_draw_input is the one function that paints the text the person is typing: every prompt (main Select:, the
+# picker, smart menus, Settings, the line editor behind _bvk_read) calls it, so the cursor / selection (_te_cursor), a text that does not fit
+# one row (_bvk_row_multi: line breaks, a paste, a block of rows) and the one scrolling row (_bvk_fit_input) look and tap the same everywhere.
+# A caller only sets _BVK_SCR_PROMPT (the prompt as "print" shows it) and calls this.  The suggestion row above the prompt is _input_hint_sync.
+_bvk_draw_input() {   # PROMPT TEXT POS
+  local back
+  _te_cursor "$2" "$3"                                    # no block cursor over a selection (the template, textedit.sh)
+  _bvk_row_multi "$1" "$2" "$3" && return 0               # a text that does not fit one row: shown in full, as a block of rows
+  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
+  _bvk_fit_input "$1" "$2" "$3"                           # one row only: a long paste must not wrap
+  builtin printf '\r\033[K%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
+  [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+# THE typed-line loop.  _bvk_edit_run is the ONE loop behind every prompt that waits for typed text: main Select:, the item / group
+# picker, smart menus, the line editor (_cm_line_edit = _bvk_read = bashbasicsbyvk_ask).  Everything the person can DO to the typed
+# line lives HERE, once: editing keys (_te_esc / _te_byte), bracketed + burst paste, the length limit, mouse reports on / off,
+# a tap on the typed text, the idle tick, WINCH, raw-key setup and its teardown.  A loop only supplies HOOKS for what is its own.
+# A new behaviour of the typed line is added to this function (or to the helper it calls) and nowhere else (AGENTS.md rule 17).
+#
+# The caller sets these as LOCALS (bash dynamic scope: the hooks see the caller's variables):
+#   _ED_BUF _ED_POS   NAMES of the text and the cursor variables        _ED_MODE   list | text   (see _te_begin)
+#   _ED_SIG_REDRAW / _ED_SIG_EDITED  optional: the same two as DRAWING variants, for Ctrl-C / Ctrl-Z (they arrive as signals; default: the two above)
+#   _ED_REDRAW        fn: draw the line      _ED_EDITED  fn: the text changed      _ED_PASTE  fn TEXT: insert a paste (default _bvk_edit_paste)
+# Optional hooks (unset / empty = nothing):
+#   _ED_START         fn: the prompt is up (the first draw, the cc replay ...)
+#   _ED_TURN          fn: top of every turn; rc 1 = leave the loop (a tapped tab)
+#   _ED_TICK          fn: an idle tick (resize, background jobs)             _ED_WINCH  1 = trap WINCH (_vp_on_resize)
+#   _ED_PRE           fn: before an editing key is handled (a loop remembers what the text was)
+#   _ED_PARK          fn: cursor onto the first row of the typed line (default _bvk_blk_park)
+#   _ED_CLICK         fn: a press that is NOT on the typed text (_MS_KIND / _MS_ITEM set); rc 2 | 3 = accept
+#   _ED_WHEEL         fn up|down            _ED_NAV   fn KNAME: a named key that is not an editing key (up down pgup pgdn home end left right)
+#   _ED_NAVPARK       1 = park the cursor before _ED_NAV and redraw after it when the text is a block
+#   _ED_DEFER_ENTER   1 = a paste that arrives with its Enter: the Enter is handled as the NEXT key (_ED_BYTE sees ""), not as the end of the loop
+#   _ED_BYTE          fn KEY: a byte the editing keys did not take; rc 0 handled · 1 accept · 2 not mine (default: type it)
+#   _ED_TYPE          fn KEY: type one character (default _bvk_edit_type: limit check + insert)
+#   _ED_STTY          the terminal settings to put back (default: what they were when the loop started)
+# Result: _ED_EOF=1 when the input is gone (Ctrl-D / closed tty), else 0.  The caller does its own leave work afterwards.
+# A screen that leaves raw mode for a sub-flow (a question asked with read, another program) and comes back: the pair it uses.  The engine's own
+# setup / teardown is the same three things; the saved stty stays with the caller that holds it.
+_bvk_tty_raw() {
+  _te_begin                                    # raw keys + a clean selection / undo (bashbasicsbyvk_textedit.sh)
+  _bvk_paste_on
+  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
+  return 0
+}
+_bvk_tty_cooked() {
+  _bvk_paste_off
+  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
+  return 0
+}
+# EVERY loop starts with  local $_BVK_ED_HOOKS  before it sets its own hooks: variables are dynamically scoped, so a loop that runs inside a hook of
+# another (the choice box runs "h" = Home from Settings' Enter) would otherwise inherit the hooks it does not set (drift.sh checks it).
+_BVK_ED_HOOKS="_ED_BUF _ED_POS _ED_MODE _ED_REDRAW _ED_EDITED _ED_PASTE _ED_SIG_REDRAW _ED_SIG_EDITED _ED_START _ED_TURN _ED_TICK _ED_WINCH _ED_PRE _ED_PARK _ED_CLICK _ED_WHEEL _ED_NAV _ED_NAVPARK _ED_BYTE _ED_TYPE _ED_TOOLARGE _ED_STTY _ED_DEFER_ENTER"
+_bvk_edit_type() {   # a typed character: ctrl bytes never get in; the length limit is the same for every prompt
+  _is_ctrl_char "$1" && return 0
+  local cur="${!_ED_BUF}" n=0
+  (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$cur" "${!_ED_POS}"; n=$_TE_N; }     # a selected text is replaced by what is typed
+  if (( ${#cur} - n + 1 > _BVK_MAX_INPUT )); then
+    if [ -n "${_ED_TOOLARGE:-}" ]; then "$_ED_TOOLARGE" $(( ${#cur} + 1 )); else _bvk_too_large $(( ${#cur} + 1 )) "$_ED_REDRAW"; fi
+    return 0
+  fi
+  _te_insert "$_ED_BUF" "$_ED_POS" "$1"
+  [ -n "${_ED_EDITED:-}" ] && "$_ED_EDITED"
+  return 0
+}
+_bvk_edit_paste() {   # TEXT: a paste at the cursor.  Over the limit it is refused and the notice says so; a selection is replaced by it
+  local t="$1" cur="${!_ED_BUF}" n=0
+  [ -z "$t" ] && return 0
+  (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$cur" "${!_ED_POS}"; n=$_TE_N; }
+  if (( ${#cur} - n + ${#t} > _BVK_MAX_INPUT )); then
+    _bvk_too_large $(( ${#cur} - n + ${#t} )) "$_ED_REDRAW" drain
+    return 0
+  fi
+  _te_insert "$_ED_BUF" "$_ED_POS" "$t"
+  [ -n "${_ED_EDITED:-}" ] && "$_ED_EDITED"
+  return 0
+}
+# a press: ONE place decides what was touched.  The tap on the typed text is handled here for every loop; only the rest goes to _ED_CLICK.
+_bvk_edit_press() {   # rc 2 | 3 = accept
+  "${_ED_PARK:-_bvk_blk_park}"
+  if ! _bvk_mouse_prow; then "$_ED_REDRAW"; return 0; fi
+  _bvk_mouse_hit "$_MS_Y" "$_BVK_CROW"
+  if [ "$_MS_KIND" = prompt ]; then
+    if _bvk_prompt_tap "${!_ED_BUF}" "$_ED_POS"; then "$_ED_REDRAW"; else _bvk_mouse_other "$_MS_Y" "$_BVK_CROW"; fi
+    return 0
+  fi
+  if [ -n "${_ED_CLICK:-}" ]; then "$_ED_CLICK"; return $?; fi
+  return 0
+}
+_bvk_edit_run() {
+  local key _rc _ed_rc _ed_stty _tmo _ed_eof=0 _ed_mouse_was="${_BVK_MOUSE_ON:-0}" _ed_paste_was="${_BVK_PASTE_ON:-0}" _ED_PEND=0
+  : "${_ED_PASTE:=_bvk_edit_paste}"                       # every loop pastes the same way unless it has a rule of its own (main Select: "=")
+  _ed_stty="${_ED_STTY:-$(stty -g 2>/dev/null)}"          # what to put back: a loop that runs inside another (Settings opens screens) restores the parent's raw state
+  _te_begin "$_ED_BUF" "$_ED_POS" "$_ED_MODE" "${_ED_SIG_REDRAW:-$_ED_REDRAW}" "${_ED_SIG_EDITED:-$_ED_EDITED}" "$_ED_PASTE"     # (Ctrl-C / Ctrl-Z arrive as signals: a screen whose loop redraws at the top of a turn gives drawing variants here)
+  [ "${_ED_WINCH:-0}" = 1 ] && trap '_vp_on_resize' WINCH
+  _bvk_paste_on
+  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
+  [ -n "${_ED_START:-}" ] && "$_ED_START"
+  while :; do
+    if [ -n "${_ED_TURN:-}" ]; then "$_ED_TURN"; (( $? == 1 )) && break; fi
+    if (( _ED_PEND )); then _ED_PEND=0; key=""; _rc=0                  # an Enter that arrived with a paste: it comes now, as its own key
+    else
+      _tmo="${_vp_poll_cur:-}"
+      [ "${_BVK_MOUSE_PASS:-0}" = 1 ] && [ -z "$_tmo" ] && _tmo=1     # the touch was handed back to the terminal: wake up to take it again
+      if [ -n "$_tmo" ]; then IFS= builtin read -rsn1 -t "$_tmo" key; else IFS= builtin read -rsn1 key; fi
+      _rc=$?
+    fi
+    if (( _rc > 128 )); then
+      [ "${_BVK_MOUSE_PASS:-0}" = 1 ] && declare -F _bvk_mouse_rearm >/dev/null 2>&1 && _bvk_mouse_rearm     # idle: the reports come back once the hand-back time is over
+      declare -F _vp_poll_tick >/dev/null 2>&1 && _vp_poll_tick
+      [ -n "${_ED_TICK:-}" ] && "$_ED_TICK"
+      continue
+    fi
+    if (( _rc != 0 )); then _ed_eof=1; break; fi
+    declare -F _vp_poll_active >/dev/null 2>&1 && _vp_poll_active
+    [ "${_BVK_MOUSE_PASS:-0}" = 1 ] && [ "$key" != $'\x1b' ] && declare -F _bvk_mouse_rearm >/dev/null 2>&1 && _bvk_mouse_rearm force   # a typed key: the person is back on the keyboard
+    if [[ "$key" == $'\x1b' ]]; then
+      _read_key_seq || continue
+      if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; "$_ED_PASTE" "$_BVK_PASTE"; continue; fi
+      if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
+        case "$_MS_ACT" in
+          press)     _bvk_edit_press; case $? in 2|3) break ;; esac ;;
+          wheelup)   [ -n "${_ED_WHEEL:-}" ] && "$_ED_WHEEL" up ;;
+          wheeldown) [ -n "${_ED_WHEEL:-}" ] && "$_ED_WHEEL" down ;;
+        esac
+        continue
+      fi
+      [ -n "${_ED_PRE:-}" ] && "$_ED_PRE"
+      _te_esc "$_esc" "$_ED_MODE" "$_ED_BUF" "$_ED_POS" "$_ED_REDRAW" "$_ED_EDITED" "$_ED_PASTE" && continue
+      if [ -n "${_ED_NAV:-}" ]; then
+        _key_name "$_esc"
+        if [ "${_ED_NAVPARK:-0}" = 1 ]; then
+          case "$_kname" in up|down|pgup|pgdn|home|end) _bvk_blk_park ;; esac   # list moves repaint rows relative to the first input row
+          "$_ED_NAV" "$_kname"; _ed_rc=$?
+          case "$_kname" in up|down|pgup|pgdn|home|end) (( ${_BLK_ROWS:-1} > 1 )) && "$_ED_REDRAW" ;; esac
+        else "$_ED_NAV" "$_kname"; _ed_rc=$?; fi
+        (( _ed_rc == 1 )) && break
+      fi
+      continue
+    fi
+    # a paste that came without the bracketed-paste markers: the bytes already waiting are part of it (see _bvk_paste_burst)
+    if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
+      if _bvk_paste_burst "${key:-$'\n'}"; then
+        [ -z "$key" ] && _BVK_PASTE="${_BVK_PASTE#$'\n'}"          # the Enter that started the burst is a key press, not a line break of the text
+        "$_ED_PASTE" "$_BVK_PASTE"
+        if [ "$_BVK_PASTE_ENTER" = 1 ]; then
+          if [ "${_ED_DEFER_ENTER:-0}" = 1 ]; then _ED_PEND=1; continue; fi   # typed text + Enter that arrived together: the Enter comes next (Settings)
+          break
+        fi
+        continue
+      fi
+    fi
+    [ -n "${_ED_PRE:-}" ] && "$_ED_PRE"
+    _te_byte "$key" "$_ED_MODE" "$_ED_BUF" "$_ED_POS" "$_ED_REDRAW" "$_ED_EDITED" "$_ED_PASTE" && continue
+    _ed_rc=2
+    [ -n "${_ED_BYTE:-}" ] && { "$_ED_BYTE" "$key"; _ed_rc=$?; }
+    case "$_ed_rc" in
+      0) continue ;;
+      1) break ;;
+    esac
+    case "$key" in
+      ""|$'\r'|$'\n') break ;;
+      *) if [ -n "${_ED_TYPE:-}" ]; then "$_ED_TYPE" "$key"; else _bvk_edit_type "$key"; fi ;;
+    esac
+  done
+  [ "${_ED_WINCH:-0}" = 1 ] && trap - WINCH
+  [ "$_ed_paste_was" = 1 ] || _bvk_paste_off
+  declare -F _bvk_mouse_off >/dev/null 2>&1 && [ "$_ed_mouse_was" = 1 ] || { declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off; }
+  _te_end
+  [ -n "$_ed_stty" ] && stty "$_ed_stty" 2>/dev/null
+  _ED_EOF=$_ed_eof                                        # set at the END: a loop that ran inside this one must not leave its value behind
+  return 0
+}
+
 # moving the cursor inside the text: a plain one-row text just steps the cursor; a block is redrawn (it may scroll / change row)
 # _bvk_cursor_to NEWPOS REDRAW_FN
 _bvk_cursor_to() {
@@ -1028,6 +1203,32 @@ _bvk_room() { local _rm_n=0; (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$_buf" 
 #     Select: _
 # It is part of the drawn block (_vp_hint_row, counted in _blk_h / _vp_dist), so painting it never scrolls the screen.
 # The cursor is on row _BLK_CROW of the prompt block; it ends where it started (column 0).
+# The suggestion area ABOVE a prompt: ONE row on a wide screen, two on a narrow one (a phone).  Menus (_vp_render) and the typed-line prompt
+# (_cm_line_edit) both turn it on here, so the suggestion sits above the text everywhere.  $1 = the screen's rows (default: now).
+_bvk_hint_area_on() {
+  local rows="${1:-${_vp_rows_now:-24}}"
+  _vp_hint_row=1; _vp_hint_n=1
+  (( ${_vp_cols_now:-80} < ${BVK_HINT_WIDE:-100} && rows >= 24 )) && _vp_hint_n=2
+  return 0
+}
+# The live suggestion above the prompt: re-evaluated on every redraw of the typed line (_bvk_draw_input), painted by _bvk_hint_paint.
+# "=" has its own hint (live filter, main Select: only); everything else is the command map's live suggestion: kind text for a typed-line
+# prompt (the picker, the line editor), menu for the others.  The text is read through _ED_BUF (the loop's buffer name; _buf outside a loop).
+_input_hint_sync() {
+  local _ih_b="${_ED_BUF:-_buf}" _ih_k=menu
+  _hint_want=""
+  if [ "${_vp_hint_row:-0}" = 1 ]; then
+    [ "${_vp_input_fn:-}" = "_print_input_line" ] && declare -F _filter_hint_text >/dev/null 2>&1 && _filter_hint_text
+    if [ -z "$_hint_want" ] && declare -F _cm_hint >/dev/null 2>&1; then
+      { [ "${_vp_input_fn:-}" = _multi_print_input_line ] || [ "${_ED_MODE:-}" = text ]; } && _ih_k=text
+      _cm_hint "${!_ih_b:-}" "$_ih_k"
+    fi
+  fi
+  [ "$_hint_want" = "${_hint_cur:-}" ] && return 0
+  _hint_cur="$_hint_want"
+  _bvk_hint_paint "$_hint_want"                        # the painter expands a long suggestion onto the next row (_bvk_hint_wrap); "" wipes it
+}
+
 _bvk_hint_paint() {   # $1 text ("" = wipe)  $2 sgr (default dim).  A long text expands onto the next reserved row (_bvk_hint_wrap).
   local n=${_vp_hint_n:-1} i up sgr="${2:-2}" out="" ln
   _BVK_HINT_N=0; [ -n "$1" ] && _bvk_hint_wrap "$1" "$n"
@@ -1058,10 +1259,11 @@ _bvk_notice() {
 # after refusing a paste: swallow whatever is still arriving from it (a terminal without paste markers sends it in pieces)
 _bvk_paste_drain() { local junk; while IFS= builtin read -rs -d '' -n 65536 -t 0.15 junk; do :; done; return 0; }
 # refuse: nothing was added; redraw the row and say why.   _bvk_too_large TOTAL_CHARS REDRAW_FN [drain]
+_bvk_too_large_text() { _BVK_NOTICE="Too large: $1 characters (limit $_BVK_MAX_INPUT). Not accepted; nothing was changed."; }    # THE wording, for every prompt ($1 = the length it would have)
 _bvk_too_large() {
   [ "${3:-}" = drain ] && _bvk_paste_drain
   "$2"
-  _bvk_notice "Too large: $1 characters (limit $_BVK_MAX_INPUT). Not accepted; nothing was changed."
+  _bvk_too_large_text "$1"; _bvk_notice "$_BVK_NOTICE"
 }
 
 # ------------------------------------------------------------------------------------------------
@@ -1078,8 +1280,9 @@ _bvk_too_large() {
 # are dropped, nothing else is changed. Only the user pressing Enter ever accepts a row.
 _BVK_PASTE=""        # the text of the last paste
 _BVK_PASTE_ENTER=0   # 1 = the burst was "typed text + Enter" (not a paste): the caller accepts the row after inserting it
-_bvk_paste_on()  { [ -t 1 ] && builtin printf '\033[?2004h'; return 0; }
-_bvk_paste_off() { [ -t 1 ] && builtin printf '\033[?2004l'; return 0; }
+_BVK_PASTE_ON=0
+_bvk_paste_on()  { _BVK_PASTE_ON=1; [ -t 1 ] && builtin printf '\033[?2004h'; return 0; }
+_bvk_paste_off() { _BVK_PASTE_ON=0; [ -t 1 ] && builtin printf '\033[?2004l'; return 0; }
 
 # _bvk_paste_clean TEXT -> _BVK_PASTE   (line breaks are KEPT: a paste stays multi-line; CR dropped, tab -> space, other control bytes dropped)
 # (tr, not ${t//x/y}: in a UTF-8 locale bash's pattern replace is quadratic — 100 000 characters would take minutes)
@@ -1281,16 +1484,10 @@ _multi_compute_set() {
 }
 
 _multi_print_input_line() {
-  local _mp back
-  _te_cursor "$_buf" "$_pos"                             # no block cursor over a selection
+  local _mp
   if [ "$_vp_mode" == "imaginary" ]; then _BVK_SCR_PROMPT="Group numbers:"; _mp="Group numbers: "
   else _mp="${_multi_label:-Item numbers}: "; _BVK_SCR_PROMPT="${_mp% }"; fi      # _multi_label: a screen that calls this "Select" (rename)
-  _bvk_row_multi "$_mp" "$_buf" "$_pos" && return 0       # a text that does not fit one row: shown in full, as a block of rows
-  declare -F _input_hint_sync >/dev/null 2>&1 && _input_hint_sync
-  builtin printf '\r\033[K'
-  _bvk_fit_input "$_mp" "$_buf" "$_pos"                  # one row only: a long paste must not wrap
-  builtin printf '%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"; back="$_BVK_FIT_BACK"
-  [ "$back" -gt 0 ] && builtin printf '\033[%dD' "$back"
+  _bvk_draw_input "$_mp" "$_buf" "$_pos"
 }
 
 _multi_header_fn() {
@@ -1419,10 +1616,7 @@ _multi_adjust_number_at_cursor() {
 
 # mouse / touch in the picker (see bashbasicsbyvk_mouse.sh): a click toggles the item in the typed list (1-3,7), a double click
 # puts it in and accepts, ▲ / ▼ and the wheel scroll the window.  returns 2 = accept now.
-_multi_click() {
-  _bvk_blk_park
-  if ! _bvk_mouse_prow; then _multi_print_input_line; return 0; fi
-  _bvk_mouse_hit "$_MS_Y" "$_BVK_CROW"
+_multi_click() {      # called by _bvk_edit_run for a press that is not on the typed text (_MS_KIND / _MS_ITEM are set)
   local rc=0 it
   case "$_MS_KIND" in
     item)
@@ -1438,7 +1632,6 @@ _multi_click() {
       fi ;;
     pgup) _BVK_LAST_ITEM=""; _bvk_mouse_scroll $(( - _vp_page )) ;;
     pgdn) _BVK_LAST_ITEM=""; _bvk_mouse_scroll "$_vp_page" ;;
-    prompt) _bvk_prompt_tap "$_buf" _pos || _bvk_mouse_other "$_MS_Y" "$_BVK_CROW" ;;     # on the typed text: the cursor goes there; empty prompt: the touch goes back, the keyboard opens
   esac
   _multi_print_input_line
   return $rc
@@ -1464,93 +1657,26 @@ _multi_type_key() {
 }
 _multi_type_text() { _buf="$1"; _pos=${#_buf}; _multi_sync; }
 # a paste: ONE insert, ONE redraw
-_multi_paste_text() {
-  local t="$1"
-  [ -z "$t" ] && return 0
-  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _multi_print_input_line drain; return 0; }
-  _te_insert _buf _pos "$t"
-  _multi_sync
+
+_multi_wheel() { _bvk_mouse_wheel_window "$([ "$1" = up ] && echo -1 || echo 1)"; _multi_print_input_line; }
+_multi_nav() { case "$1" in up|down|pgup|pgdn|home|end) _multi_adjust_number_at_cursor "$1" ;; esac; }
+_multi_byte() {       # Ctrl-A / Ctrl-E on an empty line (with text they select / move: bashbasicsbyvk_textedit.sh)
+  case "$1" in
+    $'\x01') _multi_adjust_number_at_cursor home; return 0 ;;
+    $'\x05') _multi_adjust_number_at_cursor end;  return 0 ;;
+  esac
+  return 2
 }
+_multi_start() { _multi_render; _lt_ready text; [ -n "${_CC_PREFILL:-}" ] && _cc_replay _multi_type_key _multi_type_text; return 0; }
+_multi_tick()  { if _vp_check_resize; then _multi_render; _vp_poll_active; fi; return 0; }
 
 _multi_prompt_loop_raw() {
-  local key seq _rc
   _buf=""
   _pos=0
-
-  _te_begin _buf _pos list _multi_print_input_line _multi_sync _multi_paste_text
-  trap '_vp_on_resize' WINCH
-  _bvk_paste_on
-  declare -F _bvk_mouse_on >/dev/null 2>&1 && _bvk_mouse_on; _BVK_LAST_ITEM=""
-  _multi_render
-  _lt_ready text
-  [ -n "${_CC_PREFILL:-}" ] && _cc_replay _multi_type_key _multi_type_text
-
-  while true; do
-    IFS= read -rsn1 -t "$_vp_poll_cur" key
-    _rc=$?
-    if [ "$_rc" -gt 128 ]; then
-      _vp_poll_tick
-      if _vp_check_resize; then _multi_render; _vp_poll_active; fi
-      continue
-    fi
-    [ "$_rc" -ne 0 ] && break
-    _vp_poll_active
-    if [[ "$key" == $'\x1b' ]]; then
-      _read_key_seq || continue
-      if [ "$_esc" = "[200~" ]; then _bvk_paste_bracketed; _multi_paste_text "$_BVK_PASTE"; continue; fi
-      if declare -F _bvk_mouse_decode >/dev/null 2>&1 && _bvk_mouse_decode "$_esc"; then
-        case "$_MS_ACT" in
-          press)     _multi_click; (( $? == 2 )) && break ;;
-          wheelup)   _bvk_mouse_wheel_window -1; _multi_print_input_line ;;
-          wheeldown) _bvk_mouse_wheel_window 1;  _multi_print_input_line ;;
-        esac
-        continue
-      fi
-      # the shared editing keys (← → Shift/Ctrl+arrows, Delete, copy / cut / paste, undo ...): bashbasicsbyvk_textedit.sh
-      _te_esc "$_esc" list _buf _pos _multi_print_input_line _multi_sync _multi_paste_text && continue
-      _key_name "$_esc"
-      case "$_kname" in
-        up)   _multi_adjust_number_at_cursor up ;;
-        down) _multi_adjust_number_at_cursor down ;;
-        pgup) _multi_adjust_number_at_cursor pgup ;;
-        pgdn) _multi_adjust_number_at_cursor pgdn ;;
-        home) _multi_adjust_number_at_cursor home ;;
-        end)  _multi_adjust_number_at_cursor end ;;
-        *) : ;;
-      esac
-      continue
-    fi
-
-    if [ -z "$key" ] || [[ "$key" == [[:print:]] ]]; then
-      if _bvk_paste_burst "${key:-$'\n'}"; then
-        _multi_paste_text "$_BVK_PASTE"
-        [ "$_BVK_PASTE_ENTER" = 1 ] && break
-        continue
-      fi
-    fi
-
-    _te_byte "$key" list _buf _pos _multi_print_input_line _multi_sync _multi_paste_text && continue
-    case "$key" in
-      "")
-        break
-        ;;
-      $'\x01') _multi_adjust_number_at_cursor home ;;   # Ctrl-A on an empty line (with text it selects all: bashbasicsbyvk_textedit.sh)
-      $'\x05') _multi_adjust_number_at_cursor end ;;    # Ctrl-E on an empty line
-      *)
-        # never let stray control bytes into the buffer
-        _is_ctrl_char "$key" && continue
-        _bvk_room 1 || { _bvk_too_large $(( ${#_buf} + 1 )) _multi_print_input_line; continue; }
-        _te_insert _buf _pos "$key"
-        _multi_sync
-        ;;
-    esac
-  done
-
-  trap - WINCH
-  _bvk_paste_off
-  declare -F _bvk_mouse_off >/dev/null 2>&1 && _bvk_mouse_off
-  _te_end
-  stty "$_orig_stty" 2>/dev/null
+  local $_BVK_ED_HOOKS
+  local _ED_BUF=_buf _ED_POS=_pos _ED_MODE=list _ED_REDRAW=_multi_print_input_line _ED_EDITED=_multi_sync
+  local _ED_START=_multi_start _ED_TICK=_multi_tick _ED_WINCH=1 _ED_CLICK=_multi_click _ED_WHEEL=_multi_wheel _ED_NAV=_multi_nav _ED_BYTE=_multi_byte _ED_STTY="$_orig_stty"
+  _bvk_edit_run
   _bvk_blk_leave
   if [ "${_vp_hint_row:-0}" = 1 ] && [ -n "${_hint_cur:-}" ]; then _hint_cur=""; _bvk_hint_leave; fi
   echo
