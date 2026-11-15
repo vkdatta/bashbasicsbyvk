@@ -16,6 +16,23 @@ try:
 except ImportError:                              # a broken install: the plain built-in line
     _bvk_input = input                           # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
 
+
+def _choose(question, rows):
+    """THE native one-of-many menu (bashbasicsbyvk_choose); only a broken install (no door) falls back to a plain typed line."""
+    try:
+        import bashbasicsbyvk_choose as _ch
+    except ImportError:
+        print(question)
+        for k, lab in rows:
+            print(f"  {k} = {lab}")
+        keys = [k for k, _ in rows]
+        while True:
+            a = _bvk_input("Enter choice: ").strip()   # bvk-read-ok: fallback of a broken install (no choose door)
+            if a in keys:
+                return a
+            print("  Please enter one of: " + ", ".join(keys))
+    return _ch.ask(question, rows, title="gen_sql")
+
 def format_value(val):
     escaped = str(val).replace("'", "''")
     return f"'{escaped}'"
@@ -74,25 +91,8 @@ print(f"  Columns  : {len(headers)}")
 print(f"  Data rows: {len(body)}")
 print(f"  Headers  : {', '.join(headers)}")
 
-print("""
-Select statement type:
-  1 = INSERT INTO
-  2 = INSERT OR IGNORE INTO
-  3 = INSERT OR REPLACE INTO
-  4 = UPDATE
-""")
-
-while True:
-    choice = _bvk_input("Enter choice (1 / 2 / 3 / 4): ").strip()
-    if choice == "1":
-        stmt_type = "INSERT INTO"; break
-    if choice == "2":
-        stmt_type = "INSERT OR IGNORE INTO"; break
-    if choice == "3":
-        stmt_type = "INSERT OR REPLACE INTO"; break
-    if choice == "4":
-        stmt_type = "UPDATE"; break
-    print("  Please enter 1, 2, 3 or 4.")
+_STATEMENTS = [("1", "INSERT INTO"), ("2", "INSERT OR IGNORE INTO"), ("3", "INSERT OR REPLACE INTO"), ("4", "UPDATE")]
+stmt_type = dict(_STATEMENTS)[_choose("Select statement type:", _STATEMENTS)]
 
 print(f"  --> Using: {stmt_type}")
 

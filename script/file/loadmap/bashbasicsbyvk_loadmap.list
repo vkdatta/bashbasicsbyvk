@@ -205,6 +205,8 @@ bashbasicsbyvk_ask|||tool, run as its own process: THE typed-line prompt (native
 bashbasicsbyvk_ask.py|||python helper, run as a process: the python door to bashbasicsbyvk_ask
 bashbasicsbyvk_yn|||tool, run as its own process: THE yes/no question (native menu) for every stand-alone tool
 bashbasicsbyvk_yn.py|||python helper, run as a process
+bashbasicsbyvk_choose|||tool, run as its own process: THE one-of-many / many-of-many question (native menu) for every stand-alone tool
+bashbasicsbyvk_choose.py|||python helper, run as a process: the python door to bashbasicsbyvk_choose
 bashbasicsbyvk_lt.py|||python helper, run as a process
 bashbasicsbyvk_main.map|||command-map wiring, read as data
 bashbasicsbyvk_mapgen|||tool, run as its own process

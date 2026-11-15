@@ -40,4 +40,23 @@ d=$(grep -rnE 'read -e -?r? ?-p "(Choice|Nav|GCloud Nav|Action|Pick|Selected ite
 [ -z "$d" ] && ok "no private Choice:/Nav:/Action:/Pick: prompt" || bad "private prompt: $d"
 d=$(grep -rn '@back_quit' --include='*.sh' "$F" | grep -v 'menuchrome.sh' | head -3)
 [ -z "$d" ] && ok "no menu is wired by hand to the back_quit footer" || bad "hand-wired: $d"
+# rule 18: no hand-drawn menu anywhere under script/ (also files with NO extension: the tools).  engine/ and settings/ own the look.
+d=$(python3 - "$F" <<'PYEOF'
+import os, re, sys
+PAT = [("option row", re.compile(r"""(echo|print\(|printf)\s*f?["']\s*[1-9]\) \S""")),
+       ("Enter choice prompt", re.compile(r"Enter choice")),
+       ("typed (a/b) question", re.compile(r"""(_bvk_input\(|read\b[^\n]*-p\s+|input\()[^\n]*\((y/n|[a-z0-9]/[a-z0-9])\)""", re.I))]
+for dp, _, fs in os.walk(sys.argv[1]):
+    if re.search(r"/(engine|settings)(/|$)", dp + "/"): continue
+    for f in fs:
+        p = os.path.join(dp, f)
+        try: L = open(p, encoding="utf-8").read().split("\n")
+        except Exception: continue
+        for i, l in enumerate(L, 1):
+            if "bvk-read-ok" in l: continue
+            for n, r in PAT:
+                if r.search(l): print("%s:%d %s" % (p, i, n))
+PYEOF
+)
+[ -z "$d" ] && ok "no hand-drawn menu under script/ (rule 18)" || bad "hand-drawn menu: $(echo "$d" | head -3)"
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"; exit "$fail"

@@ -120,6 +120,27 @@ _bc_word() {
   _bc_leave "$_bc_t"
 }
 
+# the app's row-selection grammar typed into a many-of-many box:  1,3-5 · a (all) · a-2 (all except 2)  -> the ticked rows ARE exactly those
+# (a single number still toggles its row).  Same parser as every other multi-select of the app (parse_selection); shares _bvk_menu's locals.
+_bc_typed_sel() {
+  local _bc_s="${1// /}" _bc_n="${#_bc_key[@]}" _bc_j _bc_x _bc_sel="" _bc_ex
+  declare -F parse_selection >/dev/null 2>&1 || return 1
+  if [ "$_bc_s" = a ]; then
+    _bc_sel="$(seq 1 "$_bc_n")"
+  elif [[ "$_bc_s" =~ ^a-([0-9,-]+)$ ]]; then
+    _bc_ex=" $(parse_selection "${BASH_REMATCH[1]}" "$_bc_n") "
+    for (( _bc_j = 1; _bc_j <= _bc_n; _bc_j++ )); do [[ "$_bc_ex" == *" $_bc_j "* ]] || _bc_sel+=" $_bc_j"; done
+  elif [[ "$_bc_s" =~ ^[0-9]+([,-][0-9]+)+$ ]]; then
+    _bc_sel="$(parse_selection "$_bc_s" "$_bc_n")"
+  else
+    return 1
+  fi
+  [ -n "${_bc_sel// /}" ] || return 1
+  for _bc_j in "${!_bc_on[@]}"; do _bc_on[$_bc_j]=0; done
+  for _bc_x in $_bc_sel; do _bc_on[$(( _bc_x - 1 ))]=1; done
+  return 0
+}
+
 # typed text + Enter (cmd_fn of _st_run: return 0 = handled)
 _bc_cmd() {
   local _bc_t="$1"
@@ -130,6 +151,7 @@ _bc_cmd() {
   fi
   [[ "$_bc_t" =~ ^[0-9]+$ ]] && return 1             # a row number: the engine
   if _bc_index "$_bc_t"; then _bc_hit "$_bc_ix"; return 0; fi
+  (( _bc_multi )) && _bc_typed_sel "$_bc_t" && return 0
   case "$_bc_t" in
     d|done) (( _bc_multi )) && { _bc_done=1; _st_back=1; } ;;
     u|q)    _bc_leave "$_bc_t" ;;
@@ -241,7 +263,7 @@ _bvk_menu() {
       _bc_seg+="${_bc_seg:+   }${_bc_ks:-${_bc_key[$_bc_i]}}) ${_bc_lbl[$_bc_i]}"
     done
     _st_f2_custom="$_bc_seg"
-  elif (( _bc_multi )); then _st_f2_custom="Enter or tap toggles, then Done   d) Done"; fi
+  elif (( _bc_multi )); then _st_f2_custom="N · 1,3-5 · a · a-2 select   d) Done"; fi
   local _st_choice=1 _st_radio_follow=0; (( _bc_multi )) || _st_radio_follow=1   # [o] follows the highlight in a one-of-many menu
 
   # the keys this box prints are ITS answers (the live hint row and the command layer must not read them as commands)

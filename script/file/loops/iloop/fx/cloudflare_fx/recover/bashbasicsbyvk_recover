@@ -69,10 +69,16 @@ def parse_selection(text, n):
 
 
 def pick_workers(names):
-    for i, w in enumerate(names, 1):
-        print(f"  {i:>3}) {w}")
-    sel = parse_selection(_bvk_input("Recover which? (1,3-5 / a / a-2, blank = cancel): "), len(names))
-    return [names[i - 1] for i in sel]
+    """Pick the workers to recover in THE native choice menu (many-of-many): N toggles, 1,3-5 / a / a-2 select (the app's grammar), d = done; nothing ticked / q = cancel."""
+    rows = [(str(i), w) for i, w in enumerate(names, 1)]
+    try:
+        import bashbasicsbyvk_choose as _ch
+        keys = _ch.ask("Recover which workers?", rows, title="recover", multi=True)
+    except EOFError:
+        return []
+    except ImportError:                      # a broken install: the typed list
+        keys = [str(i) for i in parse_selection(_bvk_input("Recover which? (1,3-5 / a / a-2, blank = cancel): "), len(names))]
+    return [names[int(k) - 1] for k in keys]
 
 
 JOBS = max(1, int(os.environ.get("BVK_RECOVER_JOBS", "6") or 6))     # workers recovered at the same time

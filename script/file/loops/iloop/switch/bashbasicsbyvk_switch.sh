@@ -153,25 +153,20 @@ _sw_excl_edit() {
 
 # Main exclude manager — called by 'xe' inside recents tab
 _sw_excl_menu() {
+  local xc
   while true; do
     echo
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "🚫 RECENTS EXCLUDE LIST"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     _sw_excl_list
-    echo
-    echo "  a) Add rule    x) Remove rule"
-    echo "  e) Edit file   u) Back to recents   q) Quit"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    local xc
-    _bvk_read xc "Choice: " -I
-    case "${xc,,}" in
+    # THE native choice menu (rule 18): u = back to recents, q = quit
+    if ! _bvk_menu xc -t "Recents exclude list" -i "🚫" -q "What now?" -n "a:Add rule" "x:Remove rule" "e:Edit file"; then
+      _bvk_back && { echo "↩️  Back to recents"; return 0; }
+      _bvk_quit; return 0
+    fi
+    case "$xc" in
       a)  _sw_excl_add    ;;
       x)  _sw_excl_remove ;;
       e)  _sw_excl_edit   ;;
-      u|"") echo "↩️  Back to recents"; return 0 ;;
-      q)  _bvk_quit; return 0 ;;
-      *)  echo "🔴  Invalid: $xc" ;;
     esac
   done
 }

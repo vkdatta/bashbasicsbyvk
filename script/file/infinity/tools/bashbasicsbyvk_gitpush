@@ -334,25 +334,18 @@ ensure_origin() {
 # ============================================================
 
 select_version() {   # a STEP of create_commit: 0 answered (VERSION set) · 1 u (back) · 3 q / no answer
-    local choice rc=3
+    local choice rc=0
 
     echo
-    echo "Select version bump type:"
-    echo "1) Patch  (#patch) [DEFAULT]"
-    echo "2) Minor  (#minor)"
-    echo "3) Major  (#major)"
-    echo "4) None   (Skip version tag)"
-    echo
-
-    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then      # THE native line editor: u = back, q = quit
-        choice="$(bashbasicsbyvk_ask "Enter choice [1-4, Default: 1]: " -b)" && rc=0 || rc=$?
-        case "$rc" in
-            0) ;;
-            4) return 1 ;;
-            3) read -e -r -p "Enter choice [1-4, Default: 1]: " choice ;;   # bvk-read-ok: fallback of a broken install (no editor)
-            *) return 3 ;;
-        esac
-    else read -e -r -p "Enter choice [1-4, Default: 1]: " choice; fi   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+    # THE native choice menu (bashbasicsbyvk_choose): the same layout as every menu; u = back, q = quit; a bare Enter takes the highlighted default
+    choice="$(bashbasicsbyvk_choose "Select version bump type:" -t "Version bump" -d 1 -b \
+        "1:Patch  (#patch)" "2:Minor  (#minor)" "3:Major  (#major)" "4:None   (skip the version tag)")" || rc=$?
+    case "$rc" in
+        0) ;;
+        4) return 1 ;;
+        3) read -e -r -p "Version bump [1 patch, 2 minor, 3 major, 4 none; Default: 1]: " choice ;;   # bvk-read-ok: fallback of a broken install (no choice menu)
+        *) return 3 ;;
+    esac
 
     case "$choice" in
         2)

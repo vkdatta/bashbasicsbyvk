@@ -24,6 +24,15 @@ try:
 except ImportError:                              # a broken install: the plain built-in line
     _bvk_input = input                           # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
 
+
+def _choose(question, rows):
+    """THE native one-of-many menu (bashbasicsbyvk_choose); only a broken install (no door) falls back to a plain typed line."""
+    try:
+        import bashbasicsbyvk_choose as _ch
+    except ImportError:
+        return _bvk_input("\n" + question + " (" + "/".join(k for k, _ in rows) + "): ").strip().lower()
+    return _ch.ask(question, rows, title="xtract", icon="🌐")
+
 def clean_sheet_name(name):
     """Clean invalid characters from Excel sheet names"""
     name = re.sub(r'[\\/*?:\[\]]', '', name)
@@ -553,7 +562,7 @@ def main():
     
     excel_support = True      # openpyxl is part of the data.xtract dependencies checked at start-up
     
-    content_type = _bvk_input("\nExtract tables or links? (t/l): ").strip().lower()
+    content_type = _choose("Extract tables or links?", [("t", "Tables"), ("l", "Links")])
     if content_type not in ['t', 'l']:
         print("\n❌ Invalid selection. Please choose 't' for tables or 'l' for links")
         return
@@ -568,7 +577,7 @@ def main():
             import bashbasicsbyvk_yn as _yn      # THE native yes/no menu
             recurse_input = 'y' if _yn.ask("Do you need recursive link extraction?", title="xtract", icon="🔗") else 'n'
         except ImportError:
-            recurse_input = _bvk_input("\nDo you need recursive link extraction? (y/n): ").strip().lower()
+            recurse_input = _bvk_input("\nDo you need recursive link extraction? (y/n): ").strip().lower()   # bvk-read-ok: fallback of a broken install (no yn door)
         if recurse_input == 'y':
             try:
                 recursion_depth = int(
@@ -593,7 +602,7 @@ def main():
                 print("🔴  Invalid input. Using recursion depth 1.")
     # ─────────────────────────────────────────────────────────────────────────
 
-    mode = _bvk_input("\nSingle URL or Multiple URLs? (1/2): ").strip()
+    mode = _choose("Single URL or Multiple URLs?", [("1", "Single URL"), ("2", "Multiple URLs")])
     
     urls = []
     classes = None
@@ -698,7 +707,7 @@ def main():
         
         print(f"\nFound {len(urls)} URLs to process")
         
-        output_mode = _bvk_input("\nSave in single file or multiple files? (1/2): ").strip()
+        output_mode = _choose("Save in single file or multiple files?", [("1", "Single file"), ("2", "Multiple files")])
         
         if output_mode == '1':
             if content_type == 'tables' and not excel_support:

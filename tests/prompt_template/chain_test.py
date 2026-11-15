@@ -83,14 +83,14 @@ def run(name, steps, want, nowant=()):       # the commit questions of bashbasic
     drive(name, ['bash', h], steps, want, nowant, env_extra={'REPO': repo})
     shutil.rmtree(repo, ignore_errors=True)
 
-V, M, C = 'Enter choice [1-4', 'Enter commit message', 'Create this commit?'
+V, M, C = 'Select version bump type:', 'Enter commit message', 'Create this commit?'
 run('plain answers commit', [(V, '2\r'), (M, 'hello world\r'), (C, 'y\r')], ['RESULT-commit: hello world #minor'])
 run('u at "Create this commit?" returns to the message, text kept', [(V, '2\r'), (M, 'keepme\r'), (C, 'u\r'), (M, '\r'), (C, 'y\r')], ['RESULT-commit: keepme #minor'])
 run('u at the message returns to the version question', [(V, '2\r'), (M, 'u\r'), (V, '3\r'), (M, 'x\r'), (C, 'y\r')], ['RESULT-commit: x #major'], ['RESULT-commit: u'])
 run('u on the first question leaves the commit', [(V, 'u\r')], ['Commit cancelled (back)'], ['RESULT-commit'])
 run('q at the message quits', [(V, '1\r'), (M, 'q\r')], ['Commit cancelled'], ['RESULT-commit'])
 run('@u is the text u', [(V, '1\r'), (M, '@u\r'), (C, 'y\r')], ['RESULT-commit: u #patch'])
-run('the footer is printed above the prompt', [(V, 'u\r')], ['u) Back   q) Quit'])
+run('the footer is printed above the prompt', [(V, 'u\r')], ['u) Back   q) Close'])
 
 # ---- bashbasicsbyvk_localhost: port -> "Force it?" (only when the port is busy).  No lsof / ss here: a fake ss reports port 8099 as busy.
 BIN = tempfile.mkdtemp(prefix='bvkbin')
