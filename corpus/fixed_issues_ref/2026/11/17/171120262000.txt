@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+On Home (and other Settings-style screens) the live suggestion row appeared twice above Select: after a screen such as Cloud Surf had been opened from Home and closed again; Home on its own never showed it.
+
+HOW DID YOU DEBUG
+Started from the suggestion text and followed who paints it: _st_draw (settings_ui.sh) paints it inside its own block (_ST_HINT) while the shared typed-line drawer (_bvk_draw_input -> _input_hint_sync) paints it again when _vp_hint_row is 1. _st_run makes _vp_hint_row / _vp_hint_n local (0) for exactly this reason. Found that _xui_fresh -> _vp_render_from_top -> _vp_geometry -> _bvk_hint_area_on assigns _vp_hint_row=1, and _xui_enter / _xui_leave (xui.sh) borrow and restore a list of viewport variables that did not include it. Reproduced with the real _xui_enter / _xui_leave inside a function holding the locals: the flag came back as 1 / 2, and 0 / 0 after the fix. The real terminal on a phone was not run; the double row itself was not reproduced on screen.
+
+CAUSE
+Bash dynamic scope: a screen opened from Home assigns through Home's local _vp_hint_row, and xui did not restore it on leave, so after returning Home drew its own suggestion and the shared drawer drew a second one on the blank row. Only visible after opening a viewport-based (xui) screen from Home, hence 'a unique combination of actions'.
+
+FIX
+xui.sh: _vp_hint_row and _vp_hint_n added to _XUI_VARS (restored by _xui_leave). settings_ui.sh _st_draw: resets both to 0 on every draw (the screen paints its own suggestion), so any other child screen that leaks the flag cannot double it either. tests/hint_leak.sh (hint_leak, fast). Lesson: a screen that makes a flag local must re-assert it, and a loop that borrows viewport state must list every flag the viewport sets.

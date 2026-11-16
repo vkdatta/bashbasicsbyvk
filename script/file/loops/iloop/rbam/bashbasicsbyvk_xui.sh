@@ -28,7 +28,8 @@ _XUI_PICK_TITLE=""
 # ── borrow / restore the shared viewport state
 _XUI_ARRS=(items _all_items _filter_src _filter_map)
 _XUI_VARS=(_hl_index _vp_mode _vp_header_fn _vp_footer_fn _vp_rowtext_fn _vp_input_fn _vp_hl_fn _fx_in_mode
-           imaginary_mode _filter_query _filter_map_active _sw_in_mode group_prefix force_show _XUI_PFX)
+           imaginary_mode _filter_query _filter_map_active _sw_in_mode group_prefix force_show _XUI_PFX
+           _vp_hint_row _vp_hint_n)     # the suggestion-area flag: _vp_geometry turns it on, and it must not stay on in the screen that opened this one
 
 _xui_enter() {
   local d=$(( ++_XUI_DEPTH )) v

@@ -167,6 +167,10 @@ _st_tty_cooked() {
 _st_draw() {
   [ "${_SL_WANT:-0}" = 1 ] && _sl_ready          # smartload: the wait is over; wipe its bar before this screen is drawn
   local rows cols n=${#_st_lbl[@]} vis i out="" line mark val f1 f2 marks=0 nl=$'\r\033[2K'
+  # This screen paints its suggestion INSIDE its own block.  _st_run made _vp_hint_row / _vp_hint_n LOCAL (0), but bash dynamic scope lets a
+  # screen opened from here (Cloud Surf, Links, RBAM ... = the viewport: _vp_geometry -> _bvk_hint_area_on) assign THROUGH that local and leave 1 in
+  # it.  Back here, _bvk_draw_input -> _input_hint_sync then painted a second copy of the suggestion on the blank row.  So every draw says it again.
+  _vp_hint_row=0; _vp_hint_n=0
   # The block is erased by moving up exactly $prev lines, so it must NEVER be taller than the
   # terminal really is.  _term_rows is a cache that only the main list refreshes; a nested prompt
   # (find results "Action:", cc ...) opens this screen with whatever size was true minutes ago, and on a
