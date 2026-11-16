@@ -370,19 +370,19 @@ _sm_cmd_letters=""
 _sm_looks_command() {
   _sm_cmd_letters=""
   local l ch
-  for l in "${_sm_hdr[@]}" "${_sm_ftr[@]}" "${_sm_lines[@]}"; do
-    # dashed grammar, e.g. c-1,3  m--2-4
-    case "$l" in
-      *[A-Za-z]-[0-9]*|*[A-Za-z]--[0-9]*|*[A-Za-z]-1,*|*[A-Za-z]-1-*)
-        # capture the leading letter(s) of the example
-        if [[ "$l" =~ ([A-Za-z]+)-{1,2}[0-9] ]]; then
-          ch="${BASH_REMATCH[1]}"
-          [[ "$_sm_cmd_letters" == *"$ch"* ]] || _sm_cmd_letters+="$ch"
-        fi
-        ;;
-    esac
-    # bare grammar advertised as: prefix 'w' / use prefix w / 'w' to select
-    if [[ "$l" =~ [Pp]refix[[:space:]]+.?([A-Za-z]).? ]]; then
+  # regexes live in variables: quoting inside [[ =~ ]] is fragile
+  local re_dash="(^|[[:space:]'\"(·/|])([A-Za-z]{1,2})-{1,2}([0-9]|N)"
+  local re_pfx="[Pp]refix[[:space:]]+['\"]?([A-Za-z])['\"]?([[:space:]]|\$)"
+  # Only the FOOTER (where menus print their hints) is read. The header and the option rows carry
+  # user data (file names, folder names): "File selected: IMG-2026.jpg" is not a command grammar.
+  for l in "${_sm_ftr[@]}"; do
+    # dashed grammar as a standalone word of 1-2 letters: c-1,3   m--2-4   c-N
+    if [[ "$l" =~ $re_dash ]]; then
+      ch="${BASH_REMATCH[2]}"
+      [[ "$_sm_cmd_letters" == *"$ch"* ]] || _sm_cmd_letters+="$ch"
+    fi
+    # bare grammar advertised as:  use prefix 'w'  /  prefix w
+    if [[ "$l" =~ $re_pfx ]]; then
       ch="${BASH_REMATCH[1]}"
       [[ "$_sm_cmd_letters" == *"$ch"* ]] || _sm_cmd_letters+="$ch"
     fi
