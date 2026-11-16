@@ -1,6 +1,5 @@
 declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 # bashbasicsbyvk_settings_ui.sh — one small menu engine for every Settings screen
-# ════════════════════════════════════════════════════════════════════════════
 #  Styled exactly like the main menu (header · what this screen is · rule · numbered rows · rule ·
 #  footer of suggested commands · "Select:" prompt):
 #
@@ -40,7 +39,6 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #     _st_start_num                   number of the row the highlight starts on (default: none)
 #     _st_radio_follow=1              the [o] of a radio row follows the highlight instead of the stored state
 #     _st_choice=1                    a choice menu: no =) Filter hint, Enter says "choose" (not "switch")
-# ════════════════════════════════════════════════════════════════════════════
 
 declare -ga _st_lbl=() _st_kind=() _st_on=() _st_val=() _st_tag=()
 declare -ga _st_num=() _st_nrow=()
@@ -472,7 +470,7 @@ _st_paste_text() {      # a pasted text goes into the row in ONE step; it is acc
 
 # _st_run "Title" build_fn act_fn ["legacy hint"] [cmd_fn]
 #   cmd_fn BUF — optional: gets typed text before the number/command rules; return 0 = handled
-# ── the loop of a Settings screen: HOOKS around THE typed-line loop (_bvk_edit_run, bashbasicsbyvk_viewport.sh) ────────────────────────────────
+# ── the loop of a Settings screen: HOOKS around THE typed-line loop (_bvk_edit_run, bashbasicsbyvk_viewport.sh)
 # Nothing here reads a key: the engine does (editing keys, paste + burst paste, mouse, the hand-back, the typed line drawn by _bvk_draw_input).  These
 # are the rows, the highlight, the filter and the commands of a screen.  They run in _st_run's scope (its locals: buf pos cur top prev need ...).
 _st_ev() { (( _st_msgclr )) && { _st_msg=""; _st_msgclr=0; }; return 0; }     # the "too large" note lasts until the next key
@@ -680,7 +678,7 @@ _st_run() {
   return 0
 }
 
-# ── small helpers used by the screens ────────────────────────────────────────
+# ── small helpers used by the screens
 
 # _st_ask "What to type" [current]  → _st_in.  Returns 1 on u / q / blank.
 _st_ask() {

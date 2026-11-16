@@ -76,7 +76,7 @@ _snap_sig() {
   ' "$1" 2>/dev/null
 }
 
-# ── local list of watched paths ───────────────────────────────────────────────────────────────────────
+# ── local list of watched paths
 _snap_targets_write() {   # stdin → targets (atomic)
   mkdir -p "$_SNAP_DIR" 2>/dev/null; chmod 700 "$_SNAP_DIR" 2>/dev/null
   local tmp; tmp=$(umask 077; mktemp "$_SNAP_TARGETS.XXXXXX") || return 1
@@ -96,7 +96,7 @@ _snap_target_line() {     # _snap_target_line <tgt> → the stored line
   [ -f "$_SNAP_TARGETS" ] && awk -F'\t' -v t="$1" '$1 == t' "$_SNAP_TARGETS"
 }
 
-# ── server calls ──────────────────────────────────────────────────────────────────────────────────────────
+# ── server calls
 _snap_dev_hdrs() {         # sets _BB_CALL_HDRS from the device id files; returns 1 when this computer has no signed id yet
   local d="${_BVK_TELEMETRY_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/telemetry}" id sg
   id=$(cat "$d/uuid" 2>/dev/null); sg=$(cat "$d/sig" 2>/dev/null)
@@ -162,7 +162,7 @@ _snap_reconcile() {
   return 0
 }
 
-# ── one snapshot of one path ──────────────────────────────────────────────────────────────────────────────
+# ── one snapshot of one path
 # returns 0 taken · 1 skipped / failed (logged) · 3 not enough credits
 _snap_take() {
   local tgt="$1" kind="$2" src="$3" lastsig="$4" now sig bytes count
@@ -235,7 +235,7 @@ _snap_cycle() {
 
 # the background process (the alien daemon) lives in bashbasicsbyvk_alien_daemon.sh
 
-# ── snap-<items> ──────────────────────────────────────────────────────────────────────────────────────────
+# ── snap-<items>
 handle_snap_add() {
   local raw="$1"
   _bb_split_alias "${raw#snap-}" || return 1
@@ -275,7 +275,7 @@ handle_snap_add() {
   return 0
 }
 
-# ── Home → Snapshots (sn) ─────────────────────────────────────────────────────────────────────────────────
+# ── Home → Snapshots (sn)
 _snap_menu_devices() {
   local lk="$1" out self
   _snap_dev_hdrs >/dev/null 2>&1 || _BB_CALL_HDRS=()

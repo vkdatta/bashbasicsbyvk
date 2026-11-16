@@ -19,7 +19,7 @@ handle_staging_map() {
   local raw="$1"         # the full token typed by the user, e.g. "p-a" or "p-1,6"
   local itemlist="${raw:2}"   # strip leading "p-"
 
-  # ── Guard: need something after p- ──────────────────────────────────
+  # ── Guard: need something after p-
   if [ -z "$itemlist" ]; then
     echo "🔴  Usage:"
     echo "     p-a          → map all items"
@@ -29,13 +29,13 @@ handle_staging_map() {
     return 0
   fi
 
-  # ── Guard: imaginary mode has no direct indices ──────────────────────
+  # ── Guard: imaginary mode has no direct indices
   if $imaginary_mode; then
     echo "🔴  Too many items to index directly — narrow the view (group filter or forceshow) before using p- shortcuts."
     return 0
   fi
 
-  # ── Resolve which items to map ───────────────────────────────────────
+  # ── Resolve which items to map
   local -a target_paths=()
 
   if [ "$itemlist" = "a" ]; then
@@ -73,18 +73,16 @@ handle_staging_map() {
     return 0
   fi
 
-  # ── Build the tree ───────────────────────────────────────────────────
+  # ── Build the tree
   local map_output
   map_output=$(_map_generate_for_paths "${target_paths[@]}")
 
   _map_deliver "$map_output"
 }
 
-# ─────────────────────────────────────────────
 #  _map_deliver <map-text>
 #  Shared output step (p-, fx map.select.items.csv, fx map.selected.items):
 #    1) Copy to clipboard   2) Save to txt file
-# ─────────────────────────────────────────────
 _map_deliver() {
   local map_output="$1" suggest="${2:-}"
   echo
@@ -121,7 +119,6 @@ _map_deliver() {
   esac
 }
 
-# ─────────────────────────────────────────────
 #  Internal: generate the tree text for the
 #  given list of absolute paths.
 #
@@ -129,7 +126,6 @@ _map_deliver() {
 #    • For directory entries, recurse with `find` (same as the old mapper)
 #    • For file entries, just list the basename
 #    • Results are printed under a header showing the target dir
-# ─────────────────────────────────────────────
 
 _map_generate_for_paths() {
   local -a paths=("$@")

@@ -23,7 +23,7 @@ cmd_def -u       exact  -              act    "Upgrade loop"
 cmd_def -auth    exact  bvk_main_exec  nav    "Account, billing, credits"
 cmd_def cd       exact  -              act    "Open a shell in this folder"
 cmd_def goto     word   -              act    "Go to a path — asks where; the list moves there"  "goto /sdcard/Download"
-# ── inner loops ────────────────────────────────────────────────
+# ── inner loops
 cmd_def sw       exact  -              act    "Switch — recents & tabs"
 cmd_def fx       exact  -              act    "Functions (fx) — CSV-driven actions"
 cmd_def api      exact  -              act    "Links manager (FileAPI)"
@@ -36,7 +36,7 @@ cmd_def nf       exact  -              act    "Notifications"
 cmd_def cs       exact  -              act    "Cloud surf"
 cmd_def gd       word   -              act    "Google Drive"
 cmd_def gdx      exact  -              act    "Leave Google Drive"
-# ── act on the files listed here ───────────────────────────────
+# ── act on the files listed here
 cmd_def c        exact  -              act    "Create files / folders"
 cmd_def d        exact  -              act    "Delete items"
 cmd_def r        exact  -              act    "Rename items"
@@ -56,7 +56,7 @@ cmd_def p-       prefix -              act    "Project map of a path"    "p-1"
 cmd_def eb-      prefix -              act    "Exact bytes of items (binary + data units) — copy or save to Excel"  "eb-1-5"
 cmd_def xtr-     prefix -              act    "Extract lines / words / characters / bytes from files (files only)"  "xtr-1,3"
 cmd_def i-       prefix -              act    "Info of files (size, words, lines, dates…) — files only, copy or save to Excel"  "i-1,3"
-# ── staging ────────────────────────────────────────────────────
+# ── staging
 cmd_def c-       prefix -              act    "Stage COPY"               "c-1,3"
 cmd_def m-       prefix -              act    "Stage MOVE"               "m-1,3"
 cmd_def k-       prefix -              act    "Stage SHORTCUT"           "k-1,3"
@@ -64,7 +64,7 @@ cmd_def b-       prefix -              act    "Stage BOOKMARK"           "b-1,3"
 cmd_def s-       prefix -              act    "Stage SELECT (a set for fx → <action>.selected.items)" "s-1,3 as set1"
 cmd_def d-       word   -              act    "Apply staged items HERE   (d- set1 = only that set)" "d- set1"
 cmd_def v-       exact  -              act    "View staged items and sets"
-# ── FileAPI ────────────────────────────────────────────────────
+# ── FileAPI
 cmd_def do-      exact  -              act    "Download from a link"
 cmd_def c2c-     prefix -              act    "Cloud-to-cloud upload"    "c2c-1"
 cmd_def up-      prefix -              act    "Upload — expiring link"   "up-1"
@@ -72,7 +72,7 @@ cmd_def ux-      prefix -              act    "Share with a user"        "ux-1"
 cmd_def save-    prefix -              act    "Save upload"              "save-1"
 cmd_def snap-    prefix -              act    "Add to snapshots"         "snap-1"
 cmd_def scr-sync exact  -              act    "Sync the shortcut registry"
-# ── selection & display rules ──────────────────────────────────
+# ── selection & display rules
 cmd_def =        prefix -              filter "Filter the list live (== searches sub-folders)" "=png"
 cmd_def .s       word   -              act    "Select by expression"     ".s.ext png"
 cmd_def .us      word   -              act    "Un-select by expression"  ".us.ext png"
@@ -80,7 +80,7 @@ cmd_def .r       word   -              act    "Rule book"
 cmd_def .d       word   -              act    "Display only what matches" ".d.ext py"
 cmd_def .dm      word   -              act    "Background daemon"
 cmd_def .ai      word   -              act    "Ask the AI for a command" ".ai delete all pyc"
-# ── tools ──────────────────────────────────────────────────────
+# ── tools
 cmd_def health   exact  bvk_main_exec  util   "What is active on this machine"
 cmd_def lang     exact  bvk_main_exec  util   "Which engines run: Drill (C or Python) · FileAPI (Go or Node) · Find & Replace (C or Python)"
 cmd_def disk     exact  bvk_main_exec  util   "Disk usage"

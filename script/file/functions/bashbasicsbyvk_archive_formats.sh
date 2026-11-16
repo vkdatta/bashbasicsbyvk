@@ -50,7 +50,7 @@ _arc_is_fmt() { [ -n "${_ARC_LABEL[${1:-}]+x}" ]; }
 
 _arc_supported() { echo ".zip .tar .tar.gz/.tgz .tar.xz/.txz .tar.bz2/.tbz2 .7z .tar.zst/.tzst .tar.lz4 .skill"; }
 
-# ── 1. the name ─────────────────────────────────────────────────────────────
+# ── 1. the name
 # a word that may follow the format word (or sit between "tar" and "gz") without changing what the file is
 _arc_junk() {
   case "$1" in
@@ -124,7 +124,7 @@ _arc_scan() {
   return 0
 }
 
-# ── 2. the content ──────────────────────────────────────────────────────────
+# ── 2. the content
 _arc_magic() {
   _ARC_MAGIC=""
   local h
@@ -143,7 +143,7 @@ _arc_magic() {
   return 0
 }
 
-# ── 1b. a compressed stream whose name has no "tar" word ──────────────────────
+# ── 1b. a compressed stream whose name has no "tar" word
 # "backup_full.gz" / "site.xz" are usually a tar made by a tool that left the .tar out of the name.  The name alone cannot say, so the
 # content does: the stream is an archive only when its first decompressed block is a tar header (the word "ustar" at byte 257).
 # A real single compressed file (notes.txt.gz) is NOT one.  Sets _ARC_FMT / _ARC_STEM and returns 0 for an archive, 1 otherwise.
@@ -175,7 +175,7 @@ _arc_bare_stream() {
   return 0
 }
 
-# ── 1 + 2 together ──────────────────────────────────────────────────────────
+# ── 1 + 2 together
 _arc_detect() {
   _ARC_FMT=""; _ARC_WHY=""
   if ! _arc_scan "${1##*/}"; then
@@ -208,7 +208,7 @@ _arc_strip_ext() {
   return 0
 }
 
-# ── tools ───────────────────────────────────────────────────────────────────
+# ── tools
 # _arc_7z: the 7-Zip binary of this machine (7zz / 7z / 7za / 7zr) → _ARC_7Z ; 1 when none
 _arc_7z() {
   [ -n "$_ARC_7Z" ] && [ -x "$_ARC_7Z" ] && return 0
@@ -233,7 +233,7 @@ _arc_need() {
   _dep_need -c "${_ARC_LABEL[$2]:-$2} archive ($1)" "archive.$1.$2"
 }
 
-# ── making an archive ───────────────────────────────────────────────────────
+# ── making an archive
 # the 7-Zip builds disagree about symlinks: p7zip stores the link unless told -l, the new 7-Zip follows it by itself
 _arc_7z_follow() {
   _ARC_7Z_FOLLOW=()
@@ -299,7 +299,7 @@ _arc_create() {
   return $rc
 }
 
-# ── opening an archive ──────────────────────────────────────────────────────
+# ── opening an archive
 _arc_extract() {
   local fmt="$1" arc="$2" dest="$3" rc=0
   local -a ps=()

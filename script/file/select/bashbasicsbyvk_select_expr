@@ -55,7 +55,7 @@ from datetime import datetime
 
 MAX_RULE_DEPTH = 5
 
-# ── optional background index (hash + folder-size cache) ─────────────────────
+# ── optional background index (hash + folder-size cache)
 def _load_lib(name):
     """Import a sibling module by file path (works for the flat install too)."""
     try:
@@ -82,9 +82,7 @@ class SelError(Exception):
     pass
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Tokenizer
-# ══════════════════════════════════════════════════════════════════════════════
 HEADER_RE = re.compile(r'^\.[sd]((?:\.[A-Za-z]+)*)(?:\((or|and)\))?$', re.I)   # .s = select, .d = display
 
 
@@ -148,9 +146,7 @@ def tokenize(text):
     return toks
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Value parsers — size
-# ══════════════════════════════════════════════════════════════════════════════
 UNITS = {'': 1, 'b': 1, 'k': 1024, 'kb': 1024, 'm': 1024 ** 2, 'mb': 1024 ** 2,
          'g': 1024 ** 3, 'gb': 1024 ** 3, 't': 1024 ** 4, 'tb': 1024 ** 4}
 SIZE_RE = re.compile(r'^(\d+(?:\.\d+)?)([a-z]*)$', re.I)
@@ -184,9 +180,7 @@ def size_item(item):
     return lambda s: round(s / unit, 1) == shown
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Value parsers — time      (YYYY | MMYYYY | DDMMYYYY | 2020s | lastNd)
-# ══════════════════════════════════════════════════════════════════════════════
 def _ts(dt):
     return dt.timestamp()
 
@@ -260,10 +254,8 @@ def make_range_pred(words, item_fn, is_time):
     return test
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  CSV cell reader — same rules as the app's _csv_resolve_items:
 #  every comma-separated cell of every non-blank line, trimmed, blanks skipped.
-# ══════════════════════════════════════════════════════════════════════════════
 def read_csv_values(path):
     vals = []
     try:
@@ -281,10 +273,8 @@ def read_csv_values(path):
     return vals
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Parser  →  AST
 #    ('and',[..]) ('or',[..]) ('not',n) ('pred',dict)
-# ══════════════════════════════════════════════════════════════════════════════
 KINDS_WITH_CSV = {'ext', 'sw', 'ew', 'contains', 'time', 'csv'}
 KINDS = {'ext', 'sw', 'ew', 'contains', 'size', 'time', 'csv', 'dup', 'empty', 'rule'}
 
@@ -575,9 +565,7 @@ def audit_rules(rules_dir, kind):
         yield name, 'ok', expr, desc, ''
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Universe + entries
-# ══════════════════════════════════════════════════════════════════════════════
 class Entry:
     __slots__ = ('path', 'name', 'isdir', '_st', '_size', '_empty', '_lname')
 
@@ -684,9 +672,7 @@ def build_universe(root, recursive, show_hidden, limit=None):
     return out
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Duplicate finder  (size → head hash → full hash)
-# ══════════════════════════════════════════════════════════════════════════════
 def find_dups(entries, keep_all):
     """Duplicate files in `entries`.  The size → head hash → full hash walk lives ONLY in bashbasicsbyvk_index_lib.dup_groups
     (which also uses the cached hashes when the index is open); this just maps its groups to "which ones to select"."""
@@ -708,9 +694,7 @@ def find_dups(entries, keep_all):
     return result
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Evaluation
-# ══════════════════════════════════════════════════════════════════════════════
 def walk_preds(node):
     if node[0] in ('and', 'or'):
         for n in node[1]:
@@ -808,9 +792,7 @@ def test(node, e):
     raise SelError('internal: unknown predicate %s' % k)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  .s.rec N  — recursive select that skips big folders
-# ══════════════════════════════════════════════════════════════════════════════
 def expand(limit, show_hidden, roots):
     """Yield ('keep', path) or ('skip', folder, file_count)."""
     done = set()

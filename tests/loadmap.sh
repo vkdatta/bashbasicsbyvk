@@ -12,7 +12,7 @@ fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 GEN="$(bvk_need bashbasicsbyvk_loadmap_gen)"
 
-# ---- (1) -------------------------------------------------------------------------------
+# ── (1)
 out="$(python3 -W ignore -I "$GEN" --root "$ROOT" --check 2>&1)"; rc=$?
 [ $rc = 0 ] && ok "$(tail -1 <<<"$out")" || { bad "loadmap_gen --check"; printf '%s\n' "$out" | cut -c1-260 | head -12; }
 
@@ -28,7 +28,7 @@ for dp, dn, fn in os.walk(os.path.join(r, 'script')):
 PY
 export HOME="$T/home" TERM=xterm LANG=C.UTF-8 PATH="$B:$PATH"; mkdir -p "$HOME"
 
-# ---- (2) + (3) -------------------------------------------------------------------------
+# ── (2) + (3)
 (cd "$T" && bash -c '
   source bashbasicsbyvk_loadmap.sh; _lm_fg || exit 9
   declare -F _vp_render_fresh >/dev/null && echo "fg:render" >&3
@@ -48,7 +48,7 @@ grep -qx 'type:function' <<<"$res" && ok "a stub shows as a function (declare -F
 
 [ -f "$ROOT/tests/loadmap/shortcut_paint.py" ] && { python3 -I "$ROOT/tests/loadmap/shortcut_paint.py" "$ROOT" || fail=1; }   # the real first paint, in a pty
 
-# ---- (4) -------------------------------------------------------------------------------
+# ── (4)
 fns() { (cd "$T" && bash -c "$1" 2>"$T/err.$2" | sort); }
 new="$(fns 'source bashbasicsbyvk_loadmap.sh; _lm_fg; _lm_all; declare -F | sed "s/declare -f //"' new)"
 old_all="$(cd "$T" && BVK_LOADMAP=all bash -c 'source bashbasicsbyvk_loadmap.sh; _lm_fg; declare -F | sed "s/declare -f //"' 2>/dev/null | sort)"
@@ -57,7 +57,7 @@ old_all="$(cd "$T" && BVK_LOADMAP=all bash -c 'source bashbasicsbyvk_loadmap.sh;
 (cd "$T" && bash -c 'source bashbasicsbyvk_loadmap.sh; _lm_fg; _lm_all; for f in $(declare -F | sed "s/declare -f //"); do declare -f $f | grep -q "_lm_stub " && [ "${f:0:4}" != _lm_ ] && echo "$f" >&3; done' >/dev/null 2>&1 3>"$T/nd"); nd="$(cat "$T/nd")"
 [ -z "$nd" ] && ok "after everything loaded, no function is still a stub" || { bad "still a stub (defined by no file that loaded?): $(echo $nd | cut -c1-200)"; }
 
-# ---- (5) -------------------------------------------------------------------------------
+# ── (5)
 n="$(grep -cE '(^|[;&|({]|[[:space:]])(source|\.)[[:space:]]+["$]' "$S/o")"
 [ "$n" = 1 ] && ok "o has exactly one source line (the loader)" || bad "o sources $n things: only bashbasicsbyvk_loadmap.sh may be sourced by o"
 

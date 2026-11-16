@@ -42,7 +42,7 @@ _API_ERR=""
 _API_LOADED=0
 _API_US=$'\x1f'
 
-# ── network ───────────────────────────────────────────────────────────────────
+# ── network
 # _api_http METHOD PATH [json-body]  → _API_STATUS / _API_BODY.  Credentials travel in a curl config on
 # stdin, never in argv.  (The call itself is _bb_call in fileapi_lib.sh.)
 _api_http() {
@@ -53,7 +53,7 @@ _api_http() {
 
 _api_fail() { _bb_http_fail "$_API_STATUS" "$_API_BODY"; }   # prints the server's reason for the last call
 
-# ── loading ───────────────────────────────────────────────────────────────────
+# ── loading
 # _API_SVC: "" = the Links screen · backup = Backup · saved = Saved Surf.  They share this whole loop (alias, expiry, nuke).
 _API_SVC="${_API_SVC:-}"
 _api_load() {
@@ -100,7 +100,7 @@ _api_load() {
   return 0
 }
 
-# ── sort ──────────────────────────────────────────────────────────────────────
+# ── sort
 # The order comes from Settings › Display › Sort order of THIS screen (links / backup / saved each keep their own; see
 # bashbasicsbyvk_menu_sort.sh). It is applied to the loaded arrays on every redraw, so changing it needs no new fetch.
 _api_sort() {
@@ -127,7 +127,7 @@ _api_backfill_secrets() {
   return 0
 }
 
-# ── aliases ───────────────────────────────────────────────────────────────────
+# ── aliases
 # An alias is stored ON THE SERVER (POST /links/<id>/alias), so it is the same on every computer and can
 # be set or renamed for any link, also one made without an alias.
 # ~/.bashbasicsbyvk/link_aliases (one line per link:  <id> TAB <alias>) is now only a PENDING list: a name
@@ -229,7 +229,7 @@ _api_do_alias() {
   return 0
 }
 
-# ── copy / rebuild links ──────────────────────────────────────────────────────
+# ── copy / rebuild links
 # A link = <server>/<id>#k=<key>. The id is on the server; the key is kept on this computer (link_keys,
 # see bashbasicsbyvk_fileapi_lib.sh) from the moment a link is made. So any link can be copied or rebuilt at will —
 # nothing is uploaded again. Links made before this feature have no stored key: attach it once with
@@ -379,7 +379,7 @@ _api_cmd_alias() {       # a-N [alias]      a-1-3 and a-1,3 not supported here: 
   _api_do_alias "$_api_k" "$name"
 }
 
-# ── formatting ────────────────────────────────────────────────────────────────
+# ── formatting
 _api_hsize() {           # bytes → "3.2 MB"
   awk -v b="${1:-0}" 'BEGIN {
     split("B KB MB GB TB", u, " "); i = 1
@@ -421,7 +421,7 @@ _api_dur_v() {
   else _api_dur="${s}s"; fi
 }
 
-# ── rows ──────────────────────────────────────────────────────────────────────
+# ── rows
 _api_rowtext() {
   local i="$1" k=$(( $1 - 1 )) icon="📦" left
   if [ -z "${_API_PRE[$k]+x}" ]; then          # the parts that never change are built once per refresh
@@ -524,7 +524,7 @@ _api_redraw_fresh() {
   _vp_render_from_top
 }
 
-# ── commands ──────────────────────────────────────────────────────────────────
+# ── commands
 _api_pick() {            # _api_pick <N>  → _api_k (0-based index)
   local num="$1"
   if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt "${#items[@]}" ]; then
@@ -752,7 +752,7 @@ HLP
 HLP
 }
 
-# ── the loop ──────────────────────────────────────────────────────────────────
+# ── the loop
 api_menu() {
   local _MS_CTX="${_API_SVC:-links}"      # Settings (s) typed in here opens THIS screen's own Display › Sort order
   local _ap_saved_prefix="$group_prefix" _ap_saved_force="$force_show"

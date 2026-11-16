@@ -14,7 +14,7 @@ has() { grep -qF -- "$2" <<<"$1"; }
 keys() { local i; for i in "${!_CC_KEY[@]}"; do printf '%s\n' "${_CC_KEY[i]}"; done; }
 inlist() { keys | grep -qxF -- "$1"; }
 
-# ---- (1) the list ----------------------------------------------------------------------
+# ── (1) the list
 SCRIPT_DIR="$F"
 # the installed app has every map / commands file flat on PATH; here they sit in per-menu folders
 for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
@@ -53,7 +53,7 @@ _cm_table_build upgrade; own="$(for i in "${!_ct_key[@]}"; do [ "${_ct_tgt[i]%%:
 _CC_CTX=st; _cc_collect; _CC_CTX=""
 [ "$(keys | paste -sd' ')" = "u q = print loadtime" ] && ok "Settings / Home screens list their own grammar" || { bad "settings list"; keys | paste -sd' '; }
 
-# ---- (2) the prompt side ---------------------------------------------------------------
+# ── (2) the prompt side
 _CC_PREFILL="loadtime"; _cc_take; [ "$_CC_TAKEN" = loadtime ] && [ -z "$_CC_PREFILL" ] && ok "a pick is consumed once" || bad "take"
 _cc_take && bad "second take must be empty" || ok "second take is empty"
 _CC_PREFILL="stale"; choice="x"; _cm_gate_choice >/dev/null 2>&1; [ -z "$_CC_PREFILL" ] && ok "a gate drops a pick nobody took" || bad "stale pick leaked"
@@ -61,7 +61,7 @@ got=""; kf() { got+="[$1]"; }; bf() { got+="<$1>"; }
 _CC_PREFILL="c-"; _cc_replay kf bf; [ "$got" = "<c->" ] && ok "plain text goes in as one piece" || bad "bulk replay: $got"
 got=""; _CC_PREFILL="=lo"; _cc_replay kf bf; [ "$got" = "[=][l][o]" ] && ok "= goes in key by key so the live filter starts" || bad "key replay: $got"
 
-# ---- (3) tmux end to end ---------------------------------------------------------------
+# ── (3) tmux end to end
 if ! command -v tmux >/dev/null 2>&1; then echo "  skip tmux not installed"; [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"; exit "$fail"; fi
 BIN="$T/bin"; mkdir -p "$BIN" "$T/home/.bashbasicsbyvk" "$T/play/docs" "$T/home/.config/bashbasicsbyvk/telemetry"
 # the app pings its telemetry once a day (no off switch): mark today as reported, so no test waits on the network

@@ -94,11 +94,9 @@ _RE_BARE_CALL = re.compile(
 )
 
 
-# ──────────────────────────────────────────────────────────────
 #  EXHAUSTIVE NATIVE GLOBALS  (ECMAScript 2024 + Web Platform)
 #  Sources: ECMA-262 2024, MDN, WHATWG HTML, W3C, WICG specs
 #  NOTE: Only verified real APIs. No speculative/hallucinated names.
-# ──────────────────────────────────────────────────────────────
 
 # ECMAScript 2024 (ES15) built-in global names
 # Source: ECMA-262 2024 specification, Clause 18–28 + Well-Known Intrinsics
@@ -667,7 +665,7 @@ _WEB_PLATFORM_GLOBALS = {
 
 # ── Combine all native globals ──
 
-# ── Common callback / functional-programming parameter names ──────────────
+# ── Common callback / functional-programming parameter names
 # These appear as bare calls (fn(), cb(), resolve(), reject() etc.) because
 # they are function parameters that happen to hold callables.
 # extract_param_names() handles the general case; this set covers names that

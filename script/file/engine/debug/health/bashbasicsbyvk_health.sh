@@ -194,7 +194,7 @@ _hl_check_bin() {                            # _hl_check_bin <path> <expected-ma
   return 1
 }
 
-# ── sub-command exerciser ─────────────────────────────────────────────────────
+# ── sub-command exerciser
 # _hl_run <label> <expect> <args…>   expect: 0 | 0or3 (3 = Unicode → Python, by design)
 _hl_run() {
   local label="$1" expect="$2"; shift 2
@@ -254,10 +254,8 @@ _hl_subcommands() {
   fi
 }
 
-# ── the report ────────────────────────────────────────────────────────────────
-# ════════════════════════════════════════════════════════════════════════════
+# ── the report
 #  FileAPI engine: Go (bvk-xfer) or Node.  Same method as the drill engine above: say WHY, never just "it fell back".
-# ════════════════════════════════════════════════════════════════════════════
 declare -ga _HL_XF=()                          # root causes for the FileAPI engine: "what|fix"
 _hl_xf() { _HL_XF+=("$1|$2"); }
 
@@ -501,7 +499,7 @@ _hl_xfer_report() {
   fi
 }
 
-# ── Find & replace engine: C (bvk-fr) or the Python twin (bashbasicsbyvk_findrep) ───────────────────────────────────
+# ── Find & replace engine: C (bvk-fr) or the Python twin (bashbasicsbyvk_findrep)
 _hl_fr_report() {
   _hl_h "9b Find & replace engine"
   if ! declare -F _fr_engine >/dev/null 2>&1; then _hl_warn "the find & replace wrapper is not loaded in this shell (run health inside 'o')"; return 0; fi

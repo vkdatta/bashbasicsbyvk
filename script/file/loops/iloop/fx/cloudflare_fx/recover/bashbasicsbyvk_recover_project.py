@@ -52,7 +52,7 @@ def build_wrangler(name, settings):
     text += "// Check: cron triggers, routes and custom domains are NOT recovered here.\n"
     return text, secrets
 
-# ------------------------------------------------------------ local project -
+# ── local project -
 # wrangler config and the static-asset rules files are the most important files of a project and are NOT stored in
 # Cloudflare in their original form (only parsed settings are). When the original project folder is available they are
 # copied BYTE FOR BYTE (never regenerated, re-encoded, re-indented or newline-converted), and the project's identifiers

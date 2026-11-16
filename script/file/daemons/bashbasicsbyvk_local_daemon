@@ -44,7 +44,7 @@ import time
 from pathlib import Path
 
 
-# ── the shared helper: planetary resources (sits next to this file, or on PATH) ──────────────────
+# ── the shared helper: planetary resources (sits next to this file, or on PATH)
 def _load_planetary():
     name = "bashbasicsbyvk_planetary_resources"
     here = os.path.dirname(os.path.realpath(__file__))
@@ -63,7 +63,7 @@ def _load_planetary():
 
 pr = _load_planetary()
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
+# ── Paths
 HOME = pr.HOME
 BVK_DIR = pr.BVK_DIR
 THIS_FILE = Path(os.path.abspath(__file__))
@@ -77,7 +77,7 @@ SVC = pr.Service("local", "bashbasicsbyvk_local_daemon", legacy_pid_files=[BVK_D
 _log = SVC.log
 _STOP = threading.Event()                          # set by SIGTERM / SIGINT: every loop looks at it
 
-# ── Self-bootstrap (service persistence) ───────────────────────────────────────
+# ── Self-bootstrap (service persistence)
 
 def bootstrap():
     BVK_DIR.mkdir(parents=True, exist_ok=True)
@@ -99,7 +99,7 @@ def _start_background():
         start_new_session=True,
     )
 
-# ── watchdog import / self-install ─────────────────────────────────────────────
+# ── watchdog import / self-install
 
 def _deps():
     """The python door to the central dependency installer (bashbasicsbyvk_deps, installed next to this script). None if it cannot
@@ -147,7 +147,7 @@ def _try_install_watchdog():
         _log(f"watchdog still not importable after install: {e}")
         return False
 
-# ══ tuning ═════════════════════════════════════════════════════════════════════
+# ── tuning
 FAV_RECONCILE_EVERY = 600     # seconds
 TRACK_RECONCILE_EVERY   = 600  # all pointers: full reconcile with inotify running
 TRACK_RECONCILE_POLLING = 60   # ... and without it (nothing else sees a move)
@@ -205,7 +205,7 @@ def _refresh_fav_snapshot():
     except Exception as e:
         _log(f"fav snapshot failed: {type(e).__name__}: {e}")
 
-# ══ events: cheap in the watcher thread, applied in batches by one worker ═════════════════════
+# ── events: cheap in the watcher thread, applied in batches by one worker
 
 def _p4_event(kind, src, dest, is_dir):
     """Called for EVERY filesystem event, in the watcher's thread: it only sorts the event (never takes a registry lock)."""
@@ -214,7 +214,7 @@ def _p4_event(kind, src, dest, is_dir):
         if "/favourites/" in src or (dest and "/favourites/" in dest):
             _fav_snapshot_dirty.set()
         return
-    # ── index: forget cached folder sizes of every ancestor ──────────────────
+    # ── index: forget cached folder sizes of every ancestor
     if _idx_lib is not None and not (is_dir and kind == "modified"):
         with _p4_lock:
             _inval_changed.add(src)
@@ -223,7 +223,7 @@ def _p4_event(kind, src, dest, is_dir):
             if is_dir and kind in ("deleted", "moved"):
                 _inval_drop.add(src)
         _inval_event.set()
-    # ── pointers: a move or a delete goes to the worker ──────────────────────
+    # ── pointers: a move or a delete goes to the worker
     if kind in ("moved", "deleted"):
         with _events_cv:
             _stats["events_seen"] += 1
@@ -300,7 +300,7 @@ def _event_worker():
             except Exception as e:
                 _log(f"event batch failed: {type(e).__name__}: {e}")
 
-# ══ the other services: favourites upkeep, pointers reconcile, index ════════════════════════════
+# ── the other services: favourites upkeep, pointers reconcile, index
 
 def _invalidator():
     """Debounced: drop cached folder sizes for everything that changed."""
@@ -512,7 +512,7 @@ def _p4_stop():
             _idx_lock.release()
     _write_status()
 
-# ── Watchers ───────────────────────────────────────────────────────────────────
+# ── Watchers
 
 def _run_watchdog_watcher(Observer, FileSystemEventHandler):
     """Returns True when the observer died by itself (the caller restarts it), False after a requested stop."""
@@ -579,7 +579,7 @@ def _run_watcher():
     _p4_events_flowing(False)
     _run_idle_watcher()
 
-# ── Daemon loop ────────────────────────────────────────────────────────────────
+# ── Daemon loop
 
 def _on_signal(signum, frame):
     _STOP.set()
@@ -620,7 +620,7 @@ def run_daemon():
         _shutdown()
     sys.exit(0)
 
-# ── Entry point ────────────────────────────────────────────────────────────────
+# ── Entry point
 
 def main():
     if "--daemon" in sys.argv:

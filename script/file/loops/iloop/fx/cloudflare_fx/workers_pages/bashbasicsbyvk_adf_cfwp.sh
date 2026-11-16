@@ -66,7 +66,7 @@ _cfw_load() {
   _cfw_fetch || { echo "❌ No workers or pages could be listed (see message above)."; _cfw_forget; return 1; }
 }
 
-# ── drawer screen (xui) ─────────────────────────────────────────────────────
+# ── drawer screen (xui)
 cfw_build() {
   local i rows=()
   for i in "${!_CFW_NAME[@]}"; do rows+=("${_CFW_TYPE[$i]} ${_CFW_NAME[$i]} $(_cfw_when "${_CFW_EPOCH[$i]}")"); done
@@ -150,7 +150,7 @@ _cfw_cmd() {
   esac
 }
 
-# ── the button ──────────────────────────────────────────────────────────────
+# ── the button
 _fx_adf_cfwp() {
   _CFW_NAV="${_fx_outer_path:-$path}"            # the navigation path, NOT $PWD
   _cfw_locate || return 1

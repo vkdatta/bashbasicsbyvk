@@ -68,7 +68,7 @@ _gdp_cmd() {
   esac
 }
 
-# ── the button ──────────────────────────────────────────────────────────────
+# ── the button
 _fx_adf_gdrive() {
   _gd_locate || return 1
   _gd_need_rclone || return 1

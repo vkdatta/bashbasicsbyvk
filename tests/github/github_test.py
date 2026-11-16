@@ -94,7 +94,6 @@ def lines(r):
     return [l for l in r.stdout.splitlines() if l]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════════════════
 def test_key_discovery():
     E = Env()
     try:

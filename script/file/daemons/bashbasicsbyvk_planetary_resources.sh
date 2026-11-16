@@ -52,7 +52,7 @@ _pr_pid_start() {     # the start time of a process (Linux: field 22 of /proc/PI
   s="${s##*) }"; set -- $s; printf '%s' "${20:-}"
 }
 
-# ── locks ────────────────────────────────────────────────────────────────────────────────────────
+# ── locks
 _pr_lock_stale() {    # _pr_lock_stale DIR STALE_S
   local pid=""; read -r pid < "$1/pid" 2>/dev/null
   if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null; then return 0; fi     # its owner died holding it
@@ -76,7 +76,7 @@ _pr_lock_take() {     # _pr_lock_take DIR [WAIT_TENTHS=30] [STALE_S=10]
 }
 _pr_lock_drop() { rm -rf "$1" 2>/dev/null; return 0; }
 
-# ── one live daemon per lock directory ───────────────────────────────────────────────────────────────
+# ── one live daemon per lock directory
 _pr_svc_alive() {     # _pr_svc_alive LOCKDIR : the pid inside is alive and is still the process that was claimed (start time); a claim younger than 10 s without a pid counts
   local d="$1" pid="" st="" cur
   { read -r pid; read -r st; } < "$d/pid" 2>/dev/null
@@ -117,7 +117,7 @@ _pr_die_with() {
     kill -0 "$2" 2>/dev/null && kill -TERM "$2" 2>/dev/null ) &
 }
 
-# ── log ──────────────────────────────────────────────────────────────────────────────────────────────
+# ── log
 _pr_log() { local f="$1"; shift; printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$f" 2>/dev/null; }
 _pr_log_trim() {      # _pr_log_trim FILE [MAX_LINES=500] [KEEP_LINES=300]
   local f="$1" max="${2:-500}" keep="${3:-300}"
@@ -125,7 +125,7 @@ _pr_log_trim() {      # _pr_log_trim FILE [MAX_LINES=500] [KEEP_LINES=300]
   true
 }
 
-# ── the local daemon's keeper ───────────────────────────────────────────────────────────────────────────
+# ── the local daemon's keeper
 # Starts bashbasicsbyvk_local_daemon unless a live one of the CURRENT version runs. An older one is replaced by the daemon script itself.
 # Runs after the first paint (an @call of the load mapper) and from  .dm.restart .
 _pr_wake_local_daemon() {

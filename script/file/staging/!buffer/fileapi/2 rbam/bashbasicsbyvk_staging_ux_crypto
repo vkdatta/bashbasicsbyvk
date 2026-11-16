@@ -89,14 +89,14 @@ async function getChunk(url, token) {
 if (!process.env.BB_JSLIB) die(127, 'bashbasicsbyvk_staging_jslib.js not found (reinstall bashbasicsbyvk)');
 const { fmtMB, live, fitv, packStatus, writeChunks } = require(process.env.BB_JSLIB);
 
-// ---------------------------------------------------------------- sealing (RBAM dinons)
+// ── sealing (RBAM dinons)
 function rawPub(keyObj) { const d = keyObj.export({ format: 'der', type: 'spki' }); return d.subarray(d.length - 32); }
 function pubFromRaw(raw) { return crypto.createPublicKey({ key: Buffer.concat([SPKI_X25519, raw]), format: 'der', type: 'spki' }); }
 function sealKey(shared, ephPub, recvPub) {
   return Buffer.from(crypto.hkdfSync('sha256', shared, Buffer.concat([ephPub, recvPub]), 'bbvk5|seal', 32));
 }
 
-// ---------------------------------------------------------------- commands
+// ── commands
 const CMD = {
   async 'seal-keygen'() {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('x25519');
@@ -152,7 +152,7 @@ const CMD = {
     } catch (e) { process.exit(1); }
   },
 
-  // ---------------------------------------------------------------- prepare: encrypt a selection to disk
+  // ── prepare: encrypt a selection to disk
   async prepare(stage, outdir) {
     if (!stage || !outdir) die(2, 'usage: prepare <stagedir> <outdir>');
     const K = key32(process.env.BB_K, 'K');
@@ -236,7 +236,7 @@ const CMD = {
     process.stdout.write(`${cipherTotal}\n${items.length}\n${chunkTotal}\n${fileCount}`);
   },
 
-  // ---------------------------------------------------------------- pack: tar.gz stream -> encrypted chunks of ONE archive item
+  // ── pack: tar.gz stream -> encrypted chunks of ONE archive item
   // Same method as up-: the archive is streamed, never written unencrypted. No limit on how many files it holds.
   async pack(outdir, arcname) {
     if (!outdir) die(2, 'usage: pack <outdir> <arcname>');
@@ -262,7 +262,7 @@ const CMD = {
     process.stdout.write(`${cipherTotal}\n1\n${idx}\n0`);
   },
 
-  // ---------------------------------------------------------------- fetch-arc: download + decrypt an archive share (do- style)
+  // ── fetch-arc: download + decrypt an archive share (do- style)
   async 'fetch-arc'(base, id, itemId, chunks, bytes, outfile) {
     const token = process.env.BB_DLTOKEN, K = key32(process.env.BB_K, 'K');
     const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || 8, 8));        // 8 x 16 MiB in flight
@@ -300,7 +300,7 @@ const CMD = {
     console.log(failed ? 'FAILED\t' + failed : 'OK');
   },
 
-  // ---------------------------------------------------------------- upload the prepared chunks
+  // ── upload the prepared chunks
   async upload(base, id, outdir) {
     const token = process.env.BB_UTOKEN;
     const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || 8, 32));
@@ -364,7 +364,7 @@ const CMD = {
     console.log(failed ? 'FAIL' : 'OK');
   },
 
-  // ---------------------------------------------------------------- names for the cloud-surf screens
+  // ── names for the cloud-surf screens
   async 'items-decrypt'() {
     const K = key32(process.env.BB_K, 'K');
     let d; try { d = JSON.parse((await readStdin()).toString('utf8')); } catch (e) { process.exit(2); }
@@ -379,7 +379,7 @@ const CMD = {
     }
   },
 
-  // ---------------------------------------------------------------- server JSON -> TSV for the shell screens
+  // ── server JSON -> TSV for the shell screens
   // kinds: gives | receives (rbam rels) · notifs · given | received (ux shares) · people (owner share detail)
   async tsv(kind) {
     let d; try { d = JSON.parse((await readStdin()).toString('utf8')); } catch (e) { process.exit(2); }
@@ -398,7 +398,7 @@ const CMD = {
     else process.exit(2);
   },
 
-  // ---------------------------------------------------------------- download + decrypt
+  // ── download + decrypt
   async download(base, id, dest) {
     const token = process.env.BB_DLTOKEN, K = key32(process.env.BB_K, 'K');
     const CONC = Math.max(1, Math.min(parseInt(process.env.BB_CONC, 10) || 6, 8));

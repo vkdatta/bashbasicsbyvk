@@ -1,6 +1,5 @@
 declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 # bashbasicsbyvk_choose.sh — THE choice menu: yes / no / cancel, pick one, pick many, run an action
-# ════════════════════════════════════════════════════════════════════════════
 #  Every question with a few fixed answers is asked with THIS menu, never with a one-line
 #  `read -p "... (y/N): "` and never with a hand-made row of keys (`c) copy   x) nuke   Enter) back:`).
 #  It is the Settings screen engine (_st_run, bashbasicsbyvk_settings_ui.sh) in a small box, so it has
@@ -42,7 +41,6 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  same question as one plain line and reads the answer, so scripts and tests that pipe answers in keep working.
 #
 #  Needs: _st_run/_st_add (settings_ui). The answer is NOT typed text: never parse it again, compare it to the keys.
-# ════════════════════════════════════════════════════════════════════════════
 
 # can the box be drawn here?
 _bc_can_draw() {

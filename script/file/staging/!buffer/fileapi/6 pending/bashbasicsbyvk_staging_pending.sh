@@ -29,14 +29,14 @@ _PN_URL=""; _PN_KEY=""; _PN_KIND=""; _PN_DEDUCTED=""; _PN_BALANCE=""; _PN_EXPIRE
 _PN_TOKEN=""; _PN_DONE=""; _PN_DONE_ITEMS="{}"
 _BB_COMMIT_STATUS=""; _BB_COMMIT_ERR=""
 
-# ── where things live ─────────────────────────────────────────────────────────
+# ── where things live
 _pn_root() { printf '%s' "${FILEAPI_BASHBASICS_PENDING_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/bashbasicsbyvk/pending}"; }
 _pn_mkroot() { local r; r=$(_pn_root); mkdir -p "$r" 2>/dev/null && chmod 700 "$r" 2>/dev/null; }
 # a work folder INSIDE the pending root: it is renamed (not copied) to <id> once the server has given the id
 _pn_mkpack() { _pn_mkroot || return 1; mktemp -d "$(_pn_root)/.pack.XXXXXX"; }
 _pn_dir() { printf '%s/%s' "$(_pn_root)" "$1"; }
 
-# ── the state file: key=value lines, read as DATA (never sourced) ──────────────
+# ── the state file: key=value lines, read as DATA (never sourced)
 _pn_get() { sed -n "s/^$2=//p" "$1/state" 2>/dev/null | tail -n 1; }
 _pn_set() {
   local d="$1" k="$2" v="${3//$'\n'/ }"
@@ -86,7 +86,7 @@ _pn_status() {
   s=$(_pn_get "$d" status); [ "$s" = paused ] && printf paused || printf interrupted
 }
 
-# ── talking to the server ──────────────────────────────────────────────────────
+# ── talking to the server
 _pn_jf() {      # _pn_jf <json> <field>  → strings as they are, objects as JSON
   if _bvk_xfer_bin; then "$_BVK_XFER_BIN" jget -o "$2" <<<"$1"; return; fi
   node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(d)[process.argv[1]];process.stdout.write(v===undefined||v===null?"":typeof v==="object"?JSON.stringify(v):String(v))}catch(e){}})' "$2" <<<"$1"
@@ -178,13 +178,11 @@ _pn_reconcile() {
   [ "$_BB_STATUS" = 200 ] && [[ "$_BB_BODY" == *"\"id\":\"$id\""* ]]
 }
 
-# ════════════════════════════════════════════════════════════════════════════
 #  _pn_complete <dir> [quiet]   finish an upload from its folder: send what the server lacks → commit → clean up.
 #  Fresh runs and continued runs both come through here.
 #  0 done (_PN_URL _PN_KEY _PN_KIND _PN_DEDUCTED _PN_BALANCE _PN_EXPIRES set; the folder is gone)
 #  else the upload is KEPT:  20 paused · 21 interrupted by Ctrl-C/kill · 22 stopped · 23 offline too long · 24 failed/transient · 2 credits · 9 already running
 #  or it was ended by the server (1) and the folder removed.
-# ════════════════════════════════════════════════════════════════════════════
 _pn_complete() {
   local d="$1" quiet="${2:-0}" id kind nb pipe verdict rc phase=upload stuck=0 retries=0 found=0 out
   id=$(_pn_get "$d" id); kind=$(_pn_get "$d" kind); nb=$(_pn_get "$d" nblobs)

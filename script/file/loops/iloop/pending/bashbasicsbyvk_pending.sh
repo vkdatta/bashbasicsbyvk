@@ -94,7 +94,7 @@ _pn_state_word() {
 }
 _pn_pause_enter() { local _a; _bvk_read _a "  Press any key to go back… " -1; echo; }
 
-# ── screen 3: one item ───────────────────────────────────────────────────────
+# ── screen 3: one item
 _pn_item_build() {
   _st_reset
   _pn_info "$_PN_CUR_ID"
@@ -129,7 +129,7 @@ _pn_item_act() {
   esac
 }
 
-# ── screen 2: the items of one service ──────────────────────────────────────
+# ── screen 2: the items of one service
 _pn_kind_build() {
   _st_reset
   _pn_ids_of "$_PN_CUR_KIND"
@@ -163,7 +163,7 @@ _pn_kind_act() {
   _st_quit=0
 }
 
-# ── screen 1: the five services ─────────────────────────────────────────────
+# ── screen 1: the five services
 _pn_top_build() {
   _st_reset
   local i n id k

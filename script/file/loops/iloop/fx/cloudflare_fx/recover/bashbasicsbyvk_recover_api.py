@@ -5,7 +5,7 @@ from email import policy
 
 API = os.environ.get("CLOUDFLARE_API_BASE", "https://api.cloudflare.com/client/v4")
 
-# ----------------------------------------------------------------- HTTP ----
+# ── HTTP
 class ApiError(Exception): pass
 
 def http_get(path, token):
@@ -34,7 +34,7 @@ def list_workers(token, account):
     names = sorted({w.get("id") for w in res if isinstance(w, dict) and w.get("id")}, key=str.lower)
     return names
 
-# --------------------------------------------------------------- multipart --
+# ── multipart
 def split_multipart(data, content_type):
     if "multipart/" not in content_type.lower():
         return [("worker.js", data)]

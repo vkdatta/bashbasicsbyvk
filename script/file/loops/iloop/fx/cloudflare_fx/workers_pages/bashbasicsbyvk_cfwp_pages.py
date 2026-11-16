@@ -129,7 +129,7 @@ def _local_path(url, ctype):
     return re.sub(r'[<>:"|?*\x00-\x1f]', "_", p) or "index.html"
 
 
-# ------------------------------------------------------------------- HTTP --
+# ── HTTP
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a, **k):
         return None
@@ -175,7 +175,7 @@ def _fetch(url):
     raise last
 
 
-# ------------------------------------------------------------- deployment --
+# ── deployment
 def _deployment(name, token, account):
     q = urllib.parse.quote(name, safe="")
     j = get_json(f"/accounts/{account}/pages/projects/{q}/deployments?env=production&per_page=1", token)
@@ -189,7 +189,7 @@ def _deployment(name, token, account):
     return d
 
 
-# ------------------------------------------------------------------ crawl --
+# ── crawl
 def _crawl(base_url, out, rep):
     host = urllib.parse.urlsplit(base_url).netloc
     seeds = [base_url + p for p in ("/", "/404.html", "/robots.txt", "/sitemap.xml", "/favicon.ico", "/manifest.json")]

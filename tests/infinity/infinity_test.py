@@ -72,7 +72,28 @@ def t_gitpush(a):
     a.line('u'); a.settle(0.8); a.line('u'); a.settle(1.0)      # u: back to the message question, u: back to the version question
     return 'Select version bump type' in last(a, 700), 'u at the message question did not go back one question'
 
+def t_localhost_q(a):
+    a.line('6'); a.wait_text('Enter localhost port', 12); a.settle(0.5)
+    a.line('q'); a.settle(1.0)
+    t = last(a, 700)                        # q closes up to the main loop: the main list is back, no question and no Infinity menu is pending
+    return (t.rstrip().endswith('Select:') and 'Enter localhost port: q' not in t.splitlines()[-1]), 'q at the port question did not close to the main list'
+
+def t_localhost_badport(a):
+    a.line('6'); a.wait_text('Enter localhost port', 12); a.settle(0.5)
+    a.line('abc'); a.settle(1.0)
+    return 'Invalid port' in last(a, 700), 'a non-numeric port was not refused'
+
+def t_gitpush_q(a):
+    a.line('4'); a.wait_text('Select version bump type', 20); a.settle(0.6)
+    a.line('1'); a.wait_text('Enter commit message', 10); a.settle(0.6)
+    a.line('q'); a.settle(1.2)
+    t = last(a, 700)
+    return (t.rstrip().endswith('Select:') and 'Enter commit message' not in t.splitlines()[-1]), 'q at the commit message did not close to the main list (or was committed as text)'
+
 check('Localhost: hint row, cc, u', t_localhost)
+check('Localhost: q closes to the main list', t_localhost_q)
+check('Localhost: a bad port is refused', t_localhost_badport)
+check('Git Push: q at the commit message closes, is not text', t_gitpush_q)
 check('Generate SQL (python): hint row, cc, u', t_gen_sql)
 check('Git Push: cc and u at every question', t_gitpush)
 print('ALL OK' if not fails else '%d FAILED' % fails); sys.exit(1 if fails else 0)

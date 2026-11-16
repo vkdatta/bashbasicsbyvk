@@ -39,7 +39,7 @@ class Ev(object):
         self.depth = 0
 
 
-# ─────────────────────────────────────────────────────────────────── helpers
+# ── helpers
 def ms(us):
     if us is None:
         return "?"
@@ -141,7 +141,7 @@ def split_from(detail):
     return frm or "?", label
 
 
-# ─────────────────────────────────────────────────────────────────── the tree
+# ── the tree
 def build_tree(window):
     """Foreground steps nest by time containment, whichever process wrote them."""
     spans = [e for e in window if e.kind in ("S", "X", "N", "P") and not e.bg and e.dur > 0]
@@ -182,7 +182,7 @@ def covered(spans, lo, hi):
     return tot
 
 
-# ─────────────────────────────────────────────────────────────────── network
+# ── network
 def net_phases(e):
     """Phase times in µs from the cumulative curl-style numbers (seconds)."""
     d = parse_kv(e.detail)
@@ -264,7 +264,7 @@ def probe_host(host, timeout=3.0):
     return r
 
 
-# ─────────────────────────────────────────────────────────────────── the report
+# ── the report
 def top_consumers(spans):
     agg = {}
     for e in spans:

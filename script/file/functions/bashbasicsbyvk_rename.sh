@@ -20,11 +20,9 @@ _sync_shortcuts_for_rename() {
   _scr_rename_sync "$1" "$2"
 }
 
-# ---------------------------------------------------------------------------
 # Batch shortcut-registry sync for CSV rename.
 # Applies ALL renames in ONE registry pass instead of load+rewrite per rename.
 # Uses the registry's own _scr_load/_scr_save; registry code is unchanged.
-# ---------------------------------------------------------------------------
 _RN_DEFER=0; _RN_DEF_OLD=(); _RN_DEF_NEW=()
 
 _rn_defer_begin() { _RN_DEFER=1; _RN_DEF_OLD=(); _RN_DEF_NEW=(); }
@@ -35,7 +33,6 @@ _rn_flush_deferred() {
   _RN_DEF_OLD=(); _RN_DEF_NEW=()
   return 0
 }
-# ---------------------------------------------------------------------------
 # _do_rename_mv <old_path> <new_path>
 # Central mv wrapper used by all rename paths.  Handles:
 #   • Conflict detection   — blocks if a genuinely different item already exists
@@ -48,7 +45,6 @@ _rn_flush_deferred() {
 #   1  mv failed (OS error)
 #   3  new name is over 255 bytes: caller prints the limit message (_bvk_name_refuse)
 #   2  real conflict — caller should print "already exists"
-# ---------------------------------------------------------------------------
 _do_rename_mv() {
   local old_path="$1"
   local new_path="$2"
@@ -84,11 +80,9 @@ _do_rename_mv() {
   return 1
 }
 
-# ---------------------------------------------------------------------------
 # rename_item <path>
 # Low-level: prompts for a new name and mv's a single file or folder.
 # Called by handle_file (run.sh option 7) as well as _rename_single_mutation.
-# ---------------------------------------------------------------------------
 rename_item() {
   local target="$1"
   local dir newname new_path
@@ -115,12 +109,10 @@ rename_item() {
   return $rc
 }
 
-# ---------------------------------------------------------------------------
 # Extension rule of the one-by-one rename (the CSV rename uses names exactly as written).
 #   the new name has an extension (the same or another one)  → it is used, instead of the old one
 #   the new name has none                                      → Settings → Rename → No extension: old · none · ask
 # _rn_ext_of NAME → _RN_EXT   (".txt", ".tar.gz"; "" for a name without one, a dotfile such as .bashrc, or a trailing dot)
-# ---------------------------------------------------------------------------
 _rn_ext_of() {
   local n="$1" last stem
   _RN_EXT=""
@@ -150,12 +142,10 @@ _rn_finalize() {
   return 0
 }
 
-# ---------------------------------------------------------------------------
 # The rename screen is ONE screen (the same pieces as a Settings screen):
 #   ✏️ Rename · what it does (the Settings description) · the items · u) Up   q) Close · Select: 1-5
 # then, for each chosen item, only  Old: name / New:  is added below it (the screen is not drawn again).
 # _rn_pick_header / _rn_pick_footer are the picker's header / footer hooks (_multi_header_hook / _multi_footer_hook).
-# ---------------------------------------------------------------------------
 _rn_pick_header() {
   local rows cols i out="" nl=$'\n'
   rows=$(_term_rows 2>/dev/null); cols=$(_term_cols 2>/dev/null)
@@ -212,11 +202,9 @@ _rn_name_prompt() {
   done
 }
 
-# ---------------------------------------------------------------------------
 # _rename_single_mutation
 # Select items via the viewport multi-picker, then ask for a new name for each.
 # Shortcut files get special handling (name-only, not the .shortcut pointer).
-# ---------------------------------------------------------------------------
 _rename_single_mutation() {
   local _rn_back
   while true; do                                 # u at a New: prompt comes back here: the item picker again
@@ -289,12 +277,10 @@ echo "💫 Shortcut renamed: $cur_name → $new_name"
   done
 }
 
-# ---------------------------------------------------------------------------
 # _rename_multi_mutation
 # CSV-driven batch rename in the current path.
 # CSV format: col1=exact_old_name, col2=exact_new_name
 # Writes renamed count back to col3 of the CSV.
-# ---------------------------------------------------------------------------
 _rename_multi_mutation() {
   open_csv_menu || return
   [ -z "$csv_file" ] && return
@@ -382,11 +368,9 @@ _rename_multi_mutation() {
   fi
 }
 
-# ---------------------------------------------------------------------------
 # handle_rename  (main menu: r)
 # Selects items interactively and renames each one individually.
 # For CSV batch rename, use the fx tab → ADF → rename.select.items.csv
-# ---------------------------------------------------------------------------
 handle_rename() {
   if [ ${#items[@]} -eq 0 ]; then
     echo "❌ No items to rename"

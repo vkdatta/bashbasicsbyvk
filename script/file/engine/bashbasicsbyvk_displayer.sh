@@ -76,7 +76,7 @@ _bvk_go_bin() {
   [ -n "$_BVK_GO_BIN" ]
 }
 
-# ── Load-source tracking (debug tag in the menu header) ──────────────────────
+# ── Load-source tracking (debug tag in the menu header)
 # _BVK_LOAD_SRC : who listed / searched the current menu   (c | py | "")
 # _BVK_META_SRC : who produced the visible rows' metadata  (c | py | "")
 # Header shows " [loaded by c]" only when the native binary did all of it,
@@ -131,7 +131,7 @@ _bvk_fill_items() {
   case "$_f" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$_f" ;; *) rm -f "$_f" ;; esac   # our re-used file: truncate (no process); a mktemp fallback file: remove
 }
 
-# ── Core arrays ───────────────────────────────────────────────────────────────
+# ── Core arrays
 
 declare -gA item_size=()
 declare -gA item_mtime=()
@@ -160,12 +160,12 @@ if [ -z "${_BVK_DSIZE_TMP:-}" ] || [ ! -d "$_BVK_DSIZE_TMP" ]; then
   export _BVK_DSIZE_TMP
 fi
 
-# ── Rendering helpers ─────────────────────────────────────────────────────────
+# ── Rendering helpers
 
 _highlight()   { printf '\033[1;7m%s\033[0m' "$1"; }
 _highlight_v() { _hl_out=$'\033[1;7m'"$1"$'\033[0m'; }
 
-# ── Icon detection (window-fetch fallback only) ───────────────────────────────
+# ── Icon detection (window-fetch fallback only)
 
 _is_archive() {
   local lower="${1##*/}"; lower="${lower,,}"
@@ -220,11 +220,9 @@ _is_plugin() {
   esac
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # _py_icon_prelude — the ONE copy of the python fallback's imports, extension tables, icon() and _pick_ctx().
 # Printed in front of each embedded python body below (_py_scan_python, _py_meta_python), so a table
 # edit lands in both. (The Go / C engines have their own tables: bvk-ls/src/bashbasicsbyvk_icon.c.)
-# ═══════════════════════════════════════════════════════════════════════════════
 _py_icon_prelude() {
 cat <<'PYEOF'
 import os, sys, stat as st_mod
@@ -277,9 +275,7 @@ def _pick_ctx():
 PYEOF
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # _py_scan_script — Layer 1: name index with optional parallel stat.
-# ═══════════════════════════════════════════════════════════════════════════════
 _py_scan_python() {
 { _py_icon_prelude; cat <<'PYEOF'
 from concurrent.futures import ProcessPoolExecutor
@@ -359,9 +355,7 @@ _py_scan_script() {
   _py_scan_python "$@"
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # _py_meta_script — Layer 2: batch stat for the visible window.
-# ═══════════════════════════════════════════════════════════════════════════════
 _py_meta_python() {
 { _py_icon_prelude; cat <<'PYEOF'
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -427,13 +421,11 @@ _py_meta_script() {
   _py_meta_python "$1"
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # _py_recursive_size — Layer 3: aggressive parallel recursive dir sizes.
 #
 # Splits each top dir into per-subdir tasks when fanout ≥ 4, so a single
 # window dir with 200 subdirs becomes 200 parallel tasks. Aggregates by
 # top dir at the end. Runs in background via & disown from bash.
-# ═══════════════════════════════════════════════════════════════════════════════
 _py_recursive_size() {
 _bvk_go_bin && { "$_BVK_GO_BIN" dsize "$1"; return; }
 python3 - "$1" <<'PYEOF'
@@ -543,9 +535,7 @@ for p in paths:
 PYEOF
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # build_items_with_meta / apply_sort — Layer 1
-# ═══════════════════════════════════════════════════════════════════════════════
 build_items_with_meta() {
   local p="$1"
   local pfx="${2:-}"
@@ -658,9 +648,7 @@ PYEOF
   _meta_loaded=false
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
 # _load_window — Layer 2 metadata for centre ± radius.
-# ═══════════════════════════════════════════════════════════════════════════════
 _load_window() {
   local centre="${1:-1}"
   local n="${#items[@]}"
@@ -761,7 +749,7 @@ _needs_dir_size() {
   return 1
 }
 
-# ── Async recursive dir-size orchestration ────────────────────────────────────
+# ── Async recursive dir-size orchestration
 
 # Spawn (or replace) a background job that computes recursive sizes for
 # any dirs in the current window that don't yet have cached sizes.
@@ -831,7 +819,7 @@ _dir_size_job_poll() {
   return 0
 }
 
-# ── Size / time formatters ────────────────────────────────────────────────────
+# ── Size / time formatters
 
 _fmt_size_v() {
   local b="${1:-0}"
@@ -869,7 +857,7 @@ _fmt_time_v() {
 }
 _fmt_time() { local _ft_out; _fmt_time_v "$1"; printf '%s' "$_ft_out"; }
 
-# ── Suffix builder — now shows real recursive sizes for dirs ──────────────────
+# ── Suffix builder — now shows real recursive sizes for dirs
 
 _build_suffix_v() {
   local fpath="$1"
@@ -930,7 +918,7 @@ _build_suffix_v() {
 }
 _build_suffix() { local _bs_out; _build_suffix_v "$1"; printf '%s' "$_bs_out"; }
 
-# ── Icon resolution ───────────────────────────────────────────────────────────
+# ── Icon resolution
 
 _resolve_display_parts_v() {
   local f="$1" real="$1"
@@ -1007,7 +995,7 @@ _shortcut_display_parts() {
   _sc_display="${sc_name}${_broken}"
 }
 
-# ── Row text helpers ──────────────────────────────────────────────────────────
+# ── Row text helpers
 
 _item_line_text()   { _item_line_text_v "$1"; printf '%s' "$_ilt_out"; }
 _item_line_text_v() {
@@ -1021,7 +1009,7 @@ _item_line_text_v() {
   printf -v _ilt_out " %2d) %s %s%s" "$target" "$_rdp_icon" "$_rdp_bn" "$_bs_out"
 }
 
-# ── Flat display ──────────────────────────────────────────────────────────────
+# ── Flat display
 
 _display_items_flat() {
   local idx=1 f line
@@ -1042,7 +1030,7 @@ _display_items_flat() {
   done
 }
 
-# ── Group by (Settings → Display → Group by) ─────────────────────────────────
+# ── Group by (Settings → Display → Group by)
 # The grouping itself is done by the C helper (bvk-ls group); _py_group_python is its
 # exact Python twin, used only when the binary is missing / too old / fails.  Bash does
 # NO per-file work here: it writes the path list, calls the helper once, and reads three
@@ -1178,7 +1166,7 @@ _gv_group_raw() {
   fi
 }
 
-# ── Group view = breadcrumb drill (view only, nothing on disk changes) ───────
+# ── Group view = breadcrumb drill (view only, nothing on disk changes)
 # _gv_crumbs = labels picked so far (2026, then 2026-Oct, ...).  Fewer crumbs than levels →
 # the screen is a menu of the next level's groups ("1) 📁 2026 (21)"); all levels picked →
 # the plain file list of that group.  `u` pops one crumb.
@@ -1287,7 +1275,7 @@ _gv_build() {
   return 0
 }
 
-# ── display_items — public entry point ────────────────────────────────────────
+# ── display_items — public entry point
 
 display_items() {
   declare -F _lk_load >/dev/null && _lk_load      # lock registry → 🔒 suffix
@@ -1301,7 +1289,7 @@ display_items() {
   _display_items_flat
 }
 
-# ── Multi-select parser ───────────────────────────────────────────────────────
+# ── Multi-select parser
 
 _parse_multi_select() {
   local input="$1" max="$2"

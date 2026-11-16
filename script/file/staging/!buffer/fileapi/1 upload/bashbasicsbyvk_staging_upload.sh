@@ -495,7 +495,6 @@ _bb_upload_commit() {
   return 1
 }
 
-# ════════════════════════════════════════════════════════════════════════════
 #  _bb_fast_send <dir> <total-bytes> <blobs> [pack-ms]      the Go engine's FAST PATH, shared by up- · backup · save- · snapshot
 #  ONE request for a small upload (blob + manifest + commit); for a big one the init rides on blob 0 and the commit on the last blob.  Auth, size and
 #  credits are checked by the server on the very first request.  Above FILEAPI_BASHBASICS_FAST_MAX_MB (default 64) the upload is HANDED OVER to the
@@ -503,7 +502,6 @@ _bb_upload_commit() {
 #  Reads _BB_COMMIT_HDRS (vault key, snapshot target) and the usual _BB_SVC / alias / ttl state.
 #    return 0 done (_FS_URL _FS_DEDUCTED _FS_BALANCE _FS_EXPIRES) · 1 refused (message printed) · 2 continue in the resumable path (_FS_ID: the
 #    server's id, or empty = it has nothing yet) · 3 interrupted by Ctrl-C (_FS_ID: keep in Pending when set) · 4 not used (no Go engine / credentials)
-# ════════════════════════════════════════════════════════════════════════════
 _FS_URL=""; _FS_DEDUCTED=""; _FS_BALANCE=""; _FS_EXPIRES=""; _FS_ID=""
 _bb_fast_send() {
   local dir="$1" est="$2" nb="$3" pack_ms="${4:-0}"
@@ -647,10 +645,10 @@ _up_do_multipart_upload() {
     echo "📜  Packed size is over the 10GB soft limit — the server will ask you to confirm at 1.2x credit cost."
   fi
 
-  # ---- price check: cost 1 → silent; more → continue / reduce time / increase time / stop ----
+  # ── price check: cost 1 → silent; more → continue / reduce time / increase time / stop
   _bb_get_credentials >/dev/null 2>&1 && { _bb_credit_gate "$total_size" "This upload" || { _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; }; }
 
-  # ---- FAST PATH (Go engine) — see _bb_fast_send.  Anything that goes wrong half-way continues in the resumable path below (nothing is lost). ----
+  # ── FAST PATH (Go engine) — see _bb_fast_send.  Anything that goes wrong half-way continues in the resumable path below (nothing is lost).
   local fast_id="" fast_intr=0 pack_ms=$(( (_tp1 - _tp0) / 1000 ))
   if [ $use_go = 1 ]; then
     _bb_fast_send "$tmpdir" "$total_size" "$nblobs" "$pack_ms"; local frc=$?
@@ -668,7 +666,7 @@ _up_do_multipart_upload() {
     esac
   fi
 
-  # ---- Phase 1: init (auth + credit precheck) → the unique service id; the encrypted blobs move to the pending folder ----
+  # ── Phase 1: init (auth + credit precheck) → the unique service id; the encrypted blobs move to the pending folder
   local init_out id token pdir
   if [ -n "$fast_id" ]; then
     id="$fast_id"; token="resume"                        # the server already knows this upload (init rode on blob 0): just continue it

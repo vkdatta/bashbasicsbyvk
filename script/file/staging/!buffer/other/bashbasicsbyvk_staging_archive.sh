@@ -32,14 +32,12 @@ handle_compress_items() {
   _compress_paths "${sp_resolved[@]}"
 }
 
-# ---------------------------------------------------------------------------
 # _compress_paths <path...>
 # Core of z-. Also used by the fx zip.* functions (CSV / .s selection).
 # Items under $path are stored with their path relative to $path. If any item
 # lives outside $path (CSV absolute paths, .s selections from elsewhere) every
 # item is staged by name through a temp folder of symlinks, so the archive
 # never embeds absolute filesystem paths.
-# ---------------------------------------------------------------------------
 # The questions of _compress_paths, one step each: 0 answered · 1 u (back) · 3 cancelled (_arc_rc = the return code) · 5 not asked.
 # They share _compress_paths's locals (paths fmt ext arc_name arc_path _arc_rm _arc_rc hid_inc).
 _arc_s_fmt() {
@@ -96,14 +94,14 @@ _compress_paths() {
     return 1
   fi
 
-  # ── Four questions, one step each (_mc_steps: u = ONE QUESTION BACK, never out of the whole archive) ─────────
+  # ── Four questions, one step each (_mc_steps: u = ONE QUESTION BACK, never out of the whole archive)
   #   format (only when Settings says "ask") → name → overwrite (only when the name exists) → hidden files (only when asked)
   local fmt="" ext="" arc_name="" arc_path="" _arc_rm=0 _arc_rc=0 hid_inc="" _arc_stp
   _mc_steps _arc_s_fmt _arc_s_name _arc_s_over _arc_s_hidden; _arc_stp=$?
   (( _arc_stp == 0 )) || return "$_arc_rc"
   [ "$_arc_rm" = 1 ] && rm -f "$arc_path"     # only now: a u at the hidden-files question must not have deleted the old archive
 
-  # ── Build the item list (relative to workdir) ────────────────────────────
+  # ── Build the item list (relative to workdir)
   local base="${path%/}/" outside=false
   for p in "${paths[@]}"; do
     [[ "$p" == "$base"* ]] || { outside=true; break; }
@@ -127,7 +125,7 @@ _compress_paths() {
 
   echo ""
 
-  # ── Compress ─────────────────────────────────────────────────────────────
+  # ── Compress
   local rc follow=false
   $outside && follow=true                                             # the staging symlinks must be followed, never stored
   echo "🗜️  Creating ${ext#.} of ${#paths[@]} item(s) → ${arc_name}${ext}"
@@ -143,7 +141,6 @@ _compress_paths() {
   return $rc
 }
 
-# ---------------------------------------------------------------------------
 # handle_decompress_items  uz-<itemlist>
 # Decompresses each selected archive into its own named folder inside $path.
 # Format is detected from the name AND the content — no prompt (see bashbasicsbyvk_archive_formats.sh).
@@ -154,7 +151,6 @@ _compress_paths() {
 # uz-2       → creates  myarchive/  and extracts into it
 # uz-1,4,7   → creates  a/  b/  c/  for each respectively
 # If the destination folder already exists, appends _1, _2, … to avoid clobber.
-# ---------------------------------------------------------------------------
 handle_decompress_items() {
   local raw="$1"
   local itemlist="${raw#uz-}"
@@ -173,12 +169,10 @@ handle_decompress_items() {
   _decompress_paths "${sp_resolved[@]}"
 }
 
-# ---------------------------------------------------------------------------
 # _decompress_paths <archive...>
 # Core of uz-. Also used by the fx unzip.* functions (CSV / .s selection) and the file menu's Extract.
 # Each archive is extracted into its own folder inside $_arc_dest_base (default: $path).
 # The format comes from the name AND the content (_arc_detect), so copies like hello.zip1 / hello_tar.gz open too.
-# ---------------------------------------------------------------------------
 _decompress_paths() {
   local -a paths=("$@")
   local dest_base="${_arc_dest_base:-$path}"
@@ -193,7 +187,7 @@ _decompress_paths() {
     fi
     local bn="${p##*/}"
 
-    # ── Detect format: name says "maybe", content decides ──────────────────
+    # ── Detect format: name says "maybe", content decides
     if ! _arc_detect "$p"; then
       echo "  🔴  Skipping '$bn' — $_ARC_WHY"
       skipped=$((skipped + 1))
@@ -202,10 +196,10 @@ _decompress_paths() {
     local fmt="$_ARC_FMT" folder_name="$_ARC_STEM"
     [ -n "$folder_name" ] || folder_name="extracted"
 
-    # ── Tool availability check ────────────────────────────────────────────
+    # ── Tool availability check
     _arc_need extract "$fmt" || return 1
 
-    # ── Avoid clobbering an existing folder ───────────────────────────────
+    # ── Avoid clobbering an existing folder
     local dest_dir="${dest_base}/${folder_name}"
     if [ -e "$dest_dir" ]; then
       local counter=1
@@ -218,7 +212,7 @@ _decompress_paths() {
 
     mkdir -p "$dest_dir"
 
-    # ── Decompress ─────────────────────────────────────────────────────────
+    # ── Decompress
     echo "  📂 Extracting '$bn' → $(basename "$dest_dir")/"
     _arc_extract "$fmt" "$p" "$dest_dir"
     local rc=$?

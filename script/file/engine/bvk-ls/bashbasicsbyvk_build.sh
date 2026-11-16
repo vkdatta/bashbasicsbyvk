@@ -57,7 +57,7 @@ if want linux; then
   done
 fi
 
-# ── Android (bionic) builds ────────────────────────────────────────────────
+# ── Android (bionic) builds
 # The glibc static builds above cannot run on Android: the Android linker
 # rejects a static-pie binary (no PT_PHDR) and aborts. These are normal
 # dynamically linked PIE executables built with the NDK clang against bionic.
@@ -99,7 +99,7 @@ elif want android; then
   if [ "${REQUIRE_ANDROID:-0}" = 1 ]; then exit 1; fi
 fi
 
-# ── macOS (darwin) builds ─────────────────────────────────────────────────────────────────────────────────────────────
+# ── macOS (darwin) builds
 # On a Mac: Apple clang, one -arch per CPU (the macos runner can build both).  Elsewhere: zig cc (bundles the macOS SDK stubs).
 # macOS has no static linking, so these are normal dynamic executables; the minimum macOS is the oldest Go supports (10.15 / 11).
 if want darwin; then
@@ -124,7 +124,7 @@ if want darwin; then
   fi
 fi
 
-# ── FreeBSD builds (zig cc: cross-compiles against FreeBSD libc stubs; the result is a normal dynamic FreeBSD executable) ─────────
+# ── FreeBSD builds (zig cc: cross-compiles against FreeBSD libc stubs; the result is a normal dynamic FreeBSD executable)
 # Needs zig >= 0.15 and an explicit FreeBSD version: older zig has no FreeBSD libc headers, and the default target (freebsd.13) has no libc in zig.
 if want freebsd; then
   if command -v zig >/dev/null 2>&1; then

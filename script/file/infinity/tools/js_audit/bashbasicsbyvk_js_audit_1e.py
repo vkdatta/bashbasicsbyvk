@@ -28,9 +28,7 @@ from bashbasicsbyvk_js_audit_constants import (
 from bashbasicsbyvk_js_audit_1d import _extract_template_literals, _extract_event_functions
 
 
-# ---------------------------------------------------------------------------
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 def _strip_strings(src):
     """Replace all string literals with spaces so their contents are ignored."""
@@ -75,9 +73,7 @@ from bashbasicsbyvk_js_audit_helpers import (
 )
 
 
-# ---------------------------------------------------------------------------
 # Audit 1e
-# ---------------------------------------------------------------------------
 
 def audit_1e_missing_imports(js_info, all_js, root):
     rows = []

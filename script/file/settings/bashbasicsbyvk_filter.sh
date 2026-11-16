@@ -257,7 +257,7 @@ _filter_total_count() {
   else echo "${#_all_items[@]}"; fi
 }
 
-# ── Imaginary-origin filter state ─────────────────────────────────────────────
+# ── Imaginary-origin filter state
 
 declare -g _imag_filter_active=false
 declare -g _imag_filter_query=""
@@ -326,7 +326,7 @@ _imag_filter_apply() {
   local q; if [ "${#_imag_filter_query}" -gt 255 ]; then q=$'\001'; else q="${_imag_filter_query,,}"; fi   # longer than any file name: matches nothing
   local threshold="${index_mode_threshold:-200}"
 
-  # ── Recursive: matches from all sub-folders, always listed flat ────────
+  # ── Recursive: matches from all sub-folders, always listed flat
   # (a group menu cannot drill into hits that live in different folders)
   if [ -n "$q" ] && _filter_rec_wanted && [ -d "$path" ]; then
     _filter_query="$_imag_filter_query"
@@ -366,7 +366,7 @@ _imag_filter_apply() {
   _filter_query="$_imag_filter_query"
   _imag_filter_committed=true
 
-  # ── Below threshold: drop out of imaginary, show the real files ────────
+  # ── Below threshold: drop out of imaginary, show the real files
   if [ "$tot" -le "$threshold" ]; then
     imaginary_mode=false
     items=("${_paths[@]}")
@@ -378,7 +378,7 @@ _imag_filter_apply() {
     _vp_header_fn=_menu_header_flat
     _vp_footer_fn=_menu_footer_lines
 
-  # ── Still above threshold: stay imaginary, groups reflect the filter ───
+  # ── Still above threshold: stay imaginary, groups reflect the filter
   else
     imaginary_mode=true
     _all_items=()
@@ -441,14 +441,14 @@ _imag_filter_restore() {
   _print_input_line
 }
 
-# ── Input handlers ────────────────────────────────────────────────────────────
+# ── Input handlers
 
 # The line (_buf) was changed by an editing key (Backspace, Delete, cut, a word delete, a paste, undo ...): the live "=" filter follows
 # the new text.  An emptied line, or a text that no longer starts with "=", ends the filter and brings the list back
 # (a lone "=" stays a filter with no text, as Backspace from "=a" always did).
 # (A recursive query only edits the text: the search runs on Enter.)
 _filter_resync() {
-  # ── Imaginary-origin filter ─────────────────────────────────────────────
+  # ── Imaginary-origin filter
   if ${_imag_filter_active:-false}; then
     if [[ "$_buf" != =* ]]; then
       _imag_filter_active=false
@@ -463,7 +463,7 @@ _filter_resync() {
     return 0
   fi
 
-  # ── Flat filter ─────────────────────────────────────────────────────────
+  # ── Flat filter
   if [[ "$_buf" == =* ]]; then
     if _filter_deferred_buf; then _print_input_line; return 0; fi
     _filter_force_rec=false
@@ -488,7 +488,7 @@ _filter_resync() {
 _filter_on_char() {
   local key="$1"
 
-  # ── Imaginary-origin filter already active ──────────────────────────────
+  # ── Imaginary-origin filter already active
   if ${_imag_filter_active:-false}; then
     if [[ "$_buf" == =* ]]; then
       # "==" only means something where a recursive search is possible
@@ -506,7 +506,7 @@ _filter_on_char() {
     _filter_query=""
   fi
 
-  # ── Enter imaginary-origin filter (type = at empty buffer) ──────────────
+  # ── Enter imaginary-origin filter (type = at empty buffer)
   if ${imaginary_mode:-false} || ${_imag_filter_committed:-false}; then
     if [ -z "$_buf" ] && [ "$key" = "=" ]; then
       _imag_filter_active=true
@@ -519,7 +519,7 @@ _filter_on_char() {
     return 1
   fi
 
-  # ── Flat filter ─────────────────────────────────────────────────────────
+  # ── Flat filter
   if [[ "$_buf" == =* ]] || { [ -z "$_buf" ] && [ "$key" = "=" ]; }; then
     if [ -z "$_buf" ] && [ "$key" = "=" ]; then
       # A committed filter (Enter on =text) already holds the original list in

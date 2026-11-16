@@ -14,7 +14,7 @@
 declare -ga _NF_ID=() _NF_KIND=() _NF_REF=() _NF_AT=() _NF_MAIL=() _NF_D30=() _NF_ALIAS=() _NF_BYTES=() _NF_FILES=() _NF_NUKED=() _NF_ROLE=()
 _NF_LOADED=0
 
-# ── the notification COUNT for the header row (⏰ N) ───────────────────────────────────────────────────────────
+# ── the notification COUNT for the header row (⏰ N)
 # The header is redrawn all the time, so it never asks the server itself: it reads a tiny cache file ("<epoch> <count>")
 # written by _nf_load (every time nf opens / reloads) and refreshed in a silent background process at most once a minute.
 _nf_cnt_file() { printf '%s' "${XDG_STATE_HOME:-$HOME/.local/state}/bashbasicsbyvk/nf_count"; }
@@ -94,7 +94,7 @@ nf_header() {
 }
 nf_footer() { _mc_footer_std -b "N:open / answer" "r-N:dismiss" "rf"; }
 
-# ── answers ──────────────────────────────────────────────────────────────────
+# ── answers
 _nf_rbam_respond() {                         # rid true|false   (also used by the rbam list)
   local rid="$1" acc="$2"
   [ "$acc" = true ] && { _ux_ensure_seal || return 1; }

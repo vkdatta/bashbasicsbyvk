@@ -51,14 +51,12 @@ class GdError(Exception):
     pass
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  Google-native files (Docs, Sheets, Slides, Forms, Drawings ...)
 #    They are NOT Office files.  They have no bytes of their own, so they are never downloaded, never exported and
 #    never uploaded as a conversion.  The mirror shows each one as a tiny pointer file (like Google Drive for desktop):
 #    Foo.gdoc  Foo.gsheet  Foo.gslides  Foo.gform ...   Copy / move / rename / delete act on the REAL Google file by
 #    its Drive ID.  A Word / Excel / PowerPoint file is only made when the person asks for it (gd.export, or a copy
 #    out of the Drive), through Google's own converter.
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 _GA = "application/vnd.google-apps."
 NATIVE = {                                    # Drive mime type -> (local extension, open URL, default export format)
     _GA + "document":     ("gdoc",    "https://docs.google.com/document/d/{id}/edit", "docx"),
@@ -120,9 +118,7 @@ def drive_name(local_name):
     return local_name[: -(len(e) + 1)] if e else local_name
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  loading bar  (same look as the smartload bar:  [░░░████░░░░░] message  3s; off when BVK_GD_BAR=0, which the app sets while smartload runs)
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 class Bar:
     def __init__(self, msg):
         self.msg = msg
@@ -278,9 +274,7 @@ def ask_yes(prompt):
         return False
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  helpers
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 _TS = re.compile(r"^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)(?:\.(\d+))?(Z|[+-]\d\d:?\d\d)?$")
 
 
@@ -387,9 +381,7 @@ def rclone(ctx, args, check=True, passthrough=False, quiet_ok=(), export=None):
     return p.returncode, out, err
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  manifest  (what the mirror knew about Drive the last time we looked)
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 class DB:
     def __init__(self, ctx):
         self.c = sqlite3.connect(os.path.join(ctx.pdir, "manifest.db"), timeout=30)
@@ -458,9 +450,7 @@ class DB:
         self.c.commit()
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  mirror <-> manifest primitives
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def make_placeholder(path, size, mtime):
     """a file of the right size that takes (almost) no disk: sparse"""
     global SPARSE_OK
@@ -720,9 +710,7 @@ def sync_dir(ctx, db, rel, force=False, recursive=False):
     return stats
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  hydrate / clean
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def pending_files(db, rels):
     out = {}
     for rel in rels:
@@ -855,9 +843,7 @@ def cmd_clean(ctx, args):
     return 0
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  push: make Drive match what was done to the mirror
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 class New:
     def __init__(self, rel, st, isdir):
         self.rel, self.st, self.isdir = rel, st, isdir
@@ -1035,7 +1021,7 @@ def cmd_push(ctx, args=None):
 
 
 def push_round(ctx, db, bar, news, gone, modified, scanned, total):
-    # ── 1. moves: a vanished entry and a new entry that are the same inode ────────────────────────────
+    # ── 1. moves: a vanished entry and a new entry that are the same inode
     gone_by_ino = {}
     for r in gone:
         gone_by_ino.setdefault((r["dev"], r["ino"], r["kind"]), []).append(r)
@@ -1075,7 +1061,7 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             still_new.append(n)
     expanded = still_new
     gone = [r for r in gone if r["rel"] not in claimed]
-    # ── 2. folders and files that are really new ─────────────────────────────────────────────────────
+    # ── 2. folders and files that are really new
     new_dirs = [n for n in expanded if n.isdir]
     new_files = [n for n in expanded if not n.isdir]
     uploads, skipped, ptr_copies = [], 0, []
@@ -1110,7 +1096,7 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
     if skipped:
         gone = [r for r in gone if not (r["kind"] == "f" and any(
             u.rel != r["rel"] and name_of(u.rel) == name_of(r["rel"]) for u in new_files if is_placeholder_copy(u.st)))]
-    # ── 3. safety net before removing things ─────────────────────────────────────────────────────────
+    # ── 3. safety net before removing things
     max_del = int(os.environ.get("BVK_GD_MAX_DELETE", "100"))
     n_native_gone = sum(1 for r in gone if r["kind"] == "f" and r["gdoc"])
     if n_native_gone and os.environ.get("BVK_GD_CONFIRM_NATIVE_DELETE", "1") == "1":
@@ -1143,7 +1129,7 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
         failed_dirs.add(parent_of(rel))
         say(f"❌ {rel}: {why}")
 
-    # ── 4. do it: mkdir -> move -> upload -> delete ───────────────────────────────────────────────────
+    # ── 4. do it: mkdir -> move -> upload -> delete
     ok_dirs = []
     for it, err in run_levels(new_dirs, lambda n: n.rel.count("/"),
                               lambda n: rclone(ctx, ["mkdir", ctx.rpath(n.rel)])):
@@ -1234,7 +1220,7 @@ def push_round(ctx, db, bar, news, gone, modified, scanned, total):
             fail(it["rel"], err)
         else:
             db.delete_tree(it["rel"]); total["rm"] += 1; did = True
-    # ── 5. folders that were fully handled look "clean" again ─────────────────────────────────────────
+    # ── 5. folders that were fully handled look "clean" again
     for rel in set(scanned):
         if rel in failed_dirs or db.get(rel) is None:
             continue
@@ -1249,9 +1235,7 @@ def _purge(ctx, rel, extra):
         raise GdError((err.strip().splitlines() or ["purge failed"])[-1])
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  server-side copy
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def cmd_copy(ctx, args):
     db = DB(ctx)
     src, dst = ctx.rel(args.src), ctx.rel(args.dst)
@@ -1282,9 +1266,7 @@ def cmd_copy(ctx, args):
     return 0
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  export: the ONLY place a Google file becomes a Word / Excel / PowerPoint / PDF file  (Google's own converter)
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def _valid_export(path, fmt):
     import zipfile
     if os.path.getsize(path) == 0:
@@ -1375,10 +1357,8 @@ def cmd_export(ctx, args):
     return 1 if bad else 0
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  recover: find files that older versions of this tool damaged, and where the good copy can still be
 #     READ-ONLY: nothing in Drive is changed.  It writes <profile-dir>/recover-report.tsv
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 _OOXML = (".docx", ".xlsx", ".pptx")
 _ZIPPED = _OOXML + (".odt", ".ods", ".odp", ".epub")
 
@@ -1469,9 +1449,7 @@ def cmd_recover(ctx, args):
     return 1 if broken else 0
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  small commands
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def cmd_remotes(args):
     types = {t.strip() for t in os.environ.get("BVK_GD_TYPES", "drive").split(",") if t.strip()}
     cmd = [RCLONE, "--ask-password=false", "config", "dump"]

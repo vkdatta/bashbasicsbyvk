@@ -31,7 +31,7 @@ _lk_n=""            # result of _lk_norm
 _lk_inside=0        # result of _lk_count_inside
 _lk_suffix=""       # result of _lk_suffix_v
 
-# ── registry ────────────────────────────────────────────────────────────────
+# ── registry
 _lk_load() {
   _LK_SET=()
   [ -r "$_LK_FILE" ] || return 0
@@ -113,7 +113,7 @@ _lk_move() {                 # keep locks when an item is renamed / moved
   return 0
 }
 
-# ── l-N / ul-N ──────────────────────────────────────────────────────────────
+# ── l-N / ul-N
 # _lk_cmd lock|unlock <l-N | ul-N>   — resolves N against items[] like z- / c-
 _lk_cmd() {
   local mode="$1" raw="$2" itemlist="${2#*-}"
@@ -172,7 +172,7 @@ _lk_join() {                 # "a, b, c, … (+N more)"  (max 8 names)
   printf '%s' "$out"
 }
 
-# ── the delete gate ─────────────────────────────────────────────────────────
+# ── the delete gate
 # u = ONE QUESTION BACK everywhere in this flow (Confirm delete → Locked items → Delete N? → number → Backup).  It is built on _mc_steps
 # (STEPS-01), never on `|| return` after the first u: that is what made u at "Back up before deleting" fall out to the file list.
 
@@ -184,8 +184,8 @@ _lcd_first() {
   [ "$rc" = 0 ] && [[ "$ans" == [yY] ]] && return 0
   echo "🚫 Deletion cancelled"; return 3
 }
-_lcd_key_one() {                # exactly one item selected, and it is locked: the 6-digit key
-  local it="${selected_items[0]}" rc
+_lk_confirm_key() {             # <path>: ONE locked item (or a folder holding locked ones) is about to be deleted: the 6-digit key.  0 go on · 1 back · 3 cancelled
+  local it="$1" rc
   local -a detail=()
   if _lk_is_locked "$it"; then
     detail+=("🔒 You selected a LOCKED $( [ -d "$it" ] && echo folder || echo file ): ${it##*/}")
@@ -199,6 +199,7 @@ _lcd_key_one() {                # exactly one item selected, and it is locked: t
   (( rc == 2 )) && return 1
   echo "🚫 Deletion cancelled — locked item kept"; return 3
 }
+_lcd_key_one() { _lk_confirm_key "${selected_items[0]}"; }   # exactly one item selected, and it is locked
 _lcd_choice() {                 # several items, some locked: what happens to the locked ones
   _bvk_menu ans -q "What should happen to the locked items?" -t "Locked items" -i "🔒" "1:Don't delete locked items" "2:Delete locked items" || {
     _bvk_back && return 1

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
-# ============================================================
 #  SMART MENU  —  universal interactive-menu highlighter
 #
 #  Retrofits arrow-key navigation, background highlighting and
@@ -27,7 +26,6 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  no per-menu wiring, and new menus are picked up automatically.
 #
 #  Disable at any time with:  export VK_SMART_MENUS=0
-# ============================================================
 
 _sm_enabled=true
 [ "${VK_SMART_MENUS:-1}" = "0" ] && _sm_enabled=false
@@ -50,9 +48,7 @@ _sm_tok=""
 
 _sm_reset() { _sm_lines=(); _sm_partial=""; }
 
-# ------------------------------------------------------------
 # capture
-# ------------------------------------------------------------
 _sm_record() {
   # Callers have already established that output is reaching a tty
   # and that capture is enabled; see the shims below.
@@ -128,9 +124,7 @@ clear() {
   return $__rc
 }
 
-# ------------------------------------------------------------
 # menu detection
-# ------------------------------------------------------------
 # An option line is "  1) Label", "3. Label" or "cd) Label".
 # Non-numeric tokens must use ')' so prose like "Note. blah"
 # is not mistaken for a menu entry.
@@ -303,9 +297,7 @@ _sm_detect() {
   return 0
 }
 
-# ------------------------------------------------------------
 # viewport hooks
-# ------------------------------------------------------------
 _sm_count()   { _vp_n=${#_sm_rows_text[@]}; }
 _sm_rowtext() { _vp_line="${_sm_rows_text[$(($1-1))]}"; }
 
@@ -330,9 +322,7 @@ _sm_footer_fn() {
   return 0
 }
 
-# ------------------------------------------------------------
 # selection mode
-# ------------------------------------------------------------
 # A menu can want one of three input styles, inferred from its
 # prompt text so no menu code has to declare anything:
 #
@@ -412,7 +402,7 @@ _sm_classify_mode() {
   fi
 }
 
-# ---- multi-select highlight set ----
+# ── multi-select highlight set
 # _msel_set maps 1-based row -> 1 for every row the current buffer
 # selects. Built by parsing the numeric part of the buffer through
 # the same grammar delete/rename uses.
@@ -635,9 +625,7 @@ PYEOF
 # _sm_range kept for external compatibility; no longer called by _sm_render_set.
 _sm_range() { if [ "$1" = "$2" ]; then builtin echo "$1"; else builtin echo "$1-$2"; fi; }
 
-# ------------------------------------------------------------
 # mouse / touch (see bashbasicsbyvk_mouse.sh)
-# ------------------------------------------------------------
 # click a row: single menu = select it (its token is typed), double click = and Enter.  multi / command menu = move the cursor row
 # there and toggle it like Space; double click = make sure it is in, and Enter.  ▲ / ▼ / wheel scroll.   returns 2 = accept now.
 _sm_click() {      # called by _bvk_edit_run for a press that is not on the typed text (_MS_KIND / _MS_ITEM are set)
@@ -683,9 +671,7 @@ _sm_wheel() {   # $1 = -1 up · 1 down
   fi
 }
 
-# ------------------------------------------------------------
 # the interactive loop
-# ------------------------------------------------------------
 # cc types a command into this menu's prompt
 _sm_type_key() {
   local key="$1"
@@ -820,9 +806,7 @@ _sm_run() {
   return 0
 }
 
-# ------------------------------------------------------------
 # the read shim
-# ------------------------------------------------------------
 # Plain-text prompt (no menu on screen): handed to the command layer's line editor so the
 # live hint row and the command / @-escape rules apply to every prompt in the app.
 # $1 = ok(1|0)  $2 = prompt  $3 = initial text  $4 = variable  $5 = tab-complete(1|0)  then the original read args
@@ -865,9 +849,7 @@ _bvk_noemoji() {
   __ne_ref="$__ne_out"
 }
 
-# ------------------------------------------------------------
 # _bvk_read — THE typed-line prompt: every place that waits for the person to TYPE calls this, never `read` itself
-# ------------------------------------------------------------
 #   _bvk_read VAR "Prompt: " [-i INITIAL] [-I] [-s] [-1]
 #     VAR        the variable that gets the answer (no emoji in the prompt: rule 6; _bvk_noemoji strips them as a net)
 #     -i TEXT    the line starts with TEXT (the person edits it)

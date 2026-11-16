@@ -62,7 +62,7 @@ _MC_RULE="   ──────────────────────�
 # A generic key is NEVER written "key:Label" (tests/cmd_drift.sh fails on it, whatever the spelling): add a variant here instead.
 declare -gA _MC_KEYLABEL=([u]=Back [u.up]=Up [u.prefix]="Remove last prefix" [q]=Quit [z]=Cancel [rf]=Refresh)
 
-# ---- CONTROL-01: the return contract of every template below, and the one unwind test --------------------
+# ── CONTROL-01: the return contract of every template below, and the one unwind test
 _MC_OK=0; _MC_BACK=1; _MC_QUIT=2; _MC_EOF=3
 # true once q was pressed in this menu or in any screen / prompt below it (_bvk_quit raises the flag, see viewport.sh)
 _mc_unwind() { [ "${_BVK_TO_MAIN:-0}" = 1 ]; }
@@ -167,7 +167,7 @@ _mc_menu0() { _mc_menu_n 0 "$@"; }
 # prompt wrapper: answer lands in $REPLY
 _mc_ask() { _bvk_read REPLY "${1:-Select: }"; }
 
-# ---- FOOTER-01: the standard footer with a screen's own actions in front ----------------------------------------
+# ── FOOTER-01: the standard footer with a screen's own actions in front
 #   _mc_footer_std [-b] [item...]     -b = no folders on this screen: u reads "Back", not "Up"
 #   Own actions first, then the standard  u q h cc.  Items from the first "|" or "#note" on stay AFTER the standard keys.
 _mc_std_items() {                      # -> _MC_STD = the standard keys as footer items (for a footer that needs its own line layout)
@@ -226,7 +226,7 @@ _mc_nav() {
   return 5
 }
 
-# ---- STEPS-01: a flow of several questions, where u = ONE QUESTION BACK --------------------------------------
+# ── STEPS-01: a flow of several questions, where u = ONE QUESTION BACK
 #   _mc_steps STEP...      each STEP is a function name that asks ONE question and returns the CONTROL-01 code
 #                          (0 answered · 1 back (u) · 2 quit · 3 cancelled) or 5 = "this question does not apply now".
 #                          Runs them in order: 0 -> the next question · 1 -> the question before it (it is asked again) ·
@@ -250,7 +250,7 @@ _mc_steps() {
   return 0
 }
 
-# ---- MC-01 / MC-02: numbered selection (and the two-option setting) ------------------------------------------
+# ── MC-01 / MC-02: numbered selection (and the two-option setting)
 #   _mc_select [-d DEFAULT] [-b] [-s SUB]... [-x ITEM]... OUTVAR "Title" ROW...
 #     -d VALUE  Enter picks the row with that value (marked "(default)");  without it a bare Enter is an invalid answer
 #     -b        no folders here: footer says u) Back instead of u) Up
@@ -322,7 +322,7 @@ _mc_select() {
   done
 }
 
-# ---- MC-07: a free-text / number prompt (not a selection) -----------------------------------------------------
+# ── MC-07: a free-text / number prompt (not a selection)
 #   _mc_text [-x ITEM]... OUTVAR "Prompt: " ["hint line"...]     -x = a screen action / note added to the footer (repeatable)
 #   0 answered (may be empty) · 1 back · 2 quit · 3 cancelled
 _mc_text() {
@@ -339,7 +339,7 @@ _mc_text() {
   done
 }
 
-# ---- MC-04: review the chosen items (confirm, or remove some) -------------------------------------------------
+# ── MC-04: review the chosen items (confirm, or remove some)
 #   _mc_review ARRAYNAME [-t "Title"] [-f FORMATTER]     FORMATTER gets one item and prints its row label (default: basename)
 #   0 confirmed · 1 back · 2 quit (the unwind flag is up: the caller must return at once) · 3 cancelled
 #   Needs parse_selection (viewport.sh) for the "1,3 or 2-5" of the remove prompt.
@@ -390,7 +390,7 @@ _mc_review() {
   done
 }
 
-# ---- THE invalid-choice handler: every menu calls this, nobody prints its own ----------
+# ── THE invalid-choice handler: every menu calls this, nobody prints its own
 #   _bvk_invalid            one standard message (the caller's loop redraws, e.g. outer loop)
 #   _bvk_invalid VAR        message + VAR=true  -> the loop's "$VAR && redraw_fresh" redraws
 #                           the SAME menu (upgrade / api / rules use _xx_fresh flags)
@@ -424,7 +424,7 @@ _bvk_info_wait() {
   return 0
 }
 
-# ---- registered footers -------------------------------------------------
+# ── registered footers
 # FOOTER-01: THE standard navigation footer.  Every ordinary selection menu and every tabbed screen shows exactly this
 # (tabmenu.sh registers its two footers from these, so one edit here changes all of them).
 _mc_footer_register std_nav      u.up q h:Home cc:Cheat_codes       # u) Up   q) Quit   h) Home   cc) Cheat codes

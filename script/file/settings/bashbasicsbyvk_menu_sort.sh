@@ -82,7 +82,7 @@ _ms_tok() {
   esac
 }
 
-# ── value of one menu ─────────────────────────────────────────────────────────
+# ── value of one menu
 # _ms_valid <menu> <token>  → 0 when the menu offers that token
 _ms_valid() { [[ " ${_MS_MODES[$1]:-} " == *" $2 "* ]]; }
 
@@ -110,7 +110,7 @@ _ms_set() {
   save_settings
 }
 
-# ── the sorter ────────────────────────────────────────────────────────────────
+# ── the sorter
 #  _ms_perm <menu> <n> <field>=<array-name> …   →  _MS_PERM = the 0-based indexes in the wanted order.
 #  Only the arrays a screen really has are passed; a choice whose field is not among them (or "as listed") keeps the
 #  order as it is. Ties keep their old order. Text sorts case-insensitively, numbers numerically (blank = 0).
@@ -146,7 +146,7 @@ _ms_reorder() {
   done
 }
 
-# ── Settings screens ─────────────────────────────────────────────────────────
+# ── Settings screens
 _MS_SEL=""      # the menu a Settings screen below is about
 
 # the choice itself (radio list)

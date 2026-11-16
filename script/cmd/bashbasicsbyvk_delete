@@ -27,19 +27,7 @@ _bd_confirm() {
 }
 _bd_lock() {
   _lk_is_protected "$target" || return 5
-  local -a detail=()
-  local rc
-  if _lk_is_locked "$target"; then
-    detail+=("🔒 You selected a LOCKED $( [ -d "$target" ] && echo folder || echo file ): ${target##*/}")
-  else
-    _lk_count_inside "$target"
-    detail+=("🔒 This folder holds $_lk_inside locked item(s): ${target##*/}")
-  fi
-  detail+=("Deleting it will erase its content PERMANENTLY if a backup has not been taken.")
-  action_confirm_key "LOCKED ITEM — confirmation required" "${detail[@]}"; rc=$?
-  (( rc == 0 )) && return 0
-  (( rc == 2 )) && return 1
-  echo "🚫 Deletion cancelled — locked item kept"; return 3
+  _lk_confirm_key "$target"
 }
 _bd_backup() {
   local rc

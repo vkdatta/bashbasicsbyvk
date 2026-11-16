@@ -19,7 +19,7 @@
 _UDF_MANIFEST="bvk_udf_manifest.txt"
 _UDF_FORMAT=1
 
-# ── e-N : edit item N ────────────────────────────────────────────────────────
+# ── e-N : edit item N
 _fx_udf_edit_item() {              # _fx_udf_edit_item <e-N>
   local arg="${1#[eE]-}"
   if [ "$_fx_tab" != "udf" ]; then
@@ -49,7 +49,7 @@ _fx_udf_edit_item() {              # _fx_udf_edit_item <e-N>
   return 0
 }
 
-# ── ux : export ──────────────────────────────────────────────────────────────
+# ── ux : export
 _fx_udf_export() {
   _bz_need zip || return 1
   _fx_ensure_store
@@ -58,7 +58,7 @@ _fx_udf_export() {
     udf_export "$_UDF_MANIFEST" BVK_UDF_EXPORT "$_UDF_FORMAT" UDFs
 }
 
-# ── ui : import ──────────────────────────────────────────────────────────────
+# ── ui : import
 _fx_udf_import() {
   _bz_need unzip || return 1
   _fx_ensure_store

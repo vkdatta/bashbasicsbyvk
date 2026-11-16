@@ -16,7 +16,7 @@ source "$LOCKSH"; source "$(bvk_need bashbasicsbyvk_planetary_resources.sh)"; so
 _fav_id() { [ -e "$1" ] && stat -c '%d:%i' -- "$1"; }
 tgt() { _swlink_read_target_v "$1"; printf '%s' "$_SWL_T"; }
 
-# ---- (1) bash side ---------------------------------------------------------------------
+# ── (1) bash side
 B1="$(_swlink_write "$_SW_DIR" "$HOME/bin/t1" t1)"; B2="$(_swlink_write "$_SW_DIR" "$HOME/bin/0.sh" 0.sh)"
 [ "$(tgt "$B2")" = "$HOME/bin/0.sh" ] && ok "a bookmark of a FILE stores the file (not its folder)" || bad "file bookmark target: $(tgt "$B2")"
 grep -q '^SWLINK_ID=[0-9]*:[0-9]*$' "$B2" && ok "bookmark carries the inode of its target" || bad "no SWLINK_ID"
@@ -41,7 +41,7 @@ rm -rf "$HOME/bin2/t1"; _trk_forget "$HOME/bin2/t1"
 printf 'filename zz.sh\n' > "$_RC_EXCLUDE_FILE"; _rc_build
 [ "${#items[@]}" = 0 ] && ok "exclude rule hides a file from recents" || bad "exclude ignored: ${items[*]}"
 
-# ---- (2) python twin -------------------------------------------------------------------
+# ── (2) python twin
 H2="$T/h2"; mkdir -p "$H2/d" "$H2/.bashbasicsbyvk/switch"; echo y > "$H2/d/a.txt"
 printf 'SWLINK_TARGET=%s\nSWLINK_NAME=a.txt\n' "$H2/d/a.txt" > "$H2/.bashbasicsbyvk/switch/a.txt.swlink"
 printf '2\t%s\n' "$H2/d/a.txt" > "$H2/.bashbasicsbyvk/recents.tsv"
@@ -57,7 +57,7 @@ PY
 [ "$res" = "1 1 1 0" ] && ok "python twin: stamps the inode, follows a folder move, ignores an editor backup rename" || bad "python twin: '$res'"
 grep -q "^SWLINK_TARGET=$H2/e/a.txt$" "$H2/.bashbasicsbyvk/switch/a.txt.swlink" && ok "python twin wrote the new target" || bad "target not rewritten"
 
-# ---- (3) the real daemon, inotify ------------------------------------------------------
+# ── (3) the real daemon, inotify
 if python3 -c 'import watchdog' 2>/dev/null; then
   H3="$T/h3"; mkdir -p "$H3/bin" "$H3/.bashbasicsbyvk/switch"; echo z > "$H3/bin/0.sh"
   printf 'SWLINK_TARGET=%s\nSWLINK_NAME=0.sh\n' "$H3/bin/0.sh" > "$H3/.bashbasicsbyvk/switch/0.sh.swlink"
@@ -76,7 +76,7 @@ else
   echo "  SKIP daemon part: python watchdog is not installed (NOT verified)"
 fi
 
-# ---- (4) displayer ---------------------------------------------------------------------
+# ── (4) displayer
 F="$ROOT/script/file"
 _is_archive() { return 1; }; _is_image() { return 1; }; _is_plugin() { return 1; }; _is_executable() { [ -x "$1" ]; }
 declare -gA item_icon=() _FAV_LABEL=() _REC_LABEL=()

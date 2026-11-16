@@ -104,7 +104,7 @@ _svc_upload() {
     echo "❌ Packed size is $((total_size/1024/1024/1024))GB — over the absolute ceiling."; _svc_cleanup; return 1
   fi
 
-  # ---- price check ----
+  # ── price check
   local what
   case "$svc" in backup) what="This backup" ;; saved) what="This save" ;; snapshot) what="This snapshot" ;; *) what="This upload" ;; esac
   _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
@@ -127,7 +127,7 @@ _svc_upload() {
 
   _BB_SVC="$svc"; _BB_LINK_ALIAS="$alias"
   local rc=1 init_out id token pdir fast_id="" fast_intr=0
-  # ---- FAST PATH (Go engine) — see _bb_fast_send (the vault key and the snapshot target travel with the commit, exactly as _pn_commit sends them) ----
+  # ── FAST PATH (Go engine) — see _bb_fast_send (the vault key and the snapshot target travel with the commit, exactly as _pn_commit sends them)
   if [ $use_go = 1 ]; then
     _BB_COMMIT_HDRS=()
     case "$svc" in

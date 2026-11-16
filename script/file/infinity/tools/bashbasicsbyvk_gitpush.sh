@@ -12,9 +12,7 @@ DEFAULT_COMMIT_MESSAGE="Codebase Updated"
 TMP_DIR=""
 SWAP_BACKUP=""
 
-# ============================================================
 # Helpers
-# ============================================================
 
     die() {
     echo "ERROR: $*" >&2
@@ -48,26 +46,20 @@ trap cleanup EXIT
 declare -F action_confirm_key >/dev/null ||
     die "bashbasicsbyvk_action_confirm_key.sh not found - cannot ask for confirmation."
 
-# ============================================================
 # Requirements: git and the GitHub CLI (gh) come from the central dependency registry
 # (feature gitpush, bashbasicsbyvk_deps.list): a missing one gets the Installer menu, not a private installer.
-# ============================================================
 
 _dep_need -c "Pushing to GitHub" gitpush || die "git and the GitHub CLI (gh) are required."
 hash -r 2>/dev/null || true
 
-# ============================================================
 # Resolve target
-# ============================================================
 
 [[ -d "$TARGET" ]] ||
     die "Target directory does not exist: $TARGET"
 
 TARGET="$(cd "$TARGET" && pwd -P)"
 
-# ============================================================
 # GitHub authentication
-# ============================================================
 
 if ! gh auth status --active --hostname github.com >/dev/null 2>&1; then
     die "GitHub CLI is not authenticated.
@@ -86,9 +78,7 @@ GH_USER="$(gh api user --jq '.login')" ||
 [[ -n "$GH_USER" ]] ||
     die "GitHub username is empty."
 
-# ============================================================
 # Repository identity
-# ============================================================
 
     update_repo_identity() {
     REPO_NAME="$(basename "$TARGET")"
@@ -105,9 +95,7 @@ GH_USER="$(gh api user --jq '.login')" ||
 
 update_repo_identity
 
-# ============================================================
 # Git identity
-# ============================================================
 
     check_git_identity() {
     local name
@@ -125,9 +113,7 @@ Run:
   git config --global user.email \"you@example.com\""
     }
 
-# ============================================================
 # Confirmation
-# ============================================================
 
 # Asks whether the new GitHub repository is private (default) or public; sets VISIBILITY for  gh repo create.
 # A yes/no question has NO default: it asks again until the answer is y or n (a bare Enter is not an answer).  Sets ANS to y | n.
@@ -164,7 +150,6 @@ Run:
         die "Confirmation failed."
     }
 
-# ============================================================
 # GitHub repository existence
 #
 # IMPORTANT:
@@ -173,7 +158,6 @@ Run:
 #
 # 404 = nonexistent
 # anything else = abort
-# ============================================================
 
     github_repo_exists() {
     local response
@@ -227,9 +211,7 @@ No repository was created."
 No repository was created."
     }
 
-# ============================================================
 # GitHub repository metadata
-# ============================================================
 
     get_repo_metadata() {
     gh repo view "$REPO_FULL" \
@@ -237,9 +219,7 @@ No repository was created."
         --jq '[.isEmpty, (.defaultBranchRef.name // ""), .url] | @tsv'
     }
 
-# ============================================================
 # Current branch
-# ============================================================
 
     get_current_branch() {
     local branch
@@ -256,9 +236,7 @@ No repository was created."
     printf '%s\n' "$branch"
     }
 
-# ============================================================
 # Ensure repository root
-# ============================================================
 
     ensure_git_root() {
     local root
@@ -300,9 +278,7 @@ No repository was created."
     fi
     }
 
-# ============================================================
 # Ensure origin
-# ============================================================
 
     ensure_origin() {
     if git remote get-url origin >/dev/null 2>&1; then
@@ -317,9 +293,7 @@ No repository was created."
     echo "  $REMOTE_URL"
     }
 
-# ============================================================
 # Version selection
-# ============================================================
 
     select_version() {   # a STEP of create_commit: 0 answered (VERSION set) · 1 u (back) · 3 q / no answer
     local choice=""
@@ -353,9 +327,7 @@ No repository was created."
     return 0
     }
 
-# ============================================================
 # Commit
-# ============================================================
 
 # The three questions of a commit, one step each (they share create_commit's locals):  version → message → "Create this commit?".
 # Each returns 0 answered · 1 u (the question before) · 3 q / no / cancelled.
@@ -429,9 +401,7 @@ No repository was created."
     return 0
     }
 
-# ============================================================
 # Push
-# ============================================================
 
     push_repository() {
     local branch="$1"
@@ -570,9 +540,7 @@ No force push was performed."
         fi
     fi
     }
-# ============================================================
 # Copy project tree excluding .git
-# ============================================================
 
     copy_project_tree() {
     local source="$1"
@@ -599,9 +567,7 @@ No force push was performed."
     fi
     }
 
-# ============================================================
 # Replace working tree while preserving .git
-# ============================================================
 
     replace_working_tree() {
     local source="$1"
@@ -635,9 +601,7 @@ No force push was performed."
     fi
     }
 
-# ============================================================
 # Validate prepared recovery repository
-# ============================================================
 
     validate_prepared_repository() {
     local expected_branch="$1"
@@ -666,12 +630,10 @@ No force push was performed."
     return 0
     }
 
-# ============================================================
 # Roll back recovery swap
 #
 # Called only after original TARGET has already been moved to
 # SWAP_BACKUP.
-# ============================================================
 
     rollback_recovery() {
     local failure_reason="$1"
@@ -709,10 +671,8 @@ Original project is still located at:
     die "CRITICAL: Original project backup could not be found."
     }
 
-# ============================================================
 # CASE 1
 # Existing local Git repository
-# ============================================================
 
 if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 
@@ -763,10 +723,8 @@ if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         fi
     fi
 
-# ============================================================
 # CASE 2 / CASE 3
 # No local Git repository
-# ============================================================
 
 else
 
@@ -774,9 +732,7 @@ else
 
     cd "$TARGET"
 
-    # ========================================================
     # GitHub repository exists
-    # ========================================================
 
     if github_repo_exists; then
 
@@ -792,10 +748,8 @@ else
         [[ -n "$REMOTE_URL" ]] ||
             die "GitHub returned an empty repository URL."
 
-        # ====================================================
         # CASE 3A
         # Existing GitHub history
-        # ====================================================
 
         if [[ "$IS_EMPTY" != "true" ]]; then
 
@@ -808,9 +762,7 @@ else
             confirm_action \
                 "GitHub history will be recovered and the current project tree will replace its working tree."
 
-            # ------------------------------------------------
             # Same-filesystem staging.
-            # ------------------------------------------------
 
             PARENT_DIR="$(dirname "$TARGET")"
             TARGET_NAME="$(basename "$TARGET")"
@@ -826,15 +778,11 @@ else
 
             mkdir -p "$PROJECT_DIR"
 
-            # ------------------------------------------------
             # Preserve current project.
-            # ------------------------------------------------
 
             copy_project_tree "$TARGET" "$PROJECT_DIR"
 
-            # ------------------------------------------------
             # Recover GitHub repository.
-            # ------------------------------------------------
 
             gh repo clone \
                 "$REPO_FULL" \
@@ -846,15 +794,11 @@ else
             [[ -d "$CLONE_DIR/.git" ]] ||
                 die "Recovered repository does not contain .git."
 
-            # ------------------------------------------------
             # Replace only working tree.
-            # ------------------------------------------------
 
             replace_working_tree "$PROJECT_DIR" "$CLONE_DIR"
 
-            # ------------------------------------------------
             # Validate prepared repository BEFORE swap.
-            # ------------------------------------------------
 
             cd "$CLONE_DIR"
 
@@ -864,9 +808,7 @@ else
 
             _gp_info "Prepared repository passed validation."
 
-            # =================================================
             # SAFE DIRECTORY SWAP
-            # =================================================
 
             SWAP_BACKUP="$(
                 mktemp -d \
@@ -879,18 +821,14 @@ else
             rmdir -- "$SWAP_BACKUP" ||
                 die "Could not prepare recovery backup path."
 
-            # ------------------------------------------------
             # Move original project to backup.
-            # ------------------------------------------------
 
             mv -- "$TARGET" "$SWAP_BACKUP" ||
                 die "Could not move the original project aside."
 
-            # ------------------------------------------------
             # Move prepared repository into TARGET.
             #
             # Same parent + same filesystem = directory rename.
-            # ------------------------------------------------
 
             if ! mv -- "$CLONE_DIR" "$TARGET"; then
 
@@ -899,11 +837,9 @@ else
 
             fi
 
-            # ------------------------------------------------
             # CRITICAL:
             # Validate AFTER the actual swap.
             # If anything is wrong, rollback automatically.
-            # ------------------------------------------------
 
             cd "$TARGET"
 
@@ -923,18 +859,14 @@ else
             ok "GitHub history recovered."
             ok "Project tree replaced successfully."
 
-            # ------------------------------------------------
             # Only after successful final validation:
             # delete original project backup.
-            # ------------------------------------------------
 
             rm -rf -- "$SWAP_BACKUP"
             SWAP_BACKUP=""
 
-        # ====================================================
         # CASE 3B
         # Existing EMPTY GitHub repository
-        # ====================================================
 
         else
 
@@ -954,10 +886,8 @@ else
             ok "Origin added."
         fi
 
-    # ========================================================
     # CASE 2
     # Completely new project
-    # ========================================================
 
     else
 
@@ -970,9 +900,7 @@ else
 
         ask_repo_visibility
 
-        # ----------------------------------------------------
         # Initialize locally first.
-        # ----------------------------------------------------
 
         git init
 
@@ -980,9 +908,7 @@ else
 
         _gp_info "Initialized branch: $BRANCH"
 
-        # ----------------------------------------------------
         # Create empty GitHub repository.
-        # ----------------------------------------------------
 
         _gp_info "Creating GitHub repository..."
 
@@ -997,9 +923,7 @@ else
     fi
 fi
 
-# ============================================================
 # Final validation
-# ============================================================
 
 cd "$TARGET"
 
@@ -1022,9 +946,7 @@ echo "Branch: $BRANCH"
 echo "Origin: $ORIGIN"
 echo "============================================================"
 
-# ============================================================
 # Commit / Push
-# ============================================================
 
 # A clean working tree does NOT mean there is nothing to push.
 # A previous push may have failed after a local commit was created.
@@ -1053,9 +975,7 @@ else
     fi
 fi
 
-# ============================================================
 # Push
-# ============================================================
 
 push_repository "$BRANCH"
 

@@ -1,6 +1,5 @@
 declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
 # bashbasicsbyvk_settings_desc.sh — a plain-words explanation of EVERY Settings screen and row
-# ════════════════════════════════════════════════════════════════════════════
 #  The text of the SCREEN (key  <screen title>|*) is shown in the header of every Settings screen, between the title and the first rule.
 #  The text of a ROW (key  <screen title>|<row tag>) is read with  ?  +  Enter  on the highlighted row.  Written for a person who has never
 #  heard of a "buffer" or a "nuke time": what it does, when to change it, what is safe.  A long screen text is cut and  ?  shows all of it.
@@ -10,7 +9,6 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  A new setting needs ONE line here; without a line the screen simply shows no description (nothing breaks).
 #  Tabbed menus (bashbasicsbyvk_tabmenu.sh) read  <menu title>|<tab key>  and  <menu title>|<tab key>:<folder>  (fx, Rule Book, Switch, Upgrade, RBAM, Cloud Surf, GitHub).
 #  Lazy: the table is built the first time a Settings screen is drawn, never at start-up.
-# ════════════════════════════════════════════════════════════════════════════
 declare -gA _ST_DESC=()
 _ST_DESC_LOADED=0
 _st_desc_load() {
@@ -475,7 +473,7 @@ GitHub|tags	Tags of this repo. Pick rows with N, 1,3-5, a (all) or a-2 (all but 
 BVK_DESC_EOF
 }
 
-# ── which text belongs to what is on the screen ──────────────────────────────────────────────
+# ── which text belongs to what is on the screen
 # Runs inside _st_draw and uses its caller's locals:  title  parent_title  cur.
 # Most specific key first, the screen's own text last; a row without a line of its own shows the screen's text.
 _ST_DESC_TXT=""; _ST_DESC_KEY=""; _ST_DESC_N=0; _ST_DESC_TRUNC=0

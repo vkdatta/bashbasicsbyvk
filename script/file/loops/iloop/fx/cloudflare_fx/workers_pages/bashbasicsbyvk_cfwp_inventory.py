@@ -45,7 +45,7 @@ def fmt_utc(epoch):
     return datetime.fromtimestamp(int(epoch), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# ------------------------------------------------------------------ listing --
+# ── listing
 def _pages_projects(token, account):
     """Page 1 first (it says how many pages there are), then every remaining page at the same time."""
     path = f"/accounts/{account}/pages/projects"
@@ -131,7 +131,7 @@ def list_inventory(token, account):
     return rows, warnings
 
 
-# ------------------------------------------------------------------- export --
+# ── export
 def export_rows(rows, nav, fmt):
     """Write the list to NAV (never overwrites). fmt: csv | json | both. Returns the paths written."""
     stamp = time.strftime("%Y%m%d-%H%M%S")

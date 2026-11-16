@@ -42,7 +42,7 @@ _LT_LINES=0
 _LT_SB_T=(); _LT_SB_N=(); _LT_SB_D=()      # stack of open steps
 _LT_CURL_OK=""          # 1 when curl can write its own phase timings (needs curl ≥ 8.3)
 
-# ── the log ──────────────────────────────────────────────────────────────────────────────
+# ── the log
 # _lt_w KIND START DUR NAME [DETAIL]   (never prints, never fails)
 # The main shell collects its lines in memory and writes them in one go when a prompt is reached
 # (_lt_flush) — a file write per event would itself show up as load time.  Subshells ($( ), helpers)
@@ -62,7 +62,7 @@ _lt_flush() {
   _LT_BUF=()
 }
 
-# ── steps:  _lt_b "name" [detail]  …work…  _lt_e [detail] ────────────────────────────────
+# ── steps:  _lt_b "name" [detail]  …work…  _lt_e [detail]
 _lt_b() {
   [ "$_LT_ON" = 1 ] || return 0                     # always push (even when idle) so every _lt_e pops its own _lt_b
   _LT_SB_T+=("${EPOCHREALTIME/[.,]/}"); _LT_SB_N+=("$1"); _LT_SB_D+=("${2:-}")
@@ -90,7 +90,7 @@ _lt_bg()   { _LT_BG=1; export _LT_BG; }
 # Daemons and animators: record nothing at all.
 _lt_off()  { _LT_ON=0; _LT_PEND=""; export _LT_PEND; }
 
-# ── screen changes ───────────────────────────────────────────────────────────────────────
+# ── screen changes
 # a readable name for "the screen the person is on": the nearest function that is not plumbing
 _lt_screen_id() {
   _LT_SID=""
@@ -140,7 +140,7 @@ _lt_ready() {
 _lt_tool_begin() { _LT_MUTE=1; }
 _lt_tool_end()   { _LT_MUTE=""; _LT_PEND=""; }
 
-# ── externals: every command that costs a fork shows up on the timeline ───────────────
+# ── externals: every command that costs a fork shows up on the timeline
 # _lt_xrun NAME ARGS…   (the wrappers below call it; when nothing is being timed it only runs the command)
 _lt_xrun() {
   local n="$1"; shift
@@ -227,7 +227,7 @@ _lt_curl() {
   return $rc
 }
 
-# ── process start: how long before "o" even began (bash start-up, PATH lookups) ─────────────
+# ── process start: how long before "o" even began (bash start-up, PATH lookups)
 _lt_proc_age_us() {   # µs since this process was spawned, or non-zero return when unknown (needs /proc)
   [ -r "/proc/$$/stat" ] && [ -r /proc/uptime ] || return 1
   local st up rest ticks
@@ -242,7 +242,7 @@ _lt_proc_age_us() {   # µs since this process was spawned, or non-zero return w
   (( _LT_AGE >= 0 && _LT_AGE < 60000000 ))
 }
 
-# ── start ──────────────────────────────────────────────────────────────────────────────────
+# ── start
 _lt_init() {
   [ "${VK_LOADTIME:-1}" = 0 ] && return 0
   [ -n "${EPOCHREALTIME:-}" ] || return 0              # bash < 5: no µs clock without a fork — stay off
@@ -265,7 +265,7 @@ _lt_init() {
 }
 _lt_cleanup() { [ -n "${_SL_ON:-}" ] && _sl_shutdown; [ -n "$_LT_LOG" ] && [ "$$" = "$_LT_MAIN_PID" ] && rm -f "$_LT_LOG" "$_LT_LOG".c.* 2>/dev/null; return 0; }
 
-# ── the command: loadtime [N | all] ───────────────────────────────────────────────────────
+# ── the command: loadtime [N | all]
 bvk_loadtime_cmd() {
   local arg="${1,,}"; arg="${arg#loadtime}"; arg="${arg# }"; arg="${arg//[^a-z0-9 ]/}"
   if [ "$_LT_ON" != 1 ] || [ ! -s "$_LT_LOG" ]; then

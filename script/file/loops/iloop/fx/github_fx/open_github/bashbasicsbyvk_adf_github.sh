@@ -28,7 +28,7 @@ declare -gA _GHX_S_HAS=()
 declare -ga _GHX_PICK=()
 _GHX_BUSY=""
 
-# ── key ─────────────────────────────────────────────────────────────────────
+# ── key
 _ghx_no_key_help() {
   echo
   echo "🔑 No GitHub key was found on this machine."
@@ -59,7 +59,7 @@ _ghx_sign_in() {                 # sets _GHX_LOGIN / _GHX_SRC and exports BVK_GH
   esac
 }
 
-# ── data ────────────────────────────────────────────────────────────────────
+# ── data
 _ghx_fetch_repos() {
   local out n v fl p d
   out="$(_gh_run repos 2>/dev/null)" || return 1
@@ -92,7 +92,7 @@ _ghx_reload() {
   _ghx_load_repo || echo "❌ ${_GHX_MSG:-reload failed}"
 }
 
-# ── repos screen ────────────────────────────────────────────────────────────
+# ── repos screen
 ghp_build() {
   local i rows=()
   for i in "${!_GHX_R_NAME[@]}"; do rows+=("${_GHX_R_NAME[$i]} ${_GHX_R_VIS[$i]} ${_GHX_R_DESC[$i]}"); done
@@ -133,7 +133,7 @@ _ghp_cmd() {
   esac
 }
 
-# ── repo screen: Stable / Tags ──────────────────────────────────────────────
+# ── repo screen: Stable / Tags
 # Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh); the title is the repo's name, so the header passes it
 _tm_define ghr _GHX_TAB "🐙 repo" "GitHub" stable:"📦 Stable" tags:"🔖 Tags"
 
@@ -262,7 +262,7 @@ _ghx_ask_field() {
   return 0
 }
 
-# ── actions ─────────────────────────────────────────────────────────────────
+# ── actions
 # Every wizard below is a step list (_mc_steps: u = ONE QUESTION BACK, never out of the whole wizard).  A step returns
 #   0 answered · 1 u (back) · 3 cancelled (message printed) · 5 not asked now.   The steps share the wizard's locals.
 # _ghx_yes_rc RC [ANS]: the rc of a yes/no step from _bvk_ask's rc and the answer (yes → 0, no → "Cancelled" 3, u → 1)
@@ -271,7 +271,7 @@ _ghx_yes_rc() {
   echo "🚫 Cancelled"; return 3
 }
 
-# ---- edit -------------------------------------------------------------------------------------------------------
+# ── edit
 _ghx_s_ed_fields() {
   _bvk_menu fields -m -t "Edit ${#_GHX_PICK[@]} item(s)" -i "✏️" -q "What do you want to change?" \
     "t:Release title" "n:Release notes" "m:Tag message" "c:Commit message" || { _bvk_back && return 1; return 3; }
@@ -320,7 +320,7 @@ _ghx_edit() {
   _ghx_reload
 }
 
-# ---- rename -----------------------------------------------------------------------------------------------------
+# ── rename
 _ghx_s_rn_rule() {
   [ "${#_GHX_PICK[@]}" -eq 1 ] && { rule=m; return 5; }
   _bvk_menu rule -t "Rename ${#_GHX_PICK[@]} items" -i "🔤" \
@@ -379,7 +379,7 @@ _ghx_rename() {
   _ghx_reload
 }
 
-# ---- delete -----------------------------------------------------------------------------------------------------
+# ── delete
 _ghx_s_del_what() {
   if [ "$_GHX_TAB" = stable ]; then
     _bvk_menu what -t "Delete ${#_GHX_PICK[@]} stable release(s)" -i "🗑️" \
@@ -406,7 +406,7 @@ _ghx_delete() {
   _ghx_reload
 }
 
-# ---- download ---------------------------------------------------------------------------------------------------
+# ── download
 _ghx_s_dl_how() {
   _bvk_menu how -t "Download ${#_GHX_PICK[@]} item(s) — clone at the tag" -i "⬇️" \
     "d:With depth — only the last N commits (fast, small)" "f:Without depth — the full history" || { _bvk_back && return 1; return 3; }
@@ -448,7 +448,7 @@ _ghx_download() {
   _ghx_job_run clone
 }
 
-# ---- create a tag / a stable release ----------------------------------------------------------------------------
+# ── create a tag / a stable release
 _ghx_s_cr_tag() {
   local t
   _xui_ask "Tag name (e.g. v1.2.0)" || return 1
@@ -553,7 +553,7 @@ _ghr_cmd() {
   esac
 }
 
-# ── the button ──────────────────────────────────────────────────────────────
+# ── the button
 _fx_adf_github() {
   _dep_need -c "GitHub" github || return 1
   _GHX_NAV="${_fx_outer_path:-$path}"                       # the navigation path, NOT $PWD

@@ -5,7 +5,7 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; F="$ROOT/script/file"
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 _vp_usable() { _vp_usable_w=80; }; _vp_cells() { _vp_w=${#1}; }; _sm_on=0
-_BVK_TO_MAIN=0; _bvk_quit() { _BVK_TO_MAIN=1; return 0; }; _bvk_invalid() { echo "INVALID"; }
+_bvk_read() { IFS= read -r "$1"; }; _BVK_TO_MAIN=0; _bvk_quit() { _BVK_TO_MAIN=1; return 0; }; _bvk_invalid() { echo "INVALID"; }
 bvk_main_exec() { echo "[ran $1]"; }
 parse_selection() { local p i; for p in ${1//,/ }; do if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then for ((i=BASH_REMATCH[1]; i<=BASH_REMATCH[2]; i++)); do [ "$i" -le "$2" ] && echo "$i"; done; elif [[ "$p" =~ ^[0-9]+$ ]] && [ "$p" -le "$2" ]; then echo "$p"; fi; done; }
 source "$F/engine/bashbasicsbyvk_menuchrome.sh"

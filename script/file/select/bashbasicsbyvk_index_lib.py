@@ -64,7 +64,7 @@ class Index:
             CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
         """)
 
-    # ── meta ──────────────────────────────────────────────────────────────────
+    # ── meta
     def meta_get(self, key, default=None):
         r = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         return r[0] if r else default
@@ -102,7 +102,7 @@ class Index:
         except PermissionError:
             return True
 
-    # ── hash cache ────────────────────────────────────────────────────────────
+    # ── hash cache
     @staticmethod
     def _prefix_range(prefix):
         p = prefix.rstrip("/")
@@ -143,7 +143,7 @@ class Index:
             self.db.execute("COMMIT")
         return len(gone)
 
-    # ── dir sizes ─────────────────────────────────────────────────────────────
+    # ── dir sizes
     def dir_get(self, path):
         if not self.daemon_alive():
             return None
@@ -205,9 +205,7 @@ def open_index():
         return None
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Duplicate detection (size → head hash → full hash) with the cache
-# ══════════════════════════════════════════════════════════════════════════════
 def _sha1_file(path, limit=None):
     h = hashlib.sha1()
     try:
@@ -314,11 +312,9 @@ def dup_groups(files, idx=None, deadline=None, prefix=None):
     return result
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Folder sizes — ONE definition shared by the select engine and the warmer.
 #  Matches os.walk semantics: symlinks to folders are not entered and not
 #  counted; every other entry counts its lstat size.
-# ══════════════════════════════════════════════════════════════════════════════
 def tree_sizes(root):
     """Return {dir: (total_size, file_count)} for root and every folder below."""
     out = {}
@@ -368,9 +364,7 @@ def dir_size(path, idx=None):
     return sizes[path][0]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Hot roots (folders worth keeping warm)
-# ══════════════════════════════════════════════════════════════════════════════
 def register_hot(path, recursive):
     """Remember that .s.dup / big-folder sizes were asked for here, so the daemon
     keeps it warm.  Line format:  R|N <TAB> path"""
@@ -411,9 +405,7 @@ def read_roots(fav_dirs=()):
     return [(p, r) for p, r in roots.items() if os.path.isdir(p)]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Warmer (daemon): fill both caches for one root
-# ══════════════════════════════════════════════════════════════════════════════
 def warm_root(idx, root, recursive, budget=120.0, nap=0.002):
     """Walk `root` (non-hidden, like the select engine) and make the hash cache
     and folder-size cache current.  Returns a small stats dict."""

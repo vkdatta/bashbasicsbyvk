@@ -41,9 +41,7 @@ class FileInfo:
     prefix: List[int] = field(repr=False, default_factory=list)   # prefix[n] = non-blank lines in first n lines
 
 
-# ============================================================================
 # tree-sitter backend
-# ============================================================================
 class TreeSitterBackend:
     def __init__(self) -> None:
         self._parsers: dict = {}
@@ -164,9 +162,7 @@ def _extract_ast(tree_root, spec: LangSpec, rel: str, use_names: bool) -> List[F
     return blocks
 
 
-# ============================================================================
 # regex / scanner fallback
-# ============================================================================
 _CTRL = frozenset("if for while switch catch else return sizeof synchronized foreach using lock do try "
                   "new delete throw case elif with".split())
 
@@ -364,9 +360,7 @@ def _extract_regex(text: str, spec: LangSpec, rel: str, use_names: bool) -> List
     return blocks
 
 
-# ============================================================================
 # python stdlib backend (ast for function extents, tokenize for the token stream)
-# ============================================================================
 def _py_tokens(segment: str) -> List[str]:
     """Normalised tokens via the real Python lexer (exact strings / f-strings / comments)."""
     import io
@@ -427,7 +421,6 @@ def _extract_python_ast(text: str, rel: str, use_names: bool) -> Optional[List[F
     return blocks
 
 
-# ============================================================================
 def extract_file(rel: str, text: str, spec: LangSpec, ts: Optional[TreeSitterBackend],
                  use_names: bool = False, force_regex: bool = False) -> Tuple[List[FunctionBlock], str]:
     """Return (function blocks, backend used)."""

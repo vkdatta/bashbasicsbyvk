@@ -46,7 +46,7 @@ _ns_on=false                        # user paused favourite mode for this visit
 _fav_banner=""
 _fav_last_path=""
 
-# ── small helpers ─────────────────────────────────────────────────────────────
+# ── small helpers
 _fav_id() {                         # dev:inode of a path
   [ -e "$1" ] || [ -L "$1" ] || return 0     # missing: nothing to stat (same empty answer, no process)
   local i
@@ -111,7 +111,7 @@ _fav_file_for() {
   return 1
 }
 
-# ── load + reconcile ──────────────────────────────────────────────────────────
+# ── load + reconcile
 # _fav_load <dir>   fills _fav_* arrays. Returns 1 if the folder has no favourites.
 _fav_adopted=false
 _fav_load() {
@@ -198,7 +198,7 @@ _fav_save() {
   _fav_unlock
 }
 
-# ── main-loop hooks ───────────────────────────────────────────────────────────
+# ── main-loop hooks
 # _fav_begin : decides favourite mode for $path, prepares labels + banner.
 _fav_begin() {
   _fav_on=false; _fav_has=false; _fav_banner=""; _FAV_LABEL=()
@@ -259,7 +259,7 @@ handle_force_show_guarded() {      # fs
   fi
 }
 
-# ── adding ────────────────────────────────────────────────────────────────────
+# ── adding
 _fav_help() {
   cat <<'HLP'
 ⭐ FAVOURITES  (per folder — the folder then shows only them)
@@ -359,7 +359,7 @@ handle_fav_add() {                 # fa ...
   _fav_add "$path" "${picked[@]}"
 }
 
-# ── sw ⭐ tab helpers ─────────────────────────────────────────────────────────
+# ── sw ⭐ tab helpers
 _fav_sw_build() {                  # _fav_sw_build <dir>  → items + labels (stale included)
   items=(); _FAV_LABEL=(); _FAV_MOVED_TO=()
   _fav_load "$1" >/dev/null 2>&1 || return 0

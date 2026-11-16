@@ -104,7 +104,7 @@ _disp_run() {
   return 0
 }
 
-# ── main-loop hooks ───────────────────────────────────────────────────────────
+# ── main-loop hooks
 # _disp_begin : sets _disp_on (true when a usable filter is active)
 _disp_begin() {
   _disp_on=false; _disp_banner=""
@@ -148,7 +148,7 @@ _disp_apply() {
   [ "${#items[@]}" -eq 0 ] && _disp_banner="🔎 Display filter: ${shown_expr}  — nothing matches here${_rt}  (.d.clr to clear)"
 }
 
-# ── commands ──────────────────────────────────────────────────────────────────
+# ── commands
 _disp_help() {
   cat <<'HLP'
 🔎 DISPLAY FILTER  (.d)   same grammar as .s
@@ -257,7 +257,7 @@ handle_display_cmd() {
   esac
 }
 
-# ── Settings → Display filter ─────────────────────────────────────────────────
+# ── Settings → Display filter
 declare -ga _dfs_presets=()
 _dfs_pick_mode=""          # run | delete
 

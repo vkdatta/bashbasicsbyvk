@@ -49,6 +49,7 @@ echo
         return 1
     fi
     if [ "${2:-}" = -b ] && _bvk_back; then return 4; fi
+    _mc_unwind && return 2                              # q: close up to the main loop
     return 1
     }
 
@@ -114,7 +115,7 @@ echo
     return 0
     }
 
-# Step 1: the port.  rc 0 answered · 1 u · 3 q / not a usable port (the message is printed here)
+# Step 1: the port.  rc 0 answered · 1 u · 2 q · 3 not a usable port (the message is printed here)
     _lh_s_port() {
     local _CE_SELECT=0                                  # the port typed before starts selected when u comes back here
     [ -n "${PORT:-}" ] && _CE_SELECT=1
@@ -123,6 +124,7 @@ echo
     _CM_BACKED=0
     if ! _bvk_read PORT "Enter localhost port: " -i "${PORT:-}"; then
         [ "${_CM_BACKED:-0}" = 1 ] && return 1
+        _mc_unwind && return 2                          # q: close up to the main loop
         return 3
     fi
     if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
@@ -143,6 +145,7 @@ echo
     case "$rc" in
         0) kill_port "$PORT"; return 0 ;;
         4) return 1 ;;
+        2) exit 42 ;;                                   # q: close up to the main loop
     esac
     echo
     echo "Operation cancelled."

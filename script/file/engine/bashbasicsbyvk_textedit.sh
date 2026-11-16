@@ -86,7 +86,7 @@ _te_onsig() {        # SIGINT = Ctrl-C (copy) · SIGTSTP = Ctrl-Z (undo), for th
   return 0
 }
 
-# ── selection ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── selection
 # _te_sel TEXT CURSOR  -> rc 0 and _TE_LO / _TE_HI when TEXT has a selection (anchor and cursor apart)
 _te_sel() {
   (( _TE_ANC >= 0 )) || return 1
@@ -119,7 +119,7 @@ _te_hl() {
 # _te_sel_len TEXT CURSOR -> _TE_N = how many characters of TEXT are selected (0 = none)
 _te_sel_len() { _TE_N=0; _te_sel "$1" "$2" && _TE_N=$(( _TE_HI - _TE_LO )); return 0; }
 
-# ── undo ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── undo
 # _te_push TEXT CURSOR KIND — remember the line before a change (typing / backspacing in a row is ONE undo step)
 _te_push() {
   if [ "$3" = type ] || [ "$3" = bs ]; then [ "$_TE_LASTOP" = "$3" ] && return 0; fi
@@ -147,7 +147,7 @@ _te_redo() {
   return 0
 }
 
-# ── editing ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── editing
 # _te_cut BUFVAR POSVAR LO HI — delete [LO, HI), cursor to LO
 _te_cut() {
   local -n _te_b="$1" _te_p="$2"
@@ -171,7 +171,7 @@ _te_insert() {
   _te_b="${_te_b:0:_te_p}${t}${_te_b:_te_p}"; _te_p=$(( _te_p + ${#t} ))
 }
 
-# ── words and lines ───────────────────────────────────────────────────────────────────────────────────────────────────
+# ── words and lines
 _te_wordl() {   # TEXT POS -> _TE_W = start of the word before POS
   local s="$1" i=$2
   while (( i > 0 )) && [[ "${s:i-1:1}" != [[:alnum:]_] ]]; do i=$(( i - 1 )); done
@@ -204,7 +204,7 @@ _te_linedown() {   # same column one line down (the last line: the end of the te
   _TE_W=$(( ns + col ))
 }
 
-# ── the clipboard ─────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── the clipboard
 # Whatever this machine has: Termux:API, macOS, Wayland, X11, WSL; over ssh the terminal's own clipboard (OSC 52, set only).
 # With none of them the app keeps the text itself, so cut / copy / paste still work inside the app.
 _te_run() { if command -v timeout >/dev/null 2>&1; then timeout 3 "$@"; else "$@"; fi; }
@@ -233,7 +233,7 @@ _te_clip_get() {   # -> _TE_GOT
   _TE_GOT="$t"
 }
 
-# ── decoding keys into chords ─────────────────────────────────────────────────────────────────────────────────────────
+# ── decoding keys into chords
 # A chord is a name: left  shift-left  ctrl-left  ctrl-shift-left  home  delete  ctrl-delete  backspace  ctrl-a  ctrl-shift-c ...
 _te_decode_byte() {   # one byte read from the terminal -> _TE_CH (rc 1 = not an editing key)
   case "$1" in
@@ -305,7 +305,7 @@ _te_decode_esc() {
   return 0
 }
 
-# ── the one switch ────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── the one switch
 # _te_apply CHORD BUFVAR POSVAR MODE -> 0 not an editing key · 1 cursor / selection moved · 2 text changed · 3 paste (_BVK_PASTE) · 4 done, nothing to redraw
 _te_apply() {
   local ch="$1" mode="${4:-text}"

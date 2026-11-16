@@ -30,7 +30,7 @@ DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw)  (draws instantly, same a
 DEFAULT_NUKE_TIME_SECONDS=3600   # up- / c2c-: how long a new link lives (1 hour). 60 s .. 30 days
 DEFAULT_UX_NUKE_TIME_SECONDS=2592000   # ux-: how long a new share lives (30 days). 60 s .. 30 days
 DEFAULT_APP_TIMEZONE=""          # "" = follow the system clock; else an IANA name, e.g. Asia/Kolkata
-# ── fileapi services ─────────────────────────────────────────────────────────
+# ── fileapi services
 DEFAULT_CREDIT_PROMPTS="show"             # show = price check before every upload (cost 1 stays silent) · skip = never ask, just go
 DEFAULT_BACKUP_MODE="yes"                 # back up to the cloud before a delete:  yes | no | ask
 DEFAULT_BACKUP_NUKE_TIME_SECONDS=2592000  # how long a backup is kept (30 days). 60 s .. 30 days
@@ -208,14 +208,12 @@ fi
 [[ "$mouse_mode" == on || "$mouse_mode" == off ]] || mouse_mode=$DEFAULT_MOUSE_MODE
 [[ "$nano_wrap" == wrap || "$nano_wrap" == nowrap ]] || nano_wrap=$DEFAULT_NANO_WRAP
 
-# ════════════════════════════════════════════════════════════════════════════
 #  Timezone  (Settings → Timezone)
 #  One setting, used everywhere: the app exports it as  TZ , so every  date  call, every python3 / node
 #  helper and every child process the app starts shows and parses local time in that zone. The recents
 #  daemon is a separate long-running process, so it reads  app_timezone  from the config file itself.
 #  Machine-readable stamps stay in UTC on purpose (CREATED=…Z, telemetry day) and epochs are zone-free.
 #  Empty = follow the system clock exactly as before.
-# ════════════════════════════════════════════════════════════════════════════
 if [ -z "${_BVK_TZ_CAPTURED+x}" ]; then       # remember what the shell came with (first load only)
   _BVK_TZ_CAPTURED=1
   if [ -n "${TZ+x}" ]; then _BVK_TZ_ORIG_SET=1; _BVK_TZ_ORIG="$TZ"; else _BVK_TZ_ORIG_SET=0; _BVK_TZ_ORIG=""; fi
@@ -386,14 +384,12 @@ _RESET='\033[0m'
 _BOLD='\033[1m'
 
 
-# ════════════════════════════════════════════════════════════════════════════
 #  Settings menu  (s)
 #     type a number to choose · ↑↓ move · space/enter change · u back · q close
 #  Every screen below is a  build  function (rows) + an  act  function (what a
 #  row does) run by _st_run in bashbasicsbyvk_settings_ui.sh.
-# ════════════════════════════════════════════════════════════════════════════
 
-# ── top level ────────────────────────────────────────────────────────────────
+# ── top level
 _ST_SORT_MODES=(az za new old big small)
 _ST_SORT_LABELS=("A → Z" "Z → A" "Newest first" "Oldest first" "Largest first" "Smallest first")
 
@@ -406,7 +402,7 @@ settings_menu() {
   builtin printf '\n'
 }
 
-# ── sort order ───────────────────────────────────────────────────────────────
+# ── sort order
 _st_sort_build() {
   local i
   _st_reset
@@ -422,7 +418,7 @@ _st_sort_act() {
 }
 sort_order_settings() { _st_run "Sort order" _st_sort_build _st_sort_act; }
 
-# ── file details (what is shown after each name) + time format ───────────────
+# ── file details (what is shown after each name) + time format
 _ST_SFX_TOKENS=(ext size time children)
 _ST_SFX_LABELS=("Extension" "Size" "Modified time" "Item count (folders)")
 _ST_TF_KEYS=(year month date datetime monthdate full)
@@ -460,7 +456,7 @@ _st_sfx_act() {
 }
 display_suffix_settings() { _st_run "File details" _st_sfx_build _st_sfx_act; }
 
-# ── group view (check = level is used; ←/→ changes its position) ─────────────
+# ── group view (check = level is used; ←/→ changes its position)
 _ST_GV_LEVELS=(ext year month date)
 _ST_GV_LABELS=("Extension" "Year" "Month" "Date")
 _ST_ORD=(1st 2nd 3rd 4th)
@@ -525,7 +521,7 @@ group_view_settings() {
   _st_run "Group by" _st_gv_build _st_gv_act "←/→ change order" _st_gv_cmd
 }
 
-# ── animation ────────────────────────────────────────────────────────────────
+# ── animation
 _st_anim_build() {
   _st_reset
   _st_add h "Main screens"
@@ -545,7 +541,7 @@ _st_anim_act() {
 }
 animation_settings() { _st_run "Animation" _st_anim_build _st_anim_act; }
 
-# ── nuke time (how long a new up- / c2c- link lives) ─────────────────────────
+# ── nuke time (how long a new up- / c2c- link lives)
 #  Charged UP FRONT for the whole period, so 1 GB for 7 days needs 168 credits in the ledger first.
 #  Rate: 1 credit per GB per hour, with a minimum charge by size (0-5 MB: 1 per month, 6-50 MB: 1 per
 #  week, 51-500 MB: 1 per day, >500 MB: 1 per hour). Under 1 hour is billed as 1 hour.
@@ -599,7 +595,7 @@ _st_nuke_build() { _st_nuke_build_for nuke_time_seconds _ST_NUKE_PRESETS _ST_NUK
 _st_nuke_act() { _st_nuke_act_for nuke_time_seconds "links" "$1"; }
 nuke_time_settings() { _st_run "Nuke time" _st_nuke_build _st_nuke_act; }
 
-# ── nuke time for ux- shares (default 30 days) ───────────────────────────────
+# ── nuke time for ux- shares (default 30 days)
 #  Same price list and refund rules as up- links. The whole period is paid up front; the refund (whole days only)
 #  happens only when the data is really gone: you nuke the share, or you shorten its nuke time from cloud surf (cs).
 _ST_UXNUKE_PRESETS=(86400 604800 1209600 2592000)
@@ -609,7 +605,7 @@ _st_uxnuke_build() { _st_nuke_build_for ux_nuke_time_seconds _ST_UXNUKE_PRESETS 
 _st_uxnuke_act() { _st_nuke_act_for ux_nuke_time_seconds "ux- shares" "$1"; }
 ux_nuke_time_settings() { _st_run "Nuke time (ux-)" _st_uxnuke_build _st_uxnuke_act; }
 
-# ── reset ────────────────────────────────────────────────────────────────────
+# ── reset
 _st_reset_build() {
   _st_reset
   _st_add h "Reset every setting to its default"

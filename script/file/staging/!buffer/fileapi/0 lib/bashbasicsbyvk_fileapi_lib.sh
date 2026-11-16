@@ -20,7 +20,7 @@ _bb_get_credentials() {
   return 1
 }
 
-# ---- transport hardening ---------------------------------------------------
+# ── transport hardening
 # HTTPS only, TLS>=1.2, never follow redirects (a redirect could carry headers elsewhere).
 _BB_CURL_OPTS=(--proto '=https' --proto-redir '=https' --tlsv1.2 --max-redirs 0)
 
@@ -117,9 +117,7 @@ _bb_fail_reason() {
   fi
 }
 
-# ════════════════════════════════════════════════════════════════════════════
 #  Nuke time, aliases and credit estimates (shared by up- / c2c- / the api loop / Settings)
-# ════════════════════════════════════════════════════════════════════════════
 #
 #  Pricing (mirrors the worker, fileapi/src/ledger.js — the server is the authority):
 #     1 credit per GB per hour, whole credits, with a minimum charge by size bucket:
@@ -193,7 +191,7 @@ _bb_fmt_when() {
   date -d "@$sec" '+%Y-%m-%d %H:%M %Z' 2>/dev/null || date -r "$sec" '+%Y-%m-%d %H:%M %Z' 2>/dev/null || printf '%ss' "$sec"
 }
 
-# ---- alias ("up-1-3 as user data") ----------------------------------------------------------------
+# ── alias ("up-1-3 as user data")
 _BB_ALIAS_RE='^[A-Za-z0-9 ._@+-]{1,48}$'
 _BB_LINK_ALIAS=""
 
@@ -279,7 +277,7 @@ _bb_osc52_copy() {
 }
 
 
-# ---- link keys (so a link can be copied / rebuilt later from the api loop) --------------------------
+# ── link keys (so a link can be copied / rebuilt later from the api loop)
 # The decryption key lives only in the "#k=" part of a link. To let you copy a link again without
 # uploading anything, the key is kept on THIS computer: ~/.bashbasicsbyvk/link_keys  (<id> TAB <key>, mode 600).
 # It never goes to the server. Turn it off with  FILEAPI_BASHBASICS_STORE_KEYS=0  (new links only).
@@ -320,9 +318,7 @@ _bb_key_remember() {
 }
 
 
-# ════════════════════════════════════════════════════════════════════════════
 #  Shared plumbing for the credit prompt, Backup, Saved Surf and Snapshots
-# ════════════════════════════════════════════════════════════════════════════
 
 # A setting by name: the live shell variable (the app loaded it), else the config file (so the background
 # snapshot process and stand-alone scripts agree), else the default.   _bb_cfg_val <name> <default>
@@ -418,7 +414,7 @@ _bb_jslib() {
   printf '%s' "$_BB_JSLIB"
 }
 
-# ── packing helpers shared by svc (backup/saved/snapshot), up- and ux- ────────────────────────────────────────────
+# ── packing helpers shared by svc (backup/saved/snapshot), up- and ux-
 # _bb_stage_links <stage-dir> <say-fn> <path>...   → appends "./<name>" to the CALLER's  rel_items  array.
 # Symlinks each existing item into <stage-dir> under a unique name, so the archive holds "<name>/..." entries relative to nothing
 # absolute. The "./" keeps a name that starts with "-" from ever being read as an option. A missing item is skipped with a notice
@@ -601,7 +597,6 @@ _bb_label_dec() {
 }
 
 
-# ════════════════════════════════════════════════════════════════════════════
 #  Client-side encryption of names and stored links (works from any device that has e-mail + diseps + apikey + dinons)
 #
 #  One LABEL KEY per user: made here on first use, kept on the server only wrapped with your FEK (dinons → FEK → label key).
@@ -610,7 +605,6 @@ _bb_label_dec() {
 #    • the full address of each up- link (so Links can copy it again on any device) →  stored as ciphertext in /links/<id>/secret
 #  The server stores only ciphertext it cannot open. Without the dinons a name is NOT sent (never sent in clear) and a link is
 #  simply not kept in the cloud.
-# ════════════════════════════════════════════════════════════════════════════
 _BB_LK=""; _BB_LK_FOR=""; _BB_LINK_ALIAS_WIRE=""; _BB_LAST_SECRET_ENC=""
 
 # _bb_labelkey_load  → sets _BB_LK (cached per account); returns 1 when it cannot be opened (no dinons / offline).

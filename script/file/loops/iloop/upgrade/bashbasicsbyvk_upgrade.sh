@@ -50,7 +50,7 @@ _UPG_T_ERR=""
 
 _UPG_US="$_GH_US"                  # shared with the GitHub screens: bashbasicsbyvk_ghlib.sh
 
-# ── network (the only place that touches GitHub; override in tests) ──────────
+# ── network (the only place that touches GitHub; override in tests)
 _upg_http_get() {
   curl -fsSL --max-time 20 -H 'Accept: application/vnd.github+json' "$1" 2>/dev/null
 }
@@ -71,7 +71,7 @@ _upg_installed() {
 }
 _upg_record() { mkdir -p "$_UPG_DIR" 2>/dev/null && printf '%s\n' "$1" > "$_UPG_DIR/installed"; }
 
-# ── loading ───────────────────────────────────────────────────────────────────
+# ── loading
 _upg_load_stable() {
   _UPG_S_TAG=(); _UPG_S_NAME=(); _UPG_S_DATE=(); _UPG_S_BODY=(); _UPG_S_IDX=()
   _UPG_S_ERR=""; _UPG_S_LOADED=1
@@ -110,7 +110,7 @@ _upg_load_tags() {
   return 0
 }
 
-# ── rows ──────────────────────────────────────────────────────────────────────
+# ── rows
 _upg_rowtext() {
   local i="$1" tag="${items[$((i-1))]}" line inst; inst="$(_upg_installed)"
   if [ "$_upg_tab" = stable ]; then
@@ -177,7 +177,7 @@ _upg_redraw_fresh() {
 
 _upg_tab_redraw() { _tm_tab_redraw _upg_build_items _upg_set_viewport; }
 
-# ── commands ──────────────────────────────────────────────────────────────────
+# ── commands
 _upg_pick() {                    # _upg_pick <N>  → _upg_ref
   local num="$1"
   if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt "${#items[@]}" ]; then
@@ -313,7 +313,7 @@ _upg_help() {
 HLP
 }
 
-# ── the loop ──────────────────────────────────────────────────────────────────
+# ── the loop
 upgrade_menu() {
   _dep_need -c "Upgrade" upgrade || return
   local _up_saved_prefix="$group_prefix" _up_saved_force="$force_show"

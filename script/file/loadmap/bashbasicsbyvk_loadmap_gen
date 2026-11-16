@@ -30,7 +30,7 @@ BUILD_TREES = ('bvk-ls', 'bvk-fr', 'bvk-xfer')      # compiled before distributi
 SECTIONS = ('fg', 'bg', 'no')
 
 
-# ------------------------------------------------------------------ a tiny reader of this repo's bash style
+# ── a tiny reader of this repo's bash style
 FDEF_ML = re.compile(r'^(?:function\s+)?([A-Za-z_][\w:.\-]*)\s*\(\)\s*\{?\s*(?:#.*)?$')
 FDEF_1 = re.compile(r'^(?:function\s+)?([A-Za-z_][\w:.\-]*)\s*\(\)\s*(\{.*|\(.*)$')
 HERE_RX = re.compile(r'<<-?\s*(["\']?)([A-Za-z_][A-Za-z0-9_]*)\1')
@@ -103,7 +103,7 @@ def strip_comment(l):
     return l
 
 
-# ------------------------------------------------------------------ the mapper
+# ── the mapper
 class Entry:
     def __init__(self, name, mode, needs, with_, note, line):
         self.name, self.mode, self.needs, self.with_, self.note, self.line = name, mode, needs, with_, note, line
@@ -134,7 +134,7 @@ def read_mapper(path, errs):
     return entries, calls
 
 
-# ------------------------------------------------------------------ the tree
+# ── the tree
 def find_root(arg):
     if arg: return os.path.abspath(arg)
     d = HERE

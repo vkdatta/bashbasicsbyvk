@@ -294,7 +294,7 @@ class JSFileInfo:
         before = clean[:pos]
         return not (_RE_FUNC_DECL.search(before) or _RE_FUNC_EXPR.search(before))
 
-# ── HTML global-name collection (used by audits 1c, 1d, 1e) ─────────────
+# ── HTML global-name collection (used by audits 1c, 1d, 1e)
 def _is_external_url(src):
     s = src.strip().lower()
     return s.startswith('http://') or s.startswith('https://') or s.startswith('//')

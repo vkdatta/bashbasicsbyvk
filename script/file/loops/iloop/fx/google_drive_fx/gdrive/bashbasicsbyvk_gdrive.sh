@@ -63,7 +63,7 @@ _GD_GLOBAL_TOPS="gdrive upgrade execute recents.list recents.tsv track.lock daem
 
 _mc_footer_register browse_gd u.up gd:Drive_menu gdx:Leave_Drive rf q '|' h:Home s:Settings -h:Help -u:Upgrade 2>/dev/null
 
-# ── small helpers ────────────────────────────────────────────────────────────
+# ── small helpers
 _gd_safe_name() {
   local s="${1//[^A-Za-z0-9_.-]/_}"
   [ -n "$s" ] || s="_"
@@ -113,12 +113,10 @@ _gd_py() { BVK_GD_PROFILE_DIR="$_GD_HOME" BVK_GD_REMOTE="$_GD_REMOTE" "$_GD_PY" 
 
 _gd_now() { printf '%(%s)T' -1; }
 
-# ═════════════════════════════════════════════════════════════════════════════
 #  Per-profile state: configs, buffers, selection, favourites, locks ... (everything the app keeps in
 #  ~/.bashbasicsbyvk) is pointed at the profile folder while the Drive is open, and put back on leave.
 #  It is generic: ANY variable that holds a path below ~/.bashbasicsbyvk is moved, so state files added
 #  later are isolated too.  (Upgrades, UDF scripts and the local daemon stay global.)
-# ═════════════════════════════════════════════════════════════════════════════
 _gd_state_enter() {
   local ph="$1" home="${HOME}/.bashbasicsbyvk" line rest v val top new g skip
   _GD_SAVED=()
@@ -187,9 +185,7 @@ _gd_reload_caches() {
   _GD_SYNCED=()
 }
 
-# ═════════════════════════════════════════════════════════════════════════════
 #  Open / leave
-# ═════════════════════════════════════════════════════════════════════════════
 # _gd_enter REMOTE  → opens the Drive; the main screen then shows it
 _gd_enter() {
   local remote="$1" safe ph orig
@@ -251,9 +247,7 @@ _gd_leave() {
 _gd_before_exec() { [ "$_GD_ACTIVE" = 1 ] && _gd_leave --quiet; return 0; }
 _gd_on_exit()     { [ "$_GD_ACTIVE" = 1 ] && _gd_push; return 0; }
 
-# ═════════════════════════════════════════════════════════════════════════════
 #  Sync with Google Drive
-# ═════════════════════════════════════════════════════════════════════════════
 _gd_push() {                       # make Drive match what was done in the mirror
   [ "$_GD_ACTIVE" = 1 ] || return 0
   _gd_py push
@@ -318,13 +312,11 @@ _gd_order_items() {
   items=("${d[@]}" "${f[@]}")
 }
 
-# ═════════════════════════════════════════════════════════════════════════════
 #  Wrapping the native functions that READ content (everything that only moves names needs nothing)
 #    open / edit / run a file      → download first, push the edit after
 #    c- copy inside the Drive      → server-side copy (nothing is downloaded)
 #    copy / move OUT of the Drive  → download first
 #    z- / uz- / up- / ux- / c2c- / rclone with a Drive file as the source → download first
-# ═════════════════════════════════════════════════════════════════════════════
 _gd_rename_fn() {          # _gd_rename_fn old new   (keeps the original callable under a new name)
   declare -F "$1" >/dev/null 2>&1 || return 1
   # no forks (the old declare|sed cost 2 processes per function — ~40 ms each on a phone):
@@ -496,9 +488,7 @@ rclone() {
   command rclone "$@"
 }
 
-# ═════════════════════════════════════════════════════════════════════════════
 #  Google files leaving the Drive: converted by Google's own converter, on request only
-# ═════════════════════════════════════════════════════════════════════════════
 _gd_native_in() {          # prints the first Google pointer in/at $1 (empty when none)
   local f
   if [ -f "$1" ]; then case "$1" in *.gdoc|*.gsheet|*.gslides|*.gform|*.gdraw|*.gsite|*.gmap|*.gscript|*.gjam|*.gfile) printf '%s' "$1" ;; esac; return 0; fi
@@ -546,9 +536,7 @@ _gd_export_cmd() {
   _gd_py export "${abs[@]}" ${fmt:+--format "$fmt"} --to "$dest" | sed 's/^/   📄 /'
 }
 
-# ═════════════════════════════════════════════════════════════════════════════
 #  gd commands (typed in the main screen while a Drive is open)
-# ═════════════════════════════════════════════════════════════════════════════
 _gd_info() {
   local k v remote="" files=0 dl=0 dlb=0 knb=0 folders=0
   echo

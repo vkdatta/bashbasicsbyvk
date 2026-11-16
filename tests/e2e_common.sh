@@ -32,7 +32,7 @@ q1() { sql "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()
 export _BVK_TELEMETRY_DIR="$XDG_CONFIG_HOME/bashbasicsbyvk/telemetry"; mkdir -p "$_BVK_TELEMETRY_DIR"
 printf '%s\n' "$UUID" > "$_BVK_TELEMETRY_DIR/uuid"; printf '%s\n' "$SIG" > "$_BVK_TELEMETRY_DIR/sig"
 
-# ---- client under test ----
+# ── client under test
 source "bashbasicsbyvk_auth.sh"
 source "bashbasicsbyvk_fileapi_lib.sh"; source "bashbasicsbyvk_staging_pending.sh"; source "bashbasicsbyvk_staging_upload.sh"; source "bashbasicsbyvk_staging_ux.sh"; source "bashbasicsbyvk_staging_svc.sh"; source "bashbasicsbyvk_staging_backup.sh"; source "bashbasicsbyvk_staging_saved.sh"; source "bashbasicsbyvk_planetary_resources.sh"; source "bashbasicsbyvk_staging_snapshot.sh"; source "bashbasicsbyvk_alien_daemon.sh"
 WORKER_URL="$BASE"; _BB_CURL_OPTS+=(--cacert "$T/cert.pem")

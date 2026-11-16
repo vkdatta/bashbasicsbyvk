@@ -52,7 +52,7 @@ _term_cols() {
   echo "$_vp_cols_now"
 }
 
-# ── one-row input fitting ───────────────────────────────────────────────────────────────────
+# ── one-row input fitting
 # Every typed-line editor redraws its row with  \r \033[K <prompt><text>  and then moves the cursor back with \033[nD.
 # That only works while prompt+text fit ONE terminal row. When a long link is pasted on a narrow screen (a phone) the
 # text wraps, \r / \033[K / \033[nD then only act on the LAST wrapped row, so every keystroke prints the prompt again
@@ -60,7 +60,7 @@ _term_cols() {
 # the row (a "<" marks hidden text on the left) and the hint row is clipped, so nothing ever wraps.
 _bvk_is_ascii() { local LC_ALL=C; [[ "$1" != *[!\ -~]* ]]; }
 
-# ── THE one cell-width rule for a non-ASCII character ───────────────────────────────────────────────────────
+# ── THE one cell-width rule for a non-ASCII character
 # _vp_cpw <codepoint> -> _VP_CPW = 0 | 1 | 2.  EVERY width measurement in the app (_bvk_dispw, _vp_cells, so every
 # prompt caret, row fit and erase count) goes through THIS function.  Never write another range table.
 # It follows wcwidth / Unicode: a character is 2 cells only when it is a wide (East Asian W/F) character or has
@@ -288,7 +288,7 @@ _vp_strip_ansi() {
   _vp_plain="$out$s"
 }
 
-# ---- THE width helpers: every menu / footer / smart-menu measures through these ----
+# ── THE width helpers: every menu / footer / smart-menu measures through these
 # Display width of a string in terminal cells -> _vp_w.  ANSI is ignored, emoji and
 # CJK count 2, variation selectors / joiners / combining marks count 0.
 # (${#s} counts characters, not cells: a row with 📁 / 👤 is one cell wider than
@@ -764,7 +764,7 @@ _vp_emit() {
   return 0
 }
 
-# --- repaint the block in place (block top is _blk_h-1 lines up) ---
+# ── repaint the block in place (block top is _blk_h-1 lines up)
 _vp_rerender() {
   builtin printf '\033[%dA\r' "$(( _blk_h - 1 ))"
   _vp_emit
@@ -882,9 +882,7 @@ _read_key_seq() {
   return 0
 }
 
-# ------------------------------------------------------------------------------------------------
 # MULTI-ROW INPUT — a text that does not fit one row (or has line breaks) is shown in full, wrapped, as a block of rows
-# ------------------------------------------------------------------------------------------------
 # The block starts on the prompt's own row and grows downward (all rows are shown unless the text is taller than the screen; then the window follows the
 # cursor). Left/right/typing move the cursor INSIDE it, across rows. Up/down/PgUp/PgDn/Home/End still move the list:
 # the loops call _bvk_blk_park first (cursor back on the first row) so every row-relative repaint stays correct.
@@ -1002,7 +1000,6 @@ _bvk_prompt_tap() {
   return 0
 }
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════════════════
 # THE typed-line DRAWER.  _bvk_draw_input is the one function that paints the text the person is typing: every prompt (main Select:, the
 # picker, smart menus, Settings, the line editor behind _bvk_read) calls it, so the cursor / selection (_te_cursor), a text that does not fit
 # one row (_bvk_row_multi: line breaks, a paste, a block of rows) and the one scrolling row (_bvk_fit_input) look and tap the same everywhere.
@@ -1018,7 +1015,6 @@ _bvk_draw_input() {   # PROMPT TEXT POS
   return 0
 }
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════════════════
 # THE typed-line loop.  _bvk_edit_run is the ONE loop behind every prompt that waits for typed text: main Select:, the item / group
 # picker, smart menus, the line editor (_cm_line_edit = _bvk_read = bashbasicsbyvk_ask).  Everything the person can DO to the typed
 # line lives HERE, once: editing keys (_te_esc / _te_byte), bracketed + burst paste, the length limit, mouse reports on / off,
@@ -1195,7 +1191,7 @@ _bvk_cursor_to() {
 # (a selected text is replaced by what is typed, so it does not count: see bashbasicsbyvk_textedit.sh)
 _bvk_room() { local _rm_n=0; (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$_buf" "$_pos"; _rm_n=$_TE_N; }; (( ${#_buf} - _rm_n + $1 <= _BVK_MAX_INPUT )); }
 # a one-line red notice on the row under the input (it stays until the next key); the cursor is put back where it was
-# ── the suggestion row ─────────────────────────────────────────────────────────────────────────────────────
+# ── the suggestion row
 # ONE row directly above the "Select:" line (between the footer and the prompt):
 #     u) Up   cd) Change directory   q) Quit
 #     h) Home   s) Settings   -h) Help   -u) Upgrade
@@ -1266,9 +1262,7 @@ _bvk_too_large() {
   _bvk_too_large_text "$1"; _bvk_notice "$_BVK_NOTICE"
 }
 
-# ------------------------------------------------------------------------------------------------
 # PASTE  — one paste = ONE edit, never a replay of keystrokes
-# ------------------------------------------------------------------------------------------------
 # Every input row (Select: · Item numbers: · smart menus · typed-line prompts · settings) reads one key at a time.
 # A pasted text used to arrive as thousands of "keys": each one redrew the row (the "someone is typing" animation) and
 # every line break was taken as Enter. Now:
@@ -1341,9 +1335,7 @@ _bvk_paste_burst() {
   return 0
 }
 
-# ------------------------------------------------------------------------------------------------
 # NAME LENGTH — a file / folder name is at most 255 BYTES (the filesystem standard). Never create or rename past it.
-# ------------------------------------------------------------------------------------------------
 # _bvk_name_too_long NAME   0 = some part of NAME (each "/"-separated part) is longer than 255 bytes
 _bvk_name_too_long() {
   local LC_ALL=C part rest="$1"
@@ -1462,6 +1454,30 @@ for part in input_str.split(','):
 if indices:
     print(' '.join(str(i) for i in indices))
 PYEOF
+}
+
+# ── numbered rows of a screen (shared by auth and xui: THE one copy) ──
+# _vp_slot_of N VAR: display row N (1-based, filtered or not) -> 0-based slot in the unfiltered arrays, into VAR
+_vp_slot_of() {
+  local -n _vp_so="$2"
+  if $_filter_map_active; then _vp_so="${_filter_map[$(( $1 - 1 ))]:-0}"; else _vp_so=$(( $1 - 1 )); fi
+}
+# _vp_row TEXT VAR: a typed row number checked against what is on screen -> slot in VAR ; 1 = invalid
+_vp_row() {
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  local n=$(( 10#$1 ))
+  [ "$n" -ge 1 ] && [ "$n" -le "${#items[@]}" ] || return 1
+  _vp_slot_of "$n" "$2"
+}
+# _vp_parse_sel ARRAY TEXT: "1,3-5 | a | a-2" -> ARRAY = display rows ; 1 (and a message) when nothing valid
+_vp_parse_sel() {
+  local -n _vp_ps="$1"
+  local s="${2// /}" n="${#items[@]}"
+  _vp_ps=()
+  if   [ "$s" = a ];            then _vp_ps=($(seq 1 "$n"))
+  elif [[ "$s" =~ ^a-(.+)$ ]];  then _vp_ps=($(_sp_parse_all_except "${BASH_REMATCH[1]}" "$n"))
+  else                               _vp_ps=($(parse_selection "$s" "$n")); fi
+  [ "${#_vp_ps[@]}" -gt 0 ] || { echo "❌ No valid items selected"; return 1; }
 }
 
 # a big paste (text with letters / words in it) is not a selection: never parse it char by char

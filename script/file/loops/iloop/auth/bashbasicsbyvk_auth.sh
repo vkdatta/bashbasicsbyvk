@@ -31,7 +31,7 @@ _bvk_share_spec() {  # "DISEPS_N pos1 pos2 ... posN" (1-based) — the one defin
   for ((k=1; k<=_BVK_SHARE_N; k++)); do printf ' %d' $(( (k * _BVK_SHARE_STEP) % _BVK_DISEPS_N + 1 )); done
 }
 
-# ---------------------------------------------------------------- storage helpers
+# ── storage helpers
 _bvk_auth_init() {
   ( umask 077; mkdir -p "$_BVK_AUTH_DIR/profiles" ) 2>/dev/null || return 1
   chmod 700 "$_BVK_AUTH_DIR" "$_BVK_AUTH_DIR/profiles" 2>/dev/null
@@ -70,7 +70,7 @@ _bvk_auth_write() {  # $1=file  (uses P_*)
   chmod 600 "$1" 2>/dev/null
 }
 
-# ---------------------------------------------------------------- validation
+# ── validation
 # No "is this a real e-mail" check (by design) -- only length and injection-safety.
 _bvk_auth_mail_ok() {
   local m="$1"
@@ -89,7 +89,7 @@ _bvk_auth_codes_ok() {  # $1=value [$2=count] : unique codes of 16 [A-Za-z0-9] j
   [ "$n" -ge 1 ] && { [ -z "${2:-}" ] || [ "$n" -eq "$2" ]; }
 }
 
-# ---------------------------------------------------------------- crypto (node; already a dependency)
+# ── crypto (node; already a dependency)
 _bvk_auth_gen_codes() {  # $1=count -> joined by '-'
   node -e '
     const c=require("crypto"),A="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -119,7 +119,7 @@ _bvk_auth_fek_unwrap() { # $1=blob $2=dinons -> fek(hex), non-zero on wrong dino
     process.stdout.write(Buffer.concat([d.update(ct),d.final()]).toString("utf8"));}catch(e){process.exit(1)}'
 }
 
-# ---------------------------------------------------------------- server calls
+# ── server calls
 # _bvk_auth_call METHOD PATH JSON [with-creds]   -> _AUTH_HTTP, _AUTH_BODY.  Secrets only via curl -K stdin.
 _bvk_auth_call() {
   local method="$1" path="$2" json="$3" withcreds="${4:-}" base="${5:-$_BVK_AUTH_URL}" body resp
@@ -145,7 +145,7 @@ _bvk_auth_err() {
 }
 _bvk_auth_jstr() { node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$1"; }
 
-# ---------------------------------------------------------------- profile list / selection
+# ── profile list / selection
 # Data only -- the screens are drawn by the shared viewport engine (see "screens" below).
 _BVK_AUTH_IDS=()      # profile id per row (UNFILTERED order)
 _BVK_AUTH_MAILS=()    # mail per row        (what the = filter searches)
@@ -175,7 +175,7 @@ _bvk_auth_load_active() {
   export FILEAPI_BASHBASICS_EMAIL="$P_MAIL" FILEAPI_BASHBASICS_DISEPS="$P_DISEPS" FILEAPI_BASHBASICS_KEY="$P_APIKEY"
 }
 
-# ---------------------------------------------------------------- create
+# ── create
 _bvk_auth_create() {
   echo; echo "🆕 Create user"
   cat <<'TXT'
@@ -218,7 +218,7 @@ TXT
   echo "   If you already have credentials, use 'ui' to import them — or wait 1 day to create new ones."
 }
 
-# ---------------------------------------------------------------- export / import
+# ── export / import
 # Same engine as fx (UDF) and .r (rules): _bz_export writes ONE zip with a manifest, import
 # goes through the zip picker + the same safety checks (_bz_import).  The picker here also
 # lists .txt, so the credentials file written by "create" can be imported too.
@@ -302,7 +302,7 @@ _bvk_auth_import() {
 }
 
 
-# ---------------------------------------------------------------- acting as a user
+# ── acting as a user
 _bvk_auth_mailto() {  # $1=subject $2=body
   local url="mailto:$_BVK_SUPPORT_MAIL?subject=$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$1")&body=$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$2")"
   echo "✉️  To: $_BVK_SUPPORT_MAIL"; echo "   Subject: $1"; printf '   %s\n' "$2"
@@ -348,7 +348,7 @@ _bvk_auth_regen() {  # $1=what: diseps|apikey|dinons|mail   (P_* = current profi
   [ "$what" = dinons ] && { echo "   🔑 The FEK was re-encrypted with the new dinons. Everyone who holds your OLD dinons has lost access to your shares."; echo "   Send the new dinons only to people you still trust:  rbam → Give access → sd"; }
 }
 
-# ================================================================ screens
+# ── screens
 # Both screens are drawn by the SAME viewport engine as `o`, fx, sw and .r, so they look and
 # behave identically:  header · rule · numbered rows · rule · footer · "Select:" prompt,
 # arrow-key highlight, u = back, q = close, "=" = live filter, bad input -> message + redraw.
@@ -364,9 +364,7 @@ _AU_QUIT=0             # set by q on the user screen: close -auth entirely
 _AU_MAIL=""            # mail shown in the user-screen header
 
 # display row N (1-based, filtered or not) -> 0-based slot in the unfiltered arrays
-_au_slot() {
-  if $_filter_map_active; then _AU_SLOT="${_filter_map[$(( $1 - 1 ))]:-0}"; else _AU_SLOT=$(( $1 - 1 )); fi
-}
+_au_slot() { _vp_slot_of "$1" _AU_SLOT; }
 
 # ---- list screen
 _au_list_rowtext() {
@@ -391,7 +389,7 @@ _au_list_build() {
   _hl_index=0
 }
 
-# ================================================================ billing · recharge · sponsorship
+# ── billing · recharge · sponsorship
 # Payments go through a magic link (30 minutes, or until it is paid). Nothing is charged from here:
 # this only asks the payments worker for a link. Credits reach an account only after the payment
 # is confirmed server-side. Rate: see _BVK_RATE_* above (US$ or ₹), minimum US$1 (= ₹100) per account.
@@ -666,27 +664,15 @@ _au_fresh() {
   return 0       # (the draw's own status is the input line's, not a failure)
 }
 # resolve a typed row number against what is on screen -> _AU_SLOT ; 1 = invalid
-_au_row() {
-  [[ "$1" =~ ^[0-9]+$ ]] || return 1
-  local n=$(( 10#$1 ))
-  [ "$n" -ge 1 ] && [ "$n" -le "${#items[@]}" ] || return 1
-  _au_slot "$n"
-}
+_au_row() { _vp_row "$1" _AU_SLOT; }
 
-# ---- the redrawer: exactly what `d` / `r` use in the outer loop (_multi_prompt_loop) ----
+# ── the redrawer: exactly what `d` / `r` use in the outer loop (_multi_prompt_loop)
 # Rows stay on screen, typing 1,3-5 / a / a-2 lights them up live; Enter confirms.
 _AU_PICK_TITLE=""
 _au_pick_header() { echo; echo "$_AU_PICK_TITLE"; }
 
 # _au_parse_sel "<1,3-5 | a | a-2>"  -> _AU_SEL = display rows
-_au_parse_sel() {
-  local s="${1// /}" n="${#items[@]}"
-  _AU_SEL=()
-  if   [ "$s" = a ];            then _AU_SEL=($(seq 1 "$n"))
-  elif [[ "$s" =~ ^a-(.+)$ ]];  then _AU_SEL=($(_sp_parse_all_except "${BASH_REMATCH[1]}" "$n"))
-  else                               _AU_SEL=($(parse_selection "$s" "$n")); fi
-  [ "${#_AU_SEL[@]}" -gt 0 ] || { echo "❌ No valid items selected"; return 1; }
-}
+_au_parse_sel() { _vp_parse_sel _AU_SEL "$1"; }
 # _au_select_rows "PROMPT" "title line" [typed]   typed = "ux-1,3" style shortcut (no redraw)
 _au_select_rows() {
   local prompt="$1" title="$2" typed="${3:-}"
@@ -811,7 +797,7 @@ _bvk_auth_user_menu() {  # $1=profile id
   return 0
 }
 
-# ---------------------------------------------------------------- entry point: -auth
+# ── entry point: -auth
 auth_menu() {
   _bvk_auth_init || { echo "❌ Cannot create $_BVK_AUTH_DIR"; return 1; }
 

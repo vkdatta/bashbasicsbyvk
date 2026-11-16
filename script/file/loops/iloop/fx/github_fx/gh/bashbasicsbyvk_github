@@ -55,9 +55,7 @@ class GhError(Exception):
         self.status = status
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  1. finding the key
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 _ASSIGN = re.compile(r'^\s*(?:export\s+|declare\s+-x\s+|typeset\s+-x\s+)?(%s)=(.*)$' % "|".join(TOKEN_NAMES))
 _SOURCE = re.compile(r'(?:^|[;&|{(]|\bthen\b|\bdo\b)\s*(?:source|\.)\s+("[^"]+"|\'[^\']+\'|[^\s;&|)]+)')
 
@@ -213,9 +211,7 @@ def get_key():
     return cands[i]
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  2. talking to GitHub
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 class _NoAuthOnHop(urllib.request.HTTPRedirectHandler):
     """a download redirect to another host (S3 ...) must NOT carry the key along"""
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -303,9 +299,7 @@ def now_iso():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  3. lists (the rows the screens draw; escaping is the same as the upgrade loop's)
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def esc(text):
     return (text or "").replace("\r", "").replace("\\", "\\\\").replace("\n", "\\n").replace(US, " ")
 
@@ -358,9 +352,7 @@ def list_tag_refs(repo):
     return [(r["ref"][len("refs/tags/"):], r["object"]["type"], r["object"]["sha"]) for r in refs if r["ref"].startswith("refs/tags/")]
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  4. git data helpers (tags and commits through the API - no clone needed)
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def get_ref(repo, tag):
     try:
         return http("GET", "/repos/%s/git/ref/tags/%s" % (repo, q(tag)))
@@ -423,9 +415,7 @@ def write_tag(repo, tag, commit_sha, message, old=None):
     (move_ref if exists else create_ref)(repo, tag, t["sha"])
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  5. text transforms and names
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def apply_text(old, mode, a, b):
     """-> (new_text, note)   note is "" or why nothing changed"""
     old = old or ""
@@ -519,9 +509,7 @@ def plan_renames(pairs, existing_tags, release_tags):
     return steps, notes, errors
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  6. jobs (a folder of plain files)
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 class Job:
     def __init__(self, d):
         self.d = d
@@ -564,9 +552,7 @@ def releases_by_tag(repo):
     return {r["tag_name"]: r for r in list_releases(repo)}
 
 
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 #  7. commands
-# ══════════════════════════════════════════════════════════════════════════════════════════════
 def cmd_auth(args):
     global _TOKEN
     cands, looked = key_candidates()
@@ -946,7 +932,7 @@ def cmd_delete(args):
     return 1 if fails else 0
 
 
-# ── clone / download ────────────────────────────────────────────────────────────────────────
+# ── clone / download
 def _git_version():
     try:
         m = re.search(r'(\d+)\.(\d+)', subprocess.run(["git", "--version"], capture_output=True, text=True).stdout)
@@ -1057,7 +1043,7 @@ def cmd_clone(args):
     return 1 if fails else 0
 
 
-# ── shared with the upgrade loop ─────────────────────────────────────────────────────────────
+# ── shared with the upgrade loop
 def cmd_parse_releases(args):
     try:
         data = json.load(open(args[0], encoding="utf-8"))

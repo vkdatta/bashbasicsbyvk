@@ -62,9 +62,7 @@ def canon_text(text: str, kind: str = "auto") -> List[str]:
     return [CANON.get(text, text)]
 
 
-# --------------------------------------------------------------------------
 # Regex tokenizer (used when tree-sitter is unavailable)
-# --------------------------------------------------------------------------
 STR_RE = (r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:\\.|[^"\\\n])*"|'
           r"'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`")
 # bash: `#` starts a comment only at a word boundary (not in $#, ${#x}, a#b); strings may span lines, single quotes

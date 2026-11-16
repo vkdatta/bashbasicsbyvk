@@ -58,7 +58,7 @@ _file_picker() {
         echo ""
         echo "📂 ${_fp_lbl} SELECT — Location: $_fp_nav_path"
 
-        # ── Build item list: dirs + matching files only ───────────────────
+        # ── Build item list: dirs + matching files only
         # Pure-bash globbing: no find, no sort, no per-file loop, no forks.
         #   "*/"          -> directories only (one readdir)
         #   "*.[cC]..."   -> matching files via the glob itself
@@ -143,27 +143,21 @@ _file_picker() {
     done
 }
 
-# ---------------------------------------------------------------------------
 # open_csv_menu [start_path]
 #   Navigate to and select a .csv file.
 #   On success : sets global $csv_file  → returns 0
 #   On cancel  : sets csv_file=""       → returns 1
 #   On quit    : exits the program
-# ---------------------------------------------------------------------------
 open_csv_menu() { _file_picker csv csv_file "$@"; }
 
-# ---------------------------------------------------------------------------
 # open_zip_menu [start_path]
 #   Same picker, for .zip files (used by UDF import).
 #   On success : sets global $zip_file  → returns 0
 #   On cancel  : sets zip_file=""       → returns 1
-# ---------------------------------------------------------------------------
 open_zip_menu() { _file_picker zip zip_file "$@"; }
 
-# ---------------------------------------------------------------------------
 # _csv_trim <nameref-var>
 # Strips leading/trailing whitespace + CR from the named variable in-place.
-# ---------------------------------------------------------------------------
 _csv_trim() {
     local -n _ct_ref="$1"
     _ct_ref="${_ct_ref#"${_ct_ref%%[![:space:]]*}"}"
@@ -171,7 +165,6 @@ _csv_trim() {
     _ct_ref="${_ct_ref%$'\r'}"
 }
 
-# ---------------------------------------------------------------------------
 # _csv_resolve_items
 #
 # Reads EVERY comma-separated value from EVERY non-blank line of $csv_file.
@@ -190,7 +183,6 @@ _csv_trim() {
 #
 # Returns 1 only if the CSV is unusable (not set / no values at all).
 # Does NOT modify the CSV file.
-# ---------------------------------------------------------------------------
 _csv_resolve_items() {
     selected_items=()
     _csv_fail_names=()
@@ -258,11 +250,9 @@ _csv_resolve_items() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
 # _csv_print_failures
 # Prints ONLY the failed names, one line each, with the reason.
 # Prints nothing when everything succeeded.
-# ---------------------------------------------------------------------------
 _csv_print_failures() {
     local n="${#_csv_fail_names[@]}" i
     [ "$n" -eq 0 ] && return 0
@@ -272,11 +262,9 @@ _csv_print_failures() {
     done
 }
 
-# ---------------------------------------------------------------------------
 # _csv_resolve_report <verb-label>
 # Resolve + one summary line "x/n" + failed list. Used by map / upload.
 # Returns 1 when nothing resolved (nothing to operate on).
-# ---------------------------------------------------------------------------
 _csv_resolve_report() {
     local label="${1:-Resolved}"
     _csv_resolve_items || return 1
@@ -289,14 +277,12 @@ _csv_resolve_report() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
 # _csv_append_batch <buffer-file> <items...>
 # Private, O(N) batch append used only by the CSV functions: one load, hash
 # duplicate check, ONE append write.  (The shared staging _sp_append is left
 # untouched.)  Sets:
 #   _CSV_ADDED     count actually added
 #   _CSV_DUPES[]   items that were already in the buffer
-# ---------------------------------------------------------------------------
 _csv_append_batch() {
     local file="$1"; shift
     local -a existing=() fresh=()
@@ -319,11 +305,9 @@ _csv_append_batch() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
 # _csv_stage_selected <buffer-file> <label>
 # Resolve the CSV and stage every resolved item into a buffer with ONE
 # file write. Prints "Staged for <label>: x/n names" + failed list only.
-# ---------------------------------------------------------------------------
 _csv_stage_selected() {
     local file="$1" label="$2"
     _csv_resolve_items || return 1

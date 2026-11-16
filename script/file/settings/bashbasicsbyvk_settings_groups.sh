@@ -85,7 +85,7 @@ _st_duration_open() {
   _st_run "$t" _st_du_build _st_du_act
 }
 
-# ── File API › Credits ───────────────────────────────────────────────────────────────────────────────────
+# ── File API › Credits
 #  The price check before an upload / backup / save / extension.  Cost of 1 credit is never asked about.
 credit_prompt_settings() {
   _st_choice_open "Credits" credit_prompts "Before spending credits on a fileapi operation" "" \
@@ -93,7 +93,7 @@ credit_prompt_settings() {
     skip "Don't ask — no price check (the server still stops you when short)"
 }
 
-# ── File API › Backup ────────────────────────────────────────────────────────────────────────────────────
+# ── File API › Backup
 backup_mode_settings() {
   _st_choice_open "Backup before delete" backup_mode "Copy to the cloud before anything is deleted (d, delete, fx delete functions)" "" \
     yes "Yes  (default)  —  always back up first; you can name the backup" \
@@ -112,13 +112,13 @@ _st_grp_backup_build() {
 _st_grp_backup_act() { case "${_st_tag[$1]}" in mode) backup_mode_settings ;; keep) backup_nuke_settings ;; esac; }
 backup_group_settings() { _st_run "Backup" _st_grp_backup_build _st_grp_backup_act; }
 
-# ── File API › Saved Surf ────────────────────────────────────────────────────────────────────────────────
+# ── File API › Saved Surf
 saved_nuke_settings() {
   _st_duration_open "Saved Surf keep time" saved_nuke_time_seconds "How long an item saved with save- is kept before it is nuked" 60 2592000 "new saves are kept this long (extend / shorten later in Saved Surf)" \
     86400 "1 day" 604800 "7 days" 1209600 "14 days" 2592000 "30 days  (default, maximum)"
 }
 
-# ── File API › Snapshots ─────────────────────────────────────────────────────────────────────────────────
+# ── File API › Snapshots
 #  Interval: 1 minute is the floor.  Every snapshot costs credits, so a short interval on a changing folder adds up.
 snapshot_enabled_settings() {
   _st_choice_open "Snapshots" snapshot_enabled "Background snapshots (only while o is running)" "" \
@@ -142,7 +142,7 @@ _st_grp_snap_build() {
 _st_grp_snap_act() { case "${_st_tag[$1]}" in on) snapshot_enabled_settings ;; interval) snapshot_interval_settings ;; keep) snapshot_keep_settings ;; esac; }
 snapshot_group_settings() { _st_run "Snapshots" _st_grp_snap_build _st_grp_snap_act; }
 
-# ── File API › Links / Cloud Surf shares ─────────────────────────────────────────────────────────────────
+# ── File API › Links / Cloud Surf shares
 _st_grp_links_build() {
   _st_reset
   _st_add a "Nuke time (up-/c2c-)" 0 "$(_bb_fmt_duration "$nuke_time_seconds")" nuke
@@ -159,7 +159,7 @@ _st_grp_shares_build() {
 _st_grp_shares_act() { case "${_st_tag[$1]}" in uxnuke) ux_nuke_time_settings ;; uxhidden) ux_hidden_settings ;; esac; }
 shares_group_settings() { _st_run "Cloud Surf shares (ux-)" _st_grp_shares_build _st_grp_shares_act; }
 
-# ── File API ─────────────────────────────────────────────────────────────────────────────────────────────
+# ── File API
 _st_grp_api_build() {
   local cp="ask first"; [ "$credit_prompts" = skip ] && cp="don't ask"
   _st_reset
@@ -184,7 +184,7 @@ _st_grp_api_act() {
 }
 fileapi_group_settings() { _st_run "File API" _st_grp_api_build _st_grp_api_act; }
 
-# ── Display ──────────────────────────────────────────────────────────────────────────────────────────────
+# ── Display
 _st_grp_display_build() {
   local i sl="$sort_mode" gv="off" sx="${display_suffix_set:-none}" hf="hide"
   for i in "${!_ST_SORT_MODES[@]}"; do [ "${_ST_SORT_MODES[$i]}" = "$sort_mode" ] && sl="${_ST_SORT_LABELS[$i]}"; done
@@ -213,14 +213,14 @@ display_group_settings() {
   else _st_run "Display" _st_grp_display_build _st_grp_display_act; fi
 }
 
-# ── Mouse / touch ────────────────────────────────────────────────────────────────────────────────────────
+# ── Mouse / touch
 mouse_mode_settings() {
   _st_choice_open "Mouse / touch" mouse_mode "Click or tap an item number in a list" "" \
     on  "On  (default) — click / tap selects, double click / double tap opens, wheel / swipe scrolls  (text selection needs Shift)" \
     off "Off — keyboard only; the terminal keeps its own mouse and text selection"
 }
 
-# ── Filters ──────────────────────────────────────────────────────────────────────────────────────────────
+# ── Filters
 _st_grp_filters_build() {
   local dv="off" fv="$filter_mode"
   if declare -F _disp_load >/dev/null 2>&1 && _disp_load; then dv="on"; fi
@@ -232,7 +232,7 @@ _st_grp_filters_build() {
 _st_grp_filters_act() { case "${_st_tag[$1]}" in dfilter) display_filter_settings ;; filter) filter_mode_settings ;; esac; }
 filters_group_settings() { _st_run "Filters" _st_grp_filters_build _st_grp_filters_act; }
 
-# ── Colors ───────────────────────────────────────────────────────────────────────────────────────────────
+# ── Colors
 _st_grp_colors_build() {
   _st_reset
   _st_add a "Background color" 0 "#$terminal_bg_color"   bg
@@ -241,7 +241,7 @@ _st_grp_colors_build() {
 _st_grp_colors_act() { case "${_st_tag[$1]}" in bg) terminal_bg_color_settings ;; fg) terminal_text_color_settings ;; esac; }
 colors_group_settings() { _st_run "Colors" _st_grp_colors_build _st_grp_colors_act; }
 
-# ── Files & archives ─────────────────────────────────────────────────────────────────────────────────────
+# ── Files & archives
 _st_grp_files_build() {
   _st_reset
   _st_add a "Compress format" 0 "${_ARC_LABEL[$compress_format]:-ask}"                                  compress
@@ -250,7 +250,7 @@ _st_grp_files_build() {
 _st_grp_files_act() { case "${_st_tag[$1]}" in compress) compress_format_settings ;; ziphidden) zip_hidden_settings ;; esac; }
 files_group_settings() { _st_run "Files & archives" _st_grp_files_build _st_grp_files_act; }
 
-# ── Buffers (c- m- k- b- s-) ─────────────────────────────────────────────────────────────────────────────
+# ── Buffers (c- m- k- b- s-)
 #  One rule per buffer for the case  c-1,3 as set1  when a set called set1 is ALREADY in that buffer:
 #     add     = put the new items into the existing set        replace = the new items take the old set's place
 #     deny    = keep the existing set, do nothing              ask     = ask every time (default; also lets you pick another name)
@@ -289,7 +289,7 @@ _st_grp_buffers_act() {
 }
 buffers_group_settings() { _st_run "Buffers — same name twice  (c- m- k- b- s-)" _st_grp_buffers_build _st_grp_buffers_act; }
 
-# ── System ───────────────────────────────────────────────────────────────────────────────────────────────
+# ── System
 _st_grp_system_build() {
   local _tzabbr; printf -v _tzabbr '%(%Z)T' -1
   _st_reset
@@ -310,7 +310,7 @@ _st_grp_system_act() {
 }
 system_group_settings() { _st_run "System" _st_grp_system_build _st_grp_system_act; }
 
-# ── top level ────────────────────────────────────────────────────────────────────────────────────────────
+# ── top level
 _st_top_build() {
   _st_reset
   _st_add a "Display"             0 "" display

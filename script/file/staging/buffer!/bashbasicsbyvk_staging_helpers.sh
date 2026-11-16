@@ -44,7 +44,7 @@ _sp_ensure_store() {
   done
 }
 
-# ── what a buffer file holds ─────────────────────────────────────────────────────────────────────────────
+# ── what a buffer file holds
 #  One line per item.  A plain path is an UNNAMED ("flat") item.  A NAMED set's items are written
 #      @<name><TAB><path>
 #  (c-1,3 as set1).  Every path is absolute, so a line that starts with @ + has a TAB is never a plain path.
@@ -328,9 +328,7 @@ _sp_parse_all_except() {
   echo "${result[*]}"
 }
 
-# ─────────────────────────────────────────────
 #  Guard helpers (shared by stage + fileapi handlers)
-# ─────────────────────────────────────────────
 
 # Guard: reject empty itemlist or imaginary_mode, then resolve.
 # Usage: _sp_guard_and_resolve "$itemlist" "$pfx"  || return 0
@@ -384,9 +382,7 @@ _sp_files_only() {
   return 0
 }
 
-# ─────────────────────────────────────────────
 #  Named sets:  c-1,3 as set1  — what happens when the name is already taken
-# ─────────────────────────────────────────────
 
 # Settings → Buffers keep one rule per buffer:  buffer_conflict_<op> = add | replace | deny | ask   (default ask)
 _sp_conflict_mode() {
@@ -434,9 +430,7 @@ _sp_conflict_decide() {
   return 0
 }
 
-# ─────────────────────────────────────────────
 #  Shared stage / apply logic
-# ─────────────────────────────────────────────
 
 # Stage items into any op buffer.
 # Usage: _sp_stage_buffer <op> <persistent> <itemlist> [name]

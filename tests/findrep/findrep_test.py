@@ -20,7 +20,7 @@ def dec(b): return b.decode("utf-8", "surrogateescape")
 def enc(s): return s.encode("utf-8", "surrogateescape")
 
 
-# ---------------------------------------------------------------------------------------------- running an engine
+# ── running an engine
 class Engine:
     def __init__(self, path):
         self.path = path
@@ -67,7 +67,7 @@ def snapshot(root):
     return snap
 
 
-# ---------------------------------------------------------------------------------------------- the oracle
+# ── the oracle
 FLAG_I = re.I | re.M
 PX = {"digit": "0-9", "alpha": "a-zA-Z"}
 
@@ -223,7 +223,7 @@ def oracle(tree, op):
                 per_rule_occ=per_rule_occ, vis=vis)
 
 
-# ---------------------------------------------------------------------------------------------- random generation
+# ── random generation
 NAME_CH = list("abcABC123 _-.[](){}$^+") + ["é", "É", "ß", "Ω", "ω", "Ж", "ж", "日"]
 TEXT_CH = list("abcABC123 \t_-.[](){}$^+*?\\/") + ["\n"] * 4 + ["é", "É", "ß", "Ω", "ω", "Ж", "ж", "日", "foo", "Foo", "bar", " hello ", "a@b"]
 
@@ -317,7 +317,7 @@ def rop(r, tree):
               binary=r.random() < 0.1, maxsize=r.choice([0, 0, 0, 30]), rules=rules)
 
 
-# ---------------------------------------------------------------------------------------------- checks
+# ── checks
 class Fail(Exception): pass
 
 
@@ -403,7 +403,7 @@ def ordered(exp, op, find):
     return [rel for rel, _, _ in exp["vis"] if rel in nh or rel in ch]
 
 
-# ---------------------------------------------------------------------------------------------- scenarios
+# ── scenarios
 def S(name, tree, op, expect, **extra):
     return dict(name=name, tree=tree, op=op, expect=expect, **extra)
 
@@ -532,7 +532,7 @@ def extra_checks(engines):
 
 
 
-# ---------------------------------------------------------------------------------------------- regex differential fuzz
+# ── regex differential fuzz
 ATOMS = ["a", "b", "c", "A", "B", " ", "é", "É", ".", "\\.", "[ab]", "[^a]", "[a-c]", "[^b-c ]", "\\d", "\\w", "\\s", "\\W", "\\D", "\\S",
          "[[:alpha:]]", "[\\d_]", "[\\w.-]", "1", "2", "-", "_", "\\n", "[é-ö]", "ß", "Ω", "ω", "\\[", "\\(", "\\$", "x", "foo"]
 ANCH = ["^", "$", "\\b", "\\B", "\\A", "\\Z"]

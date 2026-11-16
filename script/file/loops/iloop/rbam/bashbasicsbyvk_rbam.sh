@@ -76,7 +76,7 @@ rb_header() {
 }
 rb_footer() { _tm_footer -b; }                     # u q h cc: every other key (ui ux r-N sd N …) is listed by cc
 
-# ── commands ─────────────────────────────────────────────────────────────────
+# ── commands
 _rb_mail_ok() { [[ "$1" =~ ^[^[:space:]\"\\]+@[^[:space:]\"\\]+$ ]] && [ "${#1}" -le 256 ]; }
 _rb_d30_ok()   { local s; read -ra s <<<"$(_bvk_share_spec)"; [[ "$1" =~ ^[A-Za-z0-9]{16}(-[A-Za-z0-9]{16})*$ ]] && [ "$(awk -F- '{print NF}' <<<"$1")" -eq $(( ${#s[@]} - 1 )) ]; }
 
@@ -197,7 +197,7 @@ _rb_cmd() {
   esac
 }
 
-# ── one user: the shares they can reach ──────────────────────────────────────
+# ── one user: the shares they can reach
 declare -ga _RU_ID=() _RU_ALIAS=() _RU_BYTES=() _RU_EXP=() _RU_ST=()
 _RU_RID=""; _RU_MAIL=""; _RU_LOADED=0
 
@@ -285,7 +285,7 @@ _rb_user_open() {
   _xui_leave
 }
 
-# ── the loop ─────────────────────────────────────────────────────────────────
+# ── the loop
 rbam_menu() {
   _ux_need || return 1
   _RB_TAB="${1:-0}"; _RB_LOADED=0

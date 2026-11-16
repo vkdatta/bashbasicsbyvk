@@ -27,7 +27,7 @@ _TZ_LOADED=0
 
 # Fill _TZ_NAMES / _TZ_INFO.  python3 gives abbreviation + current offset in one pass (fast); without it
 # the names still come from the tz database files, just without the extra column.
-# ── is a tz database installed?  If not: offer to install it, else fall back to fixed offsets ──────────
+# ── is a tz database installed?  If not: offer to install it, else fall back to fixed offsets
 _tz_db_present() {
   declare -F _dep_have >/dev/null 2>&1 && _dep_have tzdata       # what "installed" means (the zoneinfo folders) lives in the central registry
 }

@@ -40,7 +40,7 @@ LOCK_TIMEOUT = 3.0      # seconds to wait for the lock before proceeding anyway
 LOCK_STALE = 10.0       # a lock older than this is considered abandoned
 
 
-# ── locking (mkdir is atomic; shared with the bash implementation) ────────────
+# ── locking (mkdir is atomic; shared with the bash implementation)
 @contextmanager
 def lock():
     FAV_DIR.mkdir(parents=True, exist_ok=True)
@@ -48,7 +48,7 @@ def lock():
         yield got
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# ── helpers
 norm = pr.norm
 stat_id = pr.stat_id
 
@@ -157,7 +157,7 @@ def load_all():
     return out
 
 
-# ── reconcile one folder's favourites against the disk ───────────────────────
+# ── reconcile one folder's favourites against the disk
 def reconcile(fav, missing_ids=None):
     """Bring one FavFile in line with the filesystem.
     Returns (changed: bool).  Items that cannot be found are collected into
@@ -218,7 +218,7 @@ def find_moved(missing_ids, roots, budget=60.0, skip=None):
     return found
 
 
-# ── event handlers (called by the daemon) ─────────────────────────────────────
+# ── event handlers (called by the daemon)
 def _dir_moved(favs, src, dest):
     """A folder was renamed/moved: re-point every favourites file at/under it. Returns the set of FavFiles that changed."""
     dirty = set()

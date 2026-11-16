@@ -21,15 +21,16 @@ def run(cmd, keys, wait_for='Select:'):
     if pid == 0:
         os.environ['PATH'] = flat + ':' + os.environ['PATH']; os.environ['TERM'] = 'xterm-256color'
         os.environ['PYTHONPATH'] = flat; os.execvp('bash', ['bash', '-c', cmd])
-    out = b''; sent = 0; t = time.time()
+    out = b''; sent = 0; idle = 0; t = time.time()
     while time.time() - t < 15:
         if select.select([fd], [], [], 0.1)[0]:
             try: d = os.read(fd, 65536)
             except OSError: break
             if not d: break
-            out += d
+            out += d; idle = 0
         elif sent < len(keys) and wait_for.encode() in out:
-            os.write(fd, keys[sent].encode()); sent += 1; time.sleep(0.15)
+            idle += 1                          # the screen has been quiet for 0.1 s per tick: type only after 3 quiet ticks (no fixed pause)
+            if idle >= 3: os.write(fd, keys[sent].encode()); sent += 1; idle = 0
     try: os.waitpid(pid, os.WNOHANG)
     except OSError: pass
     return re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', out.decode('utf-8', 'replace'))

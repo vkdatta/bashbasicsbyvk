@@ -22,7 +22,7 @@ _sw_ensure_store() {
   mkdir -p "$_SW_DIR" 2>/dev/null
 }
 
-# ── Exclude list helpers ───────────────────────────────────────────────────────
+# ── Exclude list helpers
 
 # Ensure the exclude file exists
 _sw_excl_ensure() {
@@ -171,12 +171,12 @@ _sw_excl_menu() {
   done
 }
 
-# ── Tab state ─────────────────────────────────────────────────────────────────
+# ── Tab state
 _sw_tab="bookmarks"   # bookmarks | recents | favourites
 _sw_in_mode=0         # 1 while inside switch_menu — enables ←/→ sentinel
 _sw_did_switch=false  # set true on successful path jump — changes q behaviour
 
-# ── Bookmarks: add / remove ───────────────────────────────────────────────────
+# ── Bookmarks: add / remove
 
 _sw_add_path() {
   local outer_path="$1" sw_cur_dir="$2"
@@ -228,7 +228,7 @@ _sw_is_ro() { [ "$_sw_tab" = "recents" ] || [ "$_sw_tab" = "favourites" ]; }
 # ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar, steps ←/→ and builds the footer ──
 _tm_define sw _sw_tab "🔀 Switch" "Switch" bookmarks:"📌 Bookmarks" recents:"🕐 Recents" favourites:"⭐ Favourites"
 
-# ── Headers / footers ─────────────────────────────────────────────────────────
+# ── Headers / footers
 
 _sw_menu_header() {
   _tm_header sw                                    # blank · title · tab bar · description (Switch|bookmarks · recents · favourites)
@@ -271,7 +271,7 @@ _sw_set_viewport_for_tab() {
   _vp_input_fn=_print_input_line
 }
 
-# ── Item builder per tab ──────────────────────────────────────────────────────
+# ── Item builder per tab
 
 _sw_build_items_for_tab() {
   _FAV_LABEL=()
@@ -296,7 +296,7 @@ _sw_build_items_for_tab() {
   esac
 }
 
-# ── Read-only guard ───────────────────────────────────────────────────────────
+# ── Read-only guard
 
 _sw_recents_blocked() {
   if [ "$_sw_tab" = "favourites" ]; then
@@ -306,7 +306,7 @@ _sw_recents_blocked() {
   fi
 }
 
-# ── Bookmarks selection ───────────────────────────────────────────────────────
+# ── Bookmarks selection
 # Returns 1 when a switch should be performed (_sw_result_path set)
 
 _sw_result_path=""
@@ -385,7 +385,7 @@ _sw_bookmarks_handle_selection() {
   return 0
 }
 
-# ── Favourites selection ──────────────────────────────────────────────────────
+# ── Favourites selection
 # Folder → jump there (leaves sw).  File → open like anywhere else.
 
 _sw_favourites_handle_selection() {
@@ -407,7 +407,7 @@ _sw_favourites_handle_selection() {
   return 0
 }
 
-# ── Recents selection ─────────────────────────────────────────────────────────
+# ── Recents selection
 
 # Recents: a folder → the list moves there (like a bookmark); a file → its run loop.
 _sw_recents_handle_selection() {
@@ -420,7 +420,7 @@ _sw_recents_handle_selection() {
   return 0
 }
 
-# ── In-place tab redraw ───────────────────────────────────────────────────────
+# ── In-place tab redraw
 # Rebuilds items + chrome, then repaints the existing terminal block.
 # Does NOT scroll or emit a new block.
 
@@ -437,7 +437,7 @@ _sw_tab_prepare() {
 }
 _sw_tab_redraw() { _tm_tab_redraw _sw_tab_prepare _sw_set_viewport_for_tab; }
 
-# ── Main entry point ──────────────────────────────────────────────────────────
+# ── Main entry point
 
 # _sw_perform_switch <dir>   the switch itself: restores the folder view state, cd's there, records it and resets the picker state.
 # (dynamic scope: the caller is the switch loop that owns _sw_saved_* / _sw_result_path / _sw_did_switch / _sw_in_mode)
@@ -474,7 +474,7 @@ switch_menu() {
 
   shopt -s nullglob
 
-  # ── First render ────────────────────────────────────────────────────────────
+  # ── First render
   declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
   _sw_build_items_for_tab
   _sw_set_viewport_for_tab
@@ -487,7 +487,7 @@ switch_menu() {
 
     shopt -s nocasematch
 
-    # ── Tab-switch sentinels ─────────────────────────────────────────────────
+    # ── Tab-switch sentinels
     case "$_sw_choice" in
       __sw_tab_right__|__sw_tab_left__)
         _tm_key sw "$_sw_choice"
@@ -496,7 +496,7 @@ switch_menu() {
         ;;
     esac
 
-    # ── After any real action, do a full fresh render at top of loop ─────────
+    # ── After any real action, do a full fresh render at top of loop
     local _sw_do_fresh=true
 
     case "$_sw_choice" in
@@ -675,7 +675,7 @@ switch_menu() {
     shopt -u nocasematch
     [ "${_BVK_TO_MAIN:-0}" = 1 ] && break          # q inside a command / prompt of this loop: close to the main loop
 
-    # ── Re-render after action ───────────────────────────────────────────────
+    # ── Re-render after action
     if $_sw_do_fresh; then
       declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
       _sw_build_items_for_tab

@@ -68,7 +68,7 @@ def is_transient(p):
     return p.endswith(_TRANSIENT) or os.path.basename(p).startswith(".#")
 
 
-# ═════════════════════════ the registries, read into memory ═════════════════════════
+# ── the registries, read into memory
 class _World:
     """Every registry, loaded once under the lock, changed in memory, written back once (only what changed)."""
 
@@ -311,7 +311,7 @@ class _World:
             _write_atomic(STATE, json.dumps(doc))
 
 
-# ═════════════════════════ what the daemon calls ═════════════════════════
+# ── what the daemon calls
 def apply_batch(events, raw=False, strict=True):
     """A batch of filesystem events, in the order they happened: (kind, src, dest) with kind "moved" or "deleted".
     Everything that follows is applied under ONE lock, with every registry read once and written once.

@@ -36,7 +36,7 @@ _trk_lock() {
 }
 _trk_unlock() { [ "$_TRK_LOCK_OWN" = 1 ] && _pr_lock_drop "$_TRK_LOCK"; _TRK_LOCK_OWN=0; return 0; }
 
-# ═════════════════════════ bookmarks (.swlink) ═════════════════════════
+# ── bookmarks (.swlink)
 
 # _swlink_read_target_v FILE → _SWL_T / _SWL_ID   (pure bash: the viewport calls it once per bookmark row)
 _swlink_read_target_v() {
@@ -109,7 +109,7 @@ _swlink_heal() {
   return 0
 }
 
-# ═════════════════════════ recents ═════════════════════════
+# ── recents
 
 _rc_load() {
   _RC_P=(); _RC_N=()
@@ -233,7 +233,7 @@ _rc_build() {
   return 0
 }
 
-# ═════════════════════════ the two calls the rest of the app makes ═════════════════════════
+# ── the two calls the rest of the app makes
 
 _trk_move()   { _swlink_retarget "$1" "$2"; _rc_move "$1" "$2"; }      # renamed / moved
 _trk_forget() { _rc_forget "$1"; }                                      # deleted: bookmarks stay and show 🔴 until the item is back or the bookmark is removed

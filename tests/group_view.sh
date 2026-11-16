@@ -11,7 +11,7 @@ E="$ROOT/script/file/engine"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 
-# ---- sample folder ----------------------------------------------------------
+# ── sample folder
 D="$T/d"; mkdir -p "$D/sub1" "$D/sub2"
 mk() { touch -d "$2 12:00" "$D/$1"; }
 mk a.pdf 2025-03-14; mk b.PDF 2025-03-20; mk c.txt 2025-03-14; mk d.jpg 2024-12-01; mk e.pdf 2024-12-31
@@ -20,7 +20,7 @@ touch -d "2025-03-14 10:00" "$D/sub1"; touch -d "2024-12-01 10:00" "$D/sub2"
 export TZ=UTC
 find "$D" -mindepth 1 -maxdepth 1 | sort > "$T/paths.txt"
 
-# ---- (1) C == Python --------------------------------------------------------
+# ── (1) C == Python
 awk '/^_py_group_python\(\) \{/{f=1;next} f&&/^python3 - "\$@" <<.PYEOF.$/{g=1;next} g&&/^PYEOF$/{exit} g{print}' \
   "$E/bashbasicsbyvk_displayer.sh" > "$T/twin.py"
 [ -s "$T/twin.py" ] && ok "python twin extracted" || bad "python twin not found in displayer.sh"
@@ -41,7 +41,7 @@ else
   echo "  skip C checks (no cc)"
 fi
 
-# ---- (2)-(4) the real viewport ---------------------------------------------
+# ── (2)-(4) the real viewport
 cat > "$T/h.sh" <<'EOS'
 show_hidden_files=true; sort_mode=az; display_suffix_set=""; imaginary_mode=false
 source "$E/bashbasicsbyvk_displayer.sh"; source "$E/bashbasicsbyvk_viewport.sh"

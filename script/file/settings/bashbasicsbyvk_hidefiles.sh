@@ -17,7 +17,6 @@ _st_hf_act() {
 hidden_file_settings() { _st_run "Hidden files" _st_hf_build _st_hf_act; }
 
 
-# ════════════════════════════════════════════════════════════════════════════
 #  Hidden files in up- / ux- (upload) and z- (zip)
 #     follow  = use the "Hidden files" setting above (default)
 #     always  = always include hidden files inside the chosen folders
@@ -25,7 +24,6 @@ hidden_file_settings() { _st_run "Hidden files" _st_hf_build _st_hf_act; }
 #     ask     = ask every time (only when a chosen folder really has hidden files)
 #  Items you pick by hand are always sent; the setting only decides about the
 #  hidden files and folders found INSIDE the folders you picked.
-# ════════════════════════════════════════════════════════════════════════════
 _hidden_mode_label() {
   case "$1" in
     always) echo "always include" ;;

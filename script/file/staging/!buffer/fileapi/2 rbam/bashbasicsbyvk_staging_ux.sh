@@ -27,7 +27,7 @@ _UX_FEK_SELF=""; _UX_FEK_SELF_FOR=""
 _UX_SEAL_FOR=""
 _UX_CORE=""
 
-# ── plumbing ─────────────────────────────────────────────────────────────────
+# ── plumbing
 _ux_core() {
   if [ -z "$_UX_CORE" ]; then
     _UX_CORE="$(command -v bashbasicsbyvk_staging_ux_crypto 2>/dev/null)"
@@ -85,7 +85,7 @@ _ux_need() {
   return 0
 }
 
-# ── sealing key: lets a sender seal their dinons for you; the server cannot open them ──────────
+# ── sealing key: lets a sender seal their dinons for you; the server cannot open them
 _ux_ensure_seal() {
   _ux_need || return 1
   [ "$_UX_SEAL_FOR" = "$FILEAPI_BASHBASICS_DISEPS" ] && return 0
@@ -103,7 +103,7 @@ _ux_ensure_seal() {
   return 0
 }
 
-# ── dinons → receivers (sealed) ─────────────────────────────────────────────
+# ── dinons → receivers (sealed)
 # _ux_sync_dinons auto             send to active receivers who never had them (not the ones "held" after a regeneration)
 # _ux_sync_dinons force [rid...]   send to every active receiver without them (or just the listed ones)
 _ux_sync_dinons() {
@@ -136,7 +136,7 @@ _ux_sync_dinons() {
   return 0
 }
 
-# ── key chain: dinons -> FEK -> K ────────────────────────────────────────────
+# ── key chain: dinons -> FEK -> K
 _ux_self_fek() {                              # -> _UX_FEK  (hex)
   _ux_need 1 || return 1
   if [ -n "$_UX_FEK_SELF" ] && [ "$_UX_FEK_SELF_FOR" = "$FILEAPI_BASHBASICS_DISEPS" ]; then _UX_FEK="$_UX_FEK_SELF"; return 0; fi
@@ -177,7 +177,7 @@ _ux_K_of() {
   _UX_K=$(printf '%s' "$kdk" | BB_FEK="$_UX_FEK" _ux_core dk-unwrap) || { echo "❌ The share key failed its integrity check." >&2; return 1; }
 }
 
-# ── people picker (the "with whom to share" menu) ────────────────────────────
+# ── people picker (the "with whom to share" menu)
 declare -ga _UX_PK_RID=() _UX_PK_MAIL=() _UX_PK_D30=()
 declare -ga _UX_PICKED=()
 
@@ -220,7 +220,7 @@ _ux_pick_people() {
   return $rc
 }
 
-# ── the init step (auth + credit precheck), like _bb_upload_init ─────────────
+# ── the init step (auth + credit precheck), like _bb_upload_init
 # prints "<id>\n<token>" ; messages on stderr
 _ux_init() {
   local est="$1" nblobs_hint="${2:-}" confirmed=false cfg response status body err msg ans
@@ -275,7 +275,7 @@ _ux_commit() {
   return 1
 }
 
-# ── the share ────────────────────────────────────────────────────────────────
+# ── the share
 _ux_do_share() {
   local -a paths=("$@")
   _ux_need 1 || return 1

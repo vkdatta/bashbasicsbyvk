@@ -180,7 +180,7 @@ PYEOF
 }
 
 # xtr-<items>
-# --- the questions of xtr-, one step each (_mc_steps: u = one question back); they fill handle_xtr's locals ---------------------
+# ── the questions of xtr-, one step each (_mc_steps: u = one question back); they fill handle_xtr's locals
 _xtr_back() { _mc_unwind && return 2; return 1; }                    # a menu / prompt came back empty: q = quit, anything else (u) = back
 _xtr_int_step() {                                                    # VAR "Prompt: "  ->  0 · 1 back · 2 quit
   local _r

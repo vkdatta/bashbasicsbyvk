@@ -68,7 +68,7 @@ _CM_BACKED=0        # set when the person typed u at a prompt that does not prin
 # only below it. Enter is the fallback: the gates (_cm_gate_*) still resolve the whole text (up to the 255 guard in _cm_resolve).
 _CM_LIVE_MAX=56
 
-# ------------------------------------------------------------ locating the files
+# ── locating the files
 # Built ONCE per session, with no subshells: the directories to look in, and every
 # command-map file found in them (name -> full path).  Nothing is searched twice.
 declare -gA _CM_PATHS=()       # basename -> full path
@@ -104,7 +104,7 @@ _cm_find() {   # name -> _CM_FOUND (and stdout)
   return 1
 }
 
-# ------------------------------------------------------------ definitions
+# ── definitions
 # cmd_def ID KIND HANDLER CLASS "description" ["example"]
 # Registered under the basename of the file that calls it (a *commands.sh, loaded through the load mapper).
 cmd_def() {
@@ -112,7 +112,7 @@ cmd_def() {
   _CM_DEF["${BASH_SOURCE[1]##*/}:$id"]="$kind|$handler|$class|$desc|$ex"
 }
 
-# ------------------------------------------------------------ loading the .map files
+# ── loading the .map files
 _cm_boot() {
   [ "$_CM_BOOTED" = 1 ] && return 0
   _CM_BOOTED=1
@@ -176,7 +176,7 @@ _cm_parse_map() {   # $1 file  $2 = head (directives only, stop at the first wir
   return 0
 }
 
-# ------------------------------------------------------------ context: which map owns this prompt?
+# ── context: which map owns this prompt?
 # Walks the call stack outwards and takes the nearest function that a .map claims.  The frames of the typed-line engine (_bvk_edit_*) and the hooks
 # a loop hands it are PLUMBING (skipped below): a new hook that can reach the gate goes on that list, or a command typed in a question is read as "inside a flow".
 # _CM_MAP    the map (nearest, any kind)         _CM_MDEPTH  stack depth of the nearest MENU function
@@ -210,7 +210,7 @@ _cm_ctx_find() {
   return 0
 }
 
-# ------------------------------------------------------------ the effective table of a map
+# ── the effective table of a map
 declare -ga _ct_key=() _ct_kind=() _ct_tgt=() _ct_map=() _ct_impl=()
 _CM_TBL_MAP=""
 # wiring of a map is parsed the first time it is needed (a menu you never open costs nothing)
@@ -248,7 +248,7 @@ _cm_match() {   # kind key typed(lowercase)
   esac
 }
 
-# ------------------------------------------------------------ resolver
+# ── resolver
 # _cm_resolve MODE TYPED       MODE = menu | text
 # Sets _CM_ACT:
 #   none    typed text is not a command            → treat as data / number
@@ -343,7 +343,7 @@ _cm_unescape() {
   return 1
 }
 
-# ------------------------------------------------------------ one judge: would typing KEY here do something?
+# ── one judge: would typing KEY here do something?
 # Shared by the live suggestion ("could become: ..."), cc and the gates, so a hint can never offer a key
 # that Enter would then reject.   _cm_usable MODE KEY   -> 0 = accepted (run / local / back), 1 = not
 _cm_usable() {
@@ -357,7 +357,7 @@ _cm_usable() {
   return $rc
 }
 
-# ------------------------------------------------------------ live suggestion
+# ── live suggestion
 _cm_hint_fmt_one() {   # key desc ex
   local s="$1"
   [ -n "$3" ] && s="$3"
@@ -417,7 +417,7 @@ _cm_hint() {
   return 0
 }
 
-# ------------------------------------------------------------ aborting a flow
+# ── aborting a flow
 # A blocked command (or "go back") typed inside a nested prompt cancels the WHOLE flow:
 # every following prompt of that flow returns at once, silently (echo/printf are muted), until
 # the menu that owns the flow redraws and prints the one-line reason.
@@ -451,7 +451,7 @@ _cm_abort_swallow() {
   return 0
 }
 
-# ------------------------------------------------------------ running a main command from elsewhere
+# ── running a main command from elsewhere
 bvk_main_exec() {
   local c="${1,,}"
   case "$c" in
@@ -487,7 +487,7 @@ _cm_run_main() {
   "$h" "$1"
 }
 
-# ------------------------------------------------------------ gate for MENUS (_read_choice)
+# ── gate for MENUS (_read_choice)
 # returns 0 = accept $choice ;  1 = re-prompt (a message was printed, caller redraws)
 _cm_gate_choice() {
   _CC_PREFILL=""
@@ -536,7 +536,7 @@ _cm_read_choice() {
   done
 }
 
-# ------------------------------------------------------------ keys a smart menu prints itself
+# ── keys a smart menu prints itself
 # A key the menu draws ("c) Create user", "q) Close") is THAT MENU'S command: it beats the map.
 declare -gA _CM_LOCAL=()
 _cm_local_clear() { _CM_LOCAL=(); }
@@ -558,7 +558,7 @@ _cm_local_collect() {   # reads the caller's _sm_rows_text/_sm_rows_token/_sm_ft
   done
 }
 
-# ------------------------------------------------------------ shared tail of the text and item-picker gates
+# ── shared tail of the text and item-picker gates
 # _cm_gate_dispatch <typed>   the typed text is not a key of the prompt itself: is it a command?  Sets _CM_OUT (what the prompt gets:
 # the text, its un-escaped literal, or "" when the flow is cancelled).  returns 0 = accept · 3 = a command ran (ask again) · 4 = flow aborted
 _cm_gate_dispatch() {
@@ -579,7 +579,7 @@ _cm_gate_dispatch() {
   return 0
 }
 
-# ------------------------------------------------------------ gate for the item picker (_multi_prompt_loop)
+# ── gate for the item picker (_multi_prompt_loop)
 # uses the caller's _buf.  returns 0 = accept · 1 = a command ran, ask again
 _cm_gate_multi() {
   local t="$_buf"
@@ -594,7 +594,7 @@ _cm_gate_multi() {
   return 0
 }
 
-# ------------------------------------------------------------ gate for SMART MENUS (read -p with a numbered list)
+# ── gate for SMART MENUS (read -p with a numbered list)
 # uses the caller's _sm_result / _sm_rows_token / _sm_ftr / _sm_mode.
 # returns 0 = accept ; 1 = re-run the menu ; 2 = flow aborted (var stays empty)
 _cm_gate_sm() {
@@ -624,7 +624,7 @@ _cm_gate_sm() {
   return 0
 }
 
-# ------------------------------------------------------------ gate + editor for FREE-TEXT prompts
+# ── gate + editor for FREE-TEXT prompts
 # does the prompt list its own answers?  [y/n]  (a/b/c)  [1-3] ...  then no command layer
 _cm_prompt_has_choices() {
   local p="$1"
@@ -699,7 +699,7 @@ _cm_complete() {   # path completion for the word before the cursor  → sets _c
 
 # hint row + the line, drawn again (after every key; also what Ctrl-C / Ctrl-Z of the template call, see bashbasicsbyvk_textedit.sh)
 
-# ---- the line editor: HOOKS around THE loop (_bvk_edit_run) and THE drawer (_bvk_draw_input), both in bashbasicsbyvk_viewport.sh ----
+# ── the line editor: HOOKS around THE loop (_bvk_edit_run) and THE drawer (_bvk_draw_input), both in bashbasicsbyvk_viewport.sh
 # The text is drawn, wrapped, scrolled and tapped by the same code as every menu prompt (a paste with line breaks shows as rows, like on Select:),
 # and the live suggestion sits ABOVE the prompt, painted by _bvk_hint_paint, as on every menu.  This file only supplies what is the editor's own.
 _cm_edit_draw() { _bvk_draw_input "$_ce_dp" "$_ce_buf" "$_ce_pos"; }
@@ -805,7 +805,7 @@ _cm_text_read() {   # prompt initial var can_complete
   done
 }
 
-# ------------------------------------------------------------ show / lint
+# ── show / lint
 # o --map-show [menu]   prints the effective command table of a menu
 _cm_show() {
   _cm_boot; _cm_ensure_all

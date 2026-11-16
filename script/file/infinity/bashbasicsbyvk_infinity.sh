@@ -45,6 +45,6 @@ infinity_stones_menu() {
       7) _inf_py "$SCRIPT_DIR/bashbasicsbyvk_polyglot" "$path" ;;
       *) _bvk_invalid; continue ;;      # redraw THIS menu, not the parent
     esac
-    return
+    return 0                          # a tool's own exit code (pyright found errors, Ctrl-C ...) is not this menu's result: 1 means q
   done
 }

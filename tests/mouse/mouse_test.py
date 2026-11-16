@@ -160,7 +160,7 @@ def t_group(a):                                  # Group by view: the rows are g
 case('Group by view: click selects the group, double click opens it', t_group, settings='group_view_levels_str="ext year"\n')
 
 
-# ── header: status row, nav path ─────────────────────────────────────────────────────────────────────────────────────
+# ── header: status row, nav path
 def hdr_tap(col, typed, extra=None):
     def t(a):
         r = a.row_of(r'\| ⏰'); a.click(r, col=col, t=3.0)
@@ -190,7 +190,7 @@ def t_nav_cur(a):
     return [l for l in a.lines() if 'nav path' in l][0] == before and a.alive, 'a tap on the current folder name changes nothing'
 case('nav path: tap the current folder -> nothing', t_nav_cur, nfiles=20)
 
-# ── Settings / Home (_st_run) ─────────────────────────────────────────────────────────────────────────────────────
+# ── Settings / Home (_st_run)
 def st_row(a, n): return a.row_of(r'^\s*%d\)\s' % n)
 def open_screen(a, key):
     a.send(key.encode() + b'\r', 1.5)
@@ -230,7 +230,7 @@ def t_st_mouse_off_after(a):
     return a.alive and n_on >= 1 and a.raw.count(b'\x1b[?1000l') >= 1, 'reports on while Settings waits, off around what a row opens'
 case('Settings: reports on inside, off when a row opens a prompt', t_st_mouse_off_after, nfiles=20)
 
-# ── a read -p menu (_sm_run): the file menu ───────────────────────────────────────────────────────────────────────────
+# ── a read -p menu (_sm_run): the file menu
 def open_file_menu(a):
     r = item_row(a, 7); a.click(r, t=0.05); a.click(r, t=1.8)       # item 7 = file001.txt
 def t_sm(a):
@@ -249,7 +249,7 @@ def t_sm_dbl(a):
     return a.alive and 'What would you like to do' not in a.text(), 'a double click on option 3 must accept it (the menu closes)'
 case('read -p menu: double click -> accepts', t_sm_dbl)
 
-# ── the Item numbers picker ───────────────────────────────────────────────────────────────────────────────────────────
+# ── the Item numbers picker
 def picker(a):
     a.send(b'd\r', 1.5)
     return 'Item numbers' in a.text()
@@ -272,7 +272,7 @@ def t_picker_header(a):
 case('Item numbers picker: status-row taps are ignored inside a flow', t_picker_header)
 
 
-# ── tabs (sw, fx, -u, .r ...) ─────────────────────────────────────────────────────────────────────────────────────
+# ── tabs (sw, fx, -u, .r ...)
 import unicodedata
 def dispw(t):                                    # display cells, as the app counts them: wide / emoji = 2, variation selector = 0
     return sum(0 if c == '\ufe0f' else (2 if unicodedata.east_asian_width(c) in 'WF' else 1) for c in t)
@@ -356,7 +356,7 @@ def t_xui_tabs(a):
     return reg and all(xs) and a.alive, 'cs / rbam tab bars: registered=%s hits=%s' % (reg, xs)
 case('cs / rbam: tab bar hit-test on their real header lines', t_xui_tabs, nfiles=20)
 
-# ── footer double tap · scroll / tap handed back to the terminal ─────────────────────────────────────────────────────────────────
+# ── footer double tap · scroll / tap handed back to the terminal
 def mouse_on(a):                                  # were the reports switched on last?  (the last 1000h / 1000l the app printed)
     return a.raw.rfind(b'\x1b[?1000h') > a.raw.rfind(b'\x1b[?1000l')
 def nav_end(a):                                   # the last folder name of the "nav path:" header line

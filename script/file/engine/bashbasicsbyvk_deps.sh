@@ -51,7 +51,7 @@ _DEP_LOADED=0
 _DEP_MGR="${_DEP_MGR:-}"
 _DEP_MISSING=""
 
-# ── small helpers ────────────────────────────────────────────────────────────
+# ── small helpers
 _dep_say() { printf '%s\n' "$*" >&2; }
 
 _dep_log() {
@@ -157,7 +157,7 @@ _dep_pkg_known() {
   esac
 }
 
-# ── the registry ─────────────────────────────────────────────────────────────
+# ── the registry
 _dep_registry() {
   local d
   if [ -n "${BVK_DEPS_REGISTRY:-}" ]; then [ -r "$BVK_DEPS_REGISTRY" ] && { printf '%s' "$BVK_DEPS_REGISTRY"; return 0; }; return 1; fi
@@ -203,7 +203,7 @@ _dep_resolve() {
   return 1
 }
 
-# ── detection ────────────────────────────────────────────────────────────────
+# ── detection
 # the pip modules of the arguments (module[:dist:min]) -> "module ok|no" lines; ONE python process
 _dep_pip_probe_py() {
   python3 - "$@" <<'PY'
@@ -283,7 +283,7 @@ _dep_probe_all() {
   return 0
 }
 
-# ── turning the arguments into a dependency list ─────────────────────────────
+# ── turning the arguments into a dependency list
 # _dep_add id required(1|0): the id, then what it needs first (dependency-first order in _DEP_ORDER)
 _dep_add() {
   local id="$1" req="$2" n
@@ -328,7 +328,7 @@ _dep_expand() {
   return 0
 }
 
-# ── the install plan ─────────────────────────────────────────────────────────
+# ── the install plan
 # _dep_pkgkey id key -> _DEP_VAL ; rc 1 when the registry has no value for that key
 _dep_pkgkey() {
   local ent
@@ -396,7 +396,7 @@ _dep_plan() {
   return 0
 }
 
-# ── recipes: installs that are more than "package manager + name" ─────────────
+# ── recipes: installs that are more than "package manager + name"
 _dep_recipe_text() {
   case "$1" in
     gh-apt) printf '%s' "adds GitHub's official apt repository (cli.github.com) to this computer, then installs gh" ;;
@@ -487,7 +487,7 @@ PY
   return 0
 }
 
-# ── running things ───────────────────────────────────────────────────────────
+# ── running things
 _dep_run() {
   _dep_log "run: $*"
   if [ "${BVK_DEPS_DRYRUN:-0}" = 1 ]; then _dep_say "   would run: $*"; return 0; fi
@@ -558,7 +558,7 @@ _dep_lane_npm() {
   done
 }
 
-# ── asking ───────────────────────────────────────────────────────────────────
+# ── asking
 # _dep_show title ids...  : the Installer text (stderr)
 _dep_show() {
   local title="$1" id n=0 how mark
@@ -621,7 +621,7 @@ _dep_ask() {
   done
 }
 
-# ── the public calls ─────────────────────────────────────────────────────────
+# ── the public calls
 # _dep_have id|feature... : rc 0 when everything REQUIRED is installed.  Never installs, never prints.  _DEP_MISSING = what is not.
 _dep_have() {
   local id withopt=() ; [ "${1:-}" = -o ] && { withopt=(-o); shift; }
@@ -784,7 +784,7 @@ _dep_quiet() {
   return $rc
 }
 
-# ── the table / map (for people and for tests) ───────────────────────────────
+# ── the table / map (for people and for tests)
 _dep_table() {
   local id st
   _dep_load || return 2

@@ -59,7 +59,7 @@ _rl_editor() {
 
 _rule_editor() { _rl_editor "$@"; }         # kept: favourites / daemon settings use this name
 
-# ── ux / ui : export / import ALL rules (same engine as the fx UDF tab) ───────
+# ── ux / ui : export / import ALL rules (same engine as the fx UDF tab)
 # Only select/ and display/ travel (not .history). Layout is enforced on import:
 # select|display / NAME / file — nothing may land anywhere else in the rule store.
 _RL_MANIFEST="bvk_rules_manifest.txt"
@@ -88,7 +88,7 @@ _rl_clean_name() {
   printf '%s' "$n"
 }
 
-# ── store ─────────────────────────────────────────────────────────────────────
+# ── store
 _rl_ensure_store() {
   _sel_ensure_store
   mkdir -p "$_SEL_RULES_DIR/select" "$_SEL_RULES_DIR/display" 2>/dev/null
@@ -171,7 +171,7 @@ _rl_refs_to() {
   echo "$n"
 }
 
-# ── save entry points (also used by  .d.save) ────────────────────────────────
+# ── save entry points (also used by  .d.save)
 # _rule_save_as <select|display> <name> <expr>  — validate, confirm overwrite, write
 _rule_save_as() {
   local scope="$1" name="$2" expr="$3" ans desc
@@ -207,7 +207,7 @@ _rule_delete_bundle() {          # _rule_delete_bundle <kind> <name>   (asks y/n
   rm -rf -- "$dir" && _carry_forget "$dir"; echo "🗑️  Deleted rule '$name'"
 }
 
-# ── last used (unsaved) ──────────────────────────────────────────────────────
+# ── last used (unsaved)
 # Called after every successful .s / .d expression.  Newest first, no dupes, max 100.
 _rule_hist_add() {
   local expr="$1" h tmp
@@ -238,7 +238,7 @@ _rl_hist_build() {               # → _rl_hist[]  (history minus anything alrea
   done < "$h"
 }
 
-# ── rows ──────────────────────────────────────────────────────────────────────
+# ── rows
 _rl_trunc() {                    # _rl_trunc <text> <max>
   local t="$1" m="$2"
   if [ "${#t}" -gt "$m" ]; then printf '%s…' "${t:0:$((m-1))}"; else printf '%s' "$t"; fi
@@ -264,7 +264,7 @@ _rl_rowtext() {
   _vp_line="$line"
 }
 
-# ── tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh) ────────────────────────────────────
+# ── tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh)
 _tm_define rules _rl_tab "📚 Rule Book" "Rule Book" rules:"🧩 Rules" last:"🕘 Last used"
 
 # header: the template's title · tab bar · description (Rule Book|rules, Rule Book|rules:select / :display, Rule Book|last), then the count and the folder
@@ -311,7 +311,7 @@ _rl_redraw_fresh() {
 
 _rl_tab_redraw() { _tm_tab_redraw _rl_build_items _rl_set_viewport; }
 
-# ── helpers for commands that take a row number ──────────────────────────────
+# ── helpers for commands that take a row number
 # _rl_pick <N> → sets _rl_p (path) _rl_n (name) ; only valid inside select/ or display/
 _rl_p=""; _rl_n=""
 _rl_pick() {
@@ -333,7 +333,7 @@ _rl_report() {                   # re-audit and say how <kind>/<name> stands
   else echo "🔴  Rule '$name' is a [broken rule]: ${_RL_RS[$key]:-unknown problem}"; fi
 }
 
-# ── commands ──────────────────────────────────────────────────────────────────
+# ── commands
 _rl_cmd_run() {                  # N inside select/ or display/ → apply the rule
   _rl_pick "$1" || return 1
   local key="$_rl_cur/$_rl_n"
@@ -502,7 +502,7 @@ _rl_help() {
 HLP
 }
 
-# ── entry from the main loop ─────────────────────────────────────────────────
+# ── entry from the main loop
 #  main loop:   .r | .r.* | .r <anything>  → handle_select_cmd → here
 handle_rule_cmd() {
   local raw="$1"
@@ -512,7 +512,7 @@ handle_rule_cmd() {
   _inner_run r
 }
 
-# ── the loop ──────────────────────────────────────────────────────────────────
+# ── the loop
 rules_menu() {
   _rl_ensure_store
   _lk_load

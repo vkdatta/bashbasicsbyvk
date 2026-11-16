@@ -1,5 +1,4 @@
 declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }; _lt_mark(){ :; }; }   # loadtime hooks: no-ops when the recorder is not loaded
-# ============================================================
 #  SMART LOAD  —  a loading bar for EVERY wait, drawn by itself
 #
 #     [░░░░████░░░░░░░░░░░░] Working on pn…  3s
@@ -76,7 +75,6 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  it is gone and never comes back for that program, and it ends for good when the program exits, or after VK_SMARTLOAD_LAUNCH_MAX_MS (default 8000) of silence.
 #  "Has it written?" is read from /proc/<pid>/io (wchar > 0).  Any write counts, files too: the error is always on the quiet side (the bar leaves early, it is never
 #  drawn over a program's screen).  If /proc/<pid>/io can not be read there is no bar at all for that launch.  Call sites write  _sl_launch <label> <command...>.
-# ============================================================
 
 _SL_ON=""             # 1 = running (needs a terminal, bash 5, mkfifo)
 _SL_WANT=0            # 1 = between "Enter" and "ready for the next key": a wait is on
@@ -268,7 +266,7 @@ _sl_anim() {
   exit 0
 }
 
-# ── the foreground side ──────────────────────────────────────────────────────────────────────
+# ── the foreground side
 
 _sl_send() { builtin printf '%s' "$1" >&"$_SL_CTLFD" 2>/dev/null; }
 
@@ -440,7 +438,7 @@ _sl_init() {
 }
 _sl_init
 
-# ── full-screen programs are not a wait ──────────────────────────────────────────────────────
+# ── full-screen programs are not a wait
 # An editor / pager / monitor takes over the whole terminal for as long as the person works in it.  A bar drawn while it runs lands in the middle
 # of ITS screen (it showed up in nano's title row).  Each of these names is a function that holds the bar back for the time the program runs and
 # brings it back when it exits (the wait of the code after it, if any, is a real wait).  `command` skips the function, so the real program runs.

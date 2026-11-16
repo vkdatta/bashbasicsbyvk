@@ -115,7 +115,7 @@ _nav_review_leave() {
   return 1                              # back: stay in the navigator
 }
 
-# ── input helpers shared by the local and the gcloud navigator ────────────────────────────────────────────
+# ── input helpers shared by the local and the gcloud navigator
 # THE prefix convention of every "pick items / go inside" list (the transfer navigators, and the fx <action>.selected.items picker):
 #     5      a folder → go INSIDE it · a file → select it
 #     w5     SELECT the item (a folder is taken whole, not entered)      w1,3 · w2-4 · 1,3 · 2-4 → select several

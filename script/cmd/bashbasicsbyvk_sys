@@ -44,7 +44,7 @@ BAD = {
 }
 
 
-# ───────────────────────── helpers ─────────────────────────
+# ── helpers
 
 def read(path):
     try:
@@ -144,7 +144,7 @@ def mem_text(used, total, prefix="", suffix=""):
     return f"{prefix}{used >> 20} MiB / {total >> 20} MiB ({used * 100 // total}%){suffix}"
 
 
-# ───────────────────────── fields ─────────────────────────
+# ── fields
 
 def os_info():
     tag = environment_tag()
@@ -984,7 +984,7 @@ def looks_server():
 
 
 
-# ───────────────────────── output ─────────────────────────
+# ── output
 
 def safe(func, fallback):
     """A field can never crash the script or show an 'unavailable'-style value."""

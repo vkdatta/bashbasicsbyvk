@@ -23,9 +23,7 @@ from bashbasicsbyvk_js_audit_helpers import build_html_global_names
 from bashbasicsbyvk_js_audit_constants import _RE_EVT_ATTR, _RE_EVT_CALL, _EVT_KNOWN, _NATIVE_GLOBALS, _JS_KEYWORDS, _CALLBACK_NAMES
 
 
-# ---------------------------------------------------------------------------
 # Helper: extract all user-defined function names from an event-attr value
-# ---------------------------------------------------------------------------
 
 def _extract_event_functions(attr_value: str) -> list:
     """Return all user-defined function names called in an event-attr value."""
@@ -36,9 +34,7 @@ def _extract_event_functions(attr_value: str) -> list:
     ]
 
 
-# ---------------------------------------------------------------------------
 # Helper: template-literal body extractor
-# ---------------------------------------------------------------------------
 
 def _extract_template_literals(source: str) -> list:
     """
@@ -139,9 +135,7 @@ def _extract_template_literals(source: str) -> list:
     return results
 
 
-# ---------------------------------------------------------------------------
 # Audit 1d
-# ---------------------------------------------------------------------------
 
 def audit_1d_imported_in_html_string(js_info, all_js, root):
     rows = []
@@ -155,9 +149,7 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
 
     template_bodies = _extract_template_literals(js_info.source)
 
-    # ------------------------------------------------------------------
     # Sub-check A: imported function used in JS-built HTML string
-    # ------------------------------------------------------------------
     if imported_names:
         for tl_body in template_bodies:
             for attr_m in _RE_EVT_ATTR.finditer(tl_body):
@@ -197,10 +189,8 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
                                 'Suggested Import': '',
                             })
 
-    # ------------------------------------------------------------------
     # Sub-check B: locally defined function in an ES-module used in
     # a JS-built HTML string but not window-exposed
-    # ------------------------------------------------------------------
     # Build a union of window_globals across ALL files. A common pattern
     # is a 'core.js' that imports functions from sibling modules and
     # re-exports them via window.X = X. If any file in the project has
@@ -233,13 +223,11 @@ def audit_1d_imported_in_html_string(js_info, all_js, root):
                                 'Suggested Import': f'window.{fname} = {fname};',
                             })
 
-    # ------------------------------------------------------------------
     # Sub-check C: function used in a JS-built HTML onclick that is
     # neither imported into this file nor locally defined here.
     # These are cross-file calls where the import statement is missing
     # entirely. Search all_js for where the function is defined/exported
     # and report it so the caller knows what to add.
-    # ------------------------------------------------------------------
     # Collect names that are globally available via classic scripts loaded
     # by the HTML page (same logic as audit 1e). Functions in classic
     # scripts, inline <script> blocks, and explicit window.X = ...

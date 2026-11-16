@@ -36,7 +36,7 @@ _sel_core() {
   BVK_RULES_DIR="$_SEL_RULES_DIR" python3 "$core" "$@"
 }
 
-# ── selection store ───────────────────────────────────────────────────────────
+# ── selection store
 _sel_load() {                       # _sel_load <array-name>
   local -n _sl_out="$1"
   _sl_out=()
@@ -54,7 +54,7 @@ _sel_save() {                       # _sel_save <array-name>
   _sel_bump
 }
 
-# ── selection marks (used by every screen that lists real files) ─────────────
+# ── selection marks (used by every screen that lists real files)
 #  A selected item is drawn with a leading "+" (width-neutral: it replaces the
 #  row's leading space).  No colour is used - the "+" alone marks the row.
 #  Lookups are lazy + memoised per generation, so a 200k-item selection costs
@@ -158,7 +158,7 @@ _sel_preview() {                    # first 8 items
   [ ${#_pv[@]} -gt $max ] && echo "   … and $(( ${#_pv[@]} - max )) more  (.s.show to see all)"
 }
 
-# ── help ──────────────────────────────────────────────────────────────────────
+# ── help
 _sel_help() {
   cat <<'HLP'
 🎯 SELECT  (.s)        works in any folder, even huge ones
@@ -195,7 +195,7 @@ FAVOURITES  fa <numbers | sel | .s expression>   ns   (see: fa help)
 HLP
 }
 
-# ── evaluate an expression → _SEL_FOUND (shared by .s, .d and fa) ─────────────
+# ── evaluate an expression → _SEL_FOUND (shared by .s, .d and fa)
 # Runs one existing CSV picker per .csv clause. Returns 1 on error / cancel
 # (message already printed).
 declare -ga _SEL_FOUND=()
@@ -300,7 +300,7 @@ _sel_eval() {
   return 0
 }
 
-# ── main entry:  .s ... ───────────────────────────────────────────────────────
+# ── main entry:  .s ...
 handle_select_cmd() {
   local raw="$1"
   raw="${raw#"${raw%%[![:space:]]*}"}"; raw="${raw%"${raw##*[![:space:]]}"}"

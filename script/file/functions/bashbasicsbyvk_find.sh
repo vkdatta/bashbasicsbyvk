@@ -31,14 +31,12 @@ _find_csv_write_counts() {
   mv "$tmp_csv" "$1"
 }
 
-# ════════════════════════════════════════════════════════════════════════════
 #  Find menu  (f)
 #     1 Find in names · 2 Find in contents · 3 Find in names and contents
 #     4 Find & replace in names · 5 … in contents · 6 … in names and contents
 #  All the work is done by the engine (bashbasicsbyvk_findrun.sh).  Every choice that can go more than one way is a SETTING
 #  (Settings → Find & replace): match case, regex, flat / recursive, whole word, hidden files, … each one "ask every
 #  time" or fixed.  Defaults: case = ask, regex = off, depth = ask.
-# ════════════════════════════════════════════════════════════════════════════
 
 # _find_ask <outvar> <question> <default-value> <key> <value> <label> [<key> <value> <label>]...
 #   One question of the Find & replace settings = the shared two-option template (menuchrome.sh, MC-01/02): numbered rows,
@@ -153,7 +151,7 @@ _find_apply_report() {
   return 0
 }
 
-# ── 1-3  Find ────────────────────────────────────────────────────────────────
+# ── 1-3  Find
 # rc 0 done (leave the menu) · 3 back to the Find menu · 1 quit
 _find_search() {
   _find_resolve_options "$1" -- _find_step_pattern _find_step_results
@@ -186,7 +184,7 @@ _find_step_results() {
   done
 }
 
-# ── 4-6  Find & replace, one pattern ─────────────────────────────────────────
+# ── 4-6  Find & replace, one pattern
 _find_replace_single() {
   _find_resolve_options "$1" -- _find_step_pattern _find_step_replacement _find_step_preview
   _find_flow_rc $?
@@ -251,7 +249,7 @@ _find_csv_rows() {
   done
 }
 
-# ── 4-6  Find & replace, many rows from a CSV ───────────────────────────────
+# ── 4-6  Find & replace, many rows from a CSV
 # Steps (in order): pick the CSV (z = back) · the questions set to "ask every time" · read + preview + "Apply all?" (u = back).
 # They share the locals of _find_replace_csv (csv_finds, csv_reps, abs_csv_file).
 _find_step_csvfile() {
@@ -306,7 +304,7 @@ _find_replace_csv() {
   return 0
 }
 
-# ── 4-6  Find & replace entry: Single or Multi ──────────────────────────────
+# ── 4-6  Find & replace entry: Single or Multi
 # u inside Single / Multi goes back to THIS question when the person was asked it (setting "ask"), else to the Find menu.
 _find_replace() {
   local scope="$1" title how rc

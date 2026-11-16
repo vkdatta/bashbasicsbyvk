@@ -21,11 +21,11 @@ _fx_ensure_store() {
   mkdir -p "$_FX_EXEC_DIR" 2>/dev/null
 }
 
-# ── Tab state ─────────────────────────────────────────────────────────────────
+# ── Tab state
 _fx_tab="adf"      # adf | udf
 _fx_in_mode=0      # 1 while inside functions_menu — enables ←/→ sentinel
 
-# ── ADF registry ─────────────────────────────────────────────────────────────
+# ── ADF registry
 #  Tree-based registry.  Each ADF file can declare a staging at its top:
 #    adf-staging='navigation/other/currentfile'
 #  which places the function at that path in the ADF tree.
@@ -74,7 +74,7 @@ _fx_adf_register() {
 # file/<first word of the label>/<label>, so the path can never disagree with the label.
 _fx_adf_register_fx() { _fx_adf_register "$1" "$2" "file/${1%%.*}/$1"; }
 
-# ── ADF tree helpers ──────────────────────────────────────────────────────────
+# ── ADF tree helpers
 
 # Print unique immediate sub-folder names at _fx_adf_cur_staging
 _fx_adf_list_subfolders() {
@@ -138,25 +138,21 @@ _fx_adf_breadcrumb() {
   if [ -z "$_fx_adf_cur_staging" ]; then echo "/"; else echo "/$_fx_adf_cur_staging"; fi
 }
 
-# ════════════════════════════════════════════════════════════════════════════
 #  ADF function files — each file declares its own adf-staging and calls
 #  _fx_adf_register.  They are loaded through the load mapper (listed in the WITH column of this file)
 #  file, from o).  To add a new ADF function: create
 #  bashbasicsbyvk_adf_<folder>_<name>.sh add one line to the load mapper ([no]) and list it in the WITH column of bashbasicsbyvk_functions.sh.
-# ════════════════════════════════════════════════════════════════════════════
 
 
 
 # UDF tab extras (e-N edit item, ux / ui export / import all UDFs as a zip): bashbasicsbyvk_udf_io.sh, loaded through the load mapper
 
-# ════════════════════════════════════════════════════════════════════════════
 #  Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar, steps ←/→ and builds the footer.
 #  The tab names live here once: the tab bar, the tap targets and the header all read them.
-# ════════════════════════════════════════════════════════════════════════════
 _FX_TAB_ADF="🪄 ADF"; _FX_TAB_UDF="🎃 UDF"
 _tm_define fx _fx_tab "🎨 Functions" "Functions" adf:"$_FX_TAB_ADF" udf:"$_FX_TAB_UDF"
 
-# ── Headers / footers ─────────────────────────────────────────────────────────
+# ── Headers / footers
 
 # The plain-words line under the tabs comes from the Settings description table through the template (_tm_desc_line):
 #   Functions|adf          the ADF root          Functions|adf:<folder path>   one ADF folder (the nearest parent wins)
@@ -224,7 +220,7 @@ _fx_set_viewport_for_tab() {
   _tm_viewport _fx_menu_header _fx_menu_footer "$rowtext"
 }
 
-# ── Item builder per tab ──────────────────────────────────────────────────────
+# ── Item builder per tab
 
 _fx_udf_path="$_FX_EXEC_DIR"   # where the UDF tab currently is (root or a sub-folder of execute/)
 
@@ -257,7 +253,7 @@ _fx_build_items_for_tab() {
   esac
 }
 
-# ── ADF selection handler ─────────────────────────────────────────────────────
+# ── ADF selection handler
 
 _fx_adf_handle_selection() {
   local choice="$1"
@@ -293,7 +289,7 @@ _fx_adf_handle_selection() {
   esac
 }
 
-# ── UDF selection handler ─────────────────────────────────────────────────────
+# ── UDF selection handler
 
 _fx_udf_handle_selection() {
   local choice="$1"
@@ -321,11 +317,11 @@ _fx_udf_handle_selection() {
   fi
 }
 
-# ── In-place tab redraw ───────────────────────────────────────────────────────
+# ── In-place tab redraw
 
 _fx_tab_redraw() { _tm_tab_redraw _fx_build_items_for_tab _fx_set_viewport_for_tab; }
 
-# ── Main entry point ──────────────────────────────────────────────────────────
+# ── Main entry point
 
 functions_menu() {
   _fx_ensure_store

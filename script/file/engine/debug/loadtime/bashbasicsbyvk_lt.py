@@ -75,7 +75,7 @@ def mark(name, detail=""):
         _write("M", _now_us(), 0, name, detail)
 
 
-# ─────────────────────────────────────────────────────────────── HTTP timing
+# ── HTTP timing
 def _mask_path(path):
     path = (path or "").split("?", 1)[0].split("#", 1)[0]
     out = []

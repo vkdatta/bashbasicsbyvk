@@ -34,7 +34,7 @@ _inf_sub() {
   return "$_is_rc"
 }
 
-# ---- the questions of a python tool, asked with the app's own menus ---------------------------------------------------
+# ── the questions of a python tool, asked with the app's own menus
 _inf_q_yn() {      # question [-t T] [-i I] [-c] [-b]
   local _q="$1" _b=0 _ans="" _a; shift
   local -a _f=()
@@ -53,7 +53,7 @@ _inf_q_choose() {  # question [-t T] [-i I] [-d key] [-k] [-m] [-b] key:Label ..
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -b) _b=1; shift ;;
-      -t|-i|-d) _f+=("$1" "${2-}"); shift 2 ;;
+      -t|-i|-d) _f+=("$1" "${2-}"); shift $(( $# >= 2 ? 2 : 1 )) ;;
       -k|-m) _f+=("$1"); shift ;;
       *) _r+=("$1"); shift ;;
     esac
@@ -70,7 +70,7 @@ _inf_q_ask() {     # "Prompt: " [-i text] [-s] [-b] [-S] [-m]
   local _p="$1" _i="" _s=0 _b=0 _CE_SELECT=0 _m=0 _ans=""; shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      -i) _i="${2-}"; shift 2 ;;
+      -i) _i="${2-}"; shift $(( $# >= 2 ? 2 : 1 )) ;;
       -s) _s=1; shift ;;
       -b) _b=1; shift ;;
       -S) _CE_SELECT=1; shift ;;

@@ -85,9 +85,7 @@ _sp_apply_op() {              # <op> <file> <dest> [names-csv]
   esac
 }
 
-# ─────────────────────────────────────────────
 #  Buffer viewer (v-)
-# ─────────────────────────────────────────────
 
 # One set of a buffer (name "" = the flat, unnamed items): numbered paths, remove items.
 # $5 = 1 when the buffer also holds named sets (so the flat items are one row among others).  Returns when the user goes back (u).

@@ -23,9 +23,7 @@ _SCR_DIR="${HOME}/.bashbasicsbyvk"
 _SCR_FILE="${_SCR_DIR}/shortcut.registry"
 _SCR_SEP="|"
 
-# ---------------------------------------------------------------------------
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 _scr_ensure() {
   mkdir -p "$_SCR_DIR" 2>/dev/null
@@ -44,20 +42,11 @@ _scr_load() {
 }
 
 # _scr_save <nameref-array>
-_scr_save() {
-  local -n __scr_in="$1"
-  : > "$_SCR_FILE"
-  local entry
-  for entry in "${__scr_in[@]}"; do
-    [ -n "$entry" ] && printf '%s\n' "$entry" >> "$_SCR_FILE"
-  done
-}
+_scr_save() { _sp_save "$1" "$_SCR_FILE"; }
 
-# ---------------------------------------------------------------------------
 # _scr_add <abs_shortcut_file_path>
 # Register a newly created .shortcut file. Reads its SHORTCUT_TARGET field.
 # Safe to call multiple times — deduplicates on sc_file path.
-# ---------------------------------------------------------------------------
 _scr_add() {
   local sc_file="$1"
   local target
@@ -80,10 +69,8 @@ _scr_add() {
   _scr_save fresh
 }
 
-# ---------------------------------------------------------------------------
 # _scr_remove <abs_shortcut_file_path>
 # Unregister a .shortcut file (called on deletion).
-# ---------------------------------------------------------------------------
 _scr_remove() {
   local sc_file="$1"
   [ -f "$_SCR_FILE" ] || return 0
@@ -97,7 +84,6 @@ _scr_remove() {
   _scr_save kept
 }
 
-# ---------------------------------------------------------------------------
 # _scr_rename_sync <old_abs_path> <new_abs_path>
 # Drop-in replacement for the old _sync_shortcuts_for_rename.
 #
@@ -106,7 +92,6 @@ _scr_remove() {
 # Also rewrites the SHORTCUT_TARGET field inside the .shortcut file itself,
 # and updates the registry row — all without touching the filesystem beyond
 # those specific files.
-# ---------------------------------------------------------------------------
 _scr_rename_sync() {
   local -a _po=("$1") _pn=("$2")
   _scr_sync_pairs _po _pn
@@ -121,7 +106,6 @@ _scr_map() {
   fi
 }
 
-# ---------------------------------------------------------------------------
 # _scr_sync_pairs <olds-array> <news-array>
 # THE shortcut carry engine. Replays path changes (old[i] → new[i], in order) over
 # the whole registry in ONE pass. For every shortcut it carries BOTH
@@ -129,7 +113,6 @@ _scr_map() {
 #   • its OWN PATH (the .shortcut file, or a folder holding it, moved/renamed →
 #                   registry row follows)
 # Used by rename, move, organise / unorganise, find-and-replace renames, ...
-# ---------------------------------------------------------------------------
 _scr_sync_pairs() {
   local -n _spo="$1" _spn="$2"
   [ "${#_spo[@]}" -gt 0 ] || return 0
@@ -197,12 +180,10 @@ _scr_add_tree() {
   _scr_save kept
 }
 
-# ---------------------------------------------------------------------------
 # _scr_rebuild
 # Full rescan of $HOME for *.shortcut files — rebuilds the registry from
 # scratch. Use when the index may have drifted (manual rm, external tools).
 # Exposed as the `scr-sync` user command (see handle_scr_sync below).
-# ---------------------------------------------------------------------------
 _scr_rebuild() {
   _scr_ensure
   local -a fresh=()
@@ -218,11 +199,9 @@ _scr_rebuild() {
   echo "💫 Registry rebuilt — ${#fresh[@]} shortcut(s) indexed."
 }
 
-# ---------------------------------------------------------------------------
 # _scr_validate
 # Lazy-validate the registry: report and optionally prune entries whose
 # .shortcut file no longer exists on disk.
-# ---------------------------------------------------------------------------
 _scr_validate() {
   [ -f "$_SCR_FILE" ] || { echo "📜  Registry does not exist yet."; return 0; }
 
@@ -259,10 +238,8 @@ _scr_validate() {
   fi
 }
 
-# ---------------------------------------------------------------------------
 # handle_scr_sync   (wire this to a menu option, e.g. "scr-sync" or option 9)
 # User-facing entry point for registry maintenance.
-# ---------------------------------------------------------------------------
 handle_scr_sync() {
   _mc_select _scr_choice "🗂️  Shortcut Registry" "Show registry contents" "Validate (find & remove stale entries)" \
     "Full rebuild (rescan \$HOME — slow, use when in doubt)" || return $(( $? == 2 ? 1 : 0 ))

@@ -25,7 +25,7 @@ declare -ga _XUI_SEL=()
 _XUI_IN=""
 _XUI_PICK_TITLE=""
 
-# ── borrow / restore the shared viewport state ───────────────────────────────
+# ── borrow / restore the shared viewport state
 _XUI_ARRS=(items _all_items _filter_src _filter_map)
 _XUI_VARS=(_hl_index _vp_mode _vp_header_fn _vp_footer_fn _vp_rowtext_fn _vp_input_fn _vp_hl_fn _fx_in_mode
            imaginary_mode _filter_query _filter_map_active _sw_in_mode group_prefix force_show _XUI_PFX)
@@ -54,10 +54,8 @@ _xui_leave() {
   _vp_cache_reset
 }
 
-# ── screens ──────────────────────────────────────────────────────────────────
-_xui_slot() {
-  if $_filter_map_active; then _XUI_SLOT="${_filter_map[$(( $1 - 1 ))]:-0}"; else _XUI_SLOT=$(( $1 - 1 )); fi
-}
+# ── screens
+_xui_slot() { _vp_slot_of "$1" _XUI_SLOT; }
 
 _xui_begin_items() {                         # call first thing in <prefix>_build
   _filter_reset_state
@@ -96,24 +94,12 @@ _xui_tab_redraw() {
 }
 
 # resolve a typed row number against what is on screen -> $_XUI_SLOT ; 1 = invalid
-_xui_row() {
-  [[ "$1" =~ ^[0-9]+$ ]] || return 1
-  local n=$(( 10#$1 ))
-  [ "$n" -ge 1 ] && [ "$n" -le "${#items[@]}" ] || return 1
-  _xui_slot "$n"
-}
+_xui_row() { _vp_row "$1" _XUI_SLOT; }
 
-# ── multi-row selection ──────────────────────────────────────────────────────
+# ── multi-row selection
 _xui_pick_header() { echo; echo "$_XUI_PICK_TITLE"; }
 
-_xui_parse_sel() {                           # "1,3-5 | a | a-2" -> _XUI_SEL (display rows)
-  local s="${1// /}" n="${#items[@]}"
-  _XUI_SEL=()
-  if   [ "$s" = a ];            then _XUI_SEL=($(seq 1 "$n"))
-  elif [[ "$s" =~ ^a-(.+)$ ]];  then _XUI_SEL=($(_sp_parse_all_except "${BASH_REMATCH[1]}" "$n"))
-  else                               _XUI_SEL=($(parse_selection "$s" "$n")); fi
-  [ "${#_XUI_SEL[@]}" -gt 0 ] || { echo "❌ No valid items selected"; return 1; }
-}
+_xui_parse_sel() { _vp_parse_sel _XUI_SEL "$1"; }   # "1,3-5 | a | a-2" -> _XUI_SEL (display rows)
 
 # _xui_select_rows "PROMPT" "title line" [typed]     typed = "r-1,3" style shortcut (no redraw)
 _xui_select_rows() {
@@ -129,7 +115,7 @@ _xui_select_rows() {
   _xui_parse_sel "$_buf"
 }
 
-# ── one-line questions ───────────────────────────────────────────────────────
+# ── one-line questions
 _xui_ask() {                                 # _xui_ask "What to type" [default]
   local q="$1" def="${2:-}" a
   if [ -n "$def" ]; then _bvk_read a "   $q [$def] (u = back): "; a="${a:-$def}"
@@ -146,7 +132,7 @@ _xui_yes() {                                 # _xui_yes "Question?"  -> 0 on y
   echo "🚫 Cancelled"; return 1
 }
 
-# ── small formatters shared by the loops ─────────────────────────────────────
+# ── small formatters shared by the loops
 _xui_hsize() {                               # bytes -> "3.2 MB"
   awk -v b="${1:-0}" 'BEGIN { split("B KB MB GB TB", u, " "); i = 1
     while (b >= 1024 && i < 5) { b /= 1024; i++ }
@@ -160,7 +146,7 @@ _xui_left() {                                # epoch-ms expiry -> "29d 23h left"
   if [ "$s" -le 0 ]; then printf 'expired'; else printf '%s left' "$(_bb_fmt_duration "$s")"; fi
 }
 
-# ── the screen loop ──────────────────────────────────────────────────────────
+# ── the screen loop
 # _xui_loop <handler>     draws the current screen (_xui_screen first) and reads commands until the handler says leave.
 #   handler "<typed text>" returns:  0 = redraw   1 = nothing to redraw   2 = leave this loop   3 = redraw in place (tab switch)
 #                                    9 = not mine: the loop deals with it (u back · q quit · fx/sw/api/.r/-u hop · ignores _*)

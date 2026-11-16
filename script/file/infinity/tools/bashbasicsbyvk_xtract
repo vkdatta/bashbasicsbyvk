@@ -22,16 +22,28 @@ try:
     import bashbasicsbyvk_ask as _bvk_ask        # THE native line editor for every typed prompt (AGENTS.md rule 16)
     _bvk_input = _bvk_ask.ask
 except ImportError:                              # a broken install: the plain built-in line
-    _bvk_input = input                           # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+    def _bvk_input(prompt, **_kw):
+        return input(prompt)                     # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
 
 
-def _choose(question, rows):
+try:
+    from bashbasicsbyvk_ask import Back, steps       # the chain of the first questions: u = ONE QUESTION BACK
+except ImportError:                                  # a broken install: no u, the questions are asked in order
+    class Back(EOFError):
+        pass
+
+    def steps(*fns):
+        for f in fns:
+            f()
+
+
+def _choose(question, rows, back=False):
     """THE native one-of-many menu (bashbasicsbyvk_choose); only a broken install (no door) falls back to a plain typed line."""
     try:
         import bashbasicsbyvk_choose as _ch
     except ImportError:
         return _bvk_input("\n" + question + " (" + "/".join(k for k, _ in rows) + "): ").strip().lower()
-    return _ch.ask(question, rows, title="xtract", icon="🌐")
+    return _ch.ask(question, rows, title="xtract", icon="🌐", back=back)
 
 def clean_sheet_name(name):
     """Clean invalid characters from Excel sheet names"""
@@ -431,7 +443,6 @@ def build_links_dataframe(source_url, source_text, recursion_depth,
             rows.append(row[:len(col_names)])
         return pd.DataFrame(rows, columns=col_names) if rows else pd.DataFrame(columns=col_names)
 
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def save_content(content, content_type, output_path, source_url=None,
@@ -562,17 +573,22 @@ def main():
     
     excel_support = True      # openpyxl is part of the data.xtract dependencies checked at start-up
     
-    content_type = _choose("Extract tables or links?", [("t", "Tables"), ("l", "Links")])
-    if content_type not in ['t', 'l']:
-        print("\n❌ Invalid selection. Please choose 't' for tables or 'l' for links")
-        return
-    
-    content_type = 'tables' if content_type == 't' else 'links'
+    st = {"ct": "", "depth": 0, "cap": RECURSION_LINK_CAP, "mode": "", "stop": False}
 
-    # ── ADDENDUM: Recursion prompt — links only ───────────────────────────────
-    recursion_depth = 0
-    link_cap = RECURSION_LINK_CAP
-    if content_type == 'links':
+    def _s_type():                                   # step 1: tables or links (u on the first question leaves the tool)
+        ct = _choose("Extract tables or links?", [("t", "Tables"), ("l", "Links")], back=True)
+        if ct not in ['t', 'l']:
+            print("\n❌ Invalid selection. Please choose 't' for tables or 'l' for links")
+            st["stop"] = True
+            return
+        st["ct"] = 'tables' if ct == 't' else 'links'
+
+    # ── ADDENDUM: Recursion prompt — links only
+    def _s_recursion():                              # step 2: asked for links only (False = nothing to ask, u skips it)
+        st["depth"] = 0
+        st["cap"] = RECURSION_LINK_CAP
+        if st["stop"] or st["ct"] != 'links':
+            return False
         try:
             import bashbasicsbyvk_yn as _yn      # THE native yes/no menu
             recurse_input = 'y' if _yn.ask("Do you need recursive link extraction?", title="xtract", icon="🔗") else 'n'
@@ -580,29 +596,37 @@ def main():
             recurse_input = _bvk_input("\nDo you need recursive link extraction? (y/n): ").strip().lower()   # bvk-read-ok: fallback of a broken install (no yn door)
         if recurse_input == 'y':
             try:
-                recursion_depth = int(
-                    _bvk_input("Enter recursion depth (e.g. 1 = one level deep, 2 = two levels): ").strip()
+                st["depth"] = int(
+                    _bvk_input("Enter recursion depth (e.g. 1 = one level deep, 2 = two levels): ", back=True).strip()
                 )
-                if recursion_depth < 0:
-                    recursion_depth = 0
-                print(f"💫 Recursion depth set to {recursion_depth}")
+                if st["depth"] < 0:
+                    st["depth"] = 0
+                print(f"💫 Recursion depth set to {st['depth']}")
                 print(f"   Output columns: Source URL | Source Text | L0 Link | L0 Text"
-                      + "".join([f" | L{d} Link | L{d} Text" for d in range(1, recursion_depth + 1)]))
+                      + "".join([f" | L{d} Link | L{d} Text" for d in range(1, st['depth'] + 1)]))
                 try:
-                    cap_raw = _bvk_input(f"\nMax links to follow per page per level (default: {RECURSION_LINK_CAP}, higher = much slower):\n> ").strip()
-                    link_cap = int(cap_raw) if cap_raw else RECURSION_LINK_CAP
-                    if link_cap < 1:
-                        link_cap = RECURSION_LINK_CAP
+                    cap_raw = _bvk_input(f"\nMax links to follow per page per level (default: {RECURSION_LINK_CAP}, higher = much slower):\n> ", back=True).strip()
+                    st["cap"] = int(cap_raw) if cap_raw else RECURSION_LINK_CAP
+                    if st["cap"] < 1:
+                        st["cap"] = RECURSION_LINK_CAP
                 except ValueError:
-                    link_cap = RECURSION_LINK_CAP
-                print(f"💫 Link cap: {link_cap} per page | Est. max requests: ~{link_cap ** (recursion_depth+1)}")
+                    st["cap"] = RECURSION_LINK_CAP
+                print(f"💫 Link cap: {st['cap']} per page | Est. max requests: ~{st['cap'] ** (st['depth']+1)}")
             except ValueError:
-                recursion_depth = 1
-                link_cap = RECURSION_LINK_CAP
+                st["depth"] = 1
+                st["cap"] = RECURSION_LINK_CAP
                 print("🔴  Invalid input. Using recursion depth 1.")
-    # ─────────────────────────────────────────────────────────────────────────
 
-    mode = _choose("Single URL or Multiple URLs?", [("1", "Single URL"), ("2", "Multiple URLs")])
+    def _s_mode():                                   # step 3: single URL or several
+        if st["stop"]:
+            return False
+        st["mode"] = _choose("Single URL or Multiple URLs?", [("1", "Single URL"), ("2", "Multiple URLs")], back=True)
+
+    steps(_s_type, _s_recursion, _s_mode)
+    if st["stop"]:
+        return
+    content_type, recursion_depth, link_cap, mode = st["ct"], st["depth"], st["cap"], st["mode"]
+
     
     urls = []
     classes = None
@@ -650,7 +674,7 @@ def main():
         if not filename.endswith('.xlsx'):
             filename = os.path.splitext(filename)[0] + '.xlsx'
         
-        # ── Links with recursion: use recursive fetcher directly ─────────────
+        # ── Links with recursion: use recursive fetcher directly
         if content_type == 'links' and recursion_depth > 0:
             print(f"\n⏳ Starting recursive link extraction (depth={recursion_depth}, cap={link_cap}/page)...")
             df = build_links_dataframe(
@@ -662,7 +686,7 @@ def main():
                 save_content(df, content_type, filename, url, "Given Link", recursion_depth)
             else:
                 print("\n❌ No content extracted. Check URL and parameters")
-        # ── All other cases: existing extraction path ─────────────────────────
+        # ── All other cases: existing extraction path
         else:
             content = extract_url(
                 url, 

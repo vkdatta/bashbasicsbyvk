@@ -142,7 +142,7 @@ def print_report(report: dict, written: str, max_clusters: int = 20, top_files: 
         con.print(f"Full report written to [bold]{written}[/]", highlight=False)
         con.print(f"\n[bold yellow]\u26a0  {WARNING}[/]", highlight=False)
         return
-    # ---- plain-text fallback ----
+    # ── plain-text fallback
     out: List[str] = ["=" * 64, "PolyglotCloneFinder - Summary", "=" * 64,
                       f"Total Files Scanned          : {s['total_files_scanned']}",
                       f"Total Functions Extracted    : {s['total_functions_extracted']}",

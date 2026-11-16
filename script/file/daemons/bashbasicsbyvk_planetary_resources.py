@@ -35,7 +35,7 @@ DAEMONS_DIR = BVK_DIR / "daemons"          # pid / log / version / status / inst
 VERSIONS_FILE = "bashbasicsbyvk_planetary_versions.list"
 
 
-# ══════════════════════════ finding files and versions ══════════════════════════
+# ── finding files and versions
 _FOUND = {}
 
 
@@ -87,7 +87,7 @@ def daemon_version(name):
     return 0
 
 
-# ══════════════════════════ paths ══════════════════════════
+# ── paths
 def norm(p):
     p = str(p)
     if len(p) > 1:
@@ -133,7 +133,7 @@ def app_dirs():
     return tuple(str(p) for p in (BVK_DIR, cfg / "bashbasicsbyvk", cache / "bashbasicsbyvk"))
 
 
-# ══════════════════════════ the lock ══════════════════════════
+# ── the lock
 def pid_alive(pid, marker=None):
     """True when `pid` is a live process (not a zombie) and, if `marker` is given and can be read, its command line holds it."""
     try:
@@ -229,7 +229,7 @@ def dir_lock(lockdir, wait=3.0, stale=10.0):
             shutil.rmtree(lockdir, ignore_errors=True)
 
 
-# ══════════════════════════ the one inode walk ══════════════════════════
+# ── the one inode walk
 def find_inodes(roots, wanted, budget=30.0, skip=None, dirs_only=False):
     """Walk `roots` once (hidden names skipped, like the select engine) and find the items whose "dev:inode" is in `wanted`
     (a set). Returns {id: path}. Stops at the time `budget` or when everything is found. `skip(path)` prunes a folder."""
@@ -268,7 +268,7 @@ def find_inodes(roots, wanted, budget=30.0, skip=None, dirs_only=False):
     return found
 
 
-# ══════════════════════════ time zone (a daemon outlives the app) ══════════════════════════
+# ── time zone (a daemon outlives the app)
 _TZ_SEEN = [None]
 _ORIG_TZ = [os.environ.get("TZ")]
 
@@ -314,7 +314,7 @@ def apply_app_timezone():
         pass
 
 
-# ══════════════════════════ a daemon's own files ══════════════════════════
+# ── a daemon's own files
 LOG_MAX_LINES = 1000
 LOG_KEEP_LINES = 600
 
@@ -452,7 +452,7 @@ class Service:
         return not pids
 
 
-# ══════════════════════════ keeping a daemon running ══════════════════════════
+# ── keeping a daemon running
 def has_systemd_user():
     try:
         r = subprocess.run(["systemctl", "--user", "is-system-running"], capture_output=True, timeout=3)

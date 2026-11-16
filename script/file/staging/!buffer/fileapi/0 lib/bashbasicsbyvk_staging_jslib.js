@@ -9,7 +9,7 @@ const fs = require('fs');
 
 const fmtMB = (b) => (b / 1048576).toFixed(1);
 
-// ---- ONE way to draw a \r-redrawn status line ------------------------------------------
+// ── ONE way to draw a \r-redrawn status line
 // dw(): display width in terminal cells (emoji / CJK = 2).  live(): erases the row and
 // writes with auto-wrap OFF (DECAWM), so a line that is wider than the screen -- or a
 // terminal that reports the wrong width (Cloud Shell Android app) -- is clipped instead

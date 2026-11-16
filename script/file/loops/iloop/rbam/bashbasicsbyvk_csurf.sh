@@ -55,7 +55,7 @@ _cs_answer_offer() {                         # share id, alias
   if _ux_ok; then [ "$a" = true ] && echo "💫 Accepted." || echo "💫 Declined."; else _ux_fail; fi
 }
 
-# ═════════════════════════ share list (the two tabs) ═════════════════════════
+# ── share list (the two tabs)
 # Settings › Display › Sort order of this screen (one list per tab: Given / Received). Sorting the arrays in place is cheap and
 # idempotent, so it runs on every redraw (a change made in Settings applies when you come back, with no new fetch).
 _cs_sort() {
@@ -180,7 +180,7 @@ _cs_cmd() {
   esac
 }
 
-# ═════════════════════════ people of one share (sender) ══════════════════════
+# ── people of one share (sender)
 _PP_ID=""; _PP_ALIAS=""; _PP_LOADED=0
 declare -ga _PP_RID=() _PP_MAIL=() _PP_D30=() _PP_ST=()
 
@@ -253,7 +253,7 @@ _cs_people_open() {
   _xui_leave
 }
 
-# ═════════════════════════ files and folders ═════════════════════════════════
+# ── files and folders
 _CT_ID=""; _CT_ROLE=""; _CT_RID=""; _CT_LOADED=0; _CT_MAILS=""; _CT_ALIAS=""
 _CT_DETAIL=""; _CT_ITEMS=""; _CT_FROM=""; _CT_EXP=0
 declare -ga _CT_IID=() _CT_PAR=() _CT_KIND=() _CT_BYTES=() _CT_CHUNKS=() _CT_NAME=() _CT_ARC=()   # everything (unfiltered); _CT_ARC=1 → a tar.gz archive share
@@ -428,7 +428,7 @@ _cs_tree_open() {
   _UX_K=""
 }
 
-# ── the loop ─────────────────────────────────────────────────────────────────
+# ── the loop
 csurf_menu() {
   local _MS_CTX=shares_given            # cs_build keeps it in step with the tab
   _ux_need || return 1

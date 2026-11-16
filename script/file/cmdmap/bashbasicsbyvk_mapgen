@@ -43,7 +43,7 @@ DEFAULT_DESC = {
     "x": "Close", "b": "Back", "h": "Home", "c": "Create", "r": "Remove", "l": "Link", "m": "Move",
 }
 
-# ---------------------------------------------------------------- read main defs
+# ── read main defs
 def read_defs(path):
     defs = {}
     rx = re.compile(r'^cmd_def\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*(?:"([^"]*)")?\s*(?:"([^"]*)")?')
@@ -55,7 +55,7 @@ def read_defs(path):
 
 main_defs = read_defs(menu_path("main", "bashbasicsbyvk_maincommands.sh"))
 
-# ---------------------------------------------------------------- find function sources
+# ── find function sources
 sources = {}
 for f in glob.glob(os.path.join(ROOT, "**", "*"), recursive=True):
     if not os.path.isfile(f) or f.endswith((".c", ".h", ".md", ".txt", ".map", ".list", ".xlsx")) or "bvk-ls" in f:
@@ -150,7 +150,7 @@ def harvest(lines):
             seen.add((key, kd)); out.append((k, kd))
     return out
 
-# ---------------------------------------------------------------- existing files
+# ── existing files
 def existing_defs(path):
     ids = set()
     if os.path.isfile(path):
@@ -174,7 +174,7 @@ def write(path, text, append):
     with open(path, "a" if append else "w", encoding="utf-8") as fh:
         fh.write(text)
 
-# ---------------------------------------------------------------- per menu
+# ── per menu
 report = []
 for raw in open(os.path.join(OUT, "bashbasicsbyvk_menus.list"), encoding="utf-8"):
     raw = raw.split("#")[0].strip()

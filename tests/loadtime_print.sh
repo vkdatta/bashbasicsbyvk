@@ -12,7 +12,7 @@ T="$(mktemp -d)"; trap 'tmux kill-session -t "${S:-none}" 2>/dev/null; bvk_reap 
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 has() { grep -qF -- "$2" <<<"$1"; }
 
-# ---- (1) print --------------------------------------------------------------------------
+# ── (1) print
 source "$PRINT_SH"
 _BVK_SCR_RAW=$'\r\033[2K\033[?7l📂 Location: /x\033[?7h\n\r\033[2K\033[?7l  1) 📄 a.txt\033[?7h\n\r\033[2K\033[1;7m  2) b.py\033[0m\n'
 _BVK_SCR_PROMPT="Select: "; _BVK_SCR_EXTRA=$'\n'
@@ -21,7 +21,7 @@ out="$(_bvk_scr_text)"
 _BVK_SCR_EXTRA=$'🔴  Invalid selection\n'
 has "$(_bvk_scr_text)" "Invalid selection" && ok "print: output printed after the frame is kept" || bad "print extra"
 
-# ---- (2) report -------------------------------------------------------------------------
+# ── (2) report
 L="$T/ev.log"; t0=1800000000000000
 w() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >>"$L"; }
 w T $t0 0 1 "" "o" "shell|launch"
@@ -51,7 +51,7 @@ all="$(python3 -I "$REPORT" "$L" --pick all)"
 has "$all" "shell → main" && has "$all" "main → Settings" && ok "report: loadtime all" || bad "loadtime all"
 none="$(python3 -I "$REPORT" "$T/empty" --pick 1)"; has "$none" "Nothing measured yet" && ok "report: no data is explained" || bad "empty log"
 
-# ---- (3) recorder -----------------------------------------------------------------------
+# ── (3) recorder
 rec="$(bash -c '
   export TMPDIR="'"$T"'"
   source "'"$LT_SH"'"; _lt_init
@@ -74,7 +74,7 @@ if curl --version 2>/dev/null | grep -q '^curl 8\.\([3-9]\|[1-9][0-9]\)' && [ -z
   has "$net" $'\tcurl 127.0.0.1:18766' && has "$net" "ns=" && ok "curl wrapper logs the phase times" || bad "curl phases"
 else echo "  skip curl phase test (curl < 8.3 or a proxy is set)"; fi
 
-# ---- (4) tmux ---------------------------------------------------------------------------
+# ── (4) tmux
 if command -v tmux >/dev/null 2>&1; then
   H="$T/h"; mkdir -p "$H" "$T/d/sub" "$H/.config/bashbasicsbyvk/telemetry"; touch "$T/d/a.txt"; B="$T/bin"; mkdir -p "$B"
   echo 00000000-0000-4000-8000-000000000000 >"$H/.config/bashbasicsbyvk/telemetry/uuid"; echo "$(date -u +%F) true" >"$H/.config/bashbasicsbyvk/telemetry/daily"   # telemetry already reported today: no network wait

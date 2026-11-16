@@ -52,7 +52,7 @@ _CC_CTX=""            # "st" = called from a Settings / Home screen (their own, 
 
 declare -ga _CC_KEY=() _CC_DESC=() _CC_INS=()
 
-# ------------------------------------------------------------ what can be typed here?
+# ── what can be typed here?
 _cc_add() {   # key description   (first one wins, a key is listed once)
   case "$_cc_seen" in *$'\n'"$1"$'\n'*) return 0 ;; esac
   _cc_seen+="$1"$'\n'
@@ -107,7 +107,7 @@ _cc_collect() {
   return 0
 }
 
-# ------------------------------------------------------------ the list (Settings / Home engine)
+# ── the list (Settings / Home engine)
 _cc_build() {
   _st_reset
   local i n=${#_CC_KEY[@]} q xm="${filter_mode:-partial}" k anyk=0
@@ -166,7 +166,7 @@ bvk_cc_cmd() {
   return 0
 }
 
-# ------------------------------------------------------------ readers: consume the pick
+# ── readers: consume the pick
 # _cc_take  →  _CC_TAKEN = the text to start the prompt with ("" = nothing waiting); clears it
 _CC_TAKEN=""
 _cc_take() { _CC_TAKEN="$_CC_PREFILL"; _CC_PREFILL=""; [ -n "$_CC_TAKEN" ]; }

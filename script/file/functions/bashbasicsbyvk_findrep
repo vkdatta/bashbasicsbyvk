@@ -312,7 +312,7 @@ def main(argv):
              names_matched=0, names_planned=0, names_renamed=0, names_conflict=0, names_invalid=0, names_error=0, occ=0)
     r_occ, r_files, r_names = [0] * nr, [0] * nr, [0] * nr
 
-    # ---- contents ----
+    # ── contents
     if do_contents:
         for it in items:
             if it.typ != "f" or it.excl:
@@ -370,7 +370,7 @@ def main(argv):
                 else:
                     it.cstate = C_DONE
 
-    # ---- names ----
+    # ── names
     if do_names:
         for it in items:
             if it.excl:
@@ -432,7 +432,7 @@ def main(argv):
             if mode == 2:
                 apply_names(items, o, S, r_names)
 
-    # ---- listing ----
+    # ── listing
     def reportable(it):
         if mode == 0:
             return it.nstate == PLAN or it.cstate == C_MATCH

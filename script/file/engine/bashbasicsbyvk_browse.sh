@@ -46,9 +46,7 @@ fast_count() {
   echo "${#arr[@]}"
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
 # count_items_in_path — single os.scandir, ~80ms for 200k.
-# ═══════════════════════════════════════════════════════════════════════════
 count_items_in_path() {
   local p="$1"
   if declare -F _bvk_go_bin >/dev/null 2>&1 && _bvk_go_bin; then
@@ -71,9 +69,7 @@ except Exception:
 PYEOF
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
 # _bvk_prefix_scan — files matching group_prefix.
-# ═══════════════════════════════════════════════════════════════════════════
 _bvk_prefix_scan_py() {
   local p="$1"
   local pfx="$2"
@@ -137,14 +133,12 @@ _bvk_load_hash_items() {
   case "$_f" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$_f" ;; *) rm -f "$_f" ;; esac   # a re-used file: truncate (no process)
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Group-key rule — the ONE definition of "which group does this file fall in".
 #   next char after the prefix: letter → UPPER, digit → itself, one of SPECIALS →
 #   itself, anything else → "#".   Used by get_imaginary_groups, _bvk_fallback_scan
 #   and the filter's imaginary scan (settings/bashbasicsbyvk_filter.sh).
 #   _bvk_py_group <args…> <<'PYEOF' … PYEOF   runs python with SPECIALS and
 #   group_key(nxt) already defined; sys.argv works exactly like `python3 - args`.
-# ═══════════════════════════════════════════════════════════════════════════
 _BVK_GKEY_PY='SPECIALS = set("_.-()[]{}@!~+=^&%$,;'"'"' ")
 def group_key(nxt):
     if nxt.isalpha(): return nxt.upper()
@@ -154,9 +148,7 @@ def group_key(nxt):
 _bvk_py_group() { python3 -c "${_BVK_GKEY_PY}
 $(cat)" "$@"; }
 
-# ═══════════════════════════════════════════════════════════════════════════
 # _bvk_fallback_scan — the "#" branch in handle_selection.
-# ═══════════════════════════════════════════════════════════════════════════
 _bvk_fallback_scan() {
   local p="$1"
   local pfx="$2"
@@ -193,9 +185,7 @@ build_all_items() {
   apply_sort
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
 # get_imaginary_groups — unfiltered.
-# ═══════════════════════════════════════════════════════════════════════════
 get_imaginary_groups() {
   local p="$1"
   local pfx="$2"
@@ -250,9 +240,7 @@ PYEOF
   done <<< "$py_out"
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
 # _rebuild_imaginary_display — sort + format block.
-# ═══════════════════════════════════════════════════════════════════════════
 _rebuild_imaginary_display() {
   local total="$1"
   if [ -n "${_filter_query:-}" ]; then
@@ -309,10 +297,8 @@ display_imaginary_groups() {
   builtin printf "%s\n" "$_imag_banner" "${imaginary_lines[@]}"
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Index mode (big folders) — the ONE place that decides "list it" or "show prefix groups".
 # Shared by the fx / switch loops (_bvk_build_path_items) and the transfer navigator.
-# ═══════════════════════════════════════════════════════════════════════════
 
 # _bvk_prefix_matches <dir> <prefix>  → _bvk_pfx_items[]: the visible entries of <dir> whose lower-cased name starts with <prefix>
 _bvk_prefix_matches() {
@@ -539,7 +525,7 @@ handle_selection() {
   fi
 }
 
-# ── the status row:   c | ⏰ <notifications> | 📣 <unfinished uploads> ─────────────────────────────────────────
+# ── the status row:   c | ⏰ <notifications> | 📣 <unfinished uploads>
 # The first field is the engine that listed this folder: c (native binary) or py (Python fallback) - the old
 # "[loaded by c]" tag, moved here (BVK_SHOW_SRC=0 or nothing loaded yet shows –).  The two numbers come from tiny caches
 # (_nf_cnt_get / _pn_count_cached), so drawing the header never waits for the network or scans folders.
@@ -796,7 +782,7 @@ _rc_type_text() {
   _sync_highlight_from_buf
 }
 
-# ── mouse / touch (see bashbasicsbyvk_mouse.sh) ──────────────────────────────────────────────────────────────────────
+# ── mouse / touch (see bashbasicsbyvk_mouse.sh)
 # wheel / swipe: scroll the highlight (clamped, no wrap-around: a wheel that jumps from the top to the bottom is useless)
 # At the first / last row, or with the touch outside the block (above its header / below its prompt), the wheel goes back to the terminal.
 _rc_wheel() {
