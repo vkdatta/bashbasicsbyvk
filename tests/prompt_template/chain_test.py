@@ -11,17 +11,6 @@ for d, _, fs in os.walk(os.path.join(ROOT, 'script')):
     for f in fs:
         if f.startswith('bashbasicsbyvk_') or f.startswith('_3bvk_'):
             shutil.copy(os.path.join(d, f), os.path.join(FLAT, f)); os.chmod(os.path.join(FLAT, f), 0o755)
-TOOL = open(os.path.join(ROOT, 'script/file/infinity/tools/bashbasicsbyvk_gitpush')).read()
-def cut(a, b): i = TOOL.index(a); return TOOL[i:TOOL.index(b, i)]
-FUNCS = cut('die() {', 'cleanup() {') + cut('ask_yn() {', 'ask_repo_visibility() {') + cut('select_version() {', '# ============================================================\n# Push')
-HARNESS = '''#!/usr/bin/env bash
-set -Eeuo pipefail
-set +eu; source "bashbasicsbyvk_menuchrome.sh"; set -eu
-DEFAULT_COMMIT_MESSAGE="Codebase Updated"
-''' + FUNCS + '''
-check_git_identity() { :; }
-cd "$REPO"; create_commit; echo "RESULT-commit: $(git log -1 --format=%s)"; b=$(git log -1 --format=%B); echo "RESULT-body: ${b//$'\n'/<NL>}"
-'''
 fails = 0
 def drive(name, argv, steps, want, nowant=(), env_extra=None, cwd=None, bindir=None):
     """Run argv in a pty with the real doors on PATH; steps = [(text to wait for (a NEW occurrence), keys to send)]; the output must contain `want`, never `nowant`."""
@@ -76,33 +65,7 @@ def drive(name, argv, steps, want, nowant=(), env_extra=None, cwd=None, bindir=N
     if ok: print('PASS ' + name)
     else: fails += 1; print('---- last output ----\n' + out[-700:])
 
-def run(name, steps, want, nowant=()):       # the commit questions of bashbasicsbyvk_gitpush, against a temp git repo
-    repo = tempfile.mkdtemp(prefix='bvkrepo')
-    subprocess.run('git init -q && git config user.email t@t && git config user.name t && echo a>a.txt && git add . && git commit -qm init && echo b>>a.txt', shell=True, cwd=repo, check=True)
-    h = os.path.join(repo, 'h.sh'); open(h, 'w').write(HARNESS)
-    drive(name, ['bash', h], steps, want, nowant, env_extra={'REPO': repo})
-    shutil.rmtree(repo, ignore_errors=True)
-
-V, M, C = 'Select version bump type:', 'Enter commit message', 'Create this commit?'
-run('plain answers commit', [(V, '2\r'), (M, 'hello world\r'), (C, 'y\r')], ['RESULT-commit: hello world #minor'])
-run('u at "Create this commit?" returns to the message, text kept', [(V, '2\r'), (M, 'keepme\r'), (C, 'u\r'), (M, '\r'), (C, 'y\r')], ['RESULT-commit: keepme #minor'])
-run('u at the message returns to the version question', [(V, '2\r'), (M, 'u\r'), (V, '3\r'), (M, 'x\r'), (C, 'y\r')], ['RESULT-commit: x #major'], ['RESULT-commit: u'])
-run('u on the first question leaves the commit', [(V, 'u\r')], ['Commit cancelled (back)'], ['RESULT-commit'])
-run('q at the message quits', [(V, '1\r'), (M, 'q\r')], ['Commit cancelled'], ['RESULT-commit'])
-run('@u is the text u', [(V, '1\r'), (M, '@u\r'), (C, 'y\r')], ['RESULT-commit: u #patch'])
-run('the footer is printed above the prompt', [(V, 'u\r')], ['u) Back   q) Close'])
-
-# ---- bashbasicsbyvk_localhost: port -> "Force it?" (only when the port is busy).  No lsof / ss here: a fake ss reports port 8099 as busy.
-BIN = tempfile.mkdtemp(prefix='bvkbin')
-open(os.path.join(BIN, 'ss'), 'w').write('#!/bin/sh\nprintf "State Recv-Q Send-Q Local Peer\\nLISTEN 0 128 0.0.0.0:8099 0.0.0.0:*\\n"\n'); os.chmod(os.path.join(BIN, 'ss'), 0o755)
-LH = ['bash', os.path.join(FLAT, 'bashbasicsbyvk_localhost')]
-PQ, FQ = 'Enter localhost port', 'is already in use'
-drive('localhost: u at "Force it?" returns to the port question (port kept), u there leaves', LH, [(PQ, '8099\r'), (FQ, 'u\r'), (PQ, 'u\r')], ['Operation cancelled'], ['Port 8099 freed', 'Localhost created'], bindir=BIN)
-drive('localhost: n at "Force it?" cancels', LH, [(PQ, '8099\r'), (FQ, 'n\r')], ['Operation cancelled'], ['Localhost created', 'Port 8099 freed'], bindir=BIN)
-drive('localhost: u on the first question leaves the tool', LH, [(PQ, 'u\r')], ['Operation cancelled'], ['Invalid port', 'Localhost created'], bindir=BIN)
-drive('localhost: q on the port question quits', LH, [(PQ, 'q\r')], [], ['Localhost created'], bindir=BIN)
-drive('localhost: a word is not a port', LH, [(PQ, 'abc\r')], ['Invalid port'], ['Localhost created'], bindir=BIN)
-shutil.rmtree(BIN, ignore_errors=True)
+# (bashbasicsbyvk_gitpush and bashbasicsbyvk_localhost are functions of the app now: tests/infinity/infinity_test.py drives their questions in the real app)
 
 # ---- bashbasicsbyvk_recover_creds.py (Python): token -> account, the questions are steps (bashbasicsbyvk_ask.steps).  The prompts and the API are faked.
 sys.path[:0] = [os.path.join(ROOT, 'script/file/engine'), os.path.join(ROOT, 'script/file/loops/iloop/fx/cloudflare_fx/recover')]
@@ -145,7 +108,6 @@ ONE = ['bash', '-c', 'x=$(bash "%s" "Name: "); echo "RESULT=[${x//$\'\\n\'/<NL>}
 MULTI = ['bash', '-c', 'x=$(bash "%s" "Name: " -m); echo "RESULT=[${x//$\'\\n\'/<NL>}]"' % os.path.join(FLAT, 'bashbasicsbyvk_ask')]
 drive('a pasted line break returns as a space (one line)', ONE, [('Name: ', PASTE), ('Name: ab', '\r')], ['RESULT=[ab cd]'], ['<NL>'])
 drive('-m keeps the line break (multi-line answer)', MULTI, [('Name: ', PASTE), ('Name: ab', '\r')], ['RESULT=[ab<NL>cd]'])
-run('commit message: a multi-line paste is kept (-m)', [(V, '1\r'), (M, PASTE), (M + ' [Default: Codebase Updated]: ab', '\r'), (C, 'y\r')], ['RESULT-body: ab<NL>cd #patch'])
 shutil.rmtree(FLAT, ignore_errors=True)
 print('ALL OK' if not fails else 'FAILED')
 sys.exit(1 if fails else 0)

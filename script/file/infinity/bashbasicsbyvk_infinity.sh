@@ -23,8 +23,6 @@ _infinity_warning() {
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 }
 
-declare -F _sl_fs >/dev/null 2>&1 || _sl_fs() { local _c="$1"; shift; command "$_c" "$@"; }   # smartload off: plain pass-through
-
 infinity_stones_menu() {
   _infinity_warning
 
@@ -38,13 +36,13 @@ infinity_stones_menu() {
     case "$is_choice" in
     u|U|"") return ;;
     q|Q) _bvk_quit; return 1 ;;
-      1) _sl_fs python "$SCRIPT_DIR/bashbasicsbyvk_xtract" "$path" ;;
-      2) _sl_fs python "$SCRIPT_DIR/bashbasicsbyvk_js_audit" "$path" ;;
-      3) _sl_fs bash "$SCRIPT_DIR/bashbasicsbyvk_py_audit" "$path" ;;
-      4) _sl_fs bash "$SCRIPT_DIR/bashbasicsbyvk_gitpush" "$path" ;;
-      5) _sl_fs python "$SCRIPT_DIR/bashbasicsbyvk_gen_sql" "$path" ;;
-      6) _sl_fs bash "$SCRIPT_DIR/bashbasicsbyvk_localhost" "$path" ;;
-      7) _sl_fs python "$SCRIPT_DIR/bashbasicsbyvk_polyglot" "$path" ;;
+      1) _inf_py "$SCRIPT_DIR/bashbasicsbyvk_xtract" "$path" ;;
+      2) _inf_py "$SCRIPT_DIR/bashbasicsbyvk_js_audit" "$path" ;;
+      3) bvk_py_audit "$path" ;;
+      4) bvk_gitpush "$path" ;;
+      5) _inf_py "$SCRIPT_DIR/bashbasicsbyvk_gen_sql" "$path" ;;
+      6) bvk_localhost "$path" ;;
+      7) _inf_py "$SCRIPT_DIR/bashbasicsbyvk_polyglot" "$path" ;;
       *) _bvk_invalid; continue ;;      # redraw THIS menu, not the parent
     esac
     return

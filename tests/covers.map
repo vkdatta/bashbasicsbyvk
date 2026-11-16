@@ -55,3 +55,5 @@ cmd/bashbasicsbyvk_sys	sys deps
 (^|/)(bashbasicsbyvk_|_3bvk_import_|o$)	read_lint
 engine/bashbasicsbyvk_(cheatcode|menuchrome)	cc_footer cheatcode
 engine/bashbasicsbyvk_(cheatcode|menuchrome)	cc_footer cc_truth cheatcode
+file/infinity/	infinity_in_app loadmap menu_templates prompt_drift
+engine/bashbasicsbyvk_(qbridge|ask|yn|choose)	infinity_in_app choose_door yn_tools prompt_chain

@@ -51,7 +51,7 @@ for typed, want in (('a-2', '1 3 4 5'), ('a', '1 2 3 4 5'), ('2-4', '2 3 4'), ('
 o = run('a=$(bashbasicsbyvk_choose "Pick" -d 1 "1:One" "2:Two"); echo "RC=$? ANS=[$a]"', ['cc\r', '2\r'])
 check('cc in a stand-alone door: no crash, still answers', 'command not found' not in o and 'RC=0 ANS=[2]' in o, o)
 # the force-push confirmation gate (action_confirm_key) in a tool with no _bvk_read: THE ask door types the number
-GATE = ('set -Eeuo pipefail; set +eu; source bashbasicsbyvk_menuchrome.sh 2>/dev/null; source _3bvk_import_gitpush.sh 2>/dev/null; set -eu; '
+GATE = ('set -Eeuo pipefail; set +eu; source bashbasicsbyvk_menuchrome.sh 2>/dev/null; source _3bvk_import_cmd_delete.sh 2>/dev/null; set -eu; '
         'rc=0; action_confirm_key "FINAL FORCE-PUSH CONFIRMATION" "destructive" || rc=$?; echo "GATE-RC=$rc"')
 for label, fn, want in (('right number', lambda k: k + '\r', 'GATE-RC=0'), ('wrong number', lambda k: '111111\r', 'GATE-RC=1'),
                         ('u is back', lambda k: 'u\r', 'GATE-RC=2'), ('q cancels', lambda k: 'q\r', 'GATE-RC=1')):
@@ -76,7 +76,7 @@ py = ('import bashbasicsbyvk_choose as c\n'
 open(os.path.join(flat, 'pyprobe.py'), 'w').write(py)
 o = run('python3 ' + os.path.join(flat, 'pyprobe.py'), ['2\r']); check('python door returns the key', "PY '2'" in o, o)
 o = run('python3 ' + os.path.join(flat, 'pyprobe.py'), ['q\r']); check('python door raises EOFError on q', 'PY EOF' in o, o)
-g = open(os.path.join(SCRIPT, 'file/infinity/tools/bashbasicsbyvk_gitpush')).read()
-check('gitpush asks the version through the door', 'bashbasicsbyvk_choose' in g and 'echo "1) Patch' not in g)
+g = open(os.path.join(SCRIPT, 'file/infinity/tools/bashbasicsbyvk_gitpush.sh')).read()
+check('gitpush asks the version with the app menu (_bvk_menu)', '_bvk_menu choice' in g and 'echo "1) Patch' not in g)
 shutil.rmtree(flat, ignore_errors=True)
 print('ALL OK' if ok else 'FAILED'); sys.exit(0 if ok else 1)

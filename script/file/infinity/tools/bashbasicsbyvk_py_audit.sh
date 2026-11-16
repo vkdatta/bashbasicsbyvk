@@ -1,9 +1,10 @@
-#!/usr/bin/env bash
+# bashbasicsbyvk_py_audit.sh - Python audit, a function of the app (Infinity Stones, 3).  Runs INSIDE the app: see bashbasicsbyvk_gitpush.sh.
 
-set -euo pipefail
+bvk_py_audit() { _inf_sub "-eo pipefail" _pa_body "$@"; }
 
+_pa_body() {
 # pyright, openpyxl, pip and python3 come from the central dependency registry (feature py_audit): missing ones get the Installer menu.
-bashbasicsbyvk_deps.sh -c "Python audit" py_audit || exit 1
+_dep_need -c "Python audit" py_audit || exit 1
 PATH="$PATH:$HOME/.local/bin"       # a fresh user-space install puts pyright here
 
 TARGET="${1:-$(pwd)}"
@@ -166,3 +167,4 @@ echo "Excel report      : $TARGET/Python Report.xlsx"
 echo "=============================="
 
 exit "$PYRIGHT_EXIT"
+}

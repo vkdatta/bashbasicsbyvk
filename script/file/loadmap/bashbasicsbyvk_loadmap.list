@@ -148,6 +148,10 @@ bashbasicsbyvk_adf_cfwp.sh|||tool, run as its own process
 bashbasicsbyvk_adf_github.sh|||tool, run as its own process
 bashbasicsbyvk_udf_io.sh|||UDF export / import
 bashbasicsbyvk_infinity.sh|||i: infinity stones
+bashbasicsbyvk_infinity_run.sh|||Infinity tools run inside the app: _inf_sub (bash tools), _inf_py (python tools, questions asked by the app)
+bashbasicsbyvk_gitpush.sh|||Infinity 4: Git Push, a function of the app
+bashbasicsbyvk_localhost.sh|||Infinity 6: Localhost server, a function of the app
+bashbasicsbyvk_py_audit.sh|||Infinity 3: Python audit, a function of the app
 bashbasicsbyvk_auth.sh|||auth: accounts
 bashbasicsbyvk_xui.sh|||shared screen for rbam / nf / cs
 bashbasicsbyvk_rbam.sh|||rbam: share people
@@ -157,7 +161,6 @@ bashbasicsbyvk_gdrive.sh|bashbasicsbyvk_run.sh,bashbasicsbyvk_transfer.sh,bashba
 _3bvk_import_cmd_copy.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_cmd_delete.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_deps.sh|||import file of a stand-alone tool (its own process, never loaded by o)
-_3bvk_import_gitpush.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_ask.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_yn.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 bashbasicsbyvk_api.map|||command-map wiring, read as data
@@ -182,10 +185,10 @@ bashbasicsbyvk_fx.map|||command-map wiring, read as data
 bashbasicsbyvk_gd|||tool, run as its own process
 bashbasicsbyvk_gen_sql|||tool, run as its own process
 bashbasicsbyvk_github|||tool, run as its own process
-bashbasicsbyvk_gitpush|||tool, run as its own process
 bashbasicsbyvk_help.txt|||data / text
 bashbasicsbyvk_home.map|||command-map wiring, read as data
 bashbasicsbyvk_index_lib.py|||python helper, run as a process
+bashbasicsbyvk_qbridge.py|||python helper: the python doors ask through the app when run by _inf_py
 bashbasicsbyvk_infinity.map|||command-map wiring, read as data
 bashbasicsbyvk_js_audit|||tool, run as its own process
 bashbasicsbyvk_js_audit_1a.py|||python helper, run as a process
@@ -200,7 +203,6 @@ bashbasicsbyvk_js_audit_helpers.py|||python helper, run as a process
 bashbasicsbyvk_loadmap.list|||data
 bashbasicsbyvk_loadmap_gen|||tool, run as its own process
 bashbasicsbyvk_loadtime_report|||tool, run as its own process
-bashbasicsbyvk_localhost|||tool, run as its own process
 bashbasicsbyvk_ask|||tool, run as its own process: THE typed-line prompt (native line editor) for every stand-alone tool
 bashbasicsbyvk_ask.py|||python helper, run as a process: the python door to bashbasicsbyvk_ask
 bashbasicsbyvk_yn|||tool, run as its own process: THE yes/no question (native menu) for every stand-alone tool
@@ -231,7 +233,6 @@ bashbasicsbyvk_polyglot_ui.py|||python helper, run as a process
 bashbasicsbyvk_polyglot_verify.py|||python helper, run as a process
 bashbasicsbyvk_polyglot_xlsx.py|||python helper, run as a process
 bashbasicsbyvk_prompt.map|||command-map wiring, read as data
-bashbasicsbyvk_py_audit|||tool, run as its own process
 bashbasicsbyvk_local_daemon|||tool, run as its own process (the local daemon)
 bashbasicsbyvk_planetary_resources.py|||python helper of both the local daemon and its libs, run as a process (the twin of bashbasicsbyvk_planetary_resources.sh)
 bashbasicsbyvk_planetary_versions.list|||data: the version of each daemon, read by both flavours of planetary resources

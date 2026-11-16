@@ -1,10 +1,8 @@
-#!/usr/bin/env bash
+# bashbasicsbyvk_localhost.sh - Localhost server, a function of the app (Infinity Stones, 6).  Runs INSIDE the app: see bashbasicsbyvk_gitpush.sh.
 
-# The questions of this tool are STEPS (_mc_steps: u = ONE QUESTION BACK, q = quit).  Only the step helper is needed (flat pip install: it sits next to this script on PATH).
-# shellcheck disable=SC1090
-source "bashbasicsbyvk_menuchrome.sh" 2>/dev/null
-declare -F _mc_steps >/dev/null 2>&1 || { echo "ERROR: cannot load bashbasicsbyvk_menuchrome.sh (reinstall bashbasicsbyvk)." >&2; exit 1; }
+bvk_localhost() { _inf_sub "" _lh_body "$@"; }
 
+_lh_body() {
 clear
 
 echo "=============================================="
@@ -43,20 +41,18 @@ fi
 
 echo
 
-# THE yes/no question: the app's native menu (bashbasicsbyvk_yn).  ask_yes "Question?" [-b]:  rc 0 = yes · 1 = no or no answer · 4 = u (only with -b: one question back).
 # A plain line only if the menu is not installed.
-ask_yes() {
-    local rc=3 a yn_args=(-t "Localhost" -i "🌐")
-    [ "${2:-}" = -b ] && yn_args+=(-b)
-    if command -v bashbasicsbyvk_yn >/dev/null 2>&1; then
-        bashbasicsbyvk_yn "$1" "${yn_args[@]}"; rc=$?
-        case "$rc" in 0) return 0 ;; 1|2) return 1 ;; 4) return 4 ;; esac
+    ask_yes() {
+    local ans=""
+    if _bvk_yn ans "$1" -t "Localhost" -i "🌐"; then
+        [ "$ans" = y ] && return 0
+        return 1
     fi
-    read -e -rp "$1 (y/n): " a   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_yn)
-    [[ "$a" == [Yy]* ]]
-}
+    if [ "${2:-}" = -b ] && _bvk_back; then return 4; fi
+    return 1
+    }
 
-port_busy() {
+    port_busy() {
 
     if command -v lsof >/dev/null 2>&1; then
         lsof -i :"$1" >/dev/null 2>&1 && return 0
@@ -79,9 +75,9 @@ port_busy() {
     fi
 
     return 1
-}
+    }
 
-kill_port() {
+    kill_port() {
 
     echo
     echo "Attempting to free port $1..."
@@ -116,22 +112,18 @@ kill_port() {
 
     echo "Port $1 freed."
     return 0
-}
+    }
 
 # Step 1: the port.  rc 0 answered · 1 u · 3 q / not a usable port (the message is printed here)
-_lh_s_port() {
-    local rc=3
+    _lh_s_port() {
+    local _CE_SELECT=0                                  # the port typed before starts selected when u comes back here
+    [ -n "${PORT:-}" ] && _CE_SELECT=1
     echo
-    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then        # THE native line editor: u = back, q = quit; the port typed before is kept when u comes back here
-        PORT="$(bashbasicsbyvk_ask "Enter localhost port: " -b -S -i "${PORT:-}")" && rc=0 || rc=$?
-        case "$rc" in
-            0) ;;
-            4) return 1 ;;
-            3) read -e -rp "Enter localhost port: " PORT ;;   # bvk-read-ok: fallback of a broken install (no editor)
-            *) return 3 ;;
-        esac
-    else
-        read -e -rp "Enter localhost port: " PORT   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+    _mc_footer_std -b
+    _CM_BACKED=0
+    if ! _bvk_read PORT "Enter localhost port: " -i "${PORT:-}"; then
+        [ "${_CM_BACKED:-0}" = 1 ] && return 1
+        return 3
     fi
     if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
         echo; echo "Invalid port."; return 3
@@ -140,10 +132,10 @@ _lh_s_port() {
         echo; echo "Port must be between 1 and 65535."; return 3
     fi
     return 0
-}
+    }
 
 # Step 2: "Force it?" - asked only when the port is busy (a free port: nothing to ask, also when u comes back here from a later step)
-_lh_s_force() {
+    _lh_s_force() {
     local rc=0
     port_busy "$PORT" || return 0
     echo
@@ -155,31 +147,32 @@ _lh_s_force() {
     echo
     echo "Operation cancelled."
     exit 0
-}
+    }
 
 _lh_rc=0
 _mc_steps _lh_s_port _lh_s_force || _lh_rc=$?
 case "$_lh_rc" in
     0) ;;
     1) echo; echo "Operation cancelled."; exit 0 ;;      # u on the FIRST question: out of the tool, back to the menu it was opened from
+    2) exit 42 ;;                                      # q: close up to the main loop
     *) exit 1 ;;
 esac
 
 if command -v python3 >/dev/null 2>&1; then
-    PYTHON="python3"
+    _LH_PY="python3"
 elif command -v python >/dev/null 2>&1; then
-    PYTHON="python"
+    _LH_PY="python"
 else
-    bashbasicsbyvk_deps.sh -c "Local web server" python3 || exit 1
-    PYTHON="python3"
+    _dep_need -c "Local web server" python3 || exit 1
+    _LH_PY="python3"
 fi
 
-start_server() {
+    start_server() {
 
     TMPFILE=$(mktemp)
     trap 'rm -f "$TMPFILE"' EXIT
 
-    "$PYTHON" -m http.server "$PORT" \
+    "$_LH_PY" -m http.server "$PORT" \
         --bind 127.0.0.1 \
         2>"$TMPFILE"
 
@@ -205,7 +198,7 @@ start_server() {
                 trap - EXIT
                 rm -f "$TMPFILE"
 
-                exec "$PYTHON" -m http.server "$PORT" --bind 127.0.0.1
+                exec "$_LH_PY" -m http.server "$PORT" --bind 127.0.0.1
 
                 ;;
 
@@ -225,7 +218,7 @@ start_server() {
     cat "$TMPFILE"
 
     return $STATUS
-}
+    }
 
 echo
 echo "=============================================="
@@ -240,3 +233,4 @@ echo "=============================================="
 echo
 
 start_server
+}

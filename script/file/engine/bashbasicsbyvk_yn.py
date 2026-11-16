@@ -9,8 +9,9 @@ The menu is drawn on the terminal even when this process's stdin / stdout are pi
 does it fall back to one plain y/n line on the terminal.
 """
 import shutil
-import subprocess
 from pathlib import Path
+
+import bashbasicsbyvk_qbridge as _qb      # inside the app the question is asked by the app itself (see bashbasicsbyvk_qbridge.py)
 
 CLI_NAME = "bashbasicsbyvk_yn"
 
@@ -42,14 +43,14 @@ def _plain(question):
 
 def ask(question, title="", icon=""):
     cli = _cli()
-    if cli:
-        cmd = ["bash", cli, question]
+    if cli or _qb.active():
+        tail = [question]
         if title:
-            cmd += ["-t", title]
+            tail += ["-t", title]
         if icon:
-            cmd += ["-i", icon]
+            tail += ["-i", icon]
         try:
-            rc = subprocess.run(cmd).returncode
+            rc, _ = _qb.run("yn", tail, cli, capture=False)
         except OSError:
             rc = 3
         if rc == 0:

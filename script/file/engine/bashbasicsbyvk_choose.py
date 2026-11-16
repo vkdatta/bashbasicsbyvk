@@ -10,8 +10,9 @@ The menu is drawn on the terminal even when this process's stdin / stdout are pi
 fall back to one plain numbered line on the terminal.
 """
 import shutil
-import subprocess
 from pathlib import Path
+
+import bashbasicsbyvk_qbridge as _qb      # inside the app the question is asked by the app itself (see bashbasicsbyvk_qbridge.py)
 
 try:
     from bashbasicsbyvk_ask import Back, steps          # the SAME Back / steps as the typed prompts: one chain across both doors
@@ -66,34 +67,33 @@ def _plain(question, rows, default, multi):
 def ask(question, items, title="", icon="", default="", multi=False, back=False, keys_line=False):
     rows = _rows(items)
     cli = _cli()
-    if cli:
-        cmd = ["bash", cli, question]
+    if cli or _qb.active():
+        tail = [question]
         if title:
-            cmd += ["-t", title]
+            tail += ["-t", title]
         if icon:
-            cmd += ["-i", icon]
+            tail += ["-i", icon]
         if default:
-            cmd += ["-d", str(default)]
+            tail += ["-d", str(default)]
         if multi:
-            cmd += ["-m"]
+            tail += ["-m"]
         if keys_line:
-            cmd += ["-k"]
+            tail += ["-k"]
         if back:
-            cmd += ["-b"]
-        cmd += [f"{k}:{lab}" for k, lab in rows]
+            tail += ["-b"]
+        tail += [f"{k}:{lab}" for k, lab in rows]
         try:
-            r = subprocess.run(cmd, stdout=subprocess.PIPE)
+            rc, raw = _qb.run("choose", tail, cli)
         except OSError:
-            r = None
-        if r is not None:
-            if r.returncode == 0:
-                out = r.stdout.decode("utf-8", "replace").strip()
-                return out.split() if multi else out
-            if r.returncode in (130, -2):                 # Ctrl-C inside the menu
-                raise KeyboardInterrupt
-            if r.returncode == 4:                         # u, with back=True
-                raise Back
-            if r.returncode != 3:                         # 2 = no answer; anything else = the tool ended: never ask twice
-                raise EOFError
-            # 3 = the menu is not installed: the plain line below
+            rc, raw = 3, b""
+        if rc == 0:
+            out = raw.decode("utf-8", "replace").strip()
+            return out.split() if multi else out
+        if rc in (130, -2):                           # Ctrl-C inside the menu
+            raise KeyboardInterrupt
+        if rc == 4:                                   # u, with back=True
+            raise Back
+        if rc != 3:                                   # 2 = no answer; anything else = the tool ended: never ask twice
+            raise EOFError
+        # 3 = the menu is not installed: the plain line below
     return _plain(question, rows, str(default), multi)

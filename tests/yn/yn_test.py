@@ -56,12 +56,8 @@ for ans, left in ((b'n', 'data'), (b'y', '')):
 for ans, exists in ((b'n', True), (b'y', False)):
     open(f, 'w').write('x'); rc, o = run([os.path.join(flat, 'bashbasicsbyvk_delete'), 'f.txt'], [ans, b'\r'])
     check('delete answers ' + ans.decode() + ' through the native menu', os.path.exists(f) == exists and 'Select:' in o and "Type 'yes'" not in o, (rc, o[-200:]))
-src = open(os.path.join(SCRIPT, 'file/infinity/tools/bashbasicsbyvk_gitpush')).read()
-a, b = src.index('ask_yn() {'), src.index('ask_repo_visibility()')
-open(os.path.join(work, 'ask.sh'), 'w').write('set -Eeuo pipefail\ndie(){ echo "DIE: $*" >&2; exit 1; }\n' + src[a:b] + '\nask_yn "Make repository private?"; echo "ANS=$ANS"\n')
-for ans, want in ((b'y', 'ANS=y'), (b'n', 'ANS=n'), (b'q', 'DIE: No answer')):
-    rc, o = run([os.path.join(work, 'ask.sh')], [ans, b'\r'])
-    check('git push ask_yn ' + ans.decode() + ' -> ' + want + ' (quitting never answers "public")', want in o and '[y/n]' not in o, (rc, o[-200:]))
+src = open(os.path.join(SCRIPT, 'file/infinity/tools/bashbasicsbyvk_gitpush.sh')).read()
+check('git push asks yes/no with the app menu (_bvk_yn), not a door of its own', '_bvk_yn ans "$1"' in src and 'bashbasicsbyvk_yn' not in src)
 # 3. lint: a plain y/n prompt only next to the native menu
 PLAIN = re.compile(r"""(read\b[^\n]*(\(y/n\)|\[y/n\]|\(Y/N\)|\[yes/no\]|\(yes/no\)|Type 'yes'))|(input\([^\n]*\(y/n\))|(echo -n [^\n]*\(yes/no\))|(tty\.write\([^\n]*\(y/n\))""", re.I)
 bad = []

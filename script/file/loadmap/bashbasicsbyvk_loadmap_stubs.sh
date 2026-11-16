@@ -98,6 +98,7 @@ _bc_index() { _lm_stub bashbasicsbyvk_choose.sh _bc_index "$@"; }
 _bc_act() { _lm_stub bashbasicsbyvk_choose.sh _bc_act "$@"; }
 _bc_leave() { _lm_stub bashbasicsbyvk_choose.sh _bc_leave "$@"; }
 _bc_word() { _lm_stub bashbasicsbyvk_choose.sh _bc_word "$@"; }
+_bc_typed_sel() { _lm_stub bashbasicsbyvk_choose.sh _bc_typed_sel "$@"; }
 _bc_cmd() { _lm_stub bashbasicsbyvk_choose.sh _bc_cmd "$@"; }
 _bc_wrap() { _lm_stub bashbasicsbyvk_choose.sh _bc_wrap "$@"; }
 _bc_plain() { _lm_stub bashbasicsbyvk_choose.sh _bc_plain "$@"; }
@@ -1010,6 +1011,18 @@ _fx_udf_export() { _lm_stub bashbasicsbyvk_udf_io.sh _fx_udf_export "$@"; }
 _fx_udf_import() { _lm_stub bashbasicsbyvk_udf_io.sh _fx_udf_import "$@"; }
 _infinity_warning() { _lm_stub bashbasicsbyvk_infinity.sh _infinity_warning "$@"; }
 infinity_stones_menu() { _lm_stub bashbasicsbyvk_infinity.sh infinity_stones_menu "$@"; }
+_inf_sub() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_sub "$@"; }
+_inf_q_yn() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_q_yn "$@"; }
+_inf_q_choose() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_q_choose "$@"; }
+_inf_q_ask() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_q_ask "$@"; }
+_inf_serve_one() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_serve_one "$@"; }
+_inf_py() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_py "$@"; }
+bvk_gitpush() { _lm_stub bashbasicsbyvk_gitpush.sh bvk_gitpush "$@"; }
+_gp_body() { _lm_stub bashbasicsbyvk_gitpush.sh _gp_body "$@"; }
+bvk_localhost() { _lm_stub bashbasicsbyvk_localhost.sh bvk_localhost "$@"; }
+_lh_body() { _lm_stub bashbasicsbyvk_localhost.sh _lh_body "$@"; }
+bvk_py_audit() { _lm_stub bashbasicsbyvk_py_audit.sh bvk_py_audit "$@"; }
+_pa_body() { _lm_stub bashbasicsbyvk_py_audit.sh _pa_body "$@"; }
 _bvk_share_spec() { _lm_stub bashbasicsbyvk_auth.sh _bvk_share_spec "$@"; }
 _bvk_auth_init() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_init "$@"; }
 _bvk_auth_parse() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_parse "$@"; }

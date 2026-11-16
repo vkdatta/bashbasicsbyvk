@@ -11,9 +11,10 @@ Never use the built-in line input, a stdin readline or getpass in a tool: this i
 installed (a broken install) does it fall back to one plain line on the terminal.
 """
 import shutil
-import subprocess
 import sys
 from pathlib import Path
+
+import bashbasicsbyvk_qbridge as _qb      # inside the app the question is asked by the app itself (see bashbasicsbyvk_qbridge.py)
 
 CLI_NAME = "bashbasicsbyvk_ask"
 
@@ -64,30 +65,29 @@ def _plain(prompt):
 
 def ask(prompt, initial="", secret=False, back=False, select=False, multiline=False):
     cli = _cli()
-    if cli:
-        cmd = ["bash", cli, prompt]
+    if cli or _qb.active():
+        tail = [prompt]
         if initial:
-            cmd += ["-i", initial]
+            tail += ["-i", initial]
         if secret:
-            cmd += ["-s"]
+            tail += ["-s"]
         if back:
-            cmd += ["-b"]
+            tail += ["-b"]
         if select:
-            cmd += ["-S"]
+            tail += ["-S"]
         if multiline:
-            cmd += ["-m"]
+            tail += ["-m"]
         try:
-            r = subprocess.run(cmd, stdout=subprocess.PIPE)
+            rc, out = _qb.run("ask", tail, cli)
         except OSError:
-            r = None
-        if r is not None:
-            if r.returncode == 0:
-                return r.stdout.decode("utf-8", "replace")
-            if r.returncode in (130, -2):                 # Ctrl-C inside the editor: the same as at input()
-                raise KeyboardInterrupt
-            if r.returncode == 4:                         # u, with back=True
-                raise Back
-            if r.returncode != 3:                         # 2 = no answer (q / u / Ctrl-D); anything else = the tool ended: never ask twice
-                raise EOFError
-            # 3 = the editor is not installed: the plain line below
+            rc, out = 3, b""
+        if rc == 0:
+            return out.decode("utf-8", "replace")
+        if rc in (130, -2):                           # Ctrl-C inside the editor: the same as at input()
+            raise KeyboardInterrupt
+        if rc == 4:                                   # u, with back=True
+            raise Back
+        if rc != 3:                                   # 2 = no answer (q / u / Ctrl-D); anything else = the tool ended: never ask twice
+            raise EOFError
+        # 3 = the editor is not installed: the plain line below
     return _plain(prompt)

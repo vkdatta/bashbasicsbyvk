@@ -88,11 +88,15 @@ So before you create anything, work in this order:
    - If file A needs file B at load time (top-level code, or a variable B sets), B must be loaded *earlier*: the load mapper checks it (rule 13). A never loads B itself, except `_lm_need B` in a function that reads B's variables.
    - To load a new file: add ONE line to the load mapper (rule 13), nowhere else.
    - Config/data files (e.g. the settings file) are parsed as data (`_bvk_settings_read`), never sourced.
-   - Stand-alone executables run as their own process (`script/cmd/*`, `bashbasicsbyvk_gitpush`) cannot inherit `o`'s
-     functions. They may `source` exactly ONE thing: their own `_3bvk_import_cmd_*.sh` / `_3bvk_import_gitpush.sh`
+   - Stand-alone executables run as their own process (`script/cmd/*`) cannot inherit `o`'s
+     functions. They may `source` exactly ONE thing: their own `_3bvk_import_cmd_*.sh`
      (plain `source` lines, no `_lt_*`, because loadtime is not loaded there). Never a lib directly.
+   - **The Infinity Stones tools are NOT stand-alone.** They run inside the app (bashbasicsbyvk_infinity_run.sh): a bash tool is a
+     function loaded by the load mapper and started with `_inf_sub` (its `exit` / `set -e` / `trap EXIT` end only the tool); a python tool is
+     started with `_inf_py` and its questions are asked by the app (`bashbasicsbyvk_qbridge.py`), so the hint row, `cc`, the typed commands and
+     `u` / `q` are the app's own. A new Infinity tool follows the same two paths; never `bash tool` / `python tool` from the menu.
 4. **No `_core` / `_main` suffix unless it is really necessary.** Name a file for what it does
-   (`bashbasicsbyvk_gitpush`, `bashbasicsbyvk_recover`). `main` is only allowed as the name of the *main menu*
+   (`bashbasicsbyvk_gitpush.sh`, `bashbasicsbyvk_recover`). `main` is only allowed as the name of the *main menu*
    (`bashbasicsbyvk_main.map`, `bashbasicsbyvk_maincommands.sh`).
 5. **Use the corpus before you fix a bug; add to it after.** The corpus is the repo's memory of past fixes, written for humans and AI agents.
    - Layout: notes in `corpus/fixed_issues_ref/YYYY/MM/DD/DDMMYYYYHHMM.txt` (year, month, day folders, zero-padded), and one index,

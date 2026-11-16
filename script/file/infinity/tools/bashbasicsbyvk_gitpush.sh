@@ -1,12 +1,11 @@
-#!/usr/bin/env bash
-set -Eeuo pipefail
+# bashbasicsbyvk_gitpush.sh - Git Push, a function of the app (Infinity Stones, 4).
+# It runs INSIDE the app (no process of its own), so the hint row, cc, the typed commands, u / q and every menu are the app's own.
+# The body runs in a subshell (_inf_sub, bashbasicsbyvk_infinity_run.sh): its `exit` / `die` / `set -e` / `trap EXIT` end only the tool.
+# Questions go through _bvk_yn / _bvk_menu / _bvk_read directly: there is no second copy of any menu.
 
-# The questions of one flow are STEPS (_mc_steps: u = ONE QUESTION BACK, q = quit).  Only the step helper is needed here (flat pip install: it sits next to this script on PATH);
-# the engine import is NOT sourced: it hooks echo / printf and does not run under set -u.
-# shellcheck disable=SC1090
-set +eu; source "bashbasicsbyvk_menuchrome.sh" 2>/dev/null; set -eu
-declare -F _mc_steps >/dev/null 2>&1 || { echo "ERROR: cannot load bashbasicsbyvk_menuchrome.sh (reinstall bashbasicsbyvk)." >&2; exit 1; }
+bvk_gitpush() { _inf_sub "-Eeo pipefail" _gp_body "$@"; }
 
+_gp_body() {
 TARGET="${1:-$(pwd)}"
 DEFAULT_COMMIT_MESSAGE="Codebase Updated"
 
@@ -17,37 +16,35 @@ SWAP_BACKUP=""
 # Helpers
 # ============================================================
 
-die() {
+    die() {
     echo "ERROR: $*" >&2
+    _mc_unwind && exit 42                  # q was typed somewhere below: close up to the main loop (the runner turns 42 into _bvk_quit)
     exit 1
-}
+    }
 
-warn() {
+    warn() {
     echo "WARNING: $*"
-}
+    }
 
-info() {
+    _gp_info() {
     echo "INFO: $*"
-}
+    }
 
-ok() {
+    ok() {
     echo "OK: $*"
-}
+    }
 
-cleanup() {
+    cleanup() {
     # Temporary staging only.
     # Never automatically delete SWAP_BACKUP here.
     if [[ -n "${TMP_DIR:-}" && -d "$TMP_DIR" ]]; then
         rm -rf -- "$TMP_DIR"
     fi
-}
+    }
 
 trap cleanup EXIT
 
-# Shared "type this 6-digit number" gate (also used when deleting locked items): loaded by the import file
-# (flat pip install: it sits next to this script on PATH).
-# shellcheck disable=SC1090
-source "_3bvk_import_gitpush.sh" 2>/dev/null
+# Shared "type this 6-digit number" gate (also used when deleting locked items): a function of the app (action_confirm_key).
 declare -F action_confirm_key >/dev/null ||
     die "bashbasicsbyvk_action_confirm_key.sh not found - cannot ask for confirmation."
 
@@ -93,7 +90,7 @@ GH_USER="$(gh api user --jq '.login')" ||
 # Repository identity
 # ============================================================
 
-update_repo_identity() {
+    update_repo_identity() {
     REPO_NAME="$(basename "$TARGET")"
 
     [[ -n "$REPO_NAME" ]] ||
@@ -104,7 +101,7 @@ update_repo_identity() {
 
     REPO_FULL="$GH_USER/$REPO_NAME"
     REMOTE_URL="https://github.com/$REPO_FULL.git"
-}
+    }
 
 update_repo_identity
 
@@ -112,7 +109,7 @@ update_repo_identity
 # Git identity
 # ============================================================
 
-check_git_identity() {
+    check_git_identity() {
     local name
     local email
 
@@ -126,7 +123,7 @@ Run:
 
   git config --global user.name \"Your Name\"
   git config --global user.email \"you@example.com\""
-}
+    }
 
 # ============================================================
 # Confirmation
@@ -134,29 +131,20 @@ Run:
 
 # Asks whether the new GitHub repository is private (default) or public; sets VISIBILITY for  gh repo create.
 # A yes/no question has NO default: it asks again until the answer is y or n (a bare Enter is not an answer).  Sets ANS to y | n.
-ask_yn() {   # ask_yn "Question?" [-b]   -b: u = one question back (returns 4, ANS empty); without it every non-answer ends the tool
-    local a rc=3 yn_args=(-t "Git push" -i "🚀")
-    [ "${2:-}" = -b ] && yn_args+=(-b)
-    # THE native yes/no menu (bashbasicsbyvk_yn); the plain question below is only the fallback of a broken install
-    if command -v bashbasicsbyvk_yn >/dev/null 2>&1; then
-        bashbasicsbyvk_yn "$1" "${yn_args[@]}" && rc=0 || rc=$?
-        case "$rc" in
-            0) ANS=y; return 0 ;;
-            1) ANS=n; return 0 ;;
-            4) ANS=""; return 4 ;;
-            2) die "No answer." ;;
+    ask_yn() {   # ask_yn "Question?" [-b]   -b: u = one question back (returns 4, ANS empty); without it every non-answer ends the tool
+    local ans=""
+    # THE app's yes/no menu: the same layout, hint row, cc and commands as every menu of the app
+    if _bvk_yn ans "$1" -t "Git push" -i "🚀"; then
+        case "$ans" in
+            y) ANS=y; return 0 ;;
+            n) ANS=n; return 0 ;;
         esac
     fi
-    while :; do
-        read -e -r -p "$1 [y/n]: " a || die "No answer (input closed)."   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_yn)
-        case "${a,,}" in
-            y|yes) ANS=y; return 0 ;;
-            n|no)  ANS=n; return 0 ;;
-        esac
-    done
-}
+    if [ "${2:-}" = -b ] && _bvk_back; then ANS=""; return 4; fi
+    die "No answer."
+    }
 
-ask_repo_visibility() {
+    ask_repo_visibility() {
     ask_yn "Make repository private?"; private_answer="$ANS"
 
     case "$private_answer" in
@@ -167,14 +155,14 @@ ask_repo_visibility() {
             VISIBILITY="--private"
             ;;
     esac
-}
+    }
 
-confirm_action() {
+    confirm_action() {
     local description="$1"
 
     action_confirm_key "$description" ||
         die "Confirmation failed."
-}
+    }
 
 # ============================================================
 # GitHub repository existence
@@ -187,7 +175,7 @@ confirm_action() {
 # anything else = abort
 # ============================================================
 
-github_repo_exists() {
+    github_repo_exists() {
     local response
     local status_line
 
@@ -237,23 +225,23 @@ No repository was created."
     die "Could not contact GitHub to determine whether repository exists.
 
 No repository was created."
-}
+    }
 
 # ============================================================
 # GitHub repository metadata
 # ============================================================
 
-get_repo_metadata() {
+    get_repo_metadata() {
     gh repo view "$REPO_FULL" \
         --json isEmpty,defaultBranchRef,url \
         --jq '[.isEmpty, (.defaultBranchRef.name // ""), .url] | @tsv'
-}
+    }
 
 # ============================================================
 # Current branch
 # ============================================================
 
-get_current_branch() {
+    get_current_branch() {
     local branch
 
     branch="$(git branch --show-current 2>/dev/null || true)"
@@ -266,13 +254,13 @@ get_current_branch() {
         die "Could not determine the current Git branch."
 
     printf '%s\n' "$branch"
-}
+    }
 
 # ============================================================
 # Ensure repository root
 # ============================================================
 
-ensure_git_root() {
+    ensure_git_root() {
     local root
     local answer
 
@@ -310,15 +298,15 @@ ensure_git_root() {
                 ;;
         esac
     fi
-}
+    }
 
 # ============================================================
 # Ensure origin
 # ============================================================
 
-ensure_origin() {
+    ensure_origin() {
     if git remote get-url origin >/dev/null 2>&1; then
-        info "Origin already exists:"
+        _gp_info "Origin already exists:"
         echo "  $(git remote get-url origin)"
         return 0
     fi
@@ -327,25 +315,22 @@ ensure_origin() {
 
     ok "Origin added:"
     echo "  $REMOTE_URL"
-}
+    }
 
 # ============================================================
 # Version selection
 # ============================================================
 
-select_version() {   # a STEP of create_commit: 0 answered (VERSION set) · 1 u (back) · 3 q / no answer
-    local choice rc=0
+    select_version() {   # a STEP of create_commit: 0 answered (VERSION set) · 1 u (back) · 3 q / no answer
+    local choice=""
 
     echo
-    # THE native choice menu (bashbasicsbyvk_choose): the same layout as every menu; u = back, q = quit; a bare Enter takes the highlighted default
-    choice="$(bashbasicsbyvk_choose "Select version bump type:" -t "Version bump" -d 1 -b \
-        "1:Patch  (#patch)" "2:Minor  (#minor)" "3:Major  (#major)" "4:None   (skip the version tag)")" || rc=$?
-    case "$rc" in
-        0) ;;
-        4) return 1 ;;
-        3) read -e -r -p "Version bump [1 patch, 2 minor, 3 major, 4 none; Default: 1]: " choice ;;   # bvk-read-ok: fallback of a broken install (no choice menu)
-        *) return 3 ;;
-    esac
+    # THE app's choice menu: u = back, q = quit; a bare Enter takes the highlighted default
+    if ! _bvk_menu choice -q "Select version bump type:" -t "Version bump" -d 1 -- \
+        "1:Patch  (#patch)" "2:Minor  (#minor)" "3:Major  (#major)" "4:None   (skip the version tag)"; then
+        _bvk_back && return 1
+        return 3
+    fi
 
     case "$choice" in
         2)
@@ -366,7 +351,7 @@ select_version() {   # a STEP of create_commit: 0 answered (VERSION set) · 1 u 
             ;;
     esac
     return 0
-}
+    }
 
 # ============================================================
 # Commit
@@ -374,27 +359,25 @@ select_version() {   # a STEP of create_commit: 0 answered (VERSION set) · 1 u 
 
 # The three questions of a commit, one step each (they share create_commit's locals):  version → message → "Create this commit?".
 # Each returns 0 answered · 1 u (the question before) · 3 q / no / cancelled.
-_gc_s_version() { select_version; }
-_gc_s_message() {
-    local rc=3
+    _gc_s_version() { select_version; }
+    _gc_s_message() {
+    local _CE_SELECT=0                                  # the message typed before starts selected when u comes back here
+    [ -n "$user_msg" ] && _CE_SELECT=1
     echo
-    if command -v bashbasicsbyvk_ask >/dev/null 2>&1; then      # THE native line editor: u = back, q = quit; what was typed is kept when u comes back here
-        user_msg="$(bashbasicsbyvk_ask "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " -b -S -m -i "$user_msg")" && rc=0 || rc=$?
-        case "$rc" in
-            0) ;;
-            4) return 1 ;;
-            3) read -e -r -p "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " user_msg ;;   # bvk-read-ok: fallback of a broken install (no editor)
-            *) return 3 ;;
-        esac
-    else read -e -r -p "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " user_msg; fi   # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
+    _mc_footer_std -b                                   # the footer every typed-line prompt of the app prints (u q h cc)
+    _CM_BACKED=0
+    if ! _bvk_read user_msg "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " -m -i "$user_msg"; then
+        [ "${_CM_BACKED:-0}" = 1 ] && return 1
+        return 3
+    fi
     return 0
-}
-_gc_s_confirm() {
+    }
+    _gc_s_confirm() {
     local rc=0
     final_msg="${user_msg:-$DEFAULT_COMMIT_MESSAGE}"
     if [[ -n "$VERSION" ]]; then
         if [[ "$final_msg" =~ (^|[[:space:]])#(patch|minor|major)([[:space:]]|$) ]]; then
-            info "Commit message already contains a version tag."
+            _gp_info "Commit message already contains a version tag."
         else
             final_msg="$final_msg $VERSION"
         fi
@@ -414,9 +397,9 @@ _gc_s_confirm() {
         4) return 1 ;;
     esac
     return 3
-}
+    }
 
-create_commit() {
+    create_commit() {
     local user_msg=""
     local final_msg=""
     local rc=0
@@ -434,7 +417,8 @@ create_commit() {
     _mc_steps _gc_s_version _gc_s_message _gc_s_confirm || rc=$?
     case "$rc" in
         0) ;;
-        1) echo "Commit cancelled (back)."; exit 0 ;;      # u on the FIRST question: out of the tool, back to the menu it was opened from
+        1) echo "Commit cancelled (back)."; exit 0 ;;
+        2) exit 42 ;;                                       # q: close up to the main loop      # u on the FIRST question: out of the tool, back to the menu it was opened from
         *) die "Commit cancelled." ;;
     esac
 
@@ -443,13 +427,13 @@ create_commit() {
 
     ok "Commit created."
     return 0
-}
+    }
 
 # ============================================================
 # Push
 # ============================================================
 
-push_repository() {
+    push_repository() {
     local branch="$1"
     local push_output
     local local_version
@@ -470,8 +454,8 @@ push_repository() {
     if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" \
         >/dev/null 2>&1; then
 
-        info "Upstream exists."
-        info "Running normal git push."
+        _gp_info "Upstream exists."
+        _gp_info "Running normal git push."
 
         if push_output="$(git push 2>&1)"; then
             printf '%s\n' "$push_output"
@@ -573,8 +557,8 @@ No further push was attempted."
 
         # No upstream:
         # dynamically use actual current branch.
-        info "No upstream exists."
-        info "Setting upstream for branch: $branch"
+        _gp_info "No upstream exists."
+        _gp_info "Setting upstream for branch: $branch"
 
         if git push -u origin "$branch"; then
             ok "Push completed."
@@ -585,12 +569,12 @@ The local commit remains intact.
 No force push was performed."
         fi
     fi
-}
+    }
 # ============================================================
 # Copy project tree excluding .git
 # ============================================================
 
-copy_project_tree() {
+    copy_project_tree() {
     local source="$1"
     local destination="$2"
     local item
@@ -613,13 +597,13 @@ copy_project_tree() {
 
         shopt -u dotglob nullglob
     fi
-}
+    }
 
 # ============================================================
 # Replace working tree while preserving .git
 # ============================================================
 
-replace_working_tree() {
+    replace_working_tree() {
     local source="$1"
     local destination="$2"
     local item
@@ -649,13 +633,13 @@ replace_working_tree() {
 
         shopt -u dotglob nullglob
     fi
-}
+    }
 
 # ============================================================
 # Validate prepared recovery repository
 # ============================================================
 
-validate_prepared_repository() {
+    validate_prepared_repository() {
     local expected_branch="$1"
     local branch
 
@@ -680,7 +664,7 @@ validate_prepared_repository() {
         return 1
 
     return 0
-}
+    }
 
 # ============================================================
 # Roll back recovery swap
@@ -689,7 +673,7 @@ validate_prepared_repository() {
 # SWAP_BACKUP.
 # ============================================================
 
-rollback_recovery() {
+    rollback_recovery() {
     local failure_reason="$1"
 
     warn "$failure_reason"
@@ -723,7 +707,7 @@ Original project is still located at:
     fi
 
     die "CRITICAL: Original project backup could not be found."
-}
+    }
 
 # ============================================================
 # CASE 1
@@ -732,18 +716,18 @@ Original project is still located at:
 
 if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 
-    info "Existing local Git repository detected."
+    _gp_info "Existing local Git repository detected."
 
     ensure_git_root
     cd "$TARGET"
 
     BRANCH="$(get_current_branch)"
 
-    info "Current branch: $BRANCH"
+    _gp_info "Current branch: $BRANCH"
 
     if git remote get-url origin >/dev/null 2>&1; then
 
-        info "Origin:"
+        _gp_info "Origin:"
         echo "  $(git remote get-url origin)"
 
     else
@@ -753,7 +737,7 @@ if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 
         if github_repo_exists; then
 
-            info "GitHub repository already exists."
+            _gp_info "GitHub repository already exists."
 
             ensure_origin
 
@@ -766,7 +750,7 @@ if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 
             ask_repo_visibility
 
-            info "Creating GitHub repository..."
+            _gp_info "Creating GitHub repository..."
 
             gh repo create \
                 "$REPO_FULL" \
@@ -786,7 +770,7 @@ if git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 
 else
 
-    info "No local Git repository detected."
+    _gp_info "No local Git repository detected."
 
     cd "$TARGET"
 
@@ -796,7 +780,7 @@ else
 
     if github_repo_exists; then
 
-        info "GitHub repository exists: $REPO_FULL"
+        _gp_info "GitHub repository exists: $REPO_FULL"
 
         REPO_INFO="$(get_repo_metadata)" ||
             die "Could not read GitHub repository metadata."
@@ -818,8 +802,8 @@ else
             [[ -n "$DEFAULT_BRANCH" ]] ||
                 die "GitHub repository has history but no default branch."
 
-            info "GitHub repository contains history."
-            info "Recovery branch: $DEFAULT_BRANCH"
+            _gp_info "GitHub repository contains history."
+            _gp_info "Recovery branch: $DEFAULT_BRANCH"
 
             confirm_action \
                 "GitHub history will be recovered and the current project tree will replace its working tree."
@@ -878,7 +862,7 @@ else
                 die "Prepared recovery repository failed validation."
             fi
 
-            info "Prepared repository passed validation."
+            _gp_info "Prepared repository passed validation."
 
             # =================================================
             # SAFE DIRECTORY SWAP
@@ -933,8 +917,8 @@ else
             BRANCH="$DEFAULT_BRANCH"
             ORIGIN="$(git remote get-url origin)"
 
-            info "Recovered branch: $BRANCH"
-            info "Recovered origin: $ORIGIN"
+            _gp_info "Recovered branch: $BRANCH"
+            _gp_info "Recovered origin: $ORIGIN"
 
             ok "GitHub history recovered."
             ok "Project tree replaced successfully."
@@ -954,7 +938,7 @@ else
 
         else
 
-            info "GitHub repository exists but is empty."
+            _gp_info "GitHub repository exists but is empty."
 
             confirm_action \
                 "The empty GitHub repository will be connected to this project."
@@ -963,7 +947,7 @@ else
 
             BRANCH="$(get_current_branch)"
 
-            info "Initialized branch: $BRANCH"
+            _gp_info "Initialized branch: $BRANCH"
 
             git remote add origin "$REMOTE_URL"
 
@@ -977,7 +961,7 @@ else
 
     else
 
-        info "No local Git repository and no GitHub repository found."
+        _gp_info "No local Git repository and no GitHub repository found."
 
         confirm_action \
             "A new Git repository and GitHub repository will be created for: $REPO_FULL"
@@ -994,13 +978,13 @@ else
 
         BRANCH="$(get_current_branch)"
 
-        info "Initialized branch: $BRANCH"
+        _gp_info "Initialized branch: $BRANCH"
 
         # ----------------------------------------------------
         # Create empty GitHub repository.
         # ----------------------------------------------------
 
-        info "Creating GitHub repository..."
+        _gp_info "Creating GitHub repository..."
 
         gh repo create \
             "$REPO_FULL" \
@@ -1048,24 +1032,24 @@ echo "============================================================"
 # and we continue directly to push/recovery.
 
 if create_commit; then
-    info "New commit created. Proceeding to push."
+    _gp_info "New commit created. Proceeding to push."
 else
-    info "No new working-tree changes."
+    _gp_info "No new working-tree changes."
 
     if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
         UNPUSHED_COUNT="$(git rev-list --count "@{u}..HEAD" 2>/dev/null || echo 0)"
 
         if [[ "$UNPUSHED_COUNT" -gt 0 ]]; then
-            info "$UNPUSHED_COUNT unpushed local commit(s) detected."
-            info "Skipping version and commit prompts."
-            info "Proceeding directly to push/recovery."
+            _gp_info "$UNPUSHED_COUNT unpushed local commit(s) detected."
+            _gp_info "Skipping version and commit prompts."
+            _gp_info "Proceeding directly to push/recovery."
         else
-            info "No unpushed local commits."
-            info "Nothing to push."
+            _gp_info "No unpushed local commits."
+            _gp_info "Nothing to push."
             exit 0
         fi
     else
-        info "No upstream exists. Proceeding with initial push."
+        _gp_info "No upstream exists. Proceeding with initial push."
     fi
 fi
 
@@ -1082,3 +1066,4 @@ echo "============================================================"
 echo "Repository: $REPO_FULL"
 echo "Branch:     $BRANCH"
 echo "============================================================"
+}

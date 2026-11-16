@@ -1,0 +1,14 @@
+ISSUE IN BRIEF
+In Git Push (and every other Infinity Stones tool) the questions had no suggestion (hint) row and no command worked: cc printed "(cheat codes need the full app ...)", s / h / -h were silently cleared, u behaved differently. Each tool ran as its own process, so it had none of the app's command layer.
+
+HOW DID YOU DEBUG
+Read the menu code: six drawers (_st_run, the viewport, _mc_select, _sm_run, _xui_loop, the python doors) and three stand-alone doors (bashbasicsbyvk_choose / _yn / _ask) that load different slices of the app through the _3bvk_import_* files (the _yn import has no cmdmap / cheatcode; the _ask import has cmdmap but no cheatcode; the ask door even sets _CM_ON=0). Reproduced cc in the choose door and the ask door in a pty. Then converted the tools and drove them in the real app with tests/infinity/infinity_test.py (PtyApp, a fake gh, a local bare remote). Ran: infinity_in_app, loadmap check. Did NOT run the full suite (see the status line of the delivery).
+
+CAUSE
+A tool started with `bash tool` / `python tool` is a child process: bash cannot hand functions to it, the command layer finds the running screen by walking the function call stack (_cm_ctx_find) and there is no such stack in a child, and the hand-picked import files each carried a different part of the app (drift).
+
+FIX
+The Infinity tools are part of the app (bashbasicsbyvk_infinity_run.sh): Git Push, Localhost and Python audit are functions (bashbasicsbyvk_<tool>.sh, loaded by the load mapper) started with _inf_sub, which runs the old script body in a subshell started from a trap handler (bash ignores set -e under a caller in `a || b` / `if a`; a trap handler starts clean) so exit / die / set -e / trap EXIT end only the tool and exit 42 = q closes to the main loop. Their questions call _bvk_yn / _bvk_menu / _bvk_read directly. The python tools (Extract, JS audit, Generate SQL, Polyglot) start with _inf_py and the three python doors send each question over two pipes (bashbasicsbyvk_qbridge.py) to the app, which asks it with its own prompts and answers with the exit code of the old door, so the python tools did not change. _3bvk_import_gitpush.sh and the three tool scripts are deleted. set -u is dropped for Git Push and Python audit: the app's own code is not set -u clean (_st_msg: unbound variable in settings_ui.sh).
+
+PREVENTION
+tests/infinity/infinity_test.py (registered as infinity_in_app) types cc / u at the questions of Git Push, Localhost and a python tool in the real app. The old stand-alone harness cases for gitpush / localhost in tests/prompt_template/chain_test.py were removed (plain commit, text kept after u, q quits, @u are not covered again yet).
