@@ -165,12 +165,9 @@ local_navigator() {
 
   while true; do
     nav_last_browsed_path="$nav_path"
-    echo
-    if [ "$mode" == "source" ]; then
-      echo "📂 SELECT SOURCE — Location: $nav_path${nav_prefix:+ [filter: ${nav_prefix^^}*]}"
-    else
-      echo "📂 SELECT DESTINATION — Location: $nav_path${nav_prefix:+ [filter: ${nav_prefix^^}*]}"
-    fi
+    # ONE pick screen (browse.sh): the same header, rows, icons and 🔒 marks as the folder view
+    if [ "$mode" == "source" ]; then _pick_header "Items" "Transfer" "$nav_path" "$nav_prefix"
+    else _pick_header "Destination" "Transfer" "$nav_path" "$nav_prefix"; fi
 
     local nav_imaginary=false
     local nav_items=()
@@ -189,37 +186,11 @@ local_navigator() {
         build_all_items "$nav_path"
         nav_items=("${items[@]}")
       fi
-      if [ ${#nav_items[@]} -eq 0 ]; then
-        echo "🛑 This directory is empty"
-      else
-        local idx=1
-        for item in "${nav_items[@]}"; do
-          local _nav_icon _nav_bn
-          _nav_bn="${item##*/}"
-          if [[ "$_nav_bn" == *.shortcut ]]; then
-            local _sc_type
-            _sc_type=$(_shortcut_read_field "$item" "SHORTCUT_TYPE")
-            local _sc_name
-            _sc_name=$(_shortcut_read_field "$item" "SHORTCUT_NAME")
-            [ -z "$_sc_name" ] && _sc_name="${_nav_bn%.shortcut}"
-            [ "$_sc_type" == "dir" ] && _nav_icon="🔑" || _nav_icon="🗝️"
-            printf "%2d) %s %s\n" "$idx" "$_nav_icon" "$_sc_name"
-          else
-            [ -d "$item" ] && _nav_icon="📁" || _nav_icon="📄"
-            local _nav_ln; printf -v _nav_ln "%2d) %s %s" "$idx" "$_nav_icon" "$_nav_bn"
-            if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "$item" "$_nav_ln"; then
-              printf '%s\n' "$_smk_out"     # selected with .s — green "+"
-            else
-              printf '%s\n' "$_nav_ln"
-            fi
-          fi
-          idx=$((idx+1))
-        done
-      fi
+      _pick_rows "${nav_items[@]}"
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer_std "v:View selections" "z" "#tip: use prefix 'w' to select a folder"
+      _mc_footer_std "v:View selections" "z"
     else
       _mc_footer_std "n:New folder" "c:Confirm destination" "z"
     fi
@@ -354,12 +325,8 @@ gcloud_navigator() {
   [ -z "$remote_path" ] && remote_path="$HOME"
 
   while true; do
-    echo
-    if [ "$mode" == "source" ]; then
-      echo "☁️  GCLOUD SOURCE — Location: $remote_path"
-    else
-      echo "☁️  GCLOUD DESTINATION — Location: $remote_path"
-    fi
+    if [ "$mode" == "source" ]; then _pick_header "Items" "Transfer (GCloud)" "gcloud:$remote_path"
+    else _pick_header "Destination" "Transfer (GCloud)" "gcloud:$remote_path"; fi
 
     local listing
     listing=$(_gcloud_cmd "ls -1Ap '$remote_path' 2>/dev/null")
@@ -373,19 +340,16 @@ gcloud_navigator() {
     if [ ${#remote_items[@]} -eq 0 ]; then
       echo "🛑 Remote directory is empty or inaccessible"
     else
-      local idx=1
-      for item in "${remote_items[@]}"; do
-        if [[ "$item" == */ ]]; then
-          printf "%2d) 📁 %s\n" "$idx" "${item%/}"
-        else
-          printf "%2d) 📄 %s\n" "$idx" "$item"
-        fi
-        idx=$((idx+1))
+      local -a _g_rows=(); local _g_it
+      for _g_it in "${remote_items[@]}"; do
+        if [[ "$_g_it" == */ ]]; then item_icon["${remote_path%/}/${_g_it%/}"]=dir; else item_icon["${remote_path%/}/$_g_it"]=file; fi
+        _g_rows+=("${remote_path%/}/${_g_it%/}")
       done
+      _pick_rows -r "${_g_rows[@]}"
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer_std "v:View selections" "z" "#tip: use prefix 'w' to select a folder"
+      _mc_footer_std "v:View selections" "z"
     else
       _mc_footer_std "n:New folder" "c:Confirm destination" "z"
     fi

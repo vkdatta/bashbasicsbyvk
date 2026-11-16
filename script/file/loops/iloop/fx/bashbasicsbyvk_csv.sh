@@ -51,12 +51,10 @@ _file_picker() {
     done
     local _fp_lbl="${_fp_EXT// /\/}"          # label shown to the user: ZIP/TXT
 
-    echo ""
-    echo "📂 Navigate to select your ${_fp_lbl} file (folders and .${_fp_ext// / .} files only)"
+    local _fp_desc="Navigate to select your ${_fp_lbl} file (folders and .${_fp_ext// / .} files only). Type a number to open a folder or pick a file."
 
     while true; do
-        echo ""
-        echo "📂 ${_fp_lbl} SELECT — Location: $_fp_nav_path"
+        _pick_header "Items" "${_fp_lbl} file" "$_fp_nav_path" "" "$_fp_desc"
 
         # ── Build item list: dirs + matching files only
         # Pure-bash globbing: no find, no sort, no per-file loop, no forks.
@@ -80,20 +78,7 @@ _file_picker() {
 
         # ── Render list (single rule at the bottom only — the fx menu above
         #    already ends with its own rule, so a top rule here doubled it) ──
-        if [ ${#_fp_items[@]} -eq 0 ]; then
-            echo "  🛑 No folders or ${_fp_lbl} files here."
-        else
-            local _i=1
-            for _it in "${_fp_items[@]}"; do
-                local _bn="${_it##*/}"
-                if [ -d "$_it" ]; then
-                    printf "  %3d) 📁 %s\n" "$_i" "$_bn"
-                else
-                    printf "  %3d) 📄 %s\n" "$_i" "$_bn"
-                fi
-                _i=$((_i + 1))
-            done
-        fi
+        _pick_rows "${_fp_items[@]}"
         _mc_footer_std "z"
         _mc_read _fp_choice "Select: " || { _mc_unwind; _fp_out=""; return 1; }       # rc != 0: the flow was cancelled
 

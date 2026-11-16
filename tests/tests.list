@@ -6,6 +6,7 @@
 lint_waits|fast|20|bash tests/lint_waits.sh|
 regex_portability|fast|30|bash tests/regex_portability.sh|
 cmd_drift|fast|90|bash tests/cmd_drift.sh|
+pick_drift|fast|40|bash tests/pick_drift.sh|python3
 settings_keys|fast|30|bash tests/settings_keys.sh|
 exactbytes|fast|30|bash tests/exactbytes.sh|
 group_view|fast|40|bash tests/group_view.sh|

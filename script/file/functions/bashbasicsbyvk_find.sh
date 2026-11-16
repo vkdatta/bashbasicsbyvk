@@ -167,7 +167,7 @@ _find_step_results() {
   n="${_FRS[listed]:-0}"
   if [ "$n" -eq 0 ]; then echo "No results."; _fr_notes; return 0; fi
   if [ "$n" -gt "${#_FR_LIST[@]}" ]; then n="${#_FR_LIST[@]}"; fi
-  echo "📋 Found ${_FRS[listed]} result(s):"
+  _pick_header "" "" "${_fr_root:-$path}  🔍 find: $pat  (${_FRS[listed]} result(s))"
   _fr_show
   _fr_notes
   while true; do
@@ -198,7 +198,7 @@ _find_step_preview() {
     echo "⏳ Looking…"
     _fr_exec preview || return 0
     if [ "${_FRS[listed]:-0}" -eq 0 ]; then echo "No matches found."; _fr_notes; return 0; fi
-    echo "📋 Preview — $(_find_preview_summary):"
+    _pick_header "" "" "${_fr_root:-$path}  🔍 find: $pat → $rep  ($(_find_preview_summary))"
     _fr_show
     _fr_notes
     # MC-06: the preview rows ARE the numbered choices; the footer adds a) Apply to ALL to the standard keys

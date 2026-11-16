@@ -101,21 +101,32 @@ _fr_exec() {
   return 0
 }
 
-# _fr_show  — prints the engine's numbered lines; an item selected with .s keeps its green "+"
+# _fr_show  — prints the engine's numbered lines.  The row itself (number, icon, name, 🔒, the green "+" of .s) is the folder view's row
+# (_item_line_text_v, shown relative to the search folder like the recursive "=" filter); what the engine adds after the name
+# ("(2 matches)", "→  new name") and its other lines (L12: …, "… and N more") are kept as they are.
 _fr_show() {
-  local line n
+  local line n rel p rest rdp_root="${_fr_root:-$path}"
   [ -s "$_FR_TMP/lines" ] || return 0
-  if declare -F _sel_mark_v >/dev/null 2>&1 && [ "${#_FR_LIST[@]}" -gt 0 ]; then
-    while IFS= read -r line; do
-      if [[ "$line" =~ ^\ *([0-9]+)\)\  ]]; then
-        n="${BASH_REMATCH[1]}"
-        if [ -n "${_FR_LIST[n-1]:-}" ] && _sel_mark_v "${_FR_LIST[n-1]}" "$line"; then printf '%s\n' "$_smk_out"; continue; fi
+  if [ "${#_FR_LIST[@]}" -eq 0 ] || ! declare -F _item_line_text_v >/dev/null 2>&1; then cat "$_FR_TMP/lines"; return 0; fi
+  declare -F _lk_load >/dev/null && _lk_load
+  local -a items=("${_FR_LIST[@]}")
+  local -A _REC_LABEL=()
+  local display_suffix_set=""
+  for p in "${items[@]}"; do _REC_LABEL["$p"]="${p#"${rdp_root%/}"/}"; done
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^\ *([0-9]+)\)\ \ ?(.*)$ ]]; then
+      n="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[2]}"
+      p="${_FR_LIST[n-1]:-}"
+      if [ -n "$p" ]; then
+        rel="${_REC_LABEL[$p]}"
+        if [[ "$rest" == "$rel"* ]]; then
+          _item_line_text_v "$n"; line="$_ilt_out${rest#"$rel"}"
+          if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "$p" "$line"; then line="$_smk_out"; fi
+        fi
       fi
-      printf '%s\n' "$line"
-    done < "$_FR_TMP/lines"
-  else
-    cat "$_FR_TMP/lines"
-  fi
+    fi
+    printf '%s\n' "$line"
+  done < "$_FR_TMP/lines"
 }
 
 # _fr_notes — one-line warnings the person must not miss (things that were skipped / failed)

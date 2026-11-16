@@ -572,6 +572,63 @@ _menu_header() {
   echo "$_hdr_loc"
 }
 
+# ── ONE pick screen for every "choose items / a destination / a file" job (transfer, csv, ...) ──
+# Same chrome as the main list: status row, cd path, nav path, and the rows come from the main row renderer (_item_line_text_v:
+# icons, 🔒 marks, + marks), so a picker can never look different from the folder view.  A job only passes its name.
+#   _pick_header WHAT JOB NAV_PATH [PREFIX] [DESC]     WHAT = Items | Destination | ...      →  🛷 Select <WHAT> for <JOB>   (WHAT empty: no title, e.g. a results screen)
+#   DESC empty → the Settings description of "Select <what in lower case>|*" (settings_desc.sh); same wrapping as every Settings screen
+#   _pick_rows [-r] PATH...                              -r = the paths are on a remote machine (no lock marks)
+_desc_print_dim() {          # _desc_print_dim TEXT_OR_KEY — a dim, wrapped description (the rows-gate and wrapping of the Rename screen)
+  local txt="$1" rows cols i dmax
+  rows=$(_term_rows 2>/dev/null); cols=$(_term_cols 2>/dev/null)
+  [ "${_vp_rows_now:-0}" -gt 0 ] 2>/dev/null && { rows=$_vp_rows_now; cols=$_vp_cols_now; }
+  [[ "$rows" =~ ^[0-9]+$ ]] || rows=24; [[ "$cols" =~ ^[0-9]+$ ]] || cols=60
+  if declare -F _st_desc_load >/dev/null 2>&1; then { [ -n "${_ST_DESC[Settings|*]:-}" ] || _st_desc_load; }; fi
+  [ -n "${_ST_DESC[$txt]:-}" ] && txt="${_ST_DESC[$txt]}"
+  [[ "$txt" == *"|*" ]] && return 1                          # still a bare key: the table is not there, so show nothing rather than the key
+  [ -n "$txt" ] && (( rows >= 18 )) || return 1            # nothing printed → rc 1 (the caller then adds no blank line)
+  if declare -F _st_desc_wrap >/dev/null 2>&1; then
+    _st_desc_wrap "$txt" $(( cols - 2 ))
+    dmax=$(( rows / 4 )); (( dmax < 2 )) && dmax=2
+    for (( i=0; i<${#_ST_DESC_ALL[@]} && i<dmax; i++ )); do printf '\033[2m%s\033[0m\n' "${_ST_DESC_ALL[$i]}"; done
+  else
+    printf '\033[2m%s\033[0m\n' "$txt"
+  fi
+  return 0
+}
+_pick_header() {
+  local what="$1" job="$2" nav="$3" pfx="${4:-}" desc="${5:-}" lw
+  lw="${what,,}"
+  echo
+  if declare -F _bvk_hdr_status >/dev/null 2>&1; then _bvk_hdr_status; echo; fi
+  echo
+  if [ -n "$what" ]; then
+    echo "🛷 Select $what for $job"
+    _desc_print_dim "${desc:-Select $lw|*}" || true
+    echo
+  fi
+  echo "📂 cd path: $PWD"
+  echo "☁️ nav path: $nav${pfx:+ [group: ${pfx^^}*]}"
+}
+_pick_rows() {
+  local remote=0
+  [ "${1:-}" = -r ] && { remote=1; shift; }
+  local -a items=("$@")
+  local _hl_index=0 i ln
+  if [ ${#items[@]} -eq 0 ]; then echo "🛑 This directory is empty"; return 0; fi
+  local display_suffix_set=""                              # no size / time columns: the metadata window only covers the rows around the cursor
+  if (( remote )); then
+    local -A _LK_SET=()                                    # a remote path is not a local path: no 🔒
+  else
+    declare -F _lk_load >/dev/null && _lk_load
+  fi
+  for (( i=1; i<=${#items[@]}; i++ )); do
+    _item_line_text_v "$i"; ln="$_ilt_out"
+    if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "${items[i-1]}" "$ln"; then ln="$_smk_out"; fi     # selected with .s — green "+"
+    printf '%s\n' "$ln"
+  done
+}
+
 _menu_header_flat() {
   _menu_header
   [ -s "${_SNAP_NOTICE:-}" ] && cat "$_SNAP_NOTICE"        # Snapshots paused: not enough credits

@@ -147,19 +147,10 @@ _rn_finalize() {
 # then, for each chosen item, only  Old: name / New:  is added below it (the screen is not drawn again).
 # _rn_pick_header / _rn_pick_footer are the picker's header / footer hooks (_multi_header_hook / _multi_footer_hook).
 _rn_pick_header() {
-  local rows cols i out="" nl=$'\n'
-  rows=$(_term_rows 2>/dev/null); cols=$(_term_cols 2>/dev/null)
-  [ "${_vp_rows_now:-0}" -gt 0 ] 2>/dev/null && { rows=$_vp_rows_now; cols=$_vp_cols_now; }
-  [[ "$rows" =~ ^[0-9]+$ ]] || rows=24; [[ "$cols" =~ ^[0-9]+$ ]] || cols=60
   echo; echo "✏️ Rename"; echo
-  # the description: the same table and the same wrapping as a Settings screen
-  declare -F _st_desc_load >/dev/null 2>&1 && { [ -n "${_ST_DESC[Settings|*]:-}" ] || _st_desc_load; }
-  if declare -F _st_desc_wrap >/dev/null 2>&1 && [ -n "${_ST_DESC[Rename item|*]:-}" ] && (( rows >= 18 )); then
-    _st_desc_wrap "${_ST_DESC[Rename item|*]}" $(( cols - 2 ))
-    local dmax=$(( rows / 4 )); (( dmax < 2 )) && dmax=2
-    for (( i=0; i<${#_ST_DESC_ALL[@]} && i<dmax; i++ )); do printf '\033[2m%s\033[0m\n' "${_ST_DESC_ALL[$i]}"; done
-    echo
-  fi
+  # the description: the same table and the same wrapping as a Settings screen (one shared printer, also used by the pick screen)
+  _desc_print_dim "Rename item|*" && echo
+  return 0
 }
 _rn_pick_footer() { echo; echo "u) Up   q) Close"; }
 

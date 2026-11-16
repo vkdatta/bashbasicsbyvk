@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+The Find & replace result screens (Find hits, Preview) printed the engine's numbered lines as plain text under '📋 Found N result(s)': no status row, cd path or nav path, no icons, no 🔒 marks and the main footer missing its look, so they differed from the folder view and from the recursive '=' filter showing the same hits. Follow-up of BB-171120261200-1 (one pick screen): this was a fourth copy of the list.
+
+HOW DID YOU DEBUG
+Read _find_step_results / _find_step_preview (bashbasicsbyvk_find.sh) and _fr_exec / _fr_show (bashbasicsbyvk_findrun.sh). Ran the Python twin of the engine (bashbasicsbyvk_findrep) for names / contents / both / preview: its stdout is numbered lines with extras after the name ('(1 match)', '→  new name') and sub-lines ('L1: ...'), while _FR_LIST holds the same paths in order. Ran a harness (_fr_exec + _fr_show on a temp tree) and checked icons, relative names and that the extras survive. The real app on a phone and the C engine were not run.
+
+CAUSE
+_fr_show only cat'ed the engine's text (plus the .s mark), and the two callers printed their own title line, so the list never went through the folder view's row renderer.
+
+FIX
+bashbasicsbyvk_findrun.sh _fr_show: each numbered engine line is drawn by _item_line_text_v (icon, name relative to the search folder via _REC_LABEL, 🔒, +), then the engine's own extra text; other engine lines are passed through. bashbasicsbyvk_find.sh: Find and Preview start with _pick_header (WHAT empty = no 'Select ...' title): status row, cd path, nav path with the find text and the count. browse.sh: _pick_header accepts an empty WHAT; _pick_rows never draws size / time columns (the metadata window covers only the rows around the cursor, the rest would show '...'). tests/pick_drift.sh case 5 checks the find rows. Lesson: any list of paths goes through _item_line_text_v; engine text is only appended after the name.
