@@ -1,0 +1,81 @@
+# bashbasicsbyvk_results.map — wiring for the 'results' screen (a list of paths shown the way the == filter shows its hits)
+@menu   results
+@func   _results_view
+@kind   menu
+@back   u
+@parent main
+
+q          .mapto()  q          from bashbasicsbyvk_maincommands.sh
+u          .mapto()  back()
+a          .mapto()  a          from bashbasicsbyvk_resultsmenucommands.sh
+h          .mapto()  h          from bashbasicsbyvk_maincommands.sh
+s          .mapto()  s          from bashbasicsbyvk_maincommands.sh
+i          .mapto()  i          from bashbasicsbyvk_maincommands.sh
+-h         .mapto()  -h         from bashbasicsbyvk_maincommands.sh
+-u         .mapto()  -u         from bashbasicsbyvk_maincommands.sh
+-auth      .mapto()  -auth      from bashbasicsbyvk_maincommands.sh
+cd         .mapto()  cd         from bashbasicsbyvk_maincommands.sh
+sw         .mapto()  block()
+fx         .mapto()  block()
+api        .mapto()  block()
+bk         .mapto()  block()
+sv         .mapto()  block()
+sn         .mapto()  block()
+rbam       .mapto()  block()
+nf         .mapto()  block()
+cs         .mapto()  block()
+gd         .mapto()  block()
+gdx        .mapto()  block()
+c          .mapto()  block()
+d          .mapto()  block()
+r          .mapto()  block()
+t          .mapto()  block()
+f          .mapto()  block()
+z          .mapto()  block()
+fs         .mapto()  block()
+forceshow  .mapto()  block()
+ns         .mapto()  block()
+fa         .mapto()  block()
+rf         .mapto()  rf         from bashbasicsbyvk_maincommands.sh
+l-         .mapto()  block()
+ul-        .mapto()  block()
+z-         .mapto()  block()
+uz-        .mapto()  block()
+p-         .mapto()  block()
+c-         .mapto()  block()
+m-         .mapto()  block()
+s-         .mapto()  block()
+k-         .mapto()  block()
+b-         .mapto()  block()
+d-         .mapto()  block()
+v-         .mapto()  block()
+do-        .mapto()  block()
+c2c-       .mapto()  block()
+up-        .mapto()  block()
+ux-        .mapto()  block()
+save-      .mapto()  block()
+snap-      .mapto()  block()
+scr-sync   .mapto()  block()
+=          .mapto()  =          from bashbasicsbyvk_maincommands.sh
+.s         .mapto()  block()
+.us        .mapto()  block()
+.r         .mapto()  block()
+.d         .mapto()  block()
+.dm        .mapto()  block()
+.ai        .mapto()  block()
+health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
+disk       .mapto()  disk       from bashbasicsbyvk_maincommands.sh
+ram        .mapto()  ram        from bashbasicsbyvk_maincommands.sh
+clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
+print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
+loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
+cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
+pn         .mapto()  block()
+lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
+goto       .mapto()  block()
+eb-        .mapto()  block()
+xtr-       .mapto()  block()
+i-         .mapto()  block()
+sys        .mapto()  sys        from bashbasicsbyvk_maincommands.sh

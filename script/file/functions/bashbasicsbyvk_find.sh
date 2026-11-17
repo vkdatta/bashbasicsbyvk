@@ -102,7 +102,7 @@ _find_resolve_options() {
   [ "$find_binary_mode" = include ] && _fo_binary=1 || _fo_binary=0
   mb="${find_maxsize_mb:-0}"; _fo_maxsize=$(( mb * 1048576 ))
   [ "$find_threads" = auto ] && _fo_threads=0 || _fo_threads="$find_threads"
-  _fo_limit="${find_show_limit:-300}"
+  _fo_limit=0                                     # every hit is listed: the results screen scrolls
   _fr_root="$path"; _fr_only=""; _fr_excl=()
   steps+=("$@")
   _mc_steps "${steps[@]}"
@@ -160,28 +160,17 @@ _find_search() {
 
 # the last step of Find: run it and list the hits.  u = back to the question before (the text to find)
 _find_step_results() {
-  local pat="$_fo_pat" act target n
+  local pat="$_fo_pat" n
   _fr_finds=("$pat"); _fr_reps=("")
   echo "⏳ Searching…"
   _fr_exec find || return 0
   n="${_FRS[listed]:-0}"
   if [ "$n" -eq 0 ]; then echo "No results."; _fr_notes; return 0; fi
-  if [ "$n" -gt "${#_FR_LIST[@]}" ]; then n="${#_FR_LIST[@]}"; fi
-  _pick_header "" "" "${_fr_root:-$path}  🔍 find: $pat  (${_FRS[listed]} result(s))"
-  _fr_show
   _fr_notes
-  while true; do
-    # rc != 0 = back / quit / the command layer cancelled this flow: leave at once
-    _mc_text -x "#Enter item number to navigate" act "Select: "
-    case $? in 1) return 1 ;; 2) return 2 ;; 3) return 0 ;; esac
-    if [[ $act =~ ^[0-9]+$ ]] && (( act >= 1 && act <= ${#_FR_LIST[@]} )); then
-      target="${_FR_LIST[$((act-1))]}"
-      if [ -d "$target" ]; then path="$target"
-      elif [ -f "$target" ]; then handle_file "$target"; fi
-      return 0
-    fi
-    echo "Invalid. Use a number or q."
-  done
+  _fr_results_fill "🔍 find: $pat  (${#_FR_LIST[@]} result(s))"
+  _results_view -p handle_selection             # the same screen "==" gives: a number opens that hit (folder: go there · file: its menu)
+  case $? in 1) return 1 ;; 2) return 2 ;; esac
+  return 0
 }
 
 # ── 4-6  Find & replace, one pattern
@@ -192,31 +181,26 @@ _find_replace_single() {
 
 # the last step of a single replace: preview, choose what to apply, apply.  u = back to "Replace with:"
 _find_step_preview() {
-  local pat="$_fo_pat" rep="$_fo_rep" act
+  local pat="$_fo_pat" rep="$_fo_rep"
   _fr_finds=("$pat"); _fr_reps=("$rep")
   if [ "$find_confirm_mode" != direct ]; then
     echo "⏳ Looking…"
     _fr_exec preview || return 0
     if [ "${_FRS[listed]:-0}" -eq 0 ]; then echo "No matches found."; _fr_notes; return 0; fi
-    _pick_header "" "" "${_fr_root:-$path}  🔍 find: $pat → $rep  ($(_find_preview_summary))"
-    _fr_show
     _fr_notes
-    # MC-06: the preview rows ARE the numbered choices; the footer adds a) Apply to ALL to the standard keys
-    _mc_text -x "a:Apply to ALL" -x "#Enter a number to apply to just that item" act "Select: "
-    case $? in 1) return 1 ;; 2) return 2 ;; 3) return 0 ;; esac
-    case "$act" in
+    _fr_results_fill "🔍 find: $pat → $rep  ($(_find_preview_summary))"
+    _RES_APPLY=1                                 # the preview rows ARE the numbered choices; a) Apply to ALL joins the standard keys
+    _results_view
+    case $? in 1) return 1 ;; 2) return 2 ;; esac
+    case "$_RES_CHOICE" in
       a|A) ;;
-      [0-9]*)
-        if [[ $act =~ ^[0-9]+$ ]] && (( act >= 1 && act <= ${#_FR_LIST[@]} )); then
-          _fr_only="${_FR_LIST[$((act-1))]}"
-        else echo "Invalid number."; return 0; fi ;;
-      *) _bvk_invalid; return 0 ;;
+      *)   _fr_only="$_RES_PICK" ;;
     esac
   fi
   echo "⏳ Applying…"
   _fr_exec apply || return 0
   _fr_changes_log                      # locks + shortcuts follow the renamed items
-  _fr_show
+  _fr_problems
   _find_apply_report
   _fr_notes
   return 0
@@ -297,7 +281,7 @@ _find_replace_csv() {
   echo "📝 Writing counts back to CSV..."
   _find_csv_write_counts "$csv_file" csv_counts ""
   echo "💫 CSV updated: $(basename "$csv_file")"
-  _fr_show
+  _fr_problems
   _find_apply_report
   _fr_notes
   echo "🎉 Multi Mutation complete — ${#csv_finds[@]} row(s) processed."

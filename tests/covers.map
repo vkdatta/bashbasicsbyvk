@@ -24,6 +24,7 @@ staging/buffer!/|select/|loops/iloop/fx/file_fx/bashbasicsbyvk_adf_selection|fun
 loops/iloop/fx/	adf_registry
 engine/bashbasicsbyvk_cmdmap|cmdmap/|llms-full	cmd_docs
 engine/bashbasicsbyvk_(displayer|engine_target)|debug/health/|fileapi/0 lib/|_3bvk_import_cmd_	engine_target
+engine/bashbasicsbyvk_results|cmdmap/results/|functions/bashbasicsbyvk_find	results_screen pick_drift cmd_drift findrep
 script/file/	smartload settings_desc delete_confirm rename_screen
 fx/github_fx/	github_engine github_ui github_upgrade_shared choose_plain
 functions/bashbasicsbyvk_ghlib|loops/iloop/upgrade/	github_engine github_upgrade_shared

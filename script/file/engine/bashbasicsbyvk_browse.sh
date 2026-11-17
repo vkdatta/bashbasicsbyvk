@@ -551,7 +551,9 @@ _menu_header() {
   echo
   if [ "${_GD_ACTIVE:-0}" = 1 ]; then _gd_view_path "$path"; else _gd_vp="$path"; fi      # Google Drive open: show the Drive path, not the mirror folder
   local _hdr_loc="☁️ nav path: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
-  if [ -n "$_filter_query" ]; then
+  if [ -n "${_RES_HDR:-}" ]; then
+    _hdr_loc+="  $_RES_HDR"                                # a results screen (_results_view: Find hits, a preview) names itself here, in the place the "=" filter writes its own text
+  elif [ -n "$_filter_query" ]; then
     if ${imaginary_mode:-false}; then
       local _itot=0 _ch
       for _ch in "${group_chars[@]}"; do
@@ -627,6 +629,12 @@ _pick_rows() {
     if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "${items[i-1]}" "$ln"; then ln="$_smk_out"; fi     # selected with .s — green "+"
     printf '%s\n' "$ln"
   done
+}
+
+# cd: leave the app and open a shell in the folder being browsed (the main loop's  cd  and every screen whose footer prints  cd) Change directory)
+_bvk_cd_shell() {
+  if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁️  A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; return 0; fi
+  _rc_record "$path"; _lt_cleanup; cd "$path" && exec "$SHELL"      # the in-app cd: the folder joins Recents
 }
 
 _menu_header_flat() {

@@ -202,14 +202,26 @@ _st_draw() {
     case "${_st_kind[$i]}" in t|r) marks=1; break ;; esac
   done
 
-  # footer = suggested commands (same two-step style as the main menu)
-  if (( _st_depth > 1 )); then f1="u) Back   q) Close settings"; else f1="u) Up   q) Close"; fi
+  # footer = ADVERT (bashbasicsbyvk_advert.sh).  The screen DECLARES what it accepts; the footer prints the free keys and what the budget
+  # buys (a command costs 10, a screen has 50); cc lists every declared command.  Nothing here looks anything up.
+  local _fu="Back" _fq="Close settings"; (( _st_depth > 1 )) || { _fu="Up"; _fq="Close"; }
+  _ad_open "${_CM_MAP:-}"
+  _ad_free u "Back" u "$_fu"
+  _ad_free q "Close Settings, back to the main menu" q "$_fq"
+  _ad_from_cmdfn "${_ST_CMDFN:-}"                                                           # the screen's own typed commands (clr, a-2, d ...)
+  _ad_accept '?' "Read the whole explanation of the highlighted row" $(( _ST_DESC_TRUNC ? 20 : 0 )) '?' 0 "Full text"   # in the footer only when the text was cut
+  _ad_accept '='      "Filter the rows  (=text · Enter keeps it · = + Enter clears it)" 0
+  _ad_accept print    "Print what is on screen — copy it or save as txt" 0
+  _ad_accept loadtime "Load time: what each screen change cost  (loadtime 2 · loadtime all)" 0
+  _ad_accept cc       "Cheat codes — every command this screen takes" 0
+  _ad_from_dispatcher "${_CM_MAP:-main}"
+  _ad_from_map "${_CM_MAP:-main}" st                                                        # the main words this screen's map runs (h s i -h -auth disk ram ...)
+  _ad_footer_cells
+  f1="${_AD_FT_FREE[0]:-}"; (( ${#_AD_FT_FREE[@]} > 1 )) && printf -v f1 '%s   ' "${_AD_FT_FREE[@]}" && f1="${f1%   }"
+  f2=""; (( ${#_AD_FT_PAID[@]} )) && { printf -v f2 '%s   ' "${_AD_FT_PAID[@]}"; f2="${f2%   }"; }
   [ -n "${_st_f1_custom:-}" ] && f1="$_st_f1_custom"          # cc: its own footer
-  f2=""                                                        # second footer line: empty (a blank spacer) unless there is something to say
   if (( _st_cnt == 0 )); then if [ -n "${fq:-}" ]; then f2="No match for =$fq   (= + enter clears)"; else f2="Nothing to choose here"; fi; fi
-  if [[ "$hint" == *"←/→"* ]]; then f2="clr) Clear all"; fi
-  [ -n "${_st_f2_custom:-}" ] && f2="$_st_f2_custom"           # a choice menu lists its own keys (y) Yes   n) No ...)
-  (( _ST_DESC_TRUNC )) && f2="${f2:+$f2   }?) Full text"       # the explanation in the header was cut: ? + Enter reads all of it
+  [ -n "${_st_f2_custom:-}" ] && f2="$_st_f2_custom"           # an explicit second line (the Cheat codes list has none)
 
   _ST_FTR1="$f1"; _ST_FTR2="$f2"                           # what _st_click needs to find the footer key that was touched
 
@@ -638,6 +650,7 @@ _st_type_key() {      # a typed character
 
 _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}" cmdfn="${5:-}"
+  local _ST_CMDFN="$cmdfn"      # the screen declares its typed commands with "$_ST_CMDFN --cc"  (key|description|prio|shown|short per line)
   local cur=-1 top=0 prev=0 n buf="" pos=0 posb="" _st_wasf=0 num path_title fq="" _sdq="" need=1 page="${_vp_page_step:-10}" navbuf=0 typed=0
   local parent_title="${_st_title_now:-}"
   # This screen draws its suggestion INSIDE its own block (_st_draw, _ST_HINT).  _vp_hint_row is the main menu's global flag "the prompt has the

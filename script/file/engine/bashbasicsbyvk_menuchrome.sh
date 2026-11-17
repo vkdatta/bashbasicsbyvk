@@ -97,6 +97,11 @@ _mc_options() {
 #                "|"            start a new line
 # Lines wrap at the viewport width (a line wider than the terminal would wrap
 # physically and throw the viewport's row accounting off).
+# the footer DECLARES into the advertiser registry (advert.sh).  Scripts that source menuchrome.sh on its own get it too.
+if ! declare -F _ad_open >/dev/null 2>&1; then
+  if [ -r "${BASH_SOURCE[0]%/*}/bashbasicsbyvk_advert.sh" ]; then source "${BASH_SOURCE[0]%/*}/bashbasicsbyvk_advert.sh"
+  else source "bashbasicsbyvk_advert.sh"; fi
+fi
 declare -g _MC_UNDER_FOOTER=0
 declare -gA _MC_PRINTED=()     # the keys the LAST footer printed ("u", "z", "v" ...): a plain prompt under it takes them as its own answers (cmdmap _cm_prompt_collect)
 _mc_footer() {
@@ -112,7 +117,14 @@ _mc_footer() {
   fi
   _vp_usable; local cols=$_vp_usable_w          # the ONE width source (viewport)
   (( cols < 18 )) && cols=18
-  local it cell line="" out=()
+  # ADVERT: this footer DECLARES the commands its menu takes (cc lists all of them) and then prints what the budget buys (advert.sh:
+  # a footer command costs _AD_COST_FOOTER, a menu has _AD_BUDGET; standard keys u q z rf h cc are free).  No lookup here.
+  _ad_open ""; _ad_menu_now
+  _ad_from_footer_items "${items[@]}"
+  _ad_from_dispatcher "${_AD_MENU:-main}"
+  _ad_from_map "${_AD_MENU:-main}"
+  _ad_footer_reset
+  local it cell line="" out=() shown
   for it in "${items[@]}"; do
     if [ "$it" = "|" ]; then
       [ -n "$line" ] && out+=("$line"); line=""; continue
@@ -121,11 +133,12 @@ _mc_footer() {
       [ -n "$line" ] && out+=("$line"); line=""
       out+=("${it#\#}"); continue
     fi
-    if [[ "$it" == *:* ]]; then cell="${it%%:*}) ${it#*:}"
-    elif [ -n "${_MC_KEYLABEL[$it]-}" ]; then cell="${it%%.*}) ${_MC_KEYLABEL[$it]}"
-    else cell="${it}) ${it}"; fi
+    if [[ "$it" == *:* ]]; then cell="${it%%:*}) ${it#*:}"; shown="${it%%:*}"
+    elif [ -n "${_MC_KEYLABEL[$it]-}" ]; then cell="${it%%.*}) ${_MC_KEYLABEL[$it]}"; shown="${it%%.*}"
+    else cell="${it}) ${it}"; shown="$it"; fi
     (( unders )) && cell="${cell//_/ }"
-    [[ "$cell" =~ ^([A-Za-z0-9_-]{1,5})\)[[:space:]]*(.*)$ ]] && _MC_PRINTED["${BASH_REMATCH[1],,}"]="${BASH_REMATCH[2]:-printed in the footer}"
+    [[ "$cell" =~ ^([A-Za-z0-9_-]{1,5})\)[[:space:]]*(.*)$ ]] && _MC_PRINTED["${BASH_REMATCH[1],,}"]="${BASH_REMATCH[2]:-printed in the footer}"   # every declared key is the menu's own (printed or not)
+    _ad_footer_allow "$shown" || continue                    # budget spent: the command stays in cc, the footer does not print it
     if [ -z "$line" ]; then
       line="$cell"
     elif _vp_cells "$line"; local _lw=$_vp_w; _vp_cells "$cell"; (( _lw + 3 + _vp_w >= cols )); then

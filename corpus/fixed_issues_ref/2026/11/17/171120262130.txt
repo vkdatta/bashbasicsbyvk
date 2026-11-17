@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Group by (Settings › Group by) prints "clr) Clear all" in its footer and typing clr works, but cc on that screen did not list clr. The user asked for an exhaustive audit of every footer / cc / handled command in the app.
+
+HOW DID YOU DEBUG
+Followed who builds the cc list: _cc_collect (engine/bashbasicsbyvk_cheatcode.sh). For Settings / Home / list screens (_CC_CTX=st) it returned a HARD-CODED list: u q = print loadtime. The footer is drawn by hand in _st_draw (settings_ui.sh: f1 "u) Back q) Close", f2 "clr) Clear all" when the hint has "←/→"), and clr is handled by the screen's own cmd function (_st_gv_cmd) before the map is asked. None of the three is in the map, so cc could not know them. Then ran the real resolver (_cm_resolve on maps settings / home / pending): h s i -h -auth rf health disk ram clear sast kl lang sys are RUN by _st_cm_gate on these screens but cc did not list them either. Part 2: resolved every _mc_footer key against its owning map; menus drawn through _mc_footer already reach cc through _CM_LOCAL / _MC_PRINTED, so they were fine. tests/cc_truth only checks that typed map commands do something, never that cc lists them; tests/cmd_drift (6) only checks a footer key is wired in SOME map (clr passes because rules and switch wire it), so neither could catch this.
+
+CAUSE
+cc on a _st_run screen was a fixed list, not derived from what the screen accepts. Three sources of accepted words were invisible to it: (1) the screen's own typed-command function (cmdfn: clr and "3,4,2" on Group by, s on a Pending list, a / a-2 / d on a multi choose box), (2) the footer keys the screen prints, (3) the commands the screen's map runs through _st_cm_gate, plus "?".
+
+FIX
+_st_run keeps its cmdfn in _ST_CMDFN. _cc_collect (st context) now lists, in this order: the cmdfn's own commands (asked with "$_ST_CMDFN --cc", one key|description per line, returns 1 so nothing runs), every "key) Label" in the footer on screen (_ST_FTR1 / _ST_FTR2), u q = ? print loadtime, then every command the screen's map RUNS (same _cm_resolve as _st_cm_gate; blocked ones stay out). _st_gv_cmd, _pn_kind_cmd and _bc_cmd answer --cc. New test tests/cc_footer_truth.sh.

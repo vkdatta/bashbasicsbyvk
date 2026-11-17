@@ -142,6 +142,16 @@ _bc_typed_sel() {
 # typed text + Enter (cmd_fn of _st_run: return 0 = handled)
 _bc_cmd() {
   local _bc_t="$1"
+  if [ "$_bc_t" = --cc ]; then          # the typed answers of this box, declared (the footer buys the first ones, cc lists all)
+    local _bc_i _bc_k _bc_ks _bc_pr=90
+    for _bc_i in "${!_bc_key[@]}"; do
+      _bc_ks=""; for _bc_k in ${_bc_alt[$_bc_i]}; do (( ${#_bc_k} == 1 )) && { _bc_ks="$_bc_k"; break; }; done
+      for _bc_k in ${_bc_alt[$_bc_i]}; do echo "$_bc_k|${_bc_lbl[$_bc_i]}|$([ "$_bc_k" = "${_bc_ks:-$_bc_k}" ] && echo $_bc_pr || echo 0)|$_bc_k|${_bc_lbl[$_bc_i]}"; done
+      _bc_pr=$(( _bc_pr - 5 ))
+    done
+    (( _bc_multi )) && { echo "d|Done — take the selection|95|d|Done"; echo "a|Select all|60|a|All"; echo "a-2|Select all except row 2  (a-N)|0"; echo "1,3-5|Select these rows  (numbers and ranges)|0"; }
+    return 1
+  fi
   if [ -z "$_bc_t" ]; then
     (( cur >= 0 )) && return 1                       # Enter on a highlighted row: the engine activates it
     if [ -n "$_bc_def" ] && _bc_index "$_bc_def"; then _bc_hit "$_bc_ix"; fi
@@ -252,16 +262,8 @@ _bvk_menu() {
     else _bc_wrap "$_bc_question" $(( _bc_cols - 4 )); for _bc_it in "${_bc_q[@]}"; do echo "$_bc_it"; done; fi
   fi
 
-  # the footer: u / q always; the answer keys on a second line when asked for
-  local _st_f1_custom="u) Back   q) Close" _st_f2_custom="" _st_icon="$_bc_icon" _st_crumb="" _st_verb="choose"
-  if (( _bc_keys )); then
-    _bc_seg=""
-    for _bc_i in "${!_bc_key[@]}"; do          # the first key and its one-letter twins (c/x); typed words (yes, cancel) work but are not printed
-      _bc_ks=""; for _bc_k in ${_bc_alt[$_bc_i]}; do (( ${#_bc_k} == 1 )) && _bc_ks+="${_bc_ks:+/}$_bc_k"; done
-      _bc_seg+="${_bc_seg:+   }${_bc_ks:-${_bc_key[$_bc_i]}}) ${_bc_lbl[$_bc_i]}"
-    done
-    _st_f2_custom="$_bc_seg"
-  elif (( _bc_multi )); then _st_f2_custom="N · 1,3-5 · a · a-2 select   d) Done"; fi
+  # the footer: u / q always; the answer keys are DECLARED by _bc_cmd --cc (advert.sh prints what the budget buys)
+  local _st_f1_custom="" _st_f2_custom="" _st_icon="$_bc_icon" _st_crumb="" _st_verb="choose"
   local _st_choice=1 _st_radio_follow=0; (( _bc_multi )) || _st_radio_follow=1   # [o] follows the highlight in a one-of-many menu
 
   # the keys this box prints are ITS answers (the live hint row and the command layer must not read them as commands)

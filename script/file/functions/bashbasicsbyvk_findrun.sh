@@ -101,33 +101,31 @@ _fr_exec() {
   return 0
 }
 
-# _fr_show  — prints the engine's numbered lines.  The row itself (number, icon, name, 🔒, the green "+" of .s) is the folder view's row
-# (_item_line_text_v, shown relative to the search folder like the recursive "=" filter); what the engine adds after the name
-# ("(2 matches)", "→  new name") and its other lines (L12: …, "… and N more") are kept as they are.
-_fr_show() {
-  local line n rel p rest rdp_root="${_fr_root:-$path}"
+# _fr_results_fill HEADER  — hands the hits of the last _fr_exec to the results screen (_results_view, which shows them the way the recursive "="
+# filter does).  It only supplies DATA: the paths, and what the engine writes after each name ("(2 matches)", "→  new name", the first "L12: …" line).
+# Nothing is drawn here.
+_fr_results_fill() {
+  local line n p rel rest last=""
+  _RES_LIST=("${_FR_LIST[@]}"); _RES_NOTE=(); _RES_ROOT="${_fr_root:-$path}"; _RES_HDR="$1"
   [ -s "$_FR_TMP/lines" ] || return 0
-  if [ "${#_FR_LIST[@]}" -eq 0 ] || ! declare -F _item_line_text_v >/dev/null 2>&1; then cat "$_FR_TMP/lines"; return 0; fi
-  declare -F _lk_load >/dev/null && _lk_load
-  local -a items=("${_FR_LIST[@]}")
-  local -A _REC_LABEL=()
-  local display_suffix_set=""
-  for p in "${items[@]}"; do _REC_LABEL["$p"]="${p#"${rdp_root%/}"/}"; done
   while IFS= read -r line; do
     if [[ "$line" =~ ^\ *([0-9]+)\)\ \ ?(.*)$ ]]; then
-      n="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[2]}"
-      p="${_FR_LIST[n-1]:-}"
-      if [ -n "$p" ]; then
-        rel="${_REC_LABEL[$p]}"
-        if [[ "$rest" == "$rel"* ]]; then
-          _item_line_text_v "$n"; line="$_ilt_out${rest#"$rel"}"
-          if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "$p" "$line"; then line="$_smk_out"; fi
-        fi
-      fi
+      n="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[2]}"; p="${_FR_LIST[n-1]:-}"; last=""
+      [ -n "$p" ] || continue
+      rel="${p#"${_RES_ROOT%/}"/}"
+      [[ "$rest" == "$rel"* ]] || continue
+      rest="${rest#"$rel"}"; rest="${rest#/}"; rest="${rest#"${rest%%[![:space:]]*}"}"
+      last="$p"; [ -n "$rest" ] && _RES_NOTE["$p"]="$rest"
+    elif [ -n "$last" ] && [[ "$line" =~ ^\ +L[0-9]+: ]]; then
+      line="${line#"${line%%[![:space:]]*}"}"
+      _RES_NOTE["$last"]="${_RES_NOTE[$last]:-}${_RES_NOTE[$last]:+  }$line"; last=""      # the first snippet of a file only
     fi
-    printf '%s\n' "$line"
   done < "$_FR_TMP/lines"
+  return 0
 }
+
+# _fr_problems  — after an apply the engine has no path list, only the lines of what could not be done (⚠ …): print them as they are
+_fr_problems() { [ -s "$_FR_TMP/lines" ] && cat "$_FR_TMP/lines"; return 0; }
 
 # _fr_notes — one-line warnings the person must not miss (things that were skipped / failed)
 _fr_notes() {

@@ -4,6 +4,8 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; F="$ROOT/script/file"
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
+SCRIPT_DIR="$F"; for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
+source "$F/engine/bashbasicsbyvk_cmdmap.sh"      # the footer declares through ADVERT, which reads the command map; the stubs below replace bvk_main_exec
 _vp_usable() { _vp_usable_w=80; }; _vp_cells() { _vp_w=${#1}; }; _sm_on=0
 _bvk_read() { IFS= read -r "$1"; }; _BVK_TO_MAIN=0; _bvk_quit() { _BVK_TO_MAIN=1; return 0; }; _bvk_invalid() { echo "INVALID"; }
 bvk_main_exec() { echo "[ran $1]"; }

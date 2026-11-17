@@ -28,7 +28,6 @@ _st_fnd_build() {
   _st_add a ".git / .hg / .svn" 0 "$(_find_lbl "$find_vcs_mode" skip "skip" include "include")"                                  vcs
   _st_add h "Replacing and showing"
   _st_add a "Preview first"     0 "$(_find_lbl "$find_confirm_mode" preview "preview, then confirm" direct "replace straight away")" confirm
-  _st_add a "Results shown"     0 "$([ "$find_show_limit" = 0 ] && echo all || echo "first $find_show_limit")"                  limit
   _st_add a "CPU threads"       0 "$find_threads"                                                                               threads
 }
 _st_fnd_act() {
@@ -44,7 +43,6 @@ _st_fnd_act() {
     maxsize) _st_choice_open "Big files" find_maxsize_mb "Find & replace: skip files bigger than" "💫 Saved" 50 "50 MB" 200 "200 MB (default)" 1000 "1 GB" 0 "No limit" ;;
     vcs)   _st_choice_open ".git / .hg / .svn" find_vcs_mode "Find & replace: version-control folders" "💫 Saved" skip "Skip (default, safe)" include "Include" ;;
     confirm) _st_choice_open "Preview first" find_confirm_mode "Find & replace: before changing anything" "💫 Saved" preview "Show a preview, then confirm (default)" direct "Replace straight away" ;;
-    limit) _st_choice_open "Results shown" find_show_limit "Find & replace: how many results to print" "💫 Saved" 100 "First 100" 300 "First 300 (default)" 1000 "First 1000" 0 "All" ;;
     threads) _st_choice_open "CPU threads" find_threads "Find & replace: worker threads" "💫 Saved" auto "Auto (default)" 1 "1" 2 "2" 4 "4" 8 "8" ;;
   esac
 }

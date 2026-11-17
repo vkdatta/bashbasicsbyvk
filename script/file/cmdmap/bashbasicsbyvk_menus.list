@@ -11,6 +11,7 @@ snapshot | snapshot_menu          | menu   | u
 pending  | pending_menu           | menu   | u
 xui      | _xui_loop              | menu   | u
 find     | find_menu              | menu   | u
+results  | _results_view          | menu   | u
 transfer | transfer_menu          | menu   | u
 organise | organise_menu          | menu   | u
 infinity | infinity_stones_menu   | menu   | u

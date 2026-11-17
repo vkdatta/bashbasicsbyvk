@@ -58,7 +58,6 @@ DEFAULT_FIND_VCS_MODE="skip"
 DEFAULT_FIND_CONFIRM_MODE="preview"
 DEFAULT_FIND_INPUT_MODE="ask"
 DEFAULT_FIND_MAXSIZE_MB="200"
-DEFAULT_FIND_SHOW_LIMIT="300"
 DEFAULT_FIND_THREADS="auto"
 # Transfer speed (up- / do- / pending): MB per encrypted chunk x parallel streams.  Limits are the same in the worker (TRANSFER_LIMITS) and bvk-xfer (netx.go).
 DEFAULT_XFER_CHUNK_MB="4"
@@ -112,7 +111,6 @@ unset find_vcs_mode
 unset find_confirm_mode
 unset find_input_mode
 unset find_maxsize_mb
-unset find_show_limit
 unset find_threads
 unset xfer_chunk_mb
 unset xfer_streams
@@ -301,8 +299,6 @@ _apply_timezone
 [[ "$find_input_mode" =~ ^(ask|single|csv)$ ]] || find_input_mode=$DEFAULT_FIND_INPUT_MODE
 : "${find_maxsize_mb:=$DEFAULT_FIND_MAXSIZE_MB}"
 [[ "$find_maxsize_mb" =~ ^[0-9]{1,6}$ ]] || find_maxsize_mb=$DEFAULT_FIND_MAXSIZE_MB
-: "${find_show_limit:=$DEFAULT_FIND_SHOW_LIMIT}"
-[[ "$find_show_limit" =~ ^[0-9]{1,6}$ ]] || find_show_limit=$DEFAULT_FIND_SHOW_LIMIT
 : "${find_threads:=$DEFAULT_FIND_THREADS}"
 [[ "$find_threads" =~ ^(auto|1|2|4|8)$ ]] || find_threads=$DEFAULT_FIND_THREADS
 : "${xfer_chunk_mb:=$DEFAULT_XFER_CHUNK_MB}"
@@ -370,7 +366,6 @@ save_settings() {
     echo "find_confirm_mode=$find_confirm_mode"
     echo "find_input_mode=$find_input_mode"
     echo "find_maxsize_mb=$find_maxsize_mb"
-    echo "find_show_limit=$find_show_limit"
     echo "find_threads=$find_threads"
     echo "xfer_chunk_mb=$xfer_chunk_mb"
     echo "xfer_streams=$xfer_streams"
@@ -500,6 +495,7 @@ _st_gv_act() {
 }
 # typed commands:  clr = clear all levels · "3,4,2" (or "3 4 2") = use exactly these levels in this order
 _st_gv_cmd() {
+  if [ "$1" = --cc ]; then printf '%s\n' "clr|Clear all levels|90|clr|Clear all" "3,4,2|Use exactly these levels, in this order  (numbers of the rows)|0"; return 1; fi   # declared: the footer buys clr, cc lists both
   local t="${1//,/ }" x
   local -a new=()
   if [ "$1" = clr ]; then
@@ -658,7 +654,6 @@ _st_reset_act() {
   find_confirm_mode=$DEFAULT_FIND_CONFIRM_MODE
   find_input_mode=$DEFAULT_FIND_INPUT_MODE
   find_maxsize_mb=$DEFAULT_FIND_MAXSIZE_MB
-  find_show_limit=$DEFAULT_FIND_SHOW_LIMIT
   find_threads=$DEFAULT_FIND_THREADS
   xfer_chunk_mb=$DEFAULT_XFER_CHUNK_MB; xfer_streams=$DEFAULT_XFER_STREAMS
   rename_csv_above=$DEFAULT_RENAME_CSV_ABOVE

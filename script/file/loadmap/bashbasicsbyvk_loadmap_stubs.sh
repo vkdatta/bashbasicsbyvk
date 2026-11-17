@@ -4,6 +4,7 @@
 # function of every [bg] / [no] library. The first call of a stub loads the library that defines the function (bashbasicsbyvk_loadmap.sh, _lm_stub), then runs it.
 declare -gA _LM_NEEDS=() _LM_WITH=()
 _LM_NEEDS[bashbasicsbyvk_home.sh]="bashbasicsbyvk_settings_ui.sh"
+_LM_NEEDS[bashbasicsbyvk_findrun.sh]="bashbasicsbyvk_results.sh"
 _LM_NEEDS[bashbasicsbyvk_settings_groups.sh]="bashbasicsbyvk_archive_formats.sh"
 _LM_NEEDS[bashbasicsbyvk_settings_desc.sh]="bashbasicsbyvk_settings_ui.sh bashbasicsbyvk_menu_sort.sh"
 _LM_NEEDS[bashbasicsbyvk_hidefiles.sh]="bashbasicsbyvk_settings_ui.sh"
@@ -160,9 +161,13 @@ _fr_tmpdir() { _lm_stub bashbasicsbyvk_findrun.sh _fr_tmpdir "$@"; }
 _fr_cleanup() { _lm_stub bashbasicsbyvk_findrun.sh _fr_cleanup "$@"; }
 _fr_stats_read() { _lm_stub bashbasicsbyvk_findrun.sh _fr_stats_read "$@"; }
 _fr_exec() { _lm_stub bashbasicsbyvk_findrun.sh _fr_exec "$@"; }
-_fr_show() { _lm_stub bashbasicsbyvk_findrun.sh _fr_show "$@"; }
+_fr_results_fill() { _lm_stub bashbasicsbyvk_findrun.sh _fr_results_fill "$@"; }
+_fr_problems() { _lm_stub bashbasicsbyvk_findrun.sh _fr_problems "$@"; }
 _fr_notes() { _lm_stub bashbasicsbyvk_findrun.sh _fr_notes "$@"; }
 _fr_changes_log() { _lm_stub bashbasicsbyvk_findrun.sh _fr_changes_log "$@"; }
+_results_is_preview() { _lm_stub bashbasicsbyvk_results.sh _results_is_preview "$@"; }
+_results_footer() { _lm_stub bashbasicsbyvk_results.sh _results_footer "$@"; }
+_results_view() { _lm_stub bashbasicsbyvk_results.sh _results_view "$@"; }
 _ts_to_ymd() { _lm_stub bashbasicsbyvk_organise.sh _ts_to_ymd "$@"; }
 _batch_stat() { _lm_stub bashbasicsbyvk_organise.sh _batch_stat "$@"; }
 _flush_buckets() { _lm_stub bashbasicsbyvk_organise.sh _flush_buckets "$@"; }
@@ -878,6 +883,7 @@ _fx_adf_breadcrumb() { _lm_stub bashbasicsbyvk_functions.sh _fx_adf_breadcrumb "
 _fx_count_line() { _lm_stub bashbasicsbyvk_functions.sh _fx_count_line "$@"; }
 _fx_menu_header() { _lm_stub bashbasicsbyvk_functions.sh _fx_menu_header "$@"; }
 _fx_menu_header_imaginary() { _lm_stub bashbasicsbyvk_functions.sh _fx_menu_header_imaginary "$@"; }
+_fx_tab_is_udf() { _lm_stub bashbasicsbyvk_functions.sh _fx_tab_is_udf "$@"; }
 _fx_menu_footer() { _lm_stub bashbasicsbyvk_functions.sh _fx_menu_footer "$@"; }
 _fx_adf_rowtext() { _lm_stub bashbasicsbyvk_functions.sh _fx_adf_rowtext "$@"; }
 _fx_set_viewport_for_tab() { _lm_stub bashbasicsbyvk_functions.sh _fx_set_viewport_for_tab "$@"; }

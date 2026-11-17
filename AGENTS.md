@@ -69,6 +69,22 @@ So before you create anything, work in this order:
    Less code, fewer places to forget.
 5. **No regressions.** A reuse or dedupe change must not change behaviour. For a LOGIC change run the tests of the tier chosen in "Workflow and tests" ONCE, after the change and after delivering; a MINOR change runs none (see "Workflow and tests" at the top). Say in HOW DID YOU DEBUG what you ran and what you did not.
 
+6. **Reuse a screen by feeding it DATA, and wire it; never print a lookalike list.** A screen that shows paths already exists: the folder view,
+   and the recursive `==` filter that fills it. A new list of paths (Find hits and the replace preview already do; the Transfer and csv pickers
+   still use `_pick_rows` and are to be moved) is shown by `_results_view` (`script/file/engine/bashbasicsbyvk_results.sh`), which borrows that
+   same viewport, header and footer. The caller only fills data
+   (`_RES_LIST` = the paths, `_RES_NOTE[path]` = text after the name, `_RES_HDR` = what the nav-path row says, `_RES_APPLY` = an extra `a` key) and
+   reads `_RES_CHOICE` / `_RES_PICK` back; Find's example is `_fr_results_fill` + `_results_view -p handle_selection`. When a caller needs one more
+   thing, extend the shared function for every caller (rule 2); do not patch the caller's own printing. The steps of a switch:
+   1. find what the target screen is made of (`grep` the strings the person sees: `more below`, `nav path`, the footer text) and call THAT;
+   2. wire its typed words: a screen that reads words is claimed by a `.map` (rule 14) and every key its footer prints is really handled by its loop
+      (`results` wires `cd`, `-u`, `=` like the main list; a footer must never advertise a blocked key); a key that exists only in one state
+      (`a` in a preview) is declared with `_dp_when MENU WHEN_FN KEY` (see ADVERT below), so cc and the footer stop advertising it elsewhere;
+   3. delete the old display in the SAME task, with its settings, descriptions and tests (rule 10): a capped list (`Results shown`) or a hand-made
+      `printf "%2d) "` row is the old display, not a feature to keep;
+   4. test it in the real app through a pty (`tests/results/pty_test.py` is the template), at phone size for scrolling and tall for messages.
+   A patch that only restyles the old print (BB-171120261240-1) is the thing this step exists to stop.
+
 ## The rules
 
 1. **Every file lives under `script/`.** Every file under `script/` is named with the prefix
@@ -340,3 +356,17 @@ seen elsewhere, grep for the helper first.
     - **The only plain `read` / `input()` left** is the last fallback for exit 3 (a broken install: no menu installed), marked `# bvk-read-ok: ...`.
     - **Legacy is rewritten, not kept.** A hand-drawn menu found in the code is migrated in the same change; the lint (`tests/menu_templates.sh`, hand-drawn-menu check) scans every file under `script/`, also files with no extension, so none can hide. A file that really needs an exception is listed in `tests/known_failing.txt` WITH a reason and a date; it never gets a silent pass.
     - **A migrated tool keeps its flow:** the answer keys keep their old values (`1` `2` `t` `l`), so the code after the question does not change; `u` / `q` follow rule 15.
+
+## ADVERT — what a menu accepts is declared once; cc and the footer only render it  (script/file/engine/bashbasicsbyvk_advert.sh)
+- A menu DECLARES the commands it accepts into the registry: `_ad_open`, `_ad_accept KEY "desc" [PRIO] [SHOWN] [FREE] [SHORT]`, `_ad_free` (u q z rf h cc), or the helpers
+  `_ad_from_map`, `_ad_from_cmdfn` (a screen's own typed commands: `"$cmdfn --cc"` prints `key|description|prio|shown|short`), `_ad_from_footer_items` (what `_mc_footer` is handed).
+- cc lists EVERY declared command (cost 0). The footer prints the free keys + the declared commands the budget buys (cost 10 each, budget 50 per menu = 5 commands, highest PRIO first).
+  Neither looks anything up, parses a screen, or judges; the footer is always a subset of cc. A new command is added in ONE place: the menu's declaration.
+- Never type a footer string by hand, and never add a typed command a menu takes without declaring it (a screen's `cmdfn` must answer `--cc`).
+- DISPATCHER acceptor (same file): `_dp_accept MENU KEY HANDLER "desc" [FOOT_PRIO] [SHOWN] [WHEN_FN]` tells the dispatcher what a menu accepts (FOOT_PRIO > 0 = "show this in the footer"),
+  `_dp_when MENU WHEN_FN KEY…` marks keys that exist only while WHEN_FN is true (a tab, a mode: fx's UDF tab), `_dp_accepts` is the judge, `_dp_run` runs the handler.
+  cc and every footer pick these up through `_ad_from_dispatcher`. A state-dependent command MUST use `_dp_when`, otherwise cc advertises it where the menu refuses it.
+- Tests (all menus, no terminal, ~20 s):  `bash tests/advert_score.sh`  = unit (`cc_footer_truth.sh`) + static score of every menu (`advert_static.py`: declared vs handled vs footer,
+  coverage = handled ∩ declared / handled × 100; phantom in cc −100; phantom in footer −1000; a declared handler that does not exist counts as a phantom) + `cmd_drift.sh`.
+  The slow live cross-check that types into the real app is `python3 tests/advert_pty.py` (about an hour for everything): run it when you want proof, not on every change.
+  The test must never type `kl` (`kill -9 -1`).

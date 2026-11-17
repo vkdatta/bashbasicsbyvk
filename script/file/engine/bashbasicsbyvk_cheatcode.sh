@@ -52,58 +52,28 @@ _CC_CTX=""            # "st" = called from a Settings / Home screen (their own, 
 
 declare -ga _CC_KEY=() _CC_DESC=() _CC_INS=()
 
-# ── what can be typed here?
-_cc_add() {   # key description   (first one wins, a key is listed once)
-  case "$_cc_seen" in *$'\n'"$1"$'\n'*) return 0 ;; esac
-  _cc_seen+="$1"$'\n'
-  _CC_KEY+=("$1"); _CC_DESC+=("$2"); _CC_INS+=("$1")
-}
-
+# ── what can be typed here?   (ADVERT: cc only RENDERS the registry — bashbasicsbyvk_advert.sh)
+#   · a list screen (Settings, Home, Pending ...): _st_draw declared everything the screen accepts when it was drawn
+#   · any other prompt: the menu's map + the keys the prompt / footer printed, declared now (the same declaring helpers the footers use)
 _cc_collect() {
   _CC_KEY=(); _CC_DESC=(); _CC_INS=()
-  local _cc_seen=$'\n'
-  if [ "$_CC_CTX" = st ]; then
-    # Settings / Home screens read only these (see _st_run)
-    _cc_add u        "Back"
-    _cc_add q        "Close Settings, back to the main menu"
-    _cc_add '='      "Filter the rows  (=text · Enter keeps it · = + Enter clears it)"
-    _cc_add print    "Print what is on screen — copy it or save as txt"
-    _cc_add loadtime "Load time: what each screen change cost  (loadtime 2 · loadtime all)"
-    return 0
-  fi
-
-  local mode="${_CM_RUN_MODE:-menu}" m="${_CM_MAP:-main}" i key tgt k
-  [ "${_CM_BOOTED:-0}" = 1 ] || _cm_boot
-  _cm_table_build "$m"
-  local n=${#_ct_key[@]}
-  # copy the table first: _cm_resolve below must not disturb what we iterate
-  local -a tk=("${_ct_key[@]}") tt=("${_ct_tgt[@]}")
-  for (( i=0; i<n; i++ )); do
-    key="${tk[i]}"; tgt="${tt[i]}"
-    [ "$tgt" = BLOCK ] && continue
-    case "$_cc_seen" in *$'\n'"$key"$'\n'*) continue ;; esac
-    # would THIS prompt take the key?  (the same judge that handles what you type)
-    _cm_resolve "$mode" "$key"
-    case "$_CM_ACT" in run|local|back) ;; *) continue ;; esac
-    local d="$_CM_DESC"
-    [ -n "$_CM_EX" ] && d+="  (e.g. $_CM_EX)"
-    _cc_add "$key" "$d"
-  done
-  # keys the menu draws itself ("c) Create user") are commands of THAT menu
-  # (row numbers are not commands: you pick those by typing the number, as always)
-  local -a lk=()
-  for k in "${!_CM_LOCAL[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] || lk+=("$k"); done
-  if [ "${#lk[@]}" -gt 0 ]; then
-    while IFS= read -r k; do _cc_add "$k" "${_CM_LOCAL[$k]}"; done < <(printf '%s\n' "${lk[@]}" | sort)
-  fi
-  # cc was typed as a template's footer key (_mc_std_key): the read is over and _CM_LOCAL is empty, but the footer on screen is still known
-  if [ "${_CC_FOOTER:-0}" = 1 ]; then
-    local -a fk=()
-    for k in "${!_MC_PRINTED[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] || fk+=("$k"); done
-    if [ "${#fk[@]}" -gt 0 ]; then
-      while IFS= read -r k; do _cc_add "$k" "${_MC_PRINTED[$k]}"; done < <(printf '%s\n' "${fk[@]}" | sort)
+  if [ "$_CC_CTX" != st ]; then
+    local m="${_CM_MAP:-main}" k mode=menu
+    # how THIS menu takes a typed word: a list prompt (menu) takes the inherited main words; a question inside a flow (text) only the wired ones.
+    # Where cc was typed (_CM_RUN_MODE) says nothing about that: a smart menu's gate runs everything in text mode.
+    { [ "${_CM_MAP_KIND[$m]:-menu}" = prompt ] || [ "${_CM_FLOW:-0}" != 0 ]; } && mode=text
+    [ "${_CM_BOOTED:-0}" = 1 ] || _cm_boot
+    _ad_open "$m"
+    _ad_from_dispatcher "$m"
+    _ad_from_map "$m" "" "$mode"
+    for k in "${!_CM_LOCAL[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] || _ad_accept "$k" "${_CM_LOCAL[$k]}" 0; done
+    if [ "${_CC_FOOTER:-0}" = 1 ]; then
+      for k in "${!_MC_PRINTED[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] || _ad_accept "$k" "${_MC_PRINTED[$k]}" 0; done
     fi
   fi
+  _ad_cc_rows
+  local i
+  for (( i=0; i<${#_AD_CC_KEY[@]}; i++ )); do _CC_KEY+=("${_AD_CC_KEY[i]}"); _CC_DESC+=("${_AD_CC_DESC[i]}"); _CC_INS+=("${_AD_CC_KEY[i]}"); done
   return 0
 }
 

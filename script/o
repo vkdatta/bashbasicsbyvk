@@ -189,7 +189,7 @@ while true; do
     z)           organise_menu ;;
     s)           settings_menu ;;
     r)           handle_rename ;;
-    cd)          if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁️  A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; else _rc_record "$path"; _lt_cleanup; cd "$path" && exec "$SHELL"; fi ;;   # the in-app cd: the folder joins Recents
+    cd)          _bvk_cd_shell ;;
     goto|goto\ *) handle_goto "$choice" ;;
     kl)          kill -9 -1 ;;
     i)           infinity_stones_menu ;;

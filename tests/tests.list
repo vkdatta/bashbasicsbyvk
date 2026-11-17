@@ -50,6 +50,7 @@ engine_heal|fast|40|bash tests/engine_heal.sh|python3
 track|fast|60|bash tests/track/track_test.sh|python3
 smartload|fast|90|bash tests/smartload.sh|python3
 rename_screen|fast|240|bash tests/rename_screen.sh|python3
+results_screen|fast|240|bash tests/results_screen.sh|python3
 settings_desc|fast|40|bash tests/settings_desc.sh|python3
 settings_deep|fast|30|bash tests/settings_deep.sh|python3
 delete_confirm|fast|30|bash tests/delete_confirm.sh|

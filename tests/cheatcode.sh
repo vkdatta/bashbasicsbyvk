@@ -18,6 +18,7 @@ inlist() { keys | grep -qxF -- "$1"; }
 SCRIPT_DIR="$F"
 # the installed app has every map / commands file flat on PATH; here they sit in per-menu folders
 for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
+source "$F/engine/bashbasicsbyvk_advert.sh"      # cc only renders what a menu declared here (ADVERT)
 source "$F/engine/bashbasicsbyvk_cmdmap.sh"
 source "$F/engine/bashbasicsbyvk_cheatcode.sh"
 for f in "$F"/cmdmap/*/*commands.sh; do source "$f"; done

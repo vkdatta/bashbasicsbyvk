@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Constant drift between the commands a menu accepts, the commands its footer shows and the commands cc lists. The user asked for a new model: a menu declares what it accepts, cc and the footer only advertise that list (cc costs 0 per command, footer 10, budget 50 per menu), plus a score test (accepted / advertised x 100; phantom in cc -100; phantom in footer -1000).
+
+HOW DID YOU DEBUG
+Read who built each list: cc (_cc_collect: a hard-coded list on Settings-style screens, the map table plus _CM_LOCAL / _MC_PRINTED elsewhere), the footer (hand-typed f1/f2 strings in _st_draw, items typed at every _mc_footer call), the typed words (_st_cm_gate, each screen's cmdfn, the loops). Three authors, no shared list. Drove the real app in a pty to measure what a screen really takes. The first score run (Group by) showed false results from the test itself: an empty Enter toggles the highlighted row, a fixed settle time misses slow redraws, and a command with no visible effect in the current state (clr when nothing is ticked) looks unaccepted. Fixed by seeding the screen state, "=" + Enter as the no-op, and waiting for the reaction.
+
+CAUSE
+Nothing owned "the list of commands this menu accepts"; cc, the footer and the handlers each rebuilt it their own way.
+
+FIX
+New engine bashbasicsbyvk_advert.sh (registry, budget, two renderers). A menu declares with _ad_open / _ad_accept / _ad_free or the helpers _ad_from_map, _ad_from_cmdfn ("$cmdfn --cc" prints key|description|prio|shown|short) and _ad_from_footer_items. _cc_collect only renders the registry (the Settings-style hard-coded list is gone); _st_draw declares its screen and prints free keys + what the budget buys; _mc_footer declares its items and drops what the budget cannot buy (the command stays in cc). _st_gv_cmd, _pn_kind_cmd and _bc_cmd declare their commands. Tests: tests/cc_footer_truth.sh (fast), tests/advert_pty.py (real app, scores each screen). Settings, Settings > Display, Group by and Home score 100.

@@ -4,6 +4,7 @@ bashbasicsbyvk_loadtime.sh|||the load-time recorder: first, so the loading of th
 bashbasicsbyvk_smartload.sh|||the loading bar; its shims are called by print / smartmenu, so it loads before them
 bashbasicsbyvk_print.sh|||the `print` command shim; reads what the last frame drew
 bashbasicsbyvk_smartmenu.sh|||smart menus + the `read` shim every prompt goes through
+bashbasicsbyvk_advert.sh|||the advertiser: menus declare their commands once; cc and the footer only render that list (budget 50, cc 0, footer 10)
 bashbasicsbyvk_menuchrome.sh|||footer keys / menu chrome
 bashbasicsbyvk_cmdmap.sh|||the command-map engine (typed words, hints); loads the menucommands files it is asked for
 bashbasicsbyvk_cheatcode.sh|||cc cheat codes: _CC_PREFILL is read by the input readers
@@ -38,6 +39,7 @@ bashbasicsbyvk_delete.sh|||tool, run as its own process
 bashbasicsbyvk_rename.sh|||tool, run as its own process
 bashbasicsbyvk_find.sh|||tool, run as its own process
 bashbasicsbyvk_findrun.sh|||tool, run as its own process
+bashbasicsbyvk_results.sh|||shared screen for any list of paths, shown the way the == filter shows its hits (Find hits, previews)
 bashbasicsbyvk_organise.sh|||tool, run as its own process
 bashbasicsbyvk_transfer.sh|||tool, run as its own process
 bashbasicsbyvk_carry.sh|||tool, run as its own process
@@ -86,6 +88,7 @@ bashbasicsbyvk_switch.sh|||sw: recents and bookmarks
 [no]
 bashbasicsbyvk_apimenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_findmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_resultsmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_fxmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_homemenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_infinitymenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
@@ -180,6 +183,7 @@ bashbasicsbyvk_erase|||stand-alone command, run as its own process
 bashbasicsbyvk_fav_lib.py|||python helper, run as a process
 bashbasicsbyvk_track_lib.py|||python helper of the local daemon, run as a process (the twin of bashbasicsbyvk_track.sh)
 bashbasicsbyvk_find.map|||command-map wiring, read as data
+bashbasicsbyvk_results.map|||command-map wiring, read as data
 bashbasicsbyvk_findrep|||tool, run as its own process
 bashbasicsbyvk_fx.map|||command-map wiring, read as data
 bashbasicsbyvk_gd|||tool, run as its own process

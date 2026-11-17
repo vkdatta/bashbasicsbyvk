@@ -150,6 +150,7 @@ _pn_kind_build() {
 # typed on the list of one service: s → Settings, where Display › Sort order is this list's own
 _pn_kind_cmd() {
   case "$1" in
+    --cc) echo "s|Settings (Display › Sort order is this list's own)|0"; return 1 ;;
     s) local _MS_CTX=pending; settings_menu; return 0 ;;
   esac
   return 1

@@ -224,7 +224,6 @@ Find & replace›Binary files|*	Choose whether files that are not readable text,
 Find & replace›Big files|*	Choose the size above which files are skipped to keep the search quick. Pick one answer; it is saved at once and used by every future search.
 Find & replace›.git / .hg / .svn|*	Choose whether the hidden folders where version-control programs keep their history are searched. Pick one answer; it is saved at once and used by every future search.
 Find & replace›Preview first|*	Choose whether you see a preview of every change and must confirm before text is replaced. Pick one answer; it is saved at once and used by every future search.
-Find & replace›Results shown|*	Choose how many matches are printed on the screen. Pick one answer; it is saved at once and used by every future search.
 Find & replace›CPU threads|*	Choose how many parts of the processor work on the search at the same time. Pick one answer; it is saved at once and used by every future search.
 Find & replace›Match case|v:ask	You are asked every time you search. Flexible, but one more question each time. This is the standard.
 Find & replace›Match case|v:exact	Capital and small letters count as different: Apple will not find apple. Use it for precise work such as code.
@@ -257,10 +256,6 @@ Find & replace›.git / .hg / .svn|v:skip	The hidden history folders of version-
 Find & replace›.git / .hg / .svn|v:include	These folders are searched too. Only for experts; replacing there can corrupt a project.
 Find & replace›Preview first|v:preview	You see a list of what would change and must confirm before anything is replaced. Safest and the standard.
 Find & replace›Preview first|v:direct	Text is replaced immediately without a preview. Quick, but mistakes are hard to undo.
-Find & replace›Results shown|v:100	Only the first 100 matches are printed. Short and quick to read; the search itself still covers everything.
-Find & replace›Results shown|v:300	The first 300 matches are printed. A good balance and the standard.
-Find & replace›Results shown|v:1000	The first 1000 matches are printed. Good for big jobs, but a long scroll.
-Find & replace›Results shown|v:0	Every match is printed, however many there are. The screen may flood with lines.
 Find & replace›CPU threads|v:auto	The program picks the number of workers to suit your device. Recommended and the standard.
 Find & replace›CPU threads|v:1	One worker only. Slowest but gentle on battery and heat.
 Find & replace›CPU threads|v:2	Two workers. A moderate speed-up for older phones.
