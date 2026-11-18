@@ -239,8 +239,8 @@ jobs:
       - name: Verify one wheel per machine type
         run: |
           python3 -m pip install --upgrade setuptools wheel
-          bash tests/wheel_target.sh
-          bash tests/engine_target.sh
+          bash tests/pty/fast/engine/wheel_target.sh
+          bash tests/pty/fast/engine/engine_target.sh
 
       - name: Commit generated binaries
         run: |
