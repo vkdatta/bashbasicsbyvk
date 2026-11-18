@@ -31,7 +31,7 @@ handle_staging_map() {
 
   # ── Guard: imaginary mode has no direct indices
   if $imaginary_mode; then
-    echo "🔴  Too many items to index directly — narrow the view (group filter or forceshow) before using p- shortcuts."
+    echo "🔴  Too many items to index directly — narrow the view (group filter or fs) before using p- shortcuts."
     return 0
   fi
 

@@ -17,7 +17,7 @@
 #              budget of every menu = 50  (_AD_BUDGET)  → five paid commands, highest PRIO first; free keys come on top
 #
 #  So the footer is always a subset of cc, and cc is always everything the menu declared.  Declaring is the ONLY way to be advertised.
-#  The test that keeps a declaration honest is tests/advert_score.sh (+ advert_pty.py): it types the commands into the real app and scores
+#  The tests that keep a declaration honest: tests/static (footer, arms, intent, advert). They read the real declarations and score every menu without a terminal;
 #      coverage = accepted ∩ cc / accepted × 100        (< 100  → that menu needs an urgent fix)
 #      phantom in cc      = −100 each      phantom in footer = −1000 each      (advertised, but the menu does not take it)
 #
@@ -107,20 +107,18 @@ _ad_typed_of() {   # shown -> _AD_T (empty = not a command)
   _AD_T="$s"
 }
 
-# ── declaring helpers ─────────────────────────────────────────
-# the standard keys
-_ad_std() {
-  _ad_free u  "Back"
-  _ad_free q  "Close"
-  _ad_free h  "Home — recents, bookmarks, favourites"
-  _ad_free cc "Cheat codes — every command this screen takes"
-}
 
 # the commands a map wires and the menu takes.   $2 = st: a list screen (_st_run) — it runs the main nav / util words (_st_cm_gate), not the act keys
 # (worked out once per map and kept: a footer is drawn on every redraw)
 declare -gA _AD_MAPMEMO=()
-_ad_from_map() {
-  local m="${1:-main}" st="${2:-}" mode="${3:-menu}" i key tgt p rec k d memo_key="$1|${2:-}|${3:-menu}|${#_CM_DEF[@]}"   # the number of loaded command definitions is part of the key: a list worked out before they were all loaded is never reused
+# lite (the footer): it buys only commands with a priority > 0, and those are the menu's OWN commands (a word inherited from main has priority 0),
+#   so the main menu needs no lookup at all and the other menus skip the inherited words.  cc asks without lite and still gets every command.
+# _ad_map_memo works the list out and keeps it in _AD_MAPMEMO.  The footer runs inside $( ) / mapfile < <( ), where a kept list is lost the moment the
+#   subshell ends — so the drawing code calls _ad_map_warm in the PARENT shell first and every footer draw after that only reads the list.
+_ad_map_memo() {
+  local m="${1:-main}" st="${2:-}" mode="${3:-menu}" lite="${4:-}" i key tgt p rec k d memo_key="$1|${2:-}|${3:-menu}|${4:-}|${#_CM_DEF[@]}"   # the number of loaded command definitions is part of the key: a list worked out before they were all loaded is never reused
+  _AD_MEMOKEY="$memo_key"
+  [ -n "$lite" ] && [ "$m" = main ] && { _AD_MAPMEMO[$memo_key]=""; return 0; }
   if [ -z "${_AD_MAPMEMO[$memo_key]+x}" ]; then
     [ "${_CM_BOOTED:-0}" = 1 ] || _cm_boot
     local sv_tbl="$_CM_TBL_MAP" sv_map="${_CM_MAP:-}" memo=""
@@ -130,6 +128,7 @@ _ad_from_map() {
     for (( i=0; i<${#tk[@]}; i++ )); do
       key="${tk[i]}"; tgt="${tt[i]}"
       [ "$tgt" = BLOCK ] && continue
+      [ -n "$lite" ] && [ "${tm[i]}" = main ] && continue
       _cm_resolve "$mode" "$key"
       case "$_CM_ACT" in
         run) ;;
@@ -143,6 +142,14 @@ _ad_from_map() {
     [ -n "$sv_tbl" ] && _cm_table_build "$sv_tbl"
     _AD_MAPMEMO[$memo_key]="$memo"
   fi
+}
+_ad_map_warm() {                      # the PARENT shell, before a footer is drawn in a subshell: work the list out here so it is kept
+  declare -F _ad_menu_now >/dev/null 2>&1 || return 0
+  local sv="$_AD_MENU"; _ad_menu_now; _ad_map_memo "${_AD_MENU:-main}" "" menu lite; _AD_MENU="$sv"
+}
+_ad_from_map() {
+  local k p d memo_key
+  _ad_map_memo "$@"; memo_key="$_AD_MEMOKEY"
   while IFS=$'\x1f' read -r k p d; do
     [ -n "$k" ] || continue
     [ -n "${_AD_AT[$k]+x}" ] && continue
@@ -158,7 +165,6 @@ _ad_menu_now() {                      # → _AD_MENU = the map of the menu that 
   _cm_ctx_find; _AD_MENU="$_CM_MAP"
   _CM_MAP="$sm"; _CM_MDEPTH="$sd"; _CM_FLOW="$sf"
 }
-_ad_from_map_now() { _ad_menu_now; _ad_from_map "${_AD_MENU:-main}" "${1:-}"; }
 
 # the screen's own typed commands: "$1 --cc" prints  key|description|prio|shown  (prio and shown optional) and returns 1 (nothing runs)
 _ad_from_cmdfn() {

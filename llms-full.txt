@@ -219,7 +219,6 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `eb-` | act | Exact bytes of items (binary + data units) — copy or save to Excel | `eb-1-5` |
 | `f` | act | Find |  |
 | `fa` | act | Favourite — add an alias | `fa 3` |
-| `forceshow` | act | Force-show every item (big folder) |  |
 | `fs` | act | Force-show every item (big folder) |  |
 | `fx` | act | Functions (fx) — CSV-driven actions |  |
 | `gd` | act | Google Drive |  |

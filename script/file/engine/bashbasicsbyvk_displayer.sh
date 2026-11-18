@@ -96,7 +96,6 @@ _bvk_src_tag_v() {
     _bst_out=" [loaded by py]"
   fi
 }
-_bvk_src_tag() { local _bst_out; _bvk_src_tag_v; printf '%s' "$_bst_out"; }
 
 # Scratch file for listings. Results are read back with `mapfile < file`:
 # bash reads a pipe/process-substitution ONE BYTE at a time, which made
@@ -830,7 +829,6 @@ _fmt_size_v() {
   else                           _fs_out="$(( b / 1073741824 ))G"
   fi
 }
-_fmt_size() { local _fs_out; _fmt_size_v "$1"; printf '%s' "$_fs_out"; }
 
 if printf -v _bvk_tfmt_probe '%(%Y)T' 0 2>/dev/null; then
   _BVK_HAS_TFMT=1
@@ -855,7 +853,6 @@ _fmt_time_v() {
     _ft_out=$(date -d "@$epoch" "+$f")
   fi
 }
-_fmt_time() { local _ft_out; _fmt_time_v "$1"; printf '%s' "$_ft_out"; }
 
 # ── Suffix builder — now shows real recursive sizes for dirs
 
@@ -916,7 +913,6 @@ _build_suffix_v() {
     esac
   done
 }
-_build_suffix() { local _bs_out; _build_suffix_v "$1"; printf '%s' "$_bs_out"; }
 
 # ── Icon resolution
 
@@ -1291,24 +1287,6 @@ display_items() {
 
 # ── Multi-select parser
 
-_parse_multi_select() {
-  local input="$1" max="$2"
-  local -A seen=(); local -a out=()
-  IFS=',' read -ra parts <<< "$input"
-  for part in "${parts[@]}"; do
-    part="${part// /}"
-    if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
-      local s="${BASH_REMATCH[1]}" e="${BASH_REMATCH[2]}"
-      (( s > e )) && { local tmp=$s; s=$e; e=$tmp; }
-      for (( i=s; i<=e && i<=max; i++ )); do
-        [ -z "${seen[$i]+x}" ] && out+=("$i") && seen[$i]=1
-      done
-    elif [[ "$part" =~ ^[0-9]+$ ]]; then
-      (( part >= 1 && part <= max )) && [ -z "${seen[$part]+x}" ] && out+=("$part") && seen[$part]=1
-    fi
-  done
-  printf '%s\n' "${out[@]}" | sort -n | tr '\n' ' '
-}
 
 # (Sort / file-details / group-by settings screens live in settings/bashbasicsbyvk_settings.sh)
 

@@ -5,7 +5,7 @@
  *
  * Module map (src/):
  *   text.c    UTF-8 decode, simple case mapping, word/digit/space classes, byte buffer
- *   tables.c  GENERATED Unicode tables (tests/findrep/gen_tables.py)
+ *   tables.c  GENERATED Unicode tables (tests/pty/slow/apps/findrep/gen_tables.py)
  *   regex.c   pattern compiler + backtracking matcher (Python-`re` compatible subset) and the literal fast path
  *   tree.c    directory walk -> item list (pre-order, sorted), path helpers
  *   ops.c     file contents (parallel read / replace / atomic write) and renames (plan, conflicts, apply)

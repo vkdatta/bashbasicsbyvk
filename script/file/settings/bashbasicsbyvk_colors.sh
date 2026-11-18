@@ -22,14 +22,6 @@ _valid_hex() {
     [[ "$_NH" =~ ^[0-9A-F]{6}$ ]]
 }
 
-_hex_to_rgb() {
-    local hex
-    hex="$(_normalize_hex "$1")"
-    printf "%d %d %d" \
-        "$((16#${hex:0:2}))" \
-        "$((16#${hex:2:2}))" \
-        "$((16#${hex:4:2}))"
-}
 
 apply_colors() {
     if [ -n "$terminal_bg_color" ] && _valid_hex "$terminal_bg_color"; then

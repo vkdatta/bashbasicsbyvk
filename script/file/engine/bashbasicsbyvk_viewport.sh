@@ -550,6 +550,7 @@ _vp_wants_hint_row() {
 _vp_build_chrome() {
   local _i _n
   _vp_probe_size; _vp_cols="$_vp_cols_now"     # live width BEFORE header/footer wrap to it
+  declare -F _ad_map_warm >/dev/null 2>&1 && _ad_map_warm      # the footer below runs in a subshell: the advert list it reads must already be worked out here
   mapfile -t _vp_hdr_arr < <($_vp_header_fn)
   mapfile -t _vp_ftr_arr < <($_vp_footer_fn)
 
@@ -681,15 +682,6 @@ _vp_ensure_visible() {
 _vp_frame=""
 _vp_force_pop=0         # kept for old callers; every draw is instant now
 
-# Kept so Settings / old callers that ask for an animation keep working.
-_vp_anim_pick() {
-  if [ "${_sw_in_mode:-0}" = "1" ] || [ "${_fx_in_mode:-0}" = "1" ]; then
-    _vp_am="${anim_inner:-carpet}"
-  else
-    _vp_am="${anim_outer:-pop}"
-  fi
-}
-_vp_anim_mode() { _vp_anim_pick; echo "$_vp_am"; }
 _vp_anim_start() { :; }     # the old background carpet writer no longer exists
 
 _vp_el() { _vp_frame+=$'\r\033[2K\033[?7l'"$1"$'\033[?7h\n'; }

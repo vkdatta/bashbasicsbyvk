@@ -82,7 +82,9 @@ _tm_step() {
   fi
   printf -v "${_TM_VAR[$_tm_name]}" '%s' "${_TM_KEY[$_tm_name:$_tm_t]}"
 }
+# bvk-live: _tm_next (tabmenu API, tested by tests/pty/fast/menus/tabmenu.sh)
 _tm_next() { _tm_step "$1" 1 "${2:-}"; }
+# bvk-live: _tm_prev (tabmenu API, tested by tests/pty/fast/menus/tabmenu.sh)
 _tm_prev() { _tm_step "$1" -1 "${2:-}"; }
 
 # _tm_key NAME CHOICE [nowrap]   the loop's tab-key gate: 0 = CHOICE was a tab key and the tab moved (redraw now), 1 = anything else / at an end

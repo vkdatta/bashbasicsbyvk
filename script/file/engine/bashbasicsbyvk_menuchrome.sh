@@ -59,7 +59,7 @@ _MC_RULE="   ──────────────────────�
 # ONE label per generic key. A footer item written as the bare key ("u", "q", "z", "rf") takes its label from here, so
 # the wording cannot drift between menus. A generic key that really means something else gets a NAMED variant in this table
 # ("u.up" = u) Up, go up a folder); the part after the dot is only a name, the key shown is the part before it.
-# A generic key is NEVER written "key:Label" (tests/cmd_drift.sh fails on it, whatever the spelling): add a variant here instead.
+# A generic key is NEVER written "key:Label" (tests/pty/fast/menus/cmd_drift.sh fails on it, whatever the spelling): add a variant here instead.
 declare -gA _MC_KEYLABEL=([u]=Back [u.up]=Up [u.prefix]="Remove last prefix" [q]=Quit [z]=Cancel [rf]=Refresh)
 
 # ── CONTROL-01: the return contract of every template below, and the one unwind test
@@ -122,7 +122,7 @@ _mc_footer() {
   _ad_open ""; _ad_menu_now
   _ad_from_footer_items "${items[@]}"
   _ad_from_dispatcher "${_AD_MENU:-main}"
-  _ad_from_map "${_AD_MENU:-main}"
+  _ad_from_map "${_AD_MENU:-main}" "" menu lite
   _ad_footer_reset
   local it cell line="" out=() shown
   for it in "${items[@]}"; do

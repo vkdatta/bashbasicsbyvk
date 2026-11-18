@@ -554,7 +554,7 @@ switch_menu() {
         fi
         ;;
 
-      forceshow)
+      fs)
         _sw_is_ro && { _sw_recents_blocked; _sw_do_fresh=false; } || handle_force_show
         ;;
 

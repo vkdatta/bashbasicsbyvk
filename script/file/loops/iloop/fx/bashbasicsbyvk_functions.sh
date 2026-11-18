@@ -183,15 +183,11 @@ _fx_menu_header() {
   _vp_filter_header_line
 }
 
-_fx_menu_header_imaginary() {
-  _fx_menu_header
-  echo "$_imag_banner"
-}
 
 # One footer for both tabs: u up · q quit · h home · cc cheat codes. (Settings, Exit, e-N, ux, ui still work when typed; cc lists them.)
 # ADVERT / DISPATCHER: the ADF tab ignores the UDF-only commands, so the menu tells the dispatcher they exist only while this is true.
 _fx_tab_is_udf() { [ "$_fx_tab" = "udf" ]; }
-_dp_when fx _fx_tab_is_udf forceshow c d l- ul- t z r rf p- c- m- k- s- ux ui udf.export udf.import
+_dp_when fx _fx_tab_is_udf fs c d l- ul- t z r rf p- c- m- k- s- ux ui udf.export udf.import
 _fx_menu_footer() {
   local -a _f=()
   [ "$_fx_tab" = "udf" ] && [ -n "$group_prefix" ] && _f+=("|" "u.prefix" "#Group prefix now: ${group_prefix^^}*")
@@ -412,7 +408,7 @@ functions_menu() {
         fi
         ;;
 
-      forceshow)
+      fs)
         [ "$_fx_tab" = "udf" ] && handle_force_show || { _fx_do_fresh=false; }
         ;;
 

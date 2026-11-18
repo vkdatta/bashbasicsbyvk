@@ -45,7 +45,7 @@ _lt_b "start: native engine probe"; _bvk_go_bin; _lt_e   # once, HERE in the mai
 _lt_b "start: engines fit this machine?"; _bvk_engine_heal "$@"; _lt_e   # install made on another CPU / OS: offer a reinstall
 
 trap '[ "${_GD_ACTIVE:-0}" = 1 ] && _gd_on_exit 2>/dev/null; _lt_cleanup; _bvk_paste_off 2>/dev/null; _bvk_mouse_off 2>/dev/null; stty "$_orig_stty" 2>/dev/null; \
-      [ -n "$path" ] && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; \
+      [ -n "$path" ] && { mkdir -p "${_BVK_LASTDIR_FILE%/*}" && printf "%s" "$path" > "$_BVK_LASTDIR_FILE"; } 2>/dev/null; \
       [ -n "${_BVK_DSIZE_TMP:-}" ] && rm -rf "$_BVK_DSIZE_TMP" 2>/dev/null; \
       true' EXIT
 
@@ -161,6 +161,7 @@ while true; do
 
   _lm_idle      # [bg] of the load mapper: one file at a time, only while no key is waiting
   _read_choice_filtered
+  [ -z "$choice" ] && [ ! -t 0 ] && choice=q     # stdin is not a terminal and gave nothing: it is closed (EOF) → leave, never loop on "Invalid selection"
   _lt_mark "dispatch: ${choice:-?}"
 
   shopt -s nocasematch
@@ -177,7 +178,7 @@ while true; do
                  elif [ "$path" != "/" ]; then
                    path=$(dirname "$path"); group_prefix=""; force_show=false
                  fi ;;
-    fs|forceshow) handle_force_show_guarded ;;
+    fs) handle_force_show_guarded ;;
     ns)          handle_normal_show ;;
     fa|fa\ *)    handle_fav_add "$choice" ;;
     c)           handle_create ;;

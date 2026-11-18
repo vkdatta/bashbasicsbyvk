@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_xui_ghrmenucommands.sh — commands of one GitHub repo (it runs inside _xui_loop, handler _ghr_cmd).
 # Hand-kept: the screen shares _xui_loop with the other xui screens, so bashbasicsbyvk_mapgen cannot harvest it.
-# Every key the footer prints is here (tests/github/ui_test.py types each one and checks it is accepted).
+# Every key the footer prints is here (tests/pty/slow/apps/github/ui_test.py types each one and checks it is accepted).
 cmd_def c      exact   -  local  "Create a release / a tag"
 cmd_def e      exact   -  local  "Edit: pick rows, then what to change"
 cmd_def r      exact   -  local  "Rename: pick rows, then new names"

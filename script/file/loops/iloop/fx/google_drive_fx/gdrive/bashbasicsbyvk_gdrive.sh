@@ -274,7 +274,7 @@ _gd_cycle() {
     return 0
   fi
   case "${choice:-}" in
-    ""|u|[0-9]*|fs|ns|forceshow|=*|-h|h) ;;         # pure navigation: nothing to push (opening a file pushes itself)
+    ""|u|[0-9]*|fs|ns|=*|-h|h) ;;         # pure navigation: nothing to push (opening a file pushes itself)
     *) _gd_push ;;
   esac
   if [ ! -d "$path" ]; then               # the folder vanished (deleted in Drive / moved)

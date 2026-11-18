@@ -31,7 +31,6 @@ t          .mapto()  block()
 f          .mapto()  block()
 z          .mapto()  block()
 fs         .mapto()  block()
-forceshow  .mapto()  block()
 ns         .mapto()  block()
 fa         .mapto()  block()
 rf         .mapto()  rf         from bashbasicsbyvk_maincommands.sh

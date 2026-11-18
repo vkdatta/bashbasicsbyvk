@@ -31,7 +31,6 @@ t          .mapto()  t          from bashbasicsbyvk_maincommands.sh
 f          .mapto()  f          from bashbasicsbyvk_maincommands.sh
 z          .mapto()  z          from bashbasicsbyvk_maincommands.sh
 fs         .mapto()  fs         from bashbasicsbyvk_maincommands.sh
-forceshow  .mapto()  forceshow  from bashbasicsbyvk_maincommands.sh
 ns         .mapto()  ns         from bashbasicsbyvk_maincommands.sh
 fa         .mapto()  fa         from bashbasicsbyvk_maincommands.sh
 rf         .mapto()  rf         from bashbasicsbyvk_maincommands.sh

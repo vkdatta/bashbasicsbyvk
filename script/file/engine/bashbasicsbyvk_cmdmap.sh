@@ -357,13 +357,6 @@ _cm_usable() {
   return $rc
 }
 
-# ── live suggestion
-_cm_hint_fmt_one() {   # key desc ex
-  local s="$1"
-  [ -n "$3" ] && s="$3"
-  [ -n "$2" ] && s+="  $2"
-  printf '%s' "$s"
-}
 
 # sets _hint_want for the buffer typed so far.  $2 = menu|text (default menu)
 _cm_hint() {
@@ -828,7 +821,7 @@ _cm_show() {
   done
 }
 
-# o --map-doc   the main-command reference as a markdown table, straight from cmd_def (the docs paste it; tests/cmd_docs.sh
+# o --map-doc   the main-command reference as a markdown table, straight from cmd_def (the docs paste it; tests/pty/fast/menus/cmd_docs.sh
 #               fails when the pasted copy is out of date, so a new command can never be missing from the docs)
 _cm_doc() {
   _cm_boot

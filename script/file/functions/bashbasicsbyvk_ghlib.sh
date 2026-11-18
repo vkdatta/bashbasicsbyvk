@@ -12,7 +12,7 @@
 #    _gh_print_body <escaped>     prints a row's escaped body (\n → newline), 40 lines at most, indented
 #
 #  The parsing lives in the engine (python: bashbasicsbyvk_github parse-releases / parse-commit) so the upgrade loop
-#  and the GitHub screens read releases the same way. tests/github/github_test.py proves the output is byte-for-byte
+#  and the GitHub screens read releases the same way. tests/pty/slow/apps/github/github_test.py proves the output is byte-for-byte
 #  what the upgrade loop's own code printed before.
 #  No source here (AGENTS rule 3): this file is loaded through the load mapper, before the upgrade loop.
 # ════════════════════════════════════════════════════════════════════════════

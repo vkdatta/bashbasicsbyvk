@@ -30,7 +30,6 @@ _bvk_ai_cmd_ok() {
 _bvk_ai_date_ok() {  # ddmmyyyy, real calendar date
   [[ "$1" =~ ^[0-9]{8}$ ]] && date -d "${1:4:4}-${1:2:2}-${1:0:2}" +%F >/dev/null 2>&1
 }
-_bvk_ai_iso() { echo "${1:4:4}-${1:2:2}-${1:0:2}"; }
 
 _bvk_ai_render() {  # $1=response file  $2=question  $3=output dir
   python3 - "$1" "$2" "$3" <<'PY'

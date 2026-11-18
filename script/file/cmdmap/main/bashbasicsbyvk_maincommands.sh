@@ -44,7 +44,6 @@ cmd_def t        exact  -              act    "Transfer — copy / move, Google 
 cmd_def f        exact  -              act    "Find"
 cmd_def z        exact  -              act    "Organise by year, month, extension…"
 cmd_def fs       exact  -              act    "Force-show every item (big folder)"
-cmd_def forceshow exact -              act    "Force-show every item (big folder)"
 cmd_def ns       exact  -              act    "Back to the normal listing"
 cmd_def fa       word   -              act    "Favourite — add an alias"  "fa 3"
 cmd_def rf       exact  bvk_main_exec  util   "Refresh — the main list reloads the shell, every other screen redraws"

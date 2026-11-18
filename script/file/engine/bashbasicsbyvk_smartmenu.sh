@@ -859,7 +859,7 @@ _bvk_noemoji() {
 #   Returns exactly what `read` returned (0 a line · 1 u / back, EOF · 3 a cancelled flow), so a caller's `|| return N` is unchanged.
 #   Everything below goes through the `read` shim and from there to ONE editor (_cm_line_edit, textedit.sh): selection, Shift / Ctrl keys, cut / copy /
 #   paste, undo, the highlight / cursor fixes, the command layer.  A change to how a typed line behaves is made THERE, once, and every prompt gets it.
-#   `tests/prompt_template/read_lint.sh` fails on a bare `read` anywhere else (AGENTS.md rule 16).
+#   `tests/pty/slow/input/prompt_template/read_lint.sh` fails on a bare `read` anywhere else (AGENTS.md rule 16).
 _bvk_read() {
   local __br_v="$1" __br_p="$2"; shift 2
   local -a __br_f=(-r); local __br_ifs=0 __br_e=1 _CE_MULTI=0          # _CE_MULTI: read by the line editor: 1 = the answer keeps its line breaks

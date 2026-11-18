@@ -10,7 +10,7 @@ sw         .mapto()  sw         from bashbasicsbyvk_fxmenucommands.sh
 q          .mapto()  q          from bashbasicsbyvk_fxmenucommands.sh
 -h         .mapto()  -h         from bashbasicsbyvk_fxmenucommands.sh
 u          .mapto()  u          from bashbasicsbyvk_fxmenucommands.sh
-forceshow  .mapto()  forceshow  from bashbasicsbyvk_fxmenucommands.sh
+fs          .mapto()  fs          from bashbasicsbyvk_fxmenucommands.sh
 c          .mapto()  c          from bashbasicsbyvk_fxmenucommands.sh
 d          .mapto()  d          from bashbasicsbyvk_fxmenucommands.sh
 l-         .mapto()  l-         from bashbasicsbyvk_fxmenucommands.sh
@@ -49,7 +49,6 @@ nf         .mapto()  block()
 cs         .mapto()  block()
 gd         .mapto()  block()
 gdx        .mapto()  block()
-fs         .mapto()  block()
 ns         .mapto()  block()
 fa         .mapto()  block()
 z-         .mapto()  z-         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before

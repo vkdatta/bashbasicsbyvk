@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """bashbasicsbyvk_loadmap_gen - the checker and generator of the load mapper (AGENTS.md rule 13).
 
-  bashbasicsbyvk_loadmap_gen --check     fail (exit 1) when the mapper is wrong or the generated file is stale   (what tests/loadmap.sh runs)
+  bashbasicsbyvk_loadmap_gen --check     fail (exit 1) when the mapper is wrong or the generated file is stale   (what tests/pty/fast/engine/loadmap.sh runs)
   bashbasicsbyvk_loadmap_gen --write     regenerate bashbasicsbyvk_loadmap_stubs.sh from bashbasicsbyvk_loadmap.list
   bashbasicsbyvk_loadmap_gen --report    one table: every shell library, its mode, size, functions, what it needs
   [--root DIR]                           the folder that holds `script/` (default: found from this file)

@@ -306,7 +306,7 @@ _bvk_ask() {
 
 # _bvk_yn VAR "Question" [-c] [-t Title] [-i Icon]    → VAR = y | n | c
 # EVERY yes/no question has NO default answer: nothing is highlighted and a bare Enter does nothing, the person must answer.  Enforced
-# here, in the one place every yes/no question goes through; a `-d` flag is accepted and ignored.  (_bvk_destructive stays: tests/delete_confirm.sh
+# here, in the one place every yes/no question goes through; a `-d` flag is accepted and ignored.  (_bvk_destructive stays: tests/pty/fast/menus/delete_confirm.sh
 # and the callers that name a destructive action still use it to check the wording.)
 _bvk_destructive() {
   case "${1,,}" in

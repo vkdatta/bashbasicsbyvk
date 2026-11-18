@@ -40,11 +40,6 @@ handle_goto() {
   return 0
 }
 
-fast_count() {
-  local pattern="$1"
-  local arr=("$pattern")
-  echo "${#arr[@]}"
-}
 
 # count_items_in_path — single os.scandir, ~80ms for 200k.
 count_items_in_path() {
@@ -656,12 +651,6 @@ _menu_header_imaginary() {
   echo "$_imag_banner"
 }
 
-_menu_body_flat() {
-  if $_has_group_view; then
-    _gv_banner_line; echo
-  fi
-  display_items
-}
 
 _menu_footer_lines() {
   if [ "${_GD_ACTIVE:-0}" = 1 ]; then _mc_footer @browse_gd; else _mc_footer @browse_main; fi
@@ -670,20 +659,6 @@ _menu_footer_lines() {
   fi
 }
 
-_render_items_with_highlight() {
-  local -A hl=()
-  local x
-  for x in "$@"; do hl["$x"]=1; done
-  local i line
-  for ((i=1; i<=${#items[@]}; i++)); do
-    line=$(_item_line_text "$i")
-    if [ -n "${hl[$i]+x}" ]; then
-      builtin printf '%s\n' "$(_highlight "$line")"
-    else
-      builtin printf '%s\n' "$line"
-    fi
-  done
-}
 
 # The row UNDER the prompt (kept free by _vp_geometry) shows a dim hint for what is being typed:
 #   =   "type to filter live"  (browser terminals: "type, then press Enter to filter")
@@ -966,6 +941,8 @@ _rc_byte() {        # Ctrl-A / Ctrl-E on an empty line (with text they select al
 
 _read_choice_raw() {
   choice=""
+  # SCRIPTED INPUT (tests, pipes): stdin is not a terminal → ONE line per prompt, no key reader.  A closed stdin answers q, so no loop can spin on it.
+  if [ ! -t 0 ]; then IFS= builtin read -r choice || choice=q; choice="${choice%$'\r'}"; return 0; fi
   _can_nav=false
   _vp_count
   if [ "$_vp_n" -gt 0 ]; then

@@ -1,0 +1,1 @@
+# KNOWN drift of suite footer: one stable id per line. Owner-only file. A finding listed here does not fail the run; a new one does.

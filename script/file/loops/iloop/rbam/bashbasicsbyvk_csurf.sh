@@ -25,7 +25,6 @@ declare -ga _CG_ID=() _CG_ALIAS=() _CG_BYTES=() _CG_CREATED=() _CG_EXP=() _CG_AC
 declare -ga _CR_ID=() _CR_ALIAS=() _CR_BYTES=() _CR_EXP=() _CR_OFFER=() _CR_FROM=() _CR_FROMD30=() _CR_RID=()
 
 _cs_idjson() { local o="" i; for i in "$@"; do o+="${o:+,}\"$i\""; done; printf '[%s]' "$o"; }
-_cs_name() { printf '%s' "${1:-$2}"; }
 
 _cs_load() {
   _CG_ID=(); _CG_ALIAS=(); _CG_BYTES=(); _CG_CREATED=(); _CG_EXP=(); _CG_ACC=(); _CG_OFF=(); _CG_REF=(); _CG_REFD=(); _CG_PAID=()

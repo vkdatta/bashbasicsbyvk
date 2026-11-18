@@ -73,6 +73,7 @@ _bvk_telemetry_ping() {
 }
 
 # Fire-and-forget: never delays or breaks startup.
+# bvk-live: _bvk_telemetry_start (called by loadmap.list @call)
 _bvk_telemetry_start() {
   ( declare -F _lt_bg >/dev/null 2>&1 && _lt_bg; _bvk_telemetry_ping ) >/dev/null 2>&1 &
   disown 2>/dev/null

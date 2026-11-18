@@ -26,9 +26,9 @@ ONE TRUTH PER KEY  (footer · cc · suggestion · what Enter does must never dis
       the main command of the same name (s h q open that screen; c d r answer "Invalid command") or plain
       text when there is none.
     * "could become: ..." lists only keys Enter would accept in THAT prompt (_cm_usable — the same judge).
-    * A footer key must be wired in the menu's .map AND handled by its loop.  tests/cmd_drift.sh guards this.
+    * A footer key must be wired in the menu's .map AND handled by its loop.  tests/pty/fast/menus/cmd_drift.sh guards this.
     * List screens that read keys themselves (Settings, Home: _st_run) take a typed word through _st_cm_gate: a command the map
-      wires runs there, a blocked one answers "not available here".  tests/cc_truth guards this in a real pty.
+      wires runs there, a blocked one answers "not available here".  tests/pty/retired/cc_truth guards this in a real pty.
 
 Forgot a command?  Type  cc  (cheat codes) at any prompt: it lists exactly the commands THAT prompt
 accepts (the effective table of its map, filtered by what the prompt kind can run). =lo filters, a
@@ -71,4 +71,4 @@ ADDING A _xui_loop SCREEN (the screens that share bashbasicsbyvk_xui.sh: rbam, c
     bashbasicsbyvk_xui_X.map             @menu xui_X  @kind menu  @back u  @parent xui   + one  .mapto()  line per own key
     bashbasicsbyvk_xui_Xmenucommands.sh  cmd_def KEY exact|prefix - local "what it does" ["example"]
   + two  [no]  lines in the load mapper and  python3 script/file/loadmap/bashbasicsbyvk_loadmap_gen --write.
-  Check:  bash tests/xui_wiring.sh   (a screen without a map, or an own key that does not resolve to the screen, fails).
+  Check:  bash tests/pty/fast/menus/xui_wiring.sh   (a screen without a map, or an own key that does not resolve to the screen, fails).

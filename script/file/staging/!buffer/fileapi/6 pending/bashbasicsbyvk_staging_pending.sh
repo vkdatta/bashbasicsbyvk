@@ -316,13 +316,6 @@ _pn_local_ids() {
     printf '%s\n' "${d##*/}"
   done
 }
-_pn_local_row() {
-  local d; d=$(_pn_dir "$1"); [ -s "$d/state" ] || return 1
-  local done_=0 nb last=-1 sent=0 tot=0
-  nb=$(_pn_get "$d" nblobs); tot=$(_pn_get "$d" total)
-  [ -r "$d/progress" ] && read -r done_ _ last sent _ < "$d/progress"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$(_pn_get "$d" kind)" "$(_pn_status "$d")" "$(_pn_get "$d" name)" "${done_:-0}" "${nb:-0}" "${last:--1}" "${sent:-0}" "${tot:-0}" "$(_pn_get "$d" created)"
-}
 _pn_count_local() { local n=0 i; while read -r i; do [ -n "$i" ] && n=$((n + 1)); done < <(_pn_local_ids); printf '%s' "$n"; }
 
 # the number for the header row (📣 N): same 20 s cache as the hint line below

@@ -155,5 +155,3 @@ _cc_replay() {
   return 0
 }
 
-# gates call this first: a pick that no reader took must not leak into a later prompt
-_cc_forget() { _CC_PREFILL=""; }

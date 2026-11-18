@@ -51,7 +51,6 @@ _swlink_read_target_v() {
   done < "$1"
   [ -n "$_SWL_T" ]
 }
-_swlink_read_target() { _swlink_read_target_v "$1" && printf '%s' "$_SWL_T"; }
 
 # the name a bookmark shows: the file name without the internal .swlink suffix
 _swlink_name_v() { _SWL_NAME="${1##*/}"; _SWL_NAME="${_SWL_NAME%.swlink}"; }

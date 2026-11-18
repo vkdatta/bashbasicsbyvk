@@ -1,0 +1,2 @@
+# KNOWN drift of suite readloop: one stable id per line. Owner-only file. A finding listed here does not fail the run; a new one does.
+readrc:file/infinity/bashbasicsbyvk_infinity.sh:infinity_stones_menu:34

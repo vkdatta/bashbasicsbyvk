@@ -1,0 +1,10 @@
+# The DEFAULT suites: static, no terminal, no app start, no sleeps.  name|command (run from the repo root)
+structure|python3 -I tests/static/t_structure.py
+lint|python3 -I tests/static/t_lint.py
+footer|python3 -I tests/static/t_footer.py
+intent|python3 -I tests/static/t_intent.py
+advert|bash tests/static/t_advert.sh
+arms|python3 -I tests/static/t_arms.py
+readloop|python3 -I tests/static/t_readloop.py
+shell|python3 -I tests/static/t_shell.py
+replay|python3 -I tests/static/t_replay.py

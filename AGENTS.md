@@ -3,6 +3,10 @@
 Every AI agent working in this repo must read this file first and follow it exactly.
 If a task seems to need breaking a rule, stop and ask the owner. Do not improvise.
 
+> **OWNER-ONLY FILES.** `AGENTS.md`, `CLAUDE.md` and `GEMINI.md` are written by the owner. **No agent may edit, rewrite, "tidy", extend or add rules to any of them unless a human has explicitly
+> permitted that edit in the current conversation** (a request like "update AGENTS.md" counts; a rule you think would be useful does not). If you believe a rule is wrong, outdated or missing, say so
+> in one line in your reply and change nothing. The same goes for `tests/static/baseline/*` (owner accepts known findings; agents never run `bash tests/run.sh baseline` on their own).
+
 ## Workflow and tests (owner's rule: overrides every other mention of tests, tokens or "run" in this file)
 
 **Why:** an agent can finish the work with 60% of its budget and then spend the rest on tests. If the budget runs out inside the tests, the owner gets NOTHING and waits for the
@@ -14,43 +18,57 @@ usage limit to reset. So: **deliver first, test after, deliver again after every
    - **In chat** (a chat window, or no shell on the owner's machine): put the result in the reply: send every changed file (or one archive) with the file-sending tool when you have one,
      otherwise paste each changed file in full (a diff only when the file is huge). A summary alone is not a delivery.
    - **In a terminal** (a CLI agent working in the repo): the files are already on disk in the working tree; leave them there (no commit, no push unless asked) and PRINT the summary to the terminal.
-   - Either way, the first line is the **status line**: `<task name> (tests: x/y/n)`, then 3-6 lines: what changed, which files, which test tier runs next.
+   - Either way, the first line is the **status line**: `<task name> (tests: x/y/n)`, then 3-6 lines: what changed, which files, which test runs next (static or pty, and why).
      `<task name>` = the name of the owner's original task / PR (or, if it had none, a 3-6 word name you pick); it stays the SAME on every later delivery.
-     `x/y/n` = **x passed / y completed / n total** tests of the tier you chose. Before any test it is `0/0/<n>` (add "not started"). A skipped test is NOT completed and NEVER passed.
-     Example: `Footer rename (tests: 0/0/22 not started)` ... later `Footer rename (tests: 21/22/22, github_ui failed)` ... finally `Footer rename (tests: 22/22/22)`.
-     `bash tests/run.sh ...` prints this as its `STATUS:` line: copy it, do not retype it.
+     `x/y/n` = **x passed / y completed / n total** checks of what you chose. Before any test it is `0/0/<n>` (add "not started"). A skipped test is NOT completed and NEVER passed.
+     For the static run n = the number of suites (`RESULT:` line); for pty runs n = the tests you named.
    - A MINOR change has no tests (see below): deliver with `<task name> (tests: none needed, minor change)` and you are done; the loop stops here.
-3. **Run the tests** of the tier below, once, through `tests/run.sh` (parallel, see below).
+3. **Run the test** the decision matrix below picks, once.
 4. **Red? Fix it on the BASE.** There is ONE working copy (the base). Fix the failing code THERE. Never patch the copy you already delivered, never stack a patch on a patch, never
-   hand over a diff against an earlier delivery. Read the failing test's log first. Then rerun only the failed tests by name, plus `bash tests/run.sh for <files the fix touched>`;
-   never the whole tier again. The status line counts the latest result of each test.
+   hand over a diff against an earlier delivery. Read the failing finding first. Then rerun the same command once.
 5. **DELIVER AGAIN**: the whole current base (every changed file, not only the fix), the same `<task name>`, the new `x/y/n`, one line on what the fix was.
-6. Repeat 4-5 until `x = y = n`. **Stop the loop and deliver as it stands** (with the honest status line and the names of the red tests) when you notice your budget or context
-   running low, when a red test survives 3 fix rounds, or when the cause is outside your change (then say so). A delivered copy with a true label is always better than a perfect copy that never arrives.
+6. Repeat 4-5 until green. **Stop the loop and deliver as it stands** (with the honest status line and the names of the red findings) when you notice your budget or context
+   running low, when a red finding survives 3 fix rounds, or when the cause is outside your change (then say so). A delivered copy with a true label is always better than a perfect copy that never arrives.
 
-### What to test: decide by what you changed, before the first delivery
-- **MINOR change: NO test. Not the fast tier, not `run.sh for`, not a baseline run.** Minor = nothing the app *does* changes, only what it *says* or how it *looks*: comments, docstrings,
-  descriptions, hint / help / prompt / message wording, Settings descriptions, headers, footers, banners, labels, icons, spacing, colours, menu titles, command codes / aliases / cheat-code *names*
-  or a command-map line that only renames or re-points a key (no new code behind it), README / llms*.txt / SECURITY.md / corpus notes, renames, moves, reformatting, and ANY group of these.
-  Do only the free checks: `bash -n <file>` (`python3 -m py_compile`, `node --check`) on every edited file, in parallel; `bash tests/cmd_docs.sh --write` (0.4 s, a generator, not a test) if a
-  command was added / renamed / re-described; checks 1-4 and 6 at the bottom if a file or note was added, renamed or deleted. Never call a minor change "tested" or "verified".
-- **LOGIC change in up to 5 files under `script/`: the fast tier is enough: `bash tests/run.sh fast`.** Logic = behaviour can differ (function bodies, conditions, parsing, key / input / paste /
-  mouse handling, file operations, transfers, GitHub / network code, the C engine, a bug fix). Files that only got minor edits do not count towards the 5.
-- **REVAMP: more than 5 files under `script/` changed with logic: `bash tests/run.sh all`** (fast + slow). A mixed task is judged by its logic files.
-- The owner's prompt wins: if it names tests, says "full suite" or says "no tests", do exactly that. An agent never widens the tier on its own, never "to be safe".
+### The test folders (two, and only two)
+```
+tests/
+  static/   the DEFAULT. Reads the code and the command maps, no terminal, no app start, no sleeps. All suites together: 30 s cold, about 1 s warm.
+  pty/
+    fast/   old shell tests and short real-terminal tests (menus/  terminal/  engine/).  Seconds to a few minutes each.
+    slow/   long real-terminal tests (input/  apps/): mouse, paste, resize, transfers, GitHub, full find-replace.  Minutes each. Release time or the owner asks.
+    lib/    shared helpers of the pty tests (ptyapp.py, vt.py, wait_lib.sh, e2e_common.sh, bg.sh, stresstest/).
+    pty.list  every pty test: name | folder | timeout | command | needs
+```
+`bash tests/run.sh` (static) · `bash tests/run.sh pty fast [name..]` · `bash tests/run.sh pty slow [name..]` · `bash tests/run.sh pty list` · `bash tests/run.sh list` (the static suites).
+
+### DECISION MATRIX — which test, decided by what you changed and what you need to know
+The default is **static: about 95% of tasks end there.** Ask yourself one question: *can I find the cause, or confirm the fix, by reading the script files and the static findings?* Yes → static. No → pty.
+
+| What you changed / what you need | Run | Why |
+|---|---|---|
+| **MINOR**: comments, descriptions, hint / help / prompt / message wording, labels, headers, footers, colours, spacing, renames of a key or alias (no new code behind it), README / llms*.txt / corpus notes, formatting, ANY group of these | **nothing.** Only the free checks: `bash -n <file>` (`python3 -m py_compile`, `node --check`), and `bash tests/pty/fast/menus/cmd_docs.sh --write` (a generator) if a command was added / renamed / re-described | nothing the app does has changed |
+| **LOGIC, any size**: functions, conditions, parsing, a command / menu / key added, renamed or removed, a map or footer line, a handler, a loop that reads input, file operations, GitHub / network code | **`bash tests/run.sh`** (static), once | it checks wiring, maps, cc / footer truth, every menu's accepted words, undefined or dead functions, read loops and EOF, shell hazards, and replays the real app from a pipe (crashes, hangs, shell errors) |
+| A **new command or menu** | write it in its definer / map / `cmd_def`, then run static | the static suites derive everything from the maps; there is no test file to write for it |
+| A **new class of bug** you want guarded (a rule you just fixed) | add one `tests/static/t_<name>.py` (stable finding ids, baseline, under 1 s), register it in `tests/static/suites.list`, run static | one more suite, still no terminal |
+| A bug you **cannot find by reading** the script files: timing, a race, redraw, cursor, terminal emulation, "works once then not" | **`bash tests/run.sh pty fast <name>`** the one covering test (see `pty list`), or write a pty test next to it | needs a live terminal |
+| You **must see the screen**: layout, wrapping, colours, a screenshot to judge | **`pty fast`** (`vt.py` renders the screen; print the rows, do not paste logs) | needs rendered output |
+| **Real terminal behaviour**: mouse, bracketed paste, resize, wide characters, loading bar timer, transfers, GitHub, install flows | **`pty slow <name>`** | cannot be simulated |
+| **Release** or the owner says "full suite" | static, then `pty fast`, then `pty slow` | the owner decides |
+
+Rules of the matrix:
+- **Static first, always.** A pty test is justified in the delivery in one line: `pty: <why static cannot show it>`. No reason, no pty.
+- Never run a pty test "to be safe", never widen the choice on your own, never run the whole of `pty slow` unless the owner says so. The owner's prompt wins ("no tests", "full suite").
 - Unsure whether a change is minor or logic? Ask the owner in one line. Do not run tests to find out.
-
-### Run in maximum parallel
-- Tests run ONLY through `bash tests/run.sh`: it runs one job per CPU, slowest tests first, each with a hard timeout. Never write `for t in ...; do bash $t; done`, never run tests one
-  command after another, never lower `JOBS`. Do not run two `run.sh` at once either (they would fight for the same CPUs).
-- The only exception is a test that really needs a sequential order (shared port, file or state): mark it `serial` in field 6 of `tests/tests.list` with the reason; `run.sh` then runs it
-  alone after the parallel ones. Mark a test serial only when you have seen it fail in parallel, never "just in case".
-- Other independent commands (`bash -n` on many files, greps) also go in ONE command, in parallel (`xargs -P`, or `&` and `wait`), not as a series of calls.
+- Static runs are parallel and capped already: run `bash tests/run.sh` ONCE per round, not before and after, not again on green, not twice at once.
+- The static output is at most 40 lines: one line per NEW finding (`known` findings are the owner's accepted baseline and are not yours). A new finding is yours: fix the code, or, if the finding is a
+  false positive, fix the suite (and say so); never add it to a baseline.
 
 ### Never
-- run tests before AND after a change, or again after a green result; run them "to double-check", or because another rule says "run the tests that cover it" (that means a LOGIC change, once);
+- run tests before AND after a change, or again after a green result; run them "to double-check";
 - rerun a whole tier after a red; add a `sleep`, a retry loop or a polyglot scan on your own;
-- print whole test logs into the conversation: `run.sh` already prints only the failures with their last lines (tokens are the owner's money).
+- print whole test logs into the conversation (tokens are the owner's money);
+- write a new pty test for something a static suite can check; add `sleep` to any test.
 
 ## The principle: dedupe. reuse. share. integrate
 
@@ -82,7 +100,7 @@ So before you create anything, work in this order:
       (`a` in a preview) is declared with `_dp_when MENU WHEN_FN KEY` (see ADVERT below), so cc and the footer stop advertising it elsewhere;
    3. delete the old display in the SAME task, with its settings, descriptions and tests (rule 10): a capped list (`Results shown`) or a hand-made
       `printf "%2d) "` row is the old display, not a feature to keep;
-   4. test it in the real app through a pty (`tests/results/pty_test.py` is the template), at phone size for scrolling and tall for messages.
+   4. test it in the real app through a pty (`tests/pty/fast/menus/results/pty_test.py` is the template), at phone size for scrolling and tall for messages.
    A patch that only restyles the old print (BB-171120261240-1) is the thing this step exists to stop.
 
 ## The rules
@@ -144,16 +162,16 @@ So before you create anything, work in this order:
    - **Typed prompts go through `_bvk_read` / `bashbasicsbyvk_ask`, never a bare `read` (rule 16).**
    - **No emoji in any `read ... -p` prompt**, and none in a variable that becomes one. A terminal and the width table can disagree about an emoji's
      width, and then the caret lands in the wrong cell on some devices; text without emoji cannot disagree. Emoji stay in headers, `echo` lines and menu icons.
-     `tests/width` fails on one; the `read` shim also strips them at run time (`_bvk_noemoji`) as a net, never as the fix: write the prompt without them.
+     `tests/pty/fast/terminal/width` fails on one; the `read` shim also strips them at run time (`_bvk_noemoji`) as a net, never as the fix: write the prompt without them.
    - **A question with fixed answers is never a one-line `read -p "... (y/N): "` and never a hand-made key row (`c) copy   x) nuke   Enter) back:`).**
      Use `script/file/settings/bashbasicsbyvk_choose.sh` (it is the Settings screen engine in a small box: same look, arrows, touch/click, `u`/`q`):
-     `_bvk_yn VAR "Question" [-c]` gives `y`/`n`/`c` (`-c` adds the Cancel row; `c` and `x` both cancel). **A yes/no question never has a default**: nothing is highlighted and a bare Enter does nothing, the person must answer; `_bvk_yn` enforces it itself and ignores any `-d` it is given (do not write one). `_bvk_menu VAR [-t Title] [-i Icon] [-q Question] [-d key] [-k] [-m] key:Label ...` for one-of-many, many-of-many (`-m`) and actions. **A tool that runs as its own process (bash or python) asks yes/no through `bashbasicsbyvk_yn "Question?" [-t Title] [-i Icon]` (exit 0 yes, 1 no, 2 no answer; python: `import bashbasicsbyvk_yn as yn; yn.ask(...)`): never `read -p "(y/n)"`, `input("(y/n)")` or "type yes". A plain line may remain only as the fallback beside it; `tests/yn/yn_test.py` lints for it.**
+     `_bvk_yn VAR "Question" [-c]` gives `y`/`n`/`c` (`-c` adds the Cancel row; `c` and `x` both cancel). **A yes/no question never has a default**: nothing is highlighted and a bare Enter does nothing, the person must answer; `_bvk_yn` enforces it itself and ignores any `-d` it is given (do not write one). `_bvk_menu VAR [-t Title] [-i Icon] [-q Question] [-d key] [-k] [-m] key:Label ...` for one-of-many, many-of-many (`-m`) and actions. **A tool that runs as its own process (bash or python) asks yes/no through `bashbasicsbyvk_yn "Question?" [-t Title] [-i Icon]` (exit 0 yes, 1 no, 2 no answer; python: `import bashbasicsbyvk_yn as yn; yn.ask(...)`): never `read -p "(y/n)"`, `input("(y/n)")` or "type yes". A plain line may remain only as the fallback beside it; `tests/pty/slow/input/yn/yn_test.py` lints for it.**
      Both return 1 and leave VAR empty when the user backs out (`u`/`q`): stop the flow, as for every prompt. Keep the old `case` on the answer; the keys are `y n c`.
    - **The shape** (do not invent another): `{emoji} Title`, a rule, numbered rows, a rule, `u) Back   q) Close`, an optional second line with the answer keys
      (`y) Yes   n) No   c/x) Cancel`), then `Select:`. Rows are `N) [ ] Label`; the answer is a number, a tap or click, the arrows + Enter, or the printed key + Enter.
    - **Marks: `[o]` radio = exactly one is on (one-of-many, the mark follows the highlight); `[x]` checkbox = any number can be on (many-of-many); `[ ]` off.**
      Settings rows use the same marks (`_st_add r` radio, `_st_add t` checkbox). Never use `[x]` for a radio or `[o]` for a checkbox.
-   - **A stand-alone tool (rule 3) uses the SAME menu as the app, through its doors (rule 18): `bashbasicsbyvk_yn` (yes/no), `bashbasicsbyvk_choose` (one-of-many / many-of-many), `bashbasicsbyvk_ask` (typed line).** It never draws its own menu, rows, rules or footer. A dependency question still goes through `bashbasicsbyvk_deps.sh` (rule 12). Any other plain prompt of such a tool has no emoji. A new test goes in `tests/choose`.
+   - **A stand-alone tool (rule 3) uses the SAME menu as the app, through its doors (rule 18): `bashbasicsbyvk_yn` (yes/no), `bashbasicsbyvk_choose` (one-of-many / many-of-many), `bashbasicsbyvk_ask` (typed line).** It never draws its own menu, rows, rules or footer. A dependency question still goes through `bashbasicsbyvk_deps.sh` (rule 12). Any other plain prompt of such a tool has no emoji. A new test goes in `tests/pty/slow/input/choose`.
 
 7. **Never wire a loading bar by hand: smartload draws it.** (`script/file/engine/bashbasicsbyvk_smartload.sh`; same idea as smartmenu.)
    - Wait time > loading bar. A wait starts at the person's Enter / tap (`_lt_enter`) and ends when the next prompt is up (`_lt_ready`, the `read` shim, or an engine about to
@@ -165,7 +183,7 @@ So before you create anything, work in this order:
    - **Loading bar and progress bar are two different things, and the progress bar always wins.** The loading bar is smartload's bouncing block for a wait of unknown length. A progress bar
      is a tool's own bar with real numbers (`[███░░] 45%  12.3/27.4 MB  3.1 MB/s  ETA 5s  3/7`: the fileapi pack, send, fetch and pending transfers, rclone, git ...). They are never on the screen together: when a progress bar starts, a loading bar
      that is showing is wiped and none is drawn until it ends. Every fileapi call that lets a transfer tool draw its bar sits between `_bb_progress_begin` and `_bb_progress_end` (one shared pair in
-     `bashbasicsbyvk_fileapi_lib.sh`, outside any `$( )`); `tests/smartload` fails on a transfer call that is not wrapped.
+     `bashbasicsbyvk_fileapi_lib.sh`, outside any `$( )`); `tests/pty/fast/terminal/smartload` fails on a transfer call that is not wrapped.
    - Full-screen programs (nano, vim, less, htop ...) are not a wait: smartload wraps those names (end of `bashbasicsbyvk_smartload.sh`) so no bar is drawn while they run; a new full-screen tool adds its name to that list, never a hand-made `_sl_hold`.
    - A child program that DRAWS on the terminal (its own prompt or progress bar: gitpush, bvk-xfer, rclone, git ...) is not a wait: smartload sees it by itself (`_sl_owned`, via /proc) and draws no bar while it runs.
      The test is positive: the child is exec'd, its stdout or stderr is the terminal AND it has written something (wchar in /proc/<pid>/io); a silent helper (python, node, a Go engine that is only computing) is still a wait and gets the bar. Never add a tool's name to a list to "fix" this. Never put `exec ... 2>/dev/null` in app code: with no command, `exec` makes the redirect permanent (stderr = prompts and tool progress bars).
@@ -180,22 +198,22 @@ So before you create anything, work in this order:
 9. **A list that exists twice is generated from one source, and a test fails when a copy goes stale.** What is generated today (add to this list, do not hand-copy):
    - **Footer keys.** A generic key (`u` `q` `z` `rf`) is passed to `_mc_footer` / `_mc_footer_register` as the BARE key and takes its label from `_MC_KEYLABEL`
      (`script/file/engine/bashbasicsbyvk_menuchrome.sh`). It is never written `key:Label`, in any spelling. A key that really means something else gets a NAMED variant in the same
-     table (`u.up` = `u) Up`, `u.prefix`); the part after the dot is only a name. Menu-specific keys (`bk:Close`, `n:New profile`) stay `key:Label`. `tests/cmd_drift.sh` fails on a retyped
+     table (`u.up` = `u) Up`, `u.prefix`); the part after the dot is only a name. Menu-specific keys (`bk:Close`, `n:New profile`) stay `key:Label`. `tests/pty/fast/menus/cmd_drift.sh` fails on a retyped
      generic label, on an undefined variant, and on a footer key no command map wires. There is no exceptions list: a new meaning is a new table entry.
-   - **ADF actions.** A `file` action registers with `_fx_adf_register_fx LABEL FN` (the tree path comes from the label), never with a typed `file/...` path. `tests/adf_registry.sh`.
+   - **ADF actions.** A `file` action registers with `_fx_adf_register_fx LABEL FN` (the tree path comes from the label), never with a typed `file/...` path. `tests/pty/fast/menus/adf_registry.sh`.
    - **The command reference.** `o --map-doc` prints it from `cmd_def`; `llms-full.txt` section 9 holds the pasted copy between `cmd-ref:start` / `cmd-ref:end`.
-     After adding or changing a command run `bash tests/cmd_docs.sh --write`. `tests/cmd_docs.sh`.
-   - **The CPU-to-binary mapping** (`uname -m` -> arm64 / amd64 / arm / 386; android / linux / darwin / freebsd) lives only in `_bvk_engine_target` (`engine/bashbasicsbyvk_engine_target.sh`). `setup.py` asks that function (it runs it with bash) to decide which binaries a wheel carries; it never repeats the table. `tests/engine_target.sh`, `tests/wheel_target.sh`.
+     After adding or changing a command run `bash tests/pty/fast/menus/cmd_docs.sh --write`. `tests/pty/fast/menus/cmd_docs.sh`.
+   - **The CPU-to-binary mapping** (`uname -m` -> arm64 / amd64 / arm / 386; android / linux / darwin / freebsd) lives only in `_bvk_engine_target` (`engine/bashbasicsbyvk_engine_target.sh`). `setup.py` asks that function (it runs it with bash) to decide which binaries a wheel carries; it never repeats the table. `tests/pty/fast/engine/engine_target.sh`, `tests/pty/fast/engine/wheel_target.sh`.
 
-10. **No dead files.** A file that nothing loads (not in the load mapper, rule 13, and not run as a process) is deleted, not left "untouched" or listed as legacy: `tests/adf_registry.sh` has no allowlist, and a test with an exceptions list is where drift hides.
+10. **No dead files.** A file that nothing loads (not in the load mapper, rule 13, and not run as a process) is deleted, not left "untouched" or listed as legacy: `tests/pty/fast/menus/adf_registry.sh` has no allowlist, and a test with an exceptions list is where drift hides.
     A file that another file depends on loads that dependency itself or degrades without it (`settings_ui.sh` works without `settings_desc.sh`: stand-alone callers and tests source it alone).
 
 11. **GitHub talks through ONE engine and ONE helper file.** (`fx → github → open github`, and the `-u` upgrade loop.)
     - All GitHub API / git work lives in `script/file/loops/iloop/fx/github_fx/gh/bashbasicsbyvk_github` (python); the screens in `.../open_github/bashbasicsbyvk_adf_github.sh` only ask and show.
       Parsing releases / tags / commits, tag order and body printing live in `script/file/functions/bashbasicsbyvk_ghlib.sh`, shared by the GitHub screens and `bashbasicsbyvk_upgrade.sh`: never parse the GitHub JSON a second time.
     - The GitHub screens follow rules 6-9 like every other screen: no hand-wired loading bar (a `git clone` that prints its own progress is wrapped in `_sl_hold` / `_sl_release`), bare generic footer keys (`rf`, `u`), `-d none` on every delete question.
-    - The map of a loop the generator cannot read is `block()`, never "keep or block": a map line is a claim about the loop. A list screen that reads keys itself (`_st_run`) lets a typed word through `_st_cm_gate`, so the hint row, `cc` and Enter agree (`tests/cc_truth`).
-    - Tests: `tests/github/` (mock GitHub server, no network), `tests/cc_truth`. The upgrade loop's output must stay byte-identical to `tests/github/fixtures/upgrade_golden.txt`.
+    - The map of a loop the generator cannot read is `block()`, never "keep or block": a map line is a claim about the loop. A list screen that reads keys itself (`_st_run`) lets a typed word through `_st_cm_gate`, so the hint row, `cc` and Enter agree (`tests/pty/retired/cc_truth`).
+    - Tests: `tests/pty/slow/apps/github/` (mock GitHub server, no network), `tests/pty/retired/cc_truth`. The upgrade loop's output must stay byte-identical to `tests/pty/slow/apps/github/fixtures/upgrade_golden.txt`.
 
 12. **Every external dependency goes through ONE registry and ONE installer.** (`script/file/engine/bashbasicsbyvk_deps.list`, `bashbasicsbyvk_deps.sh`, `bashbasicsbyvk_deps.py`.)
     - An outside program or package (curl, node, 7z, rclone, gh, a pip / npm package, a tz database ...) is declared ONCE, as a `D` line in `bashbasicsbyvk_deps.list`: how to detect it, its package name per package manager
@@ -207,7 +225,7 @@ So before you create anything, work in this order:
     - **Forbidden:** a private `command -v X || echo "please install X"` that exits, a private `pkg install` / `apt install` / `pip install` / `npm install` / `npx --yes` recipe, a package-name table, a sentinel / retry file for installs, a hand-made "install now? y/n" prompt for a dependency.
       The old ones (pipboot, polyglot_bootstrap, gitpush's gh installer, the daemon's pip call, timezone's package table, the archive tool tables) are gone; do not bring one back.
       A tool may still PROBE with `command -v` to choose between alternatives it can work without (clipboard tools, `xdg-open` / `termux-open`), but a dependency it cannot work without is asked for through the engine.
-    - A new dependency = one `D` line (+ one `F` line for the menu that needs it) + `bash tests/deps/deps_test.sh`. A pip family (`tree_sitter_<lang>`) is a `G` line. A multi-step install is a `@recipe` in the engine, never a copy in the caller.
+    - A new dependency = one `D` line (+ one `F` line for the menu that needs it) + `bash tests/pty/fast/engine/deps/deps_test.sh`. A pip family (`tree_sitter_<lang>`) is a `G` line. A multi-step install is a `@recipe` in the engine, never a copy in the caller.
     - Scripted runs (CI, agents, e.g. the polyglot check above): `BVK_DEPS_ASSUME=yes` answers the menu, `BVK_DEPS_ASSUME=no` refuses, `--dry-run` prints the commands. The engine installs system packages in one call and pip / npm in parallel lanes.
 
 13. **Every file passes through the load mapper; nothing is loaded outside it.** (`script/file/loadmap/`: `bashbasicsbyvk_loadmap.list`, `bashbasicsbyvk_loadmap.sh`, `bashbasicsbyvk_loadmap_gen`, generated `bashbasicsbyvk_loadmap_stubs.sh`.)
@@ -218,57 +236,54 @@ So before you create anything, work in this order:
       `[no]` never loaded unless something calls one of its functions: every function of a `[bg]` / `[no]` file is a generated one-line stub; the first call loads the file (and the files it needs) and runs the real function. Python / C / data / stand-alone commands and `*.map` files are `[no]` too (they are run or read, never sourced).
       "Background" is idle time inside the same shell: bash cannot hand functions from a child process to its parent, so a real background process cannot load a library.
     - **A new file = one mapper line.** Default to `[no]`; use `[bg]` for what the person will probably use in the first seconds (Enter on a file, a common key); `[fg]` ONLY if the first paint cannot happen without it. Say why in the note. A new helper that an `[fg]` file calls goes to the file that already is `[fg]` only if it is needed before the paint; otherwise it lives in a `[bg]` / `[no]` file and its stub loads it on the first call.
-    - **After any change** (a file added / renamed / moved between sections / deleted, a function added / renamed, a line moved) run `python3 script/file/loadmap/bashbasicsbyvk_loadmap_gen --write`, then `--check` (or `bash tests/loadmap.sh`). The check fails on: a file without a line or a line without a file; an `[fg]` file that needs a later or non-`[fg]` file (top-level call, a variable the other file sets, a redefined function); a `[bg]` file that needs a `[no]` file; a stale stubs file; a top-level `declare` without `-g` (a file loads inside a function: a plain `declare` would stay local).
+    - **After any change** (a file added / renamed / moved between sections / deleted, a function added / renamed, a line moved) run `python3 script/file/loadmap/bashbasicsbyvk_loadmap_gen --write`, then `--check` (or `bash tests/pty/fast/engine/loadmap.sh`). The check fails on: a file without a line or a line without a file; an `[fg]` file that needs a later or non-`[fg]` file (top-level call, a variable the other file sets, a redefined function); a `[bg]` file that needs a `[no]` file; a stale stubs file; a top-level `declare` without `-g` (a file loads inside a function: a plain `declare` would stay local).
     - **Code in `[fg]` never assumes a `[bg]` / `[no]` variable exists:** read it as `${VAR:-default}`, or call a function of that file first (its stub loads it), or put `_lm_need bashbasicsbyvk_x.sh` at the top of the function. Guard optional features by their own flag (`[ "${_GD_ACTIVE:-0}" = 1 ] && _gd_...`), never with `declare -F` (a stub makes `declare -F` true and the call would load the whole file).
     - **Registries and wrappers:** a file that fills a registry another file reads (the `adf_*` files fill the fx menu) is listed in that file's WITH column; a file that wraps another file's functions at load time (`gdrive.sh`) lists the wrapped files in NEEDS (a dependency no text search can see).
-    - **The stubs are sourced at the end of `[fg]`, before the first paint.** `[fg]` code calls functions of `[bg]` / `[no]` files at run time (the first paint of a folder with a `.shortcut` calls `_shortcut_read_field`, `transfer.sh`); a call with no stub yet is `command not found`. `tests/loadmap.sh` checks it.
+    - **The stubs are sourced at the end of `[fg]`, before the first paint.** `[fg]` code calls functions of `[bg]` / `[no]` files at run time (the first paint of a folder with a `.shortcut` calls `_shortcut_read_field`, `transfer.sh`); a call with no stub yet is `command not found`. `tests/pty/fast/engine/loadmap.sh` checks it.
     - `BVK_LOADMAP=all` loads everything before the first paint (the old behaviour): use it to tell a load-order bug from a real one. `loadtime` shows every load, before and after the paint.
     - **Measure it:** `loadtime` (rule 7's recorder) and the `[fg]` percentage in `bashbasicsbyvk_loadmap_gen --report`. Before you move a file to `[fg]`, say what needs it before the paint.
 
-14. **Every screen that reads a typed word is WIRED; a typed word always goes through the command layer.** (`script/file/cmdmap/`, `script/file/engine/bashbasicsbyvk_cmdmap.sh`, `tests/xui_wiring.sh`.)
+14. **Every screen that reads a typed word is WIRED; a typed word always goes through the command layer.** (`script/file/cmdmap/`, `script/file/engine/bashbasicsbyvk_cmdmap.sh`, `tests/pty/fast/menus/xui_wiring.sh`.)
     - The standard: a plain word is a command (`q`, `s`, `h`, the screen's own `r`, `rf` ...); `@word` is that text, typed literally. Inside a menu the screen's own key beats the main command of the same name; inside a question the main command wins and a blocked one cancels the flow.
     - **Which table applies is decided by the function that reads the word, by NAME** (`_cm_ctx_find`: the `@func` of a `.map`, or `xui_<prefix>` for a `_xui_loop` screen). A screen no map claims does NOT fail loudly: it silently inherits another table (`xui`, or `main`) whose rules were written for other screens, so its own keys are blocked ("Invalid command: r - not available in xui") or swallowed (`rf` = the main redraw, the screen never reloads). `o --map-lint` cannot see it (it only reads maps that exist). That is how `cfw`, `gdp`, `cs_pp`, `ct`, `ru` stayed broken.
-    - **A new `_xui_screen X` + `_xui_loop` handler = a new `script/file/cmdmap/xui_X/` in the same change**: copy `xui_ghr` (`bashbasicsbyvk_xui_X.map` + `bashbasicsbyvk_xui_Xmenucommands.sh`), one `cmd_def` line per key the handler (`_X_cmd`) accepts or the footer prints (`local`, kind `exact` / `prefix`), two loadmap lines (`[no]`), `bashbasicsbyvk_loadmap_gen --write`. `bash tests/xui_wiring.sh` fails on a screen without a map and on any own key that does not resolve to the screen. Never "keep" an own key by hoping the parent allows it.
-    - **A `cmd_fn` of `_st_run` (the 5th argument) returns 1 for every word it does not own**, so `_st_cm_gate` (or `_bc_word` in the choice boxes) decides. A `cmd_fn` that returns 0 for "anything else" swallows commands: the hint row (`_cm_hint`) says "s -> Settings" and Enter drops it (that was `_bc_cmd`). `tests/choose/typed_test.py` types a command into a question.
+    - **A new `_xui_screen X` + `_xui_loop` handler = a new `script/file/cmdmap/xui_X/` in the same change**: copy `xui_ghr` (`bashbasicsbyvk_xui_X.map` + `bashbasicsbyvk_xui_Xmenucommands.sh`), one `cmd_def` line per key the handler (`_X_cmd`) accepts or the footer prints (`local`, kind `exact` / `prefix`), two loadmap lines (`[no]`), `bashbasicsbyvk_loadmap_gen --write`. `bash tests/pty/fast/menus/xui_wiring.sh` fails on a screen without a map and on any own key that does not resolve to the screen. Never "keep" an own key by hoping the parent allows it.
+    - **A `cmd_fn` of `_st_run` (the 5th argument) returns 1 for every word it does not own**, so `_st_cm_gate` (or `_bc_word` in the choice boxes) decides. A `cmd_fn` that returns 0 for "anything else" swallows commands: the hint row (`_cm_hint`) says "s -> Settings" and Enter drops it (that was `_bc_cmd`). `tests/pty/slow/input/choose/typed_test.py` types a command into a question.
     - A typed-word prompt is read with `_bvk_read` (rule 16): one editor for all of them.
    - Do not give a list screen its own `read` / `case` for typed words, and do not add a second dispatcher: the gates are `_cm_gate_choice` (list loops), `_cm_gate_sm` (smart menus), `_cm_gate_dispatch` (text, boxes), `_st_cm_gate` (`_st_run`). A new kind of screen uses one of them.
 
 ## Tests: seconds, not half an hour (the rules the owner and the agents framed)
 
-A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes because they slept for guessed times, started the app dozens of times with a blind
-4 s start-up wait, and an agent then added its own `sleep 600` on top. **A test waits for the thing it needs and fails the moment that thing is clearly not coming.**
+A bug fix takes seconds; its tests must too. **The static suites (`tests/static/`) are the way: read the code, no terminal, no sleep.** The pty tests (`tests/pty/`) are the exception for what
+only a live terminal can show (decision matrix at the top: "Workflow and tests").
 
-**Running tests (agents follow this, do not improvise). First read "Workflow and tests" at the top of this file: it decides IF and WHICH tier runs; this section only describes the tools.**
-- `bash tests/run.sh for <the files you changed>` runs only the tests that cover them (`tests/covers.map`), in parallel, each with a hard timeout, and prints a failure *the moment
-  it happens* with the last lines of its output. `bash tests/run.sh fast` = the quick tier. `bash tests/run.sh all` = everything: only before a release or when the prompt asks
-  for the full suite. `bash tests/run.sh list` shows every test, its tier and timeout.
-- A test that cannot run here (needs `tmux`, node, the `../fileapi` repo) is printed as **SKIP and counted as NOT verified**; say so in HOW DID YOU DEBUG. Never report a skip as a pass.
-- Red from the start? `tests/known_failing.txt` lists tests that were already failing, with the reason; a failure that is not listed there is yours. Do not add a line to hide
-  a failure you caused. Before blaming the app for a red test, check the usual suspects: UTF-8 locale (`wait_lib.sh` forces it), files moved (find them by name, `bvk_need`),
-  a missing tool (a SKIP, not a fail), the app's telemetry ping (the test marks today as reported, see `PtyApp.seed_telemetry`).
-- Run each test once after your change, not before-and-after pairs of the whole suite: run the covering tests before only when you need a baseline for a failure.
+**Running (agents follow this, do not improvise).**
+- `bash tests/run.sh` = the static suites: structure (maps, `cmd_def`, handlers), lint (undefined and dead functions, syntax, hand-drawn menus), footer, intent (every word of every menu through the real
+  resolver: valid result, garbage, case, hints), arms (what each loop handles vs cc and footer), readloop (a prompt in an endless loop must leave on EOF), shell (word-splitting hazards), advert (registry unit),
+  replay (the real app with stdin from a pipe: crashes, hangs, shell errors). Findings have stable ids; those in `tests/static/baseline/<suite>.txt` are `known` (the owner's accepted drift), the rest are `NEW` and yours.
+- `bash tests/run.sh pty fast|slow [name..]` runs pty tests from `tests/pty/pty.list`; `pty list` shows them. A pty test that cannot run here (needs `tmux`, node, the `../fileapi` repo) is printed as
+  **SKIP and counted as NOT verified**; say so. Never report a skip as a pass. `tests/pty/known_failing.txt` lists pty tests that were already red; a failure not listed there is yours.
+- Long commands: never `sleep 600` (or any `sleep` over 30 s). `bash tests/pty/lib/bg.sh start <name> <command...>` runs it in the background; `bg.sh wait <name> [max-secs]` returns THE MOMENT it ends.
 
-**Long commands: never `sleep 600` (or any `sleep` over 30 s).**
-- `bash tests/bg.sh start <name> <command...>` starts it in the background (log in `/tmp/bvk_bg/<name>.log`); `bash tests/bg.sh wait <name> [max-secs]` returns THE MOMENT it ends
-  (exit code = the command's) and prints new log lines as they appear; if it is still running after 25 s it says so, and you call `wait` again. `status`, `tail`, `kill`, `list` also exist.
-- Look at the output while it runs and stop a clearly stuck job; a job with no output for a minute is stuck, not slow.
+**Writing a STATIC test (the default).**
+1. Put it in `tests/static/t_<name>.py`; report through `lib/bvk.py` `Report` (stable finding ids `kind:where:what`, `R.check()` per thing checked, `R.add(id, text)` per finding, `sys.exit(R.finish())`).
+2. Read the data, never start the app per check. Per-map resolver answers come from `lib/dump_resolve.sh` through `bvk.dump_all` (cached per map hash). A scripted run of the real app goes through
+   `t_replay.py` (stdin from a pipe: one line per prompt, EOF = `q`).
+3. Under 1 s warm, under 10 s cold. Register it in `tests/static/suites.list`. A finding that is a false positive means the suite is wrong: fix the suite, not the baseline.
+4. A test must be able to fail: after writing one, break the code on purpose, see it go red, restore. State in HOW DID YOU DEBUG that you did.
 
-**Writing a test (every new test and every edit of an old one):**
-1. **Wait for a condition, never for a time.** bash: `source tests/wait_lib.sh`, then `wait_until <secs> "<what>" <cmd...>`, `wait_file`, `wait_gone`, `wait_port`, `wait_grep`,
-   `wait_count`, and for tmux `tmx_start`, `tmx_wait`, `tmx_line`, `tmx_do`, `tmx_until`. python/pty: `tests/paste_input/ptyapp.py` (`PtyApp`): `a.wait(cond)`, `a.wait_text(t)`,
-   `a.send(keys, until=cond)`, `a.settle()`; the app is ready when it shows its prompt (the constructor waits for that), not after 4 s. Do not write a new pty/VT driver: use `PtyApp`
-   and `tests/paste_input/vt.py`.
-2. **A timeout is a failure with evidence.** Every wait has a maximum; on timeout it prints what it waited for and what was on screen instead (`WAIT_DUMP` / the screen dump), then the test
-   fails at once. Never `sleep` and then assert; never a retry loop that hides a failure.
-3. **No sleep in tests.** `tests/lint_waits.sh` (part of `run.sh fast`) rejects `sleep N` with N > 0.1, `time.sleep`, and blind `pump(N >= 0.5)`. The only allowed wait is one that IS the behaviour
-   under test (an app timer, a double-click window, "nothing else may happen"), marked on its own line `# lint-wait-ok: <why>`. "Nothing may happen" checks use `settle` / `a.settle()` (a short quiet window), not a long sleep.
-4. **Real tests, not name-sake skims.** Keep every assertion. Speeding a test up means changing how it waits, never what it checks. A test must be able to fail: after writing or changing one, break the code on
-   purpose (comment out the fix, change a value) and see it go red, then restore. State in HOW DID YOU DEBUG that you did. A check that also passes when the app never answered (e.g. result `-1` counted as "refused") is a bug in the test.
-5. **Find files by name** (`bvk_need <basename>` in bash, `find_script(root, name)` in python): files move between folders and a hard-coded path made a test fail "from the start". UTF-8 locale is set by `wait_lib.sh` / `PtyApp`.
-6. **No network, no real clock ticks.** Tests never talk to the internet and never wait for the wall clock: set mtimes with `touch -d`, pre-mark the telemetry ping as done, point tools at a local mock. Do not wait for a one-second tick.
-7. **Start the app once per test file when you can**, not once per assertion; each start costs a second of CPU. Independent checks go in separate files only if they can run in parallel (`run.sh` does).
-8. **Register the test.** Add it to `tests/tests.list` (name, tier, timeout, command, needs) and to `tests/covers.map` for the files it covers. A test with a timeout over 5 minutes needs a reason in the list.
-9. **Tests live in `tests/`** (rule 1 covers `script/` only): helpers shared by tests are `tests/wait_lib.sh` and `tests/paste_input/ptyapp.py`; find them with grep before writing another.
+**Writing a PTY test (only when the decision matrix says so).**
+1. **Wait for a condition, never for a time.** bash: `source tests/pty/lib/wait_lib.sh`, then `wait_until <secs> "<what>" <cmd...>`, `wait_file`, `wait_gone`, `wait_port`, `wait_grep`, `wait_count`, and for
+   tmux `tmx_start`, `tmx_wait`, `tmx_line`, `tmx_do`, `tmx_until`. python/pty: `tests/pty/lib/ptyapp.py` (`PtyApp`): `a.wait(cond)`, `a.wait_text(t)`, `a.send(keys, until=cond)`, `a.settle()`; the app is ready when it
+   shows its prompt, not after 4 s. Do not write a new pty/VT driver: use `PtyApp` and `tests/pty/lib/vt.py`.
+2. **A timeout is a failure with evidence** (what it waited for, what was on screen). Never `sleep` then assert; never a retry loop that hides a failure.
+3. **No sleep in tests.** `tests/pty/fast/engine/lint_waits.sh` rejects `sleep N` with N > 0.1, `time.sleep`, and blind `pump(N >= 0.5)`. The only allowed wait is one that IS the behaviour under test, marked
+   on its own line `# lint-wait-ok: <why>`.
+4. **Real tests, not name-sake skims.** Keep every assertion; speeding up means changing how it waits, never what it checks.
+5. **Find files by name** (`bvk_need <basename>` in bash, `find_script(root, name)` in python): files move between folders.
+6. **No network, no real clock ticks.** Mock servers, `touch -d`, pre-marked telemetry (`PtyApp.seed_telemetry`).
+7. **Start the app once per test file when you can.**
+8. **Register the test** in `tests/pty/pty.list` (name, folder, timeout, command, needs) and file it under `tests/pty/<fast|slow>/<topic>/` (fast: menus, terminal, engine; slow: input, apps). Paths inside a pty test are
+   relative to its own location or found by name, never hard-coded from the old `tests/` layout. Helpers shared by pty tests live in `tests/pty/lib/`; grep before writing another.
 
 ## How the install works (why names matter)
 
@@ -279,7 +294,7 @@ A bug fix takes seconds; its tests must too. The tests used to take ~30 minutes 
 - The command map finds `*commands.sh` / `*.map` by those suffixes: keep `bashbasicsbyvk_<menu>.map` and
   `bashbasicsbyvk_<menu>menucommands.sh`. `bashbasicsbyvk_mapgen` writes exactly those names.
 - Built `bvk-<engine>-<os>-<arch>` binaries (engines `ls`, `fr`, `xfer`; os `android linux darwin freebsd`; arch `amd64 arm64 arm 386`) are build output, not source: they keep that name (`setup.py`, `MANIFEST.in`, health check match it).
-- **A wheel carries the binaries of ONE machine.** pip builds the wheel on the machine it installs to; `setup.py` keeps only that machine's three binaries and tags the wheel `py3-none-<platform>` (never `any`, so pip's wheel cache cannot hand it to another CPU / OS). `BVK_TARGET=<os>-<arch>` builds one for another machine (CI). When an install is carried to a different machine, `_bvk_engine_heal` (`engine/bashbasicsbyvk_engine_heal.sh`, called from `o`) offers a reinstall that builds fresh. `tests/wheel_target.sh`, `tests/engine_heal.sh`.
+- **A wheel carries the binaries of ONE machine.** pip builds the wheel on the machine it installs to; `setup.py` keeps only that machine's three binaries and tags the wheel `py3-none-<platform>` (never `any`, so pip's wheel cache cannot hand it to another CPU / OS). `BVK_TARGET=<os>-<arch>` builds one for another machine (CI). When an install is carried to a different machine, `_bvk_engine_heal` (`engine/bashbasicsbyvk_engine_heal.sh`, called from `o`) offers a reinstall that builds fresh. `tests/pty/fast/engine/wheel_target.sh`, `tests/pty/fast/engine/engine_heal.sh`.
 
 ## When you add, rename or delete a file
 
@@ -304,8 +319,8 @@ find script -type f -printf '%f\n' | sort | uniq -d
 grep -rnI '_3bvk_' script tests setup.py MANIFEST.in README.md | grep -v '_3bvk_import_'
 # 5. ONLY when the prompt asks to dedupe / find duplicates (never as part of an ordinary fix or feature): duplicate-function candidates (polyglot: parses the code, finds renamed and cross-language copies too) — prints clusters, writes nothing into the repo
 PYTHONPATH=script/file/engine BVK_DEPS_ASSUME=yes python3 script/file/infinity/tools/polyglot/bashbasicsbyvk_polyglot . --no-xlsx --plain --exclude sample_project -o /tmp/polyglot_report.json
-# 8. no bare typed-line read (rule 16); also part of `bash tests/run.sh fast`
-python3 tests/prompt_template/read_lint.py
+# 8. no bare typed-line read (rule 16); also part of `bash tests/run.sh pty fast`
+python3 tests/pty/slow/input/prompt_template/read_lint.py
 # 6. corpus index: valid JSON lines, unique ids, every line's note exists, every note has a line, note sits in its YYYY/MM/DD folder
 python3 - <<'EOF'
 import glob, json, os
@@ -323,38 +338,38 @@ mechanism (it can miss real copies and flag look-alikes). Run it before and afte
 in HOW DID YOU DEBUG how you judged each; your change must not add a cluster that is a real copy (the clusters already there are not yours to fix
 unless the task says so). It asks the central installer for numpy / tree-sitter on first run (`BVK_DEPS_ASSUME=yes` answers the menu in scripted runs, `--no-install` to forbid). If it finds a real copy, do NOT edit the copies in step: move the code into ONE helper
 that every place calls (a function in a lib that `o` / an import file loads earlier; for node tools `bashbasicsbyvk_staging_jslib.js`, found
-through `_bb_jslib`; for tests `tests/e2e_common.sh`, `tests/wait_lib.sh`, `tests/paste_input/ptyapp.py`). Before you write a block that looks like one you have
+through `_bb_jslib`; for tests `tests/pty/lib/e2e_common.sh`, `tests/pty/lib/wait_lib.sh`, `tests/pty/lib/ptyapp.py`). Before you write a block that looks like one you have
 seen elsewhere, grep for the helper first.
 
-15. **`u` is "go back ONE step", everywhere.** (`script/file/engine/bashbasicsbyvk_menuchrome.sh`: `_mc_steps`, `_mc_read`; `bashbasicsbyvk_cmdmap.sh`: `_CM_BACKED`; `tests/nav_back/`.)
+15. **`u` is "go back ONE step", everywhere.** (`script/file/engine/bashbasicsbyvk_menuchrome.sh`: `_mc_steps`, `_mc_read`; `bashbasicsbyvk_cmdmap.sh`: `_CM_BACKED`; `tests/pty/slow/input/nav_back/`.)
     - `u` at a prompt cancels only that prompt (empty answer, no abort flag). `_mc_read` returns 1 for back and 3 for cancel / EOF; `_mc_select`, `_mc_text`, `_mc_review` pass it on. A blocked command still aborts the whole flow (`_CM_ABORT`).
     - **A flow with more than one question runs its questions with `_mc_steps`** (rc 1 = the question before; rc 1 on the first = the caller goes back one level; rc 5 = not applicable, skipped in the direction of travel). Never `|| return` after the first `u`.
     - A text prompt inside a flow is `read ... || return 3` and the parent menu loops on 3. Prompts with "Enter = default" never take the default on `u`.
     - The choice boxes (`_bvk_yn` / `_bvk_menu`, rule 14) follow the same contract: `u` in a box leaves that box only.
 
-16. **ONE typed-line prompt: every place that waits for the person to TYPE calls the app's native prompt, never `read`, `input()` or `getpass` itself.** (`_bvk_read` in `script/file/engine/bashbasicsbyvk_smartmenu.sh`; `bashbasicsbyvk_ask` + `bashbasicsbyvk_ask.py` for tools; `tests/prompt_template/read_lint.py`.) The key-loop files (viewport, browse, mouse, smartmenu, cmdmap, settings_ui, textedit, smartload, loadmap) are exempt for KEY reads only (`-n` / `-N` / `-t` / `-d` / `-u`); a `read ... -p` there is a typed line and must use `_bvk_read` (read_lint flags it).
+16. **ONE typed-line prompt: every place that waits for the person to TYPE calls the app's native prompt, never `read`, `input()` or `getpass` itself.** (`_bvk_read` in `script/file/engine/bashbasicsbyvk_smartmenu.sh`; `bashbasicsbyvk_ask` + `bashbasicsbyvk_ask.py` for tools; `tests/pty/slow/input/prompt_template/read_lint.py`.) The key-loop files (viewport, browse, mouse, smartmenu, cmdmap, settings_ui, textedit, smartload, loadmap) are exempt for KEY reads only (`-n` / `-N` / `-t` / `-d` / `-u`); a `read ... -p` there is a typed line and must use `_bvk_read` (read_lint flags it).
     - **Why:** a prompt that calls `read` itself is a copy of the line editor. Every later improvement (selection, Shift / Ctrl keys, cut / copy / paste, undo, the cursor and highlight fixes, tap / click) lands in the ONE editor (`_cm_line_edit`, `bashbasicsbyvk_textedit.sh`) and so only reaches the prompts that go through it. The bare ones (`switch.sh`, `localhost`, `xtract` ...) stayed behind: that is the drift.
     - **In the app:** `_bvk_read VAR "Prompt: " [-i INITIAL] [-I] [-s] [-1]` (`-i` starting text, `-I` keep surrounding spaces = the old `IFS= read`, `-s` a secret, `-1` one key / "press any key"). It returns exactly what `read` returned (0 line, 1 back / EOF, 3 cancelled flow), so `|| return N` stays as it was. The prompt text has no emoji (rule 6) and is ONE argument: do not `printf` a prompt and then call a prompt-less `read`.
     - **In a tool that runs as its own process (rule 3):** bash `ans=$(bashbasicsbyvk_ask "Prompt: " [-i text] [-s])` (exit 0 line, 2 no answer, 3 not installed); python `import bashbasicsbyvk_ask as bvk; bvk.ask("Prompt: ")` (raises `EOFError` like `input()`). Same editor, so a change to it reaches the tool too. Fixed answers use the choice doors: `bashbasicsbyvk_yn` / `bashbasicsbyvk_choose` (rule 18).
-    - **A raw `read` is allowed only** (a) in the key-loop files that ARE the editors (the `ENGINE_ALLOW` list in `tests/prompt_template/read_lint.py`: viewport, browse, mouse, smartmenu, cmdmap, settings_ui, textedit, smartload, loadmap); (b) when it reads DATA: `< file`, `<<< "$x"`, a pipe, a `while read` loop; (c) on a line that ends with `# bvk-read-ok: <why>` (the plain last fallback beside `bashbasicsbyvk_yn` / `bashbasicsbyvk_ask` for a broken install; a pager that reads nothing). A new marker needs a real reason, and a new `ENGINE_ALLOW` file needs the owner's say.
-    - **New or changed prompt = call `_bvk_read` / `bashbasicsbyvk_ask` in the same change.** Never add `read -p` / `read -e` / `read VAR` / `input(` / `getpass` / `sys.stdin.readline` and never an `ENGINE_ALLOW` entry to make a lint go green. `python3 tests/prompt_template/read_lint.py` (in `run.sh fast`) fails on the first one.
+    - **A raw `read` is allowed only** (a) in the key-loop files that ARE the editors (the `ENGINE_ALLOW` list in `tests/pty/slow/input/prompt_template/read_lint.py`: viewport, browse, mouse, smartmenu, cmdmap, settings_ui, textedit, smartload, loadmap); (b) when it reads DATA: `< file`, `<<< "$x"`, a pipe, a `while read` loop; (c) on a line that ends with `# bvk-read-ok: <why>` (the plain last fallback beside `bashbasicsbyvk_yn` / `bashbasicsbyvk_ask` for a broken install; a pager that reads nothing). A new marker needs a real reason, and a new `ENGINE_ALLOW` file needs the owner's say.
+    - **New or changed prompt = call `_bvk_read` / `bashbasicsbyvk_ask` in the same change.** Never add `read -p` / `read -e` / `read VAR` / `input(` / `getpass` / `sys.stdin.readline` and never an `ENGINE_ALLOW` entry to make a lint go green. `python3 tests/pty/slow/input/prompt_template/read_lint.py` (in `run.sh fast`) fails on the first one.
     - **To change how typing behaves** (a key, a highlight, tap, paste): change the shared loop `_bvk_edit_run` (rule 17) or the key helpers (`bashbasicsbyvk_textedit.sh`), once. Never patch one prompt, and never write a second line editor beside it.
 
 17. **ONE typed-line LOOP and ONE typed-line DRAWER: `_bvk_edit_run` and `_bvk_draw_input` (`script/file/engine/bashbasicsbyvk_viewport.sh`) are the only code that reads keys for a typed line and the only code that paints it.** Main `Select:`, the item / group picker, smart menus, Settings (every screen and choice box) and the line editor behind `_bvk_read` / `bashbasicsbyvk_ask` all run them; each supplies only HOOKS (`_ED_REDRAW`, `_ED_CLICK`, `_ED_NAV`, `_ED_BYTE` ...: the contract is the comment above `_bvk_edit_run`). (Follow-up of rule 16: rule 16 unified the editing KEYS; this unifies the LOOP and the DRAWING around them.)
     - **Why:** the shared helpers (`_te_esc`, `_te_byte`, `_bvk_prompt_tap`, the paste helpers) were called by five hand-written loops and five draw functions, each wired by hand. A fix went into the loop the agent was looking at and the others drifted: the line editor never got tap, drew its suggestion BELOW the text, flattened pasted line breaks and had its own length-limit message. A static "is the function name in the file" test could not see it.
     - **Everything the person can DO to the typed line lives in the engine:** editing keys, bracketed + burst paste, the length limit, mouse reports on / off and the hand-back, the tap on the typed text, the idle tick, WINCH, raw keys and their teardown (it restores what it found, so a screen can run inside a screen). Add a behaviour THERE and every prompt has it. A loop keeps only what is its own (the list rows, the tabs, the footer, the Settings rows).
     - **Everything that is PAINTED of the typed line is `_bvk_draw_input`:** the cursor / selection, a long text as rows (line breaks are kept), the one scrolling row, the tap geometry. The suggestion sits ABOVE the prompt on every prompt: `_bvk_hint_area_on` reserves it, `_input_hint_sync` fills it, `_bvk_hint_paint` paints it. Settings builds its whole screen in one write and draws the prompt through `_bvk_draw_input` too.
-    - **Never** write a `read -rsn1` key loop, call `_te_begin` with a registered editor, switch paste / mouse reports on (`_bvk_tty_raw` is the pair for leaving and re-entering raw mode), call `_bvk_row_multi` / `_te_cursor` / `_bvk_prompt_tap` outside the engine and the drawer. `tests/prompt_template/drift.sh` fails on it; its `PENDING` list is EMPTY and a new loop never goes on it.
+    - **Never** write a `read -rsn1` key loop, call `_te_begin` with a registered editor, switch paste / mouse reports on (`_bvk_tty_raw` is the pair for leaving and re-entering raw mode), call `_bvk_row_multi` / `_te_cursor` / `_bvk_prompt_tap` outside the engine and the drawer. `tests/pty/slow/input/prompt_template/drift.sh` fails on it; its `PENDING` list is EMPTY and a new loop never goes on it.
     - **One notice, one wording:** a notice (too large, not available here) goes in the suggestion rows ABOVE the prompt on every prompt kind, with the sentence written once in `_bvk_too_large_text` (Settings builds its block in one write but puts its notice in that same row). The line editor always reserves the area, also without a command layer (`drift.sh` checks the wording).
     - **A typed-line answer is ONE line:** a paste with line breaks is SHOWN as rows (so nothing is lost on screen) but `_bvk_read`, `read -p` and `bashbasicsbyvk_ask` return it joined by spaces. A caller that wants the rows (a commit message) passes `-m` (`multiline=True` in Python). Never write `mkdir "$name"` on an answer that may carry a newline.
     - **Stand-alone imports** (`_3bvk_import_*.sh`) that source a file calling the engine must source `bashbasicsbyvk_viewport.sh` first (the deps installer failed for it).
     - **Chained questions in a stand-alone tool:** `bashbasicsbyvk_ask`, `bashbasicsbyvk_yn` and `bashbasicsbyvk_choose` take `-b` (u exits 4 = one question back; q / Ctrl-D exit 2; the `ask` door gives a secret `-s` the same two words). A tool that asks 2+ questions makes each one a step on `_mc_steps` (see `bashbasicsbyvk_gitpush`, `bashbasicsbyvk_delete`): never `|| die` after the first u, never read u as an answer. A Python tool uses `bashbasicsbyvk_ask.steps(...)` (`bashbasicsbyvk_choose.ask(..., back=True)` raises the same `Back`) (a step returns `False` when it had nothing to ask: `u` skips it; `Back` is an `EOFError`, so a tool that does not chain just leaves). A question that is asked again after `u` passes `-S` / `select=True`: its old answer starts selected, so typing `u` again replaces it. `drift.sh` `PENDING_CHAIN` is EMPTY and a new tool never goes on it. A tool with `set -u` sources only `bashbasicsbyvk_menuchrome.sh`, never the engine import (it hooks echo / printf).
-    - **A new prompt kind = a new set of hooks around `_bvk_edit_run`**, plus one opener in `tests/prompt_template/prompt_test.py` (OPENERS), which runs the same selection / tap / suggestion-above / pasted-line-break checks on every kind. A prompt kind that has no opener there is not covered.
-18. **ONE menu layout for the whole project. No hand-drawn menus, no exemptions for stand-alone tools, no legacy.** (`_bvk_menu` in `script/file/settings/bashbasicsbyvk_choose.sh`; the doors `bashbasicsbyvk_choose` + `bashbasicsbyvk_choose.py`, `bashbasicsbyvk_yn`, `bashbasicsbyvk_ask`; `tests/menu_templates.sh`, `tests/choose/`.) This rule REPLACES the old exemption that a tool running as its own process may draw its own menu.
+    - **A new prompt kind = a new set of hooks around `_bvk_edit_run`**, plus one opener in `tests/pty/slow/input/prompt_template/prompt_test.py` (OPENERS), which runs the same selection / tap / suggestion-above / pasted-line-break checks on every kind. A prompt kind that has no opener there is not covered.
+18. **ONE menu layout for the whole project. No hand-drawn menus, no exemptions for stand-alone tools, no legacy.** (`_bvk_menu` in `script/file/settings/bashbasicsbyvk_choose.sh`; the doors `bashbasicsbyvk_choose` + `bashbasicsbyvk_choose.py`, `bashbasicsbyvk_yn`, `bashbasicsbyvk_ask`; `tests/pty/fast/menus/menu_templates.sh`, `tests/pty/slow/input/choose/`.) This rule REPLACES the old exemption that a tool running as its own process may draw its own menu.
     - **A question with fixed answers is asked through the menu, never printed.** In the app: `_bvk_menu` / `_bvk_yn` (rule 6) or the `_mc_select` family when the engine is loaded. In a tool that runs as its own process (bash or python, any file name, with or without an extension): `answer=$(bashbasicsbyvk_choose "Question?" [-t Title] [-i emoji] [-d key] [-k] [-m] [-b] key:Label ...)` (exit 0 answered and the key on stdout, 2 no answer, 3 not installed, 4 u with `-b`); `-m` boxes take the app's row grammar (`N` toggles; `1,3-5` · `a` · `a-2` set the selection, parsed by `parse_selection`): never a second syntax. python `import bashbasicsbyvk_choose as choose; choose.ask("Question?", [("1", "Label"), ...], default="1", multi=False, back=False)` (a key, or a list of keys with `multi=True`; raises `EOFError`, or `Back` with `back=True`). Yes/no stays `bashbasicsbyvk_yn`.
     - **Forbidden in any tool or menu:** `echo "1) ..."` / `print("  1 = ...")` option rows, a hand-made `Select ...:` / `Enter choice [1-4]:` prompt, a hand-drawn rule (`━━━`, `───`) around options, a hand-typed `u) Back   q) Quit` row, and an `(a/b)` / `(1/2)` / `(t/l)` typed question. The look (header, rules, rows, footer, prompt) belongs to ONE place, so a change to it reaches every menu at once.
     - **The only plain `read` / `input()` left** is the last fallback for exit 3 (a broken install: no menu installed), marked `# bvk-read-ok: ...`.
-    - **Legacy is rewritten, not kept.** A hand-drawn menu found in the code is migrated in the same change; the lint (`tests/menu_templates.sh`, hand-drawn-menu check) scans every file under `script/`, also files with no extension, so none can hide. A file that really needs an exception is listed in `tests/known_failing.txt` WITH a reason and a date; it never gets a silent pass.
+    - **Legacy is rewritten, not kept.** A hand-drawn menu found in the code is migrated in the same change; the lint (`tests/pty/fast/menus/menu_templates.sh`, hand-drawn-menu check) scans every file under `script/`, also files with no extension, so none can hide. A file that really needs an exception is listed in `tests/known_failing.txt` WITH a reason and a date; it never gets a silent pass.
     - **A migrated tool keeps its flow:** the answer keys keep their old values (`1` `2` `t` `l`), so the code after the question does not change; `u` / `q` follow rule 15.
 
 ## ADVERT — what a menu accepts is declared once; cc and the footer only render it  (script/file/engine/bashbasicsbyvk_advert.sh)
@@ -366,7 +381,6 @@ seen elsewhere, grep for the helper first.
 - DISPATCHER acceptor (same file): `_dp_accept MENU KEY HANDLER "desc" [FOOT_PRIO] [SHOWN] [WHEN_FN]` tells the dispatcher what a menu accepts (FOOT_PRIO > 0 = "show this in the footer"),
   `_dp_when MENU WHEN_FN KEY…` marks keys that exist only while WHEN_FN is true (a tab, a mode: fx's UDF tab), `_dp_accepts` is the judge, `_dp_run` runs the handler.
   cc and every footer pick these up through `_ad_from_dispatcher`. A state-dependent command MUST use `_dp_when`, otherwise cc advertises it where the menu refuses it.
-- Tests (all menus, no terminal, ~20 s):  `bash tests/advert_score.sh`  = unit (`cc_footer_truth.sh`) + static score of every menu (`advert_static.py`: declared vs handled vs footer,
-  coverage = handled ∩ declared / handled × 100; phantom in cc −100; phantom in footer −1000; a declared handler that does not exist counts as a phantom) + `cmd_drift.sh`.
-  The slow live cross-check that types into the real app is `python3 tests/advert_pty.py` (about an hour for everything): run it when you want proof, not on every change.
+- Tests (all menus, no terminal): `bash tests/run.sh` (static): `advert` = unit test of the registry, `footer` = every footer key is accepted and listed by cc, `arms` = declared (cc) vs handled by the loop vs footer
+  (coverage = handled ∩ declared / handled × 100), `intent` = every word of every menu through the real resolver. The old live cross-check that typed into the real app (`advert_pty.py`, about an hour) is retired in `tests/pty/retired/`.
   The test must never type `kl` (`kill -9 -1`).

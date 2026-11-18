@@ -12,7 +12,7 @@ clr        .mapto()  clr        from bashbasicsbyvk_switchmenucommands.sh
 q          .mapto()  q          from bashbasicsbyvk_switchmenucommands.sh
 -h         .mapto()  -h         from bashbasicsbyvk_switchmenucommands.sh
 u          .mapto()  u          from bashbasicsbyvk_switchmenucommands.sh
-forceshow  .mapto()  forceshow  from bashbasicsbyvk_switchmenucommands.sh
+fs          .mapto()  fs          from bashbasicsbyvk_switchmenucommands.sh
 a          .mapto()  a          from bashbasicsbyvk_switchmenucommands.sh
 x          .mapto()  x          from bashbasicsbyvk_switchmenucommands.sh
 e          .mapto()  e          from bashbasicsbyvk_switchmenucommands.sh
@@ -52,7 +52,6 @@ nf         .mapto()  block()
 cs         .mapto()  block()
 gd         .mapto()  block()
 gdx        .mapto()  block()
-fs         .mapto()  block()
 ns         .mapto()  block()
 fa         .mapto()  fa         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before
 z-         .mapto()  z-         from bashbasicsbyvk_maincommands.sh   # loop mentions it — kept as before

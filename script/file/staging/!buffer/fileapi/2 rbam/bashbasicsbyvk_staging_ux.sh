@@ -166,7 +166,6 @@ _ux_recv_fek() {                              # $1 = rbam rel id of the sender -
     return 1; }
   _UX_RFEK[$rid]="$fek"; _UX_FEK="$fek"
 }
-_ux_forget_keys() { _UX_RFEK=(); _UX_FEK=""; _UX_K=""; _UX_FEK_SELF=""; _UX_FEK_SELF_FOR=""; }
 
 # share-detail JSON (from GET /ux/<id>) -> _UX_K (the share's data key)
 _ux_K_of() {

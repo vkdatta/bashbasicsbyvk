@@ -358,7 +358,6 @@ _bb_device_cfg() {
   _bb_cfg_header X-Telemetry-Id "$id"
   _bb_cfg_header X-Telemetry-Sig "$sg"
 }
-_bb_device_ready() { _bb_device_cfg >/dev/null 2>&1; }
 
 # _bb_call <METHOD> <path> [json-body] [max-seconds=40]     → _BB_STATUS (000 = unreachable) and _BB_BODY.
 # THE one authenticated JSON call to the worker: api.sh (_api_http) and staging_ux.sh (_ux_http) are thin wrappers around it.

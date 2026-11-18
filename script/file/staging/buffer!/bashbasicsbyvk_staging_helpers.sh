@@ -340,7 +340,7 @@ _sp_guard_and_resolve() {
     return 1
   fi
   if $imaginary_mode; then
-    echo "🔴  Too many items to index directly — narrow the view (group filter or forceshow) before using ${pfx} shortcuts."
+    echo "🔴  Too many items to index directly — narrow the view (group filter or fs) before using ${pfx} shortcuts."
     return 1
   fi
   _sp_resolve_itemlist "$itemlist"

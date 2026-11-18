@@ -1,0 +1,65 @@
+# THE pty list.  name|folder|timeout-seconds|command|needs|serial     (folder = fast or slow = where the test lives: tests/pty/<folder>/<topic>/...)
+# Run:  bash tests/run.sh pty fast [name..]   |   bash tests/run.sh pty slow [name..]   |   bash tests/run.sh pty list
+# These drive a real terminal or are old shell tests: use them only by the decision matrix in AGENTS.md (deep trace / screenshots).
+archive|fast|60|bash tests/pty/fast/engine/archive/archive_test.sh|
+deps|fast|60|bash tests/pty/fast/engine/deps/deps_test.sh|
+deps_menu|fast|60|python3 tests/pty/fast/engine/deps/standalone_test.py|python3
+engine_heal|fast|40|bash tests/pty/fast/engine/engine_heal.sh|python3
+engine_target|fast|20|bash tests/pty/fast/engine/engine_target.sh|
+lint_waits|fast|20|bash tests/pty/fast/engine/lint_waits.sh|
+loadmap|fast|60|bash tests/pty/fast/engine/loadmap.sh|python3
+regex_portability|fast|30|bash tests/pty/fast/engine/regex_portability.sh|
+startup_spawns|fast|30|bash tests/pty/fast/engine/startup_spawns.sh|
+sys|fast|30|bash tests/pty/fast/engine/sys/sys_test.sh|python3
+track|fast|60|bash tests/pty/fast/engine/track/track_test.sh|python3
+wheel_target|fast|120|bash tests/pty/fast/engine/wheel_target.sh|python3
+xtr_info|fast|40|bash tests/pty/fast/engine/xtr_info.sh|python3
+adf_registry|fast|20|bash tests/pty/fast/menus/adf_registry.sh|
+buffer_sets|fast|40|bash tests/pty/fast/menus/buffer_sets.sh|
+cmd_docs|fast|30|bash tests/pty/fast/menus/cmd_docs.sh|
+cmd_drift|fast|90|bash tests/pty/fast/menus/cmd_drift.sh|
+delete_confirm|fast|30|bash tests/pty/fast/menus/delete_confirm.sh|
+group_view|fast|40|bash tests/pty/fast/menus/group_view.sh|
+hint_leak|fast|20|bash tests/pty/fast/menus/hint_leak.sh|
+hints|fast|60|python3 tests/pty/fast/menus/hints/hint_test.py|python3
+menu_templates|fast|40|bash tests/pty/fast/menus/menu_templates.sh|
+pick_drift|fast|40|bash tests/pty/fast/menus/pick_drift.sh|python3
+rename_screen|fast|240|bash tests/pty/fast/menus/rename_screen.sh|python3
+results_screen|fast|240|bash tests/pty/fast/menus/results_screen.sh|python3
+settings_deep|fast|30|bash tests/pty/fast/menus/settings_deep.sh|python3
+settings_desc|fast|40|bash tests/pty/fast/menus/settings_desc.sh|python3
+settings_keys|fast|30|bash tests/pty/fast/menus/settings_keys.sh|
+tabmenu|fast|30|bash tests/pty/fast/menus/tabmenu.sh|
+xui_wiring|fast|30|bash tests/pty/fast/menus/xui_wiring.sh|python3
+cell_width|fast|20|bash tests/pty/fast/terminal/cell_width.sh|
+exactbytes|fast|30|bash tests/pty/fast/terminal/exactbytes.sh|
+loadtime_print|fast|60|bash tests/pty/fast/terminal/loadtime_print.sh|python3
+polyglot_unit|fast|30|python3 tests/pty/fast/terminal/polyglot/polyglot_test.py|python3
+smartload|fast|90|bash tests/pty/fast/terminal/smartload.sh|python3
+stale_size|fast|30|bash tests/pty/fast/terminal/stale_size/run.sh|python3
+width|fast|20|bash tests/pty/fast/terminal/width/width_consistency.sh|
+wrap_input|fast|60|bash tests/pty/fast/terminal/wrap_input/run.sh|python3
+xfer_ux|fast|40|node tests/pty/fast/terminal/xfer_ux.mjs|node
+e2e_pending|slow|300|bash tests/pty/slow/apps/e2e_pending.sh|fileapi
+e2e_services|slow|300|bash tests/pty/slow/apps/e2e_services.sh|fileapi
+findrep|slow|120|bash tests/pty/slow/apps/findrep/findrep_run.sh quick|python3
+findrep_full|slow|600|bash tests/pty/slow/apps/findrep/findrep_run.sh full|python3
+github_engine|slow|120|python3 tests/pty/slow/apps/github/github_test.py|python3
+github_ui|slow|180|python3 tests/pty/slow/apps/github/ui_test.py|python3
+github_upgrade_shared|slow|30|bash tests/pty/slow/apps/github/upgrade_shared.sh|python3
+infinity_in_app|slow|240|python3 tests/pty/slow/apps/infinity/infinity_test.py|python3
+resume_inflight|slow|90|bash tests/pty/slow/apps/resume_inflight.sh|node
+choose|slow|90|python3 tests/pty/slow/input/choose/choose_test.py|python3
+choose_door|slow|90|python3 tests/pty/slow/input/choose/door_test.py|python3
+choose_plain|slow|20|bash tests/pty/slow/input/choose/plain_test.sh|
+choose_typed|slow|90|python3 tests/pty/slow/input/choose/typed_test.py|python3
+mouse|slow|240|python3 tests/pty/slow/input/mouse/mouse_test.py|python3
+nav_back|slow|300|python3 tests/pty/slow/input/nav_back/nav_test.py|python3
+paste_input|slow|180|bash tests/pty/slow/input/paste_input/run.sh|python3
+prompt_chain|slow|120|python3 tests/pty/slow/input/prompt_template/chain_test.py|python3
+prompt_drift|slow|20|bash tests/pty/slow/input/prompt_template/drift.sh|
+prompt_template|slow|240|python3 tests/pty/slow/input/prompt_template/prompt_test.py|python3
+read_lint|slow|90|python3 tests/pty/slow/input/prompt_template/read_lint.py|python3
+textedit|slow|180|python3 tests/pty/slow/input/textedit/textedit_pty_test.py|python3
+textedit_unit|slow|30|bash tests/pty/slow/input/textedit/textedit_unit.sh|
+yn_tools|slow|120|python3 tests/pty/slow/input/yn/yn_test.py|python3

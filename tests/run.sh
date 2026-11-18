@@ -1,79 +1,55 @@
 #!/usr/bin/env bash
-# THE way to run tests.  Seconds, not half an hour: independent tests run in parallel, every one has a hard timeout, failures print the moment they happen.
-#   bash tests/run.sh fast                 the quick tier (what you run after most changes)
-#   bash tests/run.sh for [files...]       only the tests that cover those files (tests/covers.map); no files = `git diff --name-only`
-#   bash tests/run.sh all                  everything (before release / when asked for the full suite)
-#   bash tests/run.sh <name> [name...]     named tests (see `list`)         bash tests/run.sh list
-# env: JOBS=<n> parallel jobs (default: one per CPU, at least 2; longest tests start first; a test marked `serial` in tests.list field 6 runs alone afterwards)  TEST_TIME_FACTOR=<n> stretch every wait (default: jobs / cpus)   KEEP=1 keep the logs   Exit 0 = nothing unexpected failed.  SKIP is never a pass: it is listed at the end.
+# tests/run.sh — THE runner.  Default = the STATIC suites (tests/static/suites.list): no terminal, no sleeps, hard-capped, ~1 s warm.
+#   bash tests/run.sh                       the static suites (what you run once after a change)
+#   bash tests/run.sh baseline              OWNER ONLY: accept today's findings as known drift (rewrites tests/static/baseline/*.txt)
+#   bash tests/run.sh pty fast [name..]     pty / old shell tests in tests/pty/fast  (deep trace, screenshots: see AGENTS.md decision matrix)
+#   bash tests/run.sh pty slow [name..]     the slow ones in tests/pty/slow (release time, or a bug no static test can show)
+#   bash tests/run.sh pty list              what is in tests/pty/pty.list
+#   bash tests/run.sh list                  the static suites
+# Output is capped at 40 lines: one line per NEW finding, then one RESULT line.   env: JOBS=<n> (default: CPUs, min 2)   KEEP=1 keeps the logs
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT" || exit 2
-source tests/wait_lib.sh
-CPUS="$(nproc 2>/dev/null || echo 1)"; JOBS="${JOBS:-$(( CPUS < 2 ? 2 : CPUS ))}"    # max parallel: one job per CPU (never lower it; a test that needs order is marked `serial` in tests.list field 6)
-# more jobs than cores = every app is slower: stretch all waits by that ratio (a timeout costs nothing when the app answers, and it keeps load from causing false failures)
-export TEST_TIME_FACTOR="${TEST_TIME_FACTOR:-$(( (JOBS + CPUS - 1) / CPUS ))}"
-OUT="$(mktemp -d /tmp/bvk_run.XXXXXX)"; [ "${KEEP:-0}" = 1 ] || trap 'rm -rf "$OUT"' EXIT
-mapfile -t ROWS < <(grep -vE '^[[:space:]]*(#|$)' tests/tests.list)
-declare -A KNOWN; while IFS=$'\t' read -r n why; do [ -n "$n" ] && KNOWN[$n]="$why"; done < <(grep -vE '^[[:space:]]*(#|$)' tests/known_failing.txt)
-field() { cut -d'|' -f"$2" <<<"$1"; }
-names_of() { local r; for r in "${ROWS[@]}"; do [ -z "$1" ] || [ "$(field "$r" 2)" = "$1" ] && field "$r" 1; done; }
-mode="${1:-fast}"; [ $# -gt 0 ] && shift
+CPUS="$(nproc 2>/dev/null || echo 2)"; JOBS="${JOBS:-$(( CPUS < 2 ? 2 : CPUS ))}"; MAXLINES=40
+OUT="$(mktemp -d "${TMPDIR:-/tmp}/bvk_run.XXXXXX")"; [ "${KEEP:-0}" = 1 ] || trap 'rm -rf "$OUT"' EXIT
+now() { date +%s.%N; }; T0="$(now)"; secs() { awk -v a="$T0" -v b="$(now)" 'BEGIN{printf "%.1f", b-a}'; }
+mode="${1:-default}"; [ $# -gt 0 ] && shift
+rows_of() { grep -vE '^[[:space:]]*(#|$)' "tests/$1" 2>/dev/null; }      # suites.list lives in tests/static/, the pty list in tests/pty/
+need_missing() { case "$1" in node|python3) command -v "$1" >/dev/null 2>&1 || echo "$1 not installed" ;; fileapi) [ -d "$ROOT/../fileapi/test" ] || echo "../fileapi repo not found" ;; esac; }
+PTYTIER=""
 case "$mode" in
-  list) for r in "${ROWS[@]}"; do printf '%-18s %-5s %4ss  %s\n' "$(field "$r" 1)" "$(field "$r" 2)" "$(field "$r" 3)" "$(field "$r" 4)"; done; exit 0 ;;
-  fast) SEL=($(names_of fast)) ;;
-  all)  SEL=($(names_of "")) ;;
-  for)  files=("$@"); [ ${#files[@]} -eq 0 ] && mapfile -t files < <(git diff --name-only HEAD 2>/dev/null)
-        [ ${#files[@]} -eq 0 ] && { echo "no changed files given or found - running the fast tier"; SEL=($(names_of fast)); }
-        declare -A pick; pick[lint_waits]=1
-        for f in "${files[@]}"; do hit=0
-          while IFS=$'\t' read -r re ts; do [[ "$f" =~ $re ]] && { hit=1; for t in $ts; do pick[$t]=1; done; }; done < <(grep -vE '^[[:space:]]*(#|$)' tests/covers.map)
-          [ $hit = 0 ] && for t in $(names_of fast); do pick[$t]=1; done
-        done
-        SEL=(); for n in $(names_of ""); do [ -n "${pick[$n]:-}" ] && SEL+=("$n"); done ;;
-  *)    SEL=("$mode" "$@") ;;
+  list) echo "== static/suites.list"; rows_of static/suites.list | cut -d'|' -f1 ; exit 0 ;;
+  baseline) for f in tests/static/t_*.py; do python3 -I "$f" --write-baseline; done; exit 0 ;;
+  default) LIST=static/suites.list; CAP=25; FMT=2 ;;
+  pty) PTYTIER="${1:-}"; [ $# -gt 0 ] && shift
+       case "$PTYTIER" in
+         list) echo "== pty/pty.list  (name folder timeout)"; rows_of pty/pty.list | cut -d'|' -f1,2,3 | awk -F'|' '{printf "  %-24s %-5s %s\n",$1,$2,$3}'; exit 0 ;;
+         fast) CAP=240 ;; slow) CAP=600 ;;
+         *) echo "usage: bash tests/run.sh pty fast|slow|list [name..]"; exit 2 ;;
+       esac; LIST=pty/pty.list; FMT=5 ;;
+  *) echo "unknown mode $mode (default | baseline | pty fast|slow|list | list)"; exit 2 ;;
 esac
-[ ${#SEL[@]} -gt 0 ] || { echo "nothing selected"; exit 2; }
-row_of() { local r; for r in "${ROWS[@]}"; do [ "$(field "$r" 1)" = "$1" ] && { printf '%s' "$r"; return; }; done; }
-need_missing() { case "$1" in node|python3) command -v "$1" >/dev/null 2>&1 || echo "$1 not installed" ;; fileapi) [ -d "$ROOT/../fileapi/test" ] || echo "../fileapi repo not found (set FILEAPI=...)" ;; esac; }
-run_one() {   # runs in a background job: writes $OUT/<n>.rc (PASS/FAIL/SKIP/TIMEOUT), .secs, .log
-  local n="$1" r cmd to need why t0; r="$(row_of "$n")"
-  [ -n "$r" ] || { echo "no such test: $n" >"$OUT/$n.log"; echo FAIL >"$OUT/$n.rc"; echo 0 >"$OUT/$n.secs"; return; }
-  to="$(field "$r" 3)"; cmd="$(field "$r" 4)"; need="$(field "$r" 5)"
-  to=$(( to * TEST_TIME_FACTOR ))   # the hard limit grows with the waits inside the tests (same factor); smartload: 71 s alone, 90+ s at x2-x3, listed limit 90
-  why="$(need_missing "$need")"; [ -n "$need" ] && [ -n "$why" ] && { echo "$why" >"$OUT/$n.log"; echo SKIP >"$OUT/$n.rc"; echo 0 >"$OUT/$n.secs"; return; }
-  mkdir -p "$OUT/tmp.$n"; t0="$(_wl_now)"
-  TMPDIR="$OUT/tmp.$n" timeout -k 5 "$to" bash -c "$cmd" >"$OUT/$n.log" 2>&1; local rc=$?
-  bvk_reap "$OUT/tmp.$n"; rm -rf "$OUT/tmp.$n"          # every temp dir of this test lives under its own TMPDIR: whatever the app left running from there (daemons, watchers) is stopped
-  echo "$(( ($(_wl_now) - t0) / 10000 ))" >"$OUT/$n.secs"
-  if [ $rc = 0 ]; then echo PASS >"$OUT/$n.rc"; elif [ $rc = 124 ] || [ $rc = 137 ]; then echo "TIMEOUT after ${to}s" >>"$OUT/$n.log"; echo TIMEOUT >"$OUT/$n.rc"; else echo FAIL >"$OUT/$n.rc"; fi
-}
-report() {   # print one finished test the moment it ends
-  local n="$1" st secs; st="$(<"$OUT/$n.rc")"; secs="$(<"$OUT/$n.secs")"; secs="$((secs/100)).$(printf '%02d' $((secs%100)))"
+declare -a NAMES CMDS CAPS; declare -A WANT; for n in "$@"; do WANT[$n]=1; done
+while IFS= read -r r; do
+  n="${r%%|*}"; if [ -n "$PTYTIER" ]; then f="${r#*|}"; f="${f%%|*}"; [ "$f" = "$PTYTIER" ] || continue; fi; [ $# -gt 0 ] && [ -z "${WANT[$n]:-}" ] && continue
+  if [ $FMT = 2 ]; then c="${r#*|}"; to=$CAP; nd=""; else IFS='|' read -r _ _ to c nd _ <<<"$r"; [ "${to:-0}" -gt "$CAP" ] && to=$CAP; fi
+  NAMES+=("$n"); CMDS+=("$c"); CAPS+=("$to"); echo "$nd" >"$OUT/$n.need"
+done < <(rows_of "$LIST")
+[ ${#NAMES[@]} -gt 0 ] || { echo "nothing selected"; exit 2; }
+run_one() { local i="$1" n="${NAMES[$1]}" miss; miss="$(need_missing "$(<"$OUT/$n.need")")"
+  [ -n "$miss" ] && { echo "SKIP $miss" >"$OUT/$n.log"; echo SKIP >"$OUT/$n.rc"; return; }
+  TEST_TIME_FACTOR=1 TMPDIR="${TMPDIR_FOR_TEST:-$TMPDIR}" timeout -k 2 "${CAPS[$i]}" bash -c "${CMDS[$i]}" >"$OUT/$n.log" 2>&1; local rc=$?
+  if [ $rc = 0 ]; then echo PASS >"$OUT/$n.rc"; elif [ $rc = 124 ] || [ $rc = 137 ]; then echo "TIMEOUT after ${CAPS[$i]}s" >>"$OUT/$n.log"; echo TIMEOUT >"$OUT/$n.rc"; else echo FAIL >"$OUT/$n.rc"; fi; }
+[ $mode = default ] || export TMPDIR_FOR_TEST="$OUT"      # the old tests keep per-run temp dirs; the static suites keep their cache in the normal temp dir
+running=0
+for i in "${!NAMES[@]}"; do run_one "$i" & running=$((running+1)); [ "$running" -ge "$JOBS" ] && { wait -n; running=$((running-1)); }; done; wait
+declare -A KNOWN; while IFS=$'\t' read -r n why; do [ -n "$n" ] && KNOWN[$n]="$why"; done < <(grep -vE '^[[:space:]]*(#|$)' tests/pty/known_failing.txt 2>/dev/null)
+bad=0; pass=0; skip=0; { for n in "${NAMES[@]}"; do st="$(<"$OUT/$n.rc")"
   case "$st" in
-    PASS) if [ -n "${KNOWN[$n]:-}" ]; then printf '  PASS    %-18s %6ss   (listed in known_failing.txt - it passes now: remove the line)\n' "$n" "$secs"; else printf '  PASS    %-18s %6ss\n' "$n" "$secs"; fi ;;
-    SKIP) printf '  SKIP    %-18s          %s\n' "$n" "$(<"$OUT/$n.log")" ;;
-    *) if [ -n "${KNOWN[$n]:-}" ]; then printf '  KNOWN   %-18s %6ss   already failing: %s\n' "$n" "$secs" "${KNOWN[$n]}"
-       else printf '  %-7s %-18s %6ss   <- what failed (FAIL lines first, then the last lines of its output):\n' "$st" "$n" "$secs"
-            { grep -a 'FAIL\|TIMEOUT' "$OUT/$n.log" | cut -c1-200 | head -12; echo '  ...'; grep -avE '^[[:space:]]*(ok|PASS)[[:space:]]' "$OUT/$n.log" | tail -14; } | sed 's/^/          | /'; fi ;;
-  esac
-}
-PAR=(); SER=()   # longest first (the slowest tests start first, so they are not the tail of the run); `serial` tests (field 6) run alone, after the parallel ones
-while read -r _ n; do [ -z "$n" ] && continue; [ "$(field "$(row_of "$n")" 6)" = serial ] && SER+=("$n") || PAR+=("$n"); done < <(for n in "${SEL[@]}"; do t="$(field "$(row_of "$n")" 3)"; echo "${t:-0} $n"; done | sort -rn)
-t_start; declare -A PID REPORTED; running=0
-for n in "${PAR[@]}"; do
-  run_one "$n" & PID[$n]=$!; running=$((running+1))
-  while [ "$running" -ge "$JOBS" ]; do
-    wait -n; running=$((running-1))
-    for m in "${!PID[@]}"; do [ -s "$OUT/$m.rc" ] && [ -z "${REPORTED[$m]:-}" ] && { REPORTED[$m]=1; report "$m"; }; done
-  done
-done
-while [ "$running" -gt 0 ]; do
-  wait -n; running=$((running-1))
-  for m in "${!PID[@]}"; do [ -s "$OUT/$m.rc" ] && [ -z "${REPORTED[$m]:-}" ] && { REPORTED[$m]=1; report "$m"; }; done
-done
-for n in "${SER[@]}"; do run_one "$n"; PID[$n]=0; REPORTED[$n]=1; report "$n"; done
-for m in "${!PID[@]}"; do [ -z "${REPORTED[$m]:-}" ] && report "$m"; done
-bad=0; npass=0; ndone=0; skipped=(); for n in "${SEL[@]}"; do st="$(<"$OUT/$n.rc")"
-  case "$st" in PASS) npass=$((npass+1)); ndone=$((ndone+1)) ;; SKIP) skipped+=("$n") ;; *) ndone=$((ndone+1)); [ -z "${KNOWN[$n]:-}" ] && bad=$((bad+1)) ;; esac; done
-echo "  ----"; echo "  ${#SEL[@]} test(s) in $(t_since)s wall time (JOBS=$JOBS, waits x$TEST_TIME_FACTOR)"
-echo "  STATUS: $npass/$ndone/${#SEL[@]}  (passed/completed/total; a skip is not completed)  <- copy this into the delivery line: <task name> (tests: $npass/$ndone/${#SEL[@]})"
-[ ${#skipped[@]} -gt 0 ] && echo "  NOT RUN (skipped, so NOT verified): ${skipped[*]}"
-if [ $bad = 0 ]; then echo "  RESULT: OK${skipped:+ - but ${#skipped[@]} skipped}"; exit 0; else echo "  RESULT: $bad FAILED"; [ "${KEEP:-0}" = 1 ] && echo "  logs: $OUT"; exit 1; fi
+    PASS) pass=$((pass+1)); [ $mode = default ] && grep -a '^[a-z]*: ' "$OUT/$n.log" | head -1 | sed 's/^/  /' ;;
+    SKIP) skip=$((skip+1)); echo "  SKIP  $n: $(<"$OUT/$n.log")" ;;
+    *) if [ -n "${KNOWN[$n]:-}" ]; then echo "  KNOWN $n (known_failing.txt)"; else bad=$((bad+1)); echo "  $st  $n"
+         grep -a 'NEW\|FAIL\|TIMEOUT' "$OUT/$n.log" | cut -c1-190 | head -12 | sed 's/^/      /'
+         [ $mode = default ] && grep -a '^[a-z]*: ' "$OUT/$n.log" | head -1 | sed 's/^/      /'; fi ;;
+  esac; done; } > "$OUT/report.txt"
+total=$(wc -l <"$OUT/report.txt"); head -n $MAXLINES "$OUT/report.txt"; [ "$total" -gt $MAXLINES ] && echo "  ... $((total-MAXLINES)) more lines (KEEP=1 keeps the logs)"
+echo "  RESULT: $([ $bad = 0 ] && echo OK || echo "$bad FAILED")   ($pass passed, $skip skipped, ${#NAMES[@]} total, $(secs)s)"; [ "${KEEP:-0}" = 1 ] && echo "  logs: $OUT"
+[ $bad = 0 ]

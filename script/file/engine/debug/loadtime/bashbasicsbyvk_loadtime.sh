@@ -82,8 +82,6 @@ _lt_mark() {
   [ "$_LT_ON" = 1 ] && [ -n "$_LT_PEND" ] && [ -z "$_LT_MUTE" ] || return 0
   _lt_w M "${EPOCHREALTIME/[.,]/}" 0 "$1" "${2:-}"
 }
-# run a command as one step, from the shell (not for functions that set variables in a $( ) )
-_lt_run() { local _n="$1"; shift; _lt_b "$_n"; "$@"; local _rc=$?; _lt_e; return $_rc; }
 
 # Run as a background helper: its commands are logged, but flagged "did not block the menu".
 _lt_bg()   { _LT_BG=1; export _LT_BG; }
