@@ -20,13 +20,13 @@ jobs:
       - name: Build bvk-ls and bvk-fr (darwin)
         run: |
           for e in ls fr; do
-            (cd "script/file/engine/bvk-$e" && chmod +x bashbasicsbyvk_build.sh && BVK_ONLY=darwin REQUIRE_DARWIN=1 ./bashbasicsbyvk_build.sh)
+            (cd "script/file/engine/native/bvk-$e" && chmod +x bashbasicsbyvk_build.sh && BVK_ONLY=darwin REQUIRE_DARWIN=1 ./bashbasicsbyvk_build.sh)
           done
 
       - name: Verify darwin engines
         run: |
           set -x
-          cd script/file/engine
+          cd script/file/engine/native
           for e in ls fr; do
             file "bvk-$e/bvk-$e-darwin-arm64" | grep -q "Mach-O 64-bit executable arm64"
             file "bvk-$e/bvk-$e-darwin-amd64" | grep -q "Mach-O 64-bit executable x86_64"
@@ -45,8 +45,8 @@ jobs:
         with:
           name: darwin-engines
           path: |
-            script/file/engine/bvk-ls/bvk-ls-darwin-*
-            script/file/engine/bvk-fr/bvk-fr-darwin-*
+            script/file/engine/native/bvk-ls/bvk-ls-darwin-*
+            script/file/engine/native/bvk-fr/bvk-fr-darwin-*
           if-no-files-found: error
 
   build:
@@ -86,13 +86,13 @@ jobs:
 
       # ── bvk-ls: the C drill engine ─────────────────────────────────────────
       - name: Build bvk-ls
-        working-directory: script/file/engine/bvk-ls
+        working-directory: script/file/engine/native/bvk-ls
         run: |
           chmod +x bashbasicsbyvk_build.sh
           BVK_ONLY="linux android freebsd" REQUIRE_ANDROID=1 REQUIRE_FREEBSD=1 ./bashbasicsbyvk_build.sh
 
       - name: Verify bvk-ls
-        working-directory: script/file/engine/bvk-ls
+        working-directory: script/file/engine/native/bvk-ls
         run: |
           file bvk-ls-linux-arm64
           file bvk-ls-linux-amd64
@@ -115,13 +115,13 @@ jobs:
 
       # ── bvk-fr: the C find & replace engine (find · preview · apply) ───────
       - name: Build bvk-fr
-        working-directory: script/file/engine/bvk-fr
+        working-directory: script/file/engine/native/bvk-fr
         run: |
           chmod +x bashbasicsbyvk_build.sh
           BVK_ONLY="linux android freebsd" REQUIRE_ANDROID=1 REQUIRE_FREEBSD=1 ./bashbasicsbyvk_build.sh
 
       - name: Verify bvk-fr
-        working-directory: script/file/engine/bvk-fr
+        working-directory: script/file/engine/native/bvk-fr
         run: |
           file bvk-fr-linux-arm64
           file bvk-fr-linux-amd64
@@ -163,7 +163,7 @@ jobs:
 
       # ── bvk-xfer: the Go FileAPI engine (pack · send · jget · netcheck) ─────
       - name: Vet bvk-xfer (every OS / CPU it is built for)
-        working-directory: script/file/engine/bvk-xfer
+        working-directory: script/file/engine/native/bvk-xfer
         run: |
           for t in linux/amd64 linux/arm64 linux/arm linux/386 darwin/amd64 darwin/arm64 freebsd/amd64; do
             echo "go vet $t"
@@ -171,13 +171,13 @@ jobs:
           done
 
       - name: Build bvk-xfer
-        working-directory: script/file/engine/bvk-xfer
+        working-directory: script/file/engine/native/bvk-xfer
         run: |
           chmod +x bashbasicsbyvk_build.sh
           REQUIRE_ANDROID=1 ./bashbasicsbyvk_build.sh
 
       - name: Verify bvk-xfer
-        working-directory: script/file/engine/bvk-xfer
+        working-directory: script/file/engine/native/bvk-xfer
         run: |
           file bvk-xfer-linux-arm64
           file bvk-xfer-linux-amd64
@@ -230,10 +230,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: darwin-engines
-          path: script/file/engine
+          path: script/file/engine/native
 
       - name: Mark engines executable
-        run: chmod +x script/file/engine/bvk-*/bvk-*-*-*
+        run: chmod +x script/file/engine/native/bvk-*/bvk-*-*-*
 
       # every machine type gets a wheel with exactly its own three binaries, tagged for its platform (never py3-none-any)
       - name: Verify one wheel per machine type
@@ -248,36 +248,36 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add \
-            script/file/engine/bvk-ls/bvk-ls-linux-arm64 \
-            script/file/engine/bvk-ls/bvk-ls-linux-amd64 \
-            script/file/engine/bvk-ls/bvk-ls-linux-arm \
-            script/file/engine/bvk-ls/bvk-ls-linux-386 \
-            script/file/engine/bvk-ls/bvk-ls-darwin-arm64 \
-            script/file/engine/bvk-ls/bvk-ls-darwin-amd64 \
-            script/file/engine/bvk-ls/bvk-ls-freebsd-amd64 \
-            script/file/engine/bvk-ls/bvk-ls-android-arm64 \
-            script/file/engine/bvk-ls/bvk-ls-android-amd64 \
-            script/file/engine/bvk-ls/bvk-ls-android-arm \
-            script/file/engine/bvk-fr/bvk-fr-linux-arm64 \
-            script/file/engine/bvk-fr/bvk-fr-linux-amd64 \
-            script/file/engine/bvk-fr/bvk-fr-linux-arm \
-            script/file/engine/bvk-fr/bvk-fr-linux-386 \
-            script/file/engine/bvk-fr/bvk-fr-darwin-arm64 \
-            script/file/engine/bvk-fr/bvk-fr-darwin-amd64 \
-            script/file/engine/bvk-fr/bvk-fr-freebsd-amd64 \
-            script/file/engine/bvk-fr/bvk-fr-android-arm64 \
-            script/file/engine/bvk-fr/bvk-fr-android-amd64 \
-            script/file/engine/bvk-fr/bvk-fr-android-arm \
-            script/file/engine/bvk-xfer/bvk-xfer-linux-arm64 \
-            script/file/engine/bvk-xfer/bvk-xfer-linux-amd64 \
-            script/file/engine/bvk-xfer/bvk-xfer-linux-arm \
-            script/file/engine/bvk-xfer/bvk-xfer-linux-386 \
-            script/file/engine/bvk-xfer/bvk-xfer-darwin-arm64 \
-            script/file/engine/bvk-xfer/bvk-xfer-darwin-amd64 \
-            script/file/engine/bvk-xfer/bvk-xfer-freebsd-amd64 \
-            script/file/engine/bvk-xfer/bvk-xfer-android-arm64 \
-            script/file/engine/bvk-xfer/bvk-xfer-android-amd64 \
-            script/file/engine/bvk-xfer/bvk-xfer-android-arm
+            script/file/engine/native/bvk-ls/bvk-ls-linux-arm64 \
+            script/file/engine/native/bvk-ls/bvk-ls-linux-amd64 \
+            script/file/engine/native/bvk-ls/bvk-ls-linux-arm \
+            script/file/engine/native/bvk-ls/bvk-ls-linux-386 \
+            script/file/engine/native/bvk-ls/bvk-ls-darwin-arm64 \
+            script/file/engine/native/bvk-ls/bvk-ls-darwin-amd64 \
+            script/file/engine/native/bvk-ls/bvk-ls-freebsd-amd64 \
+            script/file/engine/native/bvk-ls/bvk-ls-android-arm64 \
+            script/file/engine/native/bvk-ls/bvk-ls-android-amd64 \
+            script/file/engine/native/bvk-ls/bvk-ls-android-arm \
+            script/file/engine/native/bvk-fr/bvk-fr-linux-arm64 \
+            script/file/engine/native/bvk-fr/bvk-fr-linux-amd64 \
+            script/file/engine/native/bvk-fr/bvk-fr-linux-arm \
+            script/file/engine/native/bvk-fr/bvk-fr-linux-386 \
+            script/file/engine/native/bvk-fr/bvk-fr-darwin-arm64 \
+            script/file/engine/native/bvk-fr/bvk-fr-darwin-amd64 \
+            script/file/engine/native/bvk-fr/bvk-fr-freebsd-amd64 \
+            script/file/engine/native/bvk-fr/bvk-fr-android-arm64 \
+            script/file/engine/native/bvk-fr/bvk-fr-android-amd64 \
+            script/file/engine/native/bvk-fr/bvk-fr-android-arm \
+            script/file/engine/native/bvk-xfer/bvk-xfer-linux-arm64 \
+            script/file/engine/native/bvk-xfer/bvk-xfer-linux-amd64 \
+            script/file/engine/native/bvk-xfer/bvk-xfer-linux-arm \
+            script/file/engine/native/bvk-xfer/bvk-xfer-linux-386 \
+            script/file/engine/native/bvk-xfer/bvk-xfer-darwin-arm64 \
+            script/file/engine/native/bvk-xfer/bvk-xfer-darwin-amd64 \
+            script/file/engine/native/bvk-xfer/bvk-xfer-freebsd-amd64 \
+            script/file/engine/native/bvk-xfer/bvk-xfer-android-arm64 \
+            script/file/engine/native/bvk-xfer/bvk-xfer-android-amd64 \
+            script/file/engine/native/bvk-xfer/bvk-xfer-android-arm
 
           if ! git diff --cached --quiet; then
             COMMIT_MESSAGE="$(git log -1 --format=%s)"
