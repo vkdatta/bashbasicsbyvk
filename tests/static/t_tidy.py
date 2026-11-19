@@ -1,6 +1,6 @@
-"""TEMPLATE IDs — every menu has a 6-character template ID (🧶 tidy prints it), each ID is unique, and the list names real things.
+"""TEMPLATE IDs — every menu is built on a TEMPLATE and each template has a 6-character ID (🧶 tidy prints it); screens on the same template share the ID, and the list names real things.
 The rules live in script/file/engine/debug/tidy/bashbasicsbyvk_tidy_gen (problems()); this suite only runs them:
-  every command map and every menus.list function has an ID · IDs are 6 capital letters/digits with at least one of each · no ID or key twice ·
+  every command map and every menus.list function is listed · IDs are 6 capital letters/digits with at least one of each · one ID per template, one template per ID, no key twice ·
   every fn: key is a defined function and every map: key a command map · the file column is current · the `tidy` word is in every map that has `print`."""
 import os, re, sys
 from importlib.machinery import SourceFileLoader

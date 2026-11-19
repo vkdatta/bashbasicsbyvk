@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+`tidy` (BB-191120261420-1) printed a different template ID for every screen. A template ID must name the LAYOUT TEMPLATE a screen is built on, so screens on the same template share one ID. Reported: Delete and Rename use the same template but showed different IDs.
+
+1. HOW DID YOU DEBUG
+Read the user's message against my own design: I had assigned one ID per screen function and per command map, so two screens that render the same way could never agree. Looked at what Delete and Rename render with (`_mc_steps` / `_mc_select` / `_bvk_menu` question menus; rename's prompt), at the master template file (bashbasicsbyvk_tabmenu.sh) and at which renderer each of the 143 listed screens calls. Tested the stack lookup with fake Delete / Rename / picker flows (Delete and Rename now give the same ID). Ran `bash tests/run.sh` (10/10) and the loadmap check. The live app was NOT run.
+
+1. CAUSE
+I read "every menu gets a template ID" as "every menu gets its own ID". The list had one ID per key; nothing grouped screens by template.
+
+1. FIX
+bashbasicsbyvk_tidy.list is now `template ID | template | key | file` with ONE ID per template: step menu, settings list, tabbed menu, picker, split screen, list menu, main list (7 templates, 148 screens). The shared renderers themselves (`_mc_steps`, `_mc_select`, `_bvk_menu`, `_bvk_yn`, `_st_run`) are listed, so a question asked by ANY flow is "step menu" whichever flow asked it. bashbasicsbyvk_tidy_gen: `--templates`, `--list` (grouped), `--set KEY TEMPLATE` (move a screen to another template), `--newtemplate`, and a template guessed from the code for new screens. tidy.sh prints the ID, the template name and the screen. t_tidy / `problems()`: one ID per template and one template per ID. The grouping of the screens is a first cut from the code, not a judgement of the owner's: the owner corrects it with `--set`. Lesson: an ID that names a shared thing needs a many-to-one list; check the example the owner gives (Delete + Rename) against the output before shipping.

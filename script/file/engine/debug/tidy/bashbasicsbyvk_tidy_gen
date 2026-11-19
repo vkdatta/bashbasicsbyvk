@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""bashbasicsbyvk_tidy_gen — the template-ID list of every menu (🧶 tidy).
+"""bashbasicsbyvk_tidy_gen — the TEMPLATE IDs of the menus (🧶 tidy).
 
-  bashbasicsbyvk_tidy_gen --write        add an ID for every command map and every menus.list function that has none; refresh the file column
-  bashbasicsbyvk_tidy_gen --add KEY...   give an ID to a screen (fn:NAME for a function that draws a screen, map:NAME for a command map)
-  bashbasicsbyvk_tidy_gen --list         print the list (ID, key, file)
-  bashbasicsbyvk_tidy_gen --check        the list is well formed and complete (the static suite t_tidy.py runs the same rules)
+A template ID names a LAYOUT TEMPLATE, not a screen: every screen built on the same template has the same ID (Delete and Rename are both
+"step menu").  The list says which template each screen (fn:NAME) and each command map (map:NAME) is built on.
 
-An ID is 6 characters, capital letters and digits (no 0/O/1/I), at least one of each, unique, assigned ONCE and never changed:
-renaming a function means editing its key here, not drawing a new ID."""
+  bashbasicsbyvk_tidy_gen --templates            the templates: ID, name, how many screens
+  bashbasicsbyvk_tidy_gen --list                 every screen with its template ID
+  bashbasicsbyvk_tidy_gen --set KEY TEMPLATE     move a screen to another template (TEMPLATE = its name or its ID); KEY = fn:NAME or map:NAME
+  bashbasicsbyvk_tidy_gen --newtemplate NAME     draw an ID for a new template
+  bashbasicsbyvk_tidy_gen --write                add every command map and menus.list function that is not listed yet (its template is guessed from the code); refresh the file column
+  bashbasicsbyvk_tidy_gen --add KEY...           list a screen (guessed the same way; --set corrects a wrong guess)
+  bashbasicsbyvk_tidy_gen --check                the list is well formed and complete (the static suite t_tidy.py runs the same rules)
+
+An ID is 6 characters, capital letters and digits (no 0/O/1/I), at least one of each, one per template, assigned ONCE and never changed."""
 import os, re, secrets, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -16,9 +21,9 @@ LIST = os.path.join(HERE, 'bashbasicsbyvk_tidy.list')
 ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 ID_RE = re.compile(r'^(?=.*[A-Z])(?=.*[0-9])[A-Z0-9]{6}$')
 KEY_RE = re.compile(r'^(fn|map):[A-Za-z_][A-Za-z0-9_.:-]*$')
-HEAD = ('# bashbasicsbyvk_tidy.list — the template ID of every menu (🧶 tidy prints it).   ID | key | file\n'
-        '# key: fn:<function that draws the screen>  or  map:<command map>.  The innermost listed function on the call stack wins, then the map.\n'
-        '# IDs are assigned once by bashbasicsbyvk_tidy_gen and never change; the file column is refreshed by --write.\n')
+HEAD = ('# bashbasicsbyvk_tidy.list — the template of every menu (🧶 tidy prints its ID).   template ID | template | key | file\n'
+        '# One ID per TEMPLATE: screens built on the same template share the ID.  key: fn:<function that draws the screen> or map:<command map>.\n'
+        '# The innermost listed function on the call stack wins, then the map.  Change a screen with  bashbasicsbyvk_tidy_gen --set KEY TEMPLATE.\n')
 
 
 def rows():
@@ -27,7 +32,7 @@ def rows():
         for l in open(LIST, encoding='utf-8'):
             if not l.strip() or l.lstrip().startswith('#'): continue
             p = [x.strip() for x in l.rstrip('\n').split('|')]
-            p += [''] * (3 - len(p)); out.append(p[:3])
+            p += [''] * (4 - len(p)); out.append(p[:4])
     return out
 
 
@@ -64,6 +69,36 @@ def menus_list_funcs():
     return out
 
 
+RULES = [('picker', r'_pick_header|_pick_rows|_pick_suggest'), ('split screen', r'_xui_loop|_xui_screen'), ('tabbed menu', r'\b_tm_[a-z]+'),
+         ('settings list', r'\b_st_run\b'), ('step menu', r'_mc_steps|_mc_select|_mc_text|_mc_header|_mc_options|_mc_footer|\b_bvk_menu\b|\b_bvk_yn\b')]
+
+
+def body_of(name, path):
+    s = open(os.path.join(FILE, path), encoding='utf-8', errors='ignore').read()
+    m = re.search(r'^' + re.escape(name) + r'\(\)\s*\{', s, re.M)
+    if not m: return ''
+    n = re.search(r'^[A-Za-z_][A-Za-z0-9_.:-]*\(\)\s*\{', s[m.end():], re.M)
+    return s[m.end():m.end() + (n.start() if n else len(s))]
+
+
+def guess(key, fns, mps, by_key):
+    """the template a NEW screen most likely uses (--set corrects it)"""
+    kind, name = key.split(':', 1)
+    if kind == 'map':
+        if name == 'main': return 'main list'
+        if name == 'prompt': return 'step menu'
+        if name.startswith('xui_'): return 'split screen'
+        for l in open(os.path.join(FILE, 'cmdmap', 'bashbasicsbyvk_menus.list'), encoding='utf-8'):
+            p = [x.strip() for x in l.split('|')]
+            if len(p) > 1 and p[0] == name and 'fn:' + p[1] in by_key: return by_key['fn:' + p[1]]
+        return 'list menu'
+    if name.startswith('_xui_'): return 'split screen'
+    b = body_of(name, fns[name]) if name in fns else ''
+    for t, rx in RULES:
+        if re.search(rx, b): return t
+    return 'list menu'
+
+
 def new_id(used):
     while True:
         i = ''.join(secrets.choice(ALPHA) for _ in range(6))
@@ -71,11 +106,12 @@ def new_id(used):
 
 
 def problems(rs, fns, mps):
-    bad = []; seen = {}; keys = {}
-    for i, k, f in rs:
+    bad = []; ids = {}; names = {}; keys = {}
+    for i, t, k, f in rs:
         if not ID_RE.match(i): bad.append('bad ID %r (6 capital letters/digits, at least one of each): %s' % (i, k))
-        if i in seen: bad.append('ID %s is used twice: %s and %s' % (i, seen[i], k))
-        seen[i] = k
+        if not t: bad.append('%s has no template name' % k)
+        if ids.setdefault(i, t) != t: bad.append('ID %s is two templates: %r and %r' % (i, ids[i], t))
+        if names.setdefault(t, i) != i: bad.append('template %r has two IDs: %s and %s' % (t, names[t], i))
         if not KEY_RE.match(k): bad.append('bad key %r' % k); continue
         if k in keys: bad.append('key %s listed twice' % k)
         keys[k] = i
@@ -92,10 +128,10 @@ def problems(rs, fns, mps):
 
 
 def save(rs):
-    w = max([len(k) for _, k, _ in rs] + [4])
+    w = max([len(k) for _, _, k, _ in rs] + [4]); tw = max([len(t) for _, t, _, _ in rs] + [4])
     with open(LIST, 'w', encoding='utf-8') as f:
         f.write(HEAD)
-        for i, k, p in rs: f.write('%s | %s | %s\n' % (i, k.ljust(w), p))
+        for i, t, k, p in rs: f.write('%s | %s | %s | %s\n' % (i, t.ljust(tw), k.ljust(w), p))
 
 
 def main(a):
@@ -103,25 +139,40 @@ def main(a):
     if not a or a[0] == '--check':
         bad = problems(rs, fns, mps)
         for b in bad: print('  ' + b)
-        print('tidy: %d template IDs, %s' % (len(rs), 'OK' if not bad else '%d problems' % len(bad))); return 1 if bad else 0
-    if a[0] == '--list':
-        for i, k, p in rs: print('%s  %-34s %s' % (i, k, p))
+        print('tidy: %d screens, %d templates, %s' % (len(rs), len({t for _, t, _, _ in rs}), 'OK' if not bad else '%d problems' % len(bad))); return 1 if bad else 0
+    tid = {t: i for i, t, _, _ in rs}
+    if a[0] == '--templates':
+        for t, i in sorted(tid.items(), key=lambda x: x[1]): print('%s  %-14s %d screens' % (i, t, sum(1 for r in rs if r[1] == t)))
         return 0
+    if a[0] == '--list':
+        for i, t, k, p in sorted(rs, key=lambda r: (r[1], r[2])): print('%s  %-14s %-34s %s' % (i, t, k, p))
+        return 0
+    if a[0] == '--newtemplate' and len(a) == 2:
+        if a[1] in tid: print('exists:', tid[a[1]]); return 0
+        print('%s  %s  (it is listed once a screen uses it: --set KEY %s)' % (new_id(set(tid.values())), a[1], a[1])); return 0
+    if a[0] == '--set' and len(a) == 3:
+        t = next((n for n, i in tid.items() if a[2] in (n, i)), None)
+        if t is None: print('unknown template %r (--templates lists them; a new one: --newtemplate NAME, then put its ID in the list by hand)' % a[2]); return 2
+        hit = [r for r in rs if r[2] == a[1]]
+        if not hit: print('not listed:', a[1]); return 2
+        hit[0][0] = tid[t]; hit[0][1] = t; save(rs); print('%s is now template %s (%s)' % (a[1], t, tid[t])); return 0
     if a[0] in ('--write', '--add'):
-        used = {i for i, _, _ in rs}; have = {k for _, k, _ in rs}; want = []
-        if a[0] == '--add': want = a[1:]
-        else: want = ['map:' + m for m in sorted(mps)] + ['fn:' + f for f in menus_list_funcs()]
+        used = set(tid.values()); have = {k for _, _, k, _ in rs}
+        by_key = {k: t for _, t, k, _ in rs}
+        want = a[1:] if a[0] == '--add' else ['map:' + m for m in sorted(mps)] + ['fn:' + f for f in menus_list_funcs()]
         for k in want:
             if k in have: continue
             if not KEY_RE.match(k): print('bad key', k); return 2
             kind, name = k.split(':', 1)
             if (kind == 'fn' and name not in fns) or (kind == 'map' and name not in mps): print('unknown', k); return 2
-            i = new_id(used); used.add(i); have.add(k); rs.append([i, k, ''])
+            t = guess(k, fns, mps, by_key)
+            if t not in tid: tid[t] = new_id(used); used.add(tid[t])
+            have.add(k); by_key[k] = t; rs.append([tid[t], t, k, ''])
         for r in rs:
-            kind, name = r[1].split(':', 1)
-            r[2] = fns.get(name, r[2]) if kind == 'fn' else mps.get(name, r[2])
-        rs.sort(key=lambda r: (r[1].split(':')[0] != 'map', r[1]))
-        save(rs); print('tidy: %d template IDs written' % len(rs)); return 0
+            kind, name = r[2].split(':', 1)
+            r[3] = fns.get(name, r[3]) if kind == 'fn' else mps.get(name, r[3])
+        rs.sort(key=lambda r: (r[1], r[2]))
+        save(rs); print('tidy: %d screens written' % len(rs)); return 0
     print(__doc__); return 2
 
 
