@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+`tidy` still gave Delete and Rename different template IDs (Delete: JR9TZ5, Rename: YWW6WZ) although both show the same screen: action title, cd path, nav path, "Select items to <action>", the rows, `u) Up   q) Close`.
+
+1. HOW DID YOU DEBUG
+Found what draws that layout: `select_items_common` + `_pk_header` / `_pk_footer` (browse.sh), "ONE item-picker screen for every choose-items-to-<action> job" (Rename, Delete, Remove bookmark, Unorganise, Extract, Info ...). Listed which screens call which renderer (body scan): the picker function was not in the tidy list, so `tidy` took the innermost LISTED function on the call stack, i.e. a caller: `_rename_single_mutation` (step menu) for Rename, and no function at all (fall back to map:main) for Delete. Re-ran both flows against the new list with stand-in functions that have the same call chain: both now print 7UH852. Ran `bash tests/run.sh` (10/10). The live app was NOT run.
+
+1. CAUSE
+The list named flows (and a guess of their template) but not the renderers that draw the screen, so the answer depended on who happened to be on the stack.
+
+1. FIX
+`select_items_common` and `select_imaginary_items_common` are listed as template "item picker" (ID 7UH852); the former "picker" template (the Transfer / csv / fx navigators, same layout family: title, paths, rows, `u q`) is merged into it. The generator's guess puts any function that calls these helpers in "item picker". Lesson: a template is the code that DRAWS the screen; list that code first, flows second, and test the owner's own example (here Delete + Rename) against the real call chain before saying it is done.

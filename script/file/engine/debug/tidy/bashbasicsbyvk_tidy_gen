@@ -69,7 +69,7 @@ def menus_list_funcs():
     return out
 
 
-RULES = [('picker', r'_pick_header|_pick_rows|_pick_suggest'), ('split screen', r'_xui_loop|_xui_screen'), ('tabbed menu', r'\b_tm_[a-z]+'),
+RULES = [('item picker', r'select_items_common|select_imaginary_items_common|_pk_header|_pick_header|_pick_rows|_pick_suggest'), ('split screen', r'_xui_loop|_xui_screen'), ('tabbed menu', r'\b_tm_[a-z]+'),
          ('settings list', r'\b_st_run\b'), ('step menu', r'_mc_steps|_mc_select|_mc_text|_mc_header|_mc_options|_mc_footer|\b_bvk_menu\b|\b_bvk_yn\b')]
 
 

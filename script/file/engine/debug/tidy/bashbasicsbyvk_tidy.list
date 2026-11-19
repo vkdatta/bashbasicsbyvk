@@ -1,10 +1,16 @@
 # bashbasicsbyvk_tidy.list — the template of every menu (🧶 tidy prints its ID).   template ID | template | key | file
 # One ID per TEMPLATE: screens built on the same template share the ID.  key: fn:<function that draws the screen> or map:<command map>.
 # The innermost listed function on the call stack wins, then the map.  Change a screen with  bashbasicsbyvk_tidy_gen --set KEY TEMPLATE.
+7UH852 | item picker   | fn:_file_picker                  | loops/iloop/fx/bashbasicsbyvk_csv.sh
+7UH852 | item picker   | fn:_fx_sel_browse                | loops/iloop/fx/file_fx/selection/bashbasicsbyvk_adf_selection.sh
+7UH852 | item picker   | fn:_fx_sel_pick                  | loops/iloop/fx/file_fx/selection/bashbasicsbyvk_adf_selection.sh
+7UH852 | item picker   | fn:gcloud_navigator              | functions/transfer/bashbasicsbyvk_transfer.sh
+7UH852 | item picker   | fn:local_navigator               | functions/transfer/bashbasicsbyvk_transfer.sh
+7UH852 | item picker   | fn:select_imaginary_items_common | engine/ui/bashbasicsbyvk_browse.sh
+7UH852 | item picker   | fn:select_items_common           | engine/ui/bashbasicsbyvk_browse.sh
 7P68NA | list menu     | fn:_bvk_auth_sub_menu            | loops/iloop/auth/bashbasicsbyvk_auth.sh
 7P68NA | list menu     | fn:_bvk_auth_user_menu           | loops/iloop/auth/bashbasicsbyvk_auth.sh
 7P68NA | list menu     | fn:_results_view                 | engine/ui/bashbasicsbyvk_results.sh
-373QS6 | settings list | fn:_st_run                       | settings/core/bashbasicsbyvk_settings_ui.sh
 7P68NA | list menu     | fn:_view_selections_menu         | functions/transfer/bashbasicsbyvk_transfer.sh
 7P68NA | list menu     | fn:api_menu                      | loops/iloop/api/bashbasicsbyvk_api.sh
 7P68NA | list menu     | fn:auth_menu                     | loops/iloop/auth/bashbasicsbyvk_auth.sh
@@ -19,14 +25,9 @@
 7P68NA | list menu     | map:results                      | cmdmap/results/bashbasicsbyvk_results.map
 7P68NA | list menu     | map:snapshot                     | cmdmap/snapshot/bashbasicsbyvk_snapshot.map
 JR9TZ5 | main list     | map:main                         | cmdmap/main/bashbasicsbyvk_main.map
-7UH852 | picker        | fn:_file_picker                  | loops/iloop/fx/bashbasicsbyvk_csv.sh
-7UH852 | picker        | fn:_fx_sel_browse                | loops/iloop/fx/file_fx/selection/bashbasicsbyvk_adf_selection.sh
-7UH852 | picker        | fn:_fx_sel_pick                  | loops/iloop/fx/file_fx/selection/bashbasicsbyvk_adf_selection.sh
-7UH852 | picker        | fn:gcloud_navigator              | functions/transfer/bashbasicsbyvk_transfer.sh
-7UH852 | picker        | fn:local_navigator               | functions/transfer/bashbasicsbyvk_transfer.sh
-YWW6WZ | step menu     | fn:_bvk_menu                     | engine/ui/bashbasicsbyvk_choose.sh
 373QS6 | settings list | fn:_st_choice_open               | settings/core/bashbasicsbyvk_settings_groups.sh
 373QS6 | settings list | fn:_st_duration_open             | settings/core/bashbasicsbyvk_settings_groups.sh
+373QS6 | settings list | fn:_st_run                       | settings/core/bashbasicsbyvk_settings_ui.sh
 373QS6 | settings list | fn:animation_settings            | settings/core/bashbasicsbyvk_settings.sh
 373QS6 | settings list | fn:backup_group_settings         | settings/core/bashbasicsbyvk_settings_groups.sh
 373QS6 | settings list | fn:buffers_group_settings        | settings/core/bashbasicsbyvk_settings_groups.sh
@@ -93,6 +94,7 @@ T5FL4F | split screen  | map:xui_ru                       | cmdmap/xui_ru/bashba
 YWW6WZ | step menu     | fn:_api_cmd_open                 | loops/iloop/api/bashbasicsbyvk_api.sh
 YWW6WZ | step menu     | fn:_arc_s_fmt                    | staging/extras/bashbasicsbyvk_staging_archive.sh
 YWW6WZ | step menu     | fn:_bb_credit_gate               | staging/fileapi/lib/bashbasicsbyvk_fileapi_lib.sh
+YWW6WZ | step menu     | fn:_bvk_menu                     | engine/ui/bashbasicsbyvk_choose.sh
 YWW6WZ | step menu     | fn:_bvk_yn                       | engine/ui/bashbasicsbyvk_choose.sh
 YWW6WZ | step menu     | fn:_bz_import                    | functions/archive/bashbasicsbyvk_bundle_io.sh
 YWW6WZ | step menu     | fn:_dd_s_level                   | loops/iloop/fx/file_fx/delete/bashbasicsbyvk_adf_delete_date.sh
