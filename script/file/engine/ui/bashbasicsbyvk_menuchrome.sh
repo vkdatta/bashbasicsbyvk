@@ -85,11 +85,11 @@ _mc_header() {
 }
 
 # _mc_options START label...  — prints "N) label" lines, numbering from START
-#   The viewport draws the rules only when it takes the menu over (two or more rows); a one-row list is read as it was printed,
-#   so it prints its own rules and looks the same.
+#   The viewport draws the rules when it takes the menu over (_VP_TAKEOVER_MIN rows or more: one row is a list too); a list it does not
+#   take over (no viewport: not a tty, VK_SMART_MENUS=0) is read as it was printed, so it prints its own rules and looks the same.
 _mc_options() {
   local n="$1" l r=0; shift
-  { _mc_managed && (( $# >= 2 )); } || r=1
+  { _mc_managed && (( $# >= ${_VP_TAKEOVER_MIN:-1} )); } || r=1
   (( r )) && echo "$_MC_RULE"
   for l in "$@"; do echo "${n}) ${l}"; n=$(( n + 1 )); done
   (( r )) && echo "$_MC_RULE"
@@ -161,10 +161,12 @@ _mc_footer() {
 
 # _mc_keyed "c:Copy" "m:Move" ...  — lettered OPTIONS (one per row, like numbered ones)
 _mc_keyed() {
-  local it
-  _mc_managed || echo "$_MC_RULE"
+  local it own=0
+  { _mc_managed && (( $# >= ${_VP_TAKEOVER_MIN_KEYED:-2} )); } || own=1      # a lettered list needs _VP_TAKEOVER_MIN_KEYED rows: below that the printer draws the rules
+  (( own )) && echo "$_MC_RULE"
   for it in "$@"; do echo "${it%%:*}) ${it#*:}"; done
-  _mc_managed || echo "$_MC_RULE"
+  (( own )) && echo "$_MC_RULE"
+  return 0
 }
 
 # _mc_menu  header… -- labels… -- footer…      (numbering starts at 1; use _mc_menu0 for 0)

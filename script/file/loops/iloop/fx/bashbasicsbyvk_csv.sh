@@ -76,8 +76,7 @@ _file_picker() {
         done
         eval "$_sg"
 
-        # ── Render list (single rule at the bottom only — the fx menu above
-        #    already ends with its own rule, so a top rule here doubled it) ──
+        # ── Render list: _pick_rows frames it (the viewport draws the rules; with no viewport the helper prints them) ──
         _pick_rows "${_fp_items[@]}"
         _mc_footer_std -T MG2374
         _mc_read _fp_choice "${_TPL_ACCEPTOR} " || { _mc_unwind; _fp_out=""; return 1; }       # rc != 0: the flow was cancelled

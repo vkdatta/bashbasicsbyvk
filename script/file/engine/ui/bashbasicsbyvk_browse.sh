@@ -657,7 +657,14 @@ _pick_header() {
   _tpl_clear; _tpl_set action "" footer_style row footer_items "u.up q.close" icon "$icon" job_word "$word" what "$1" job "$2" nav_path_text "$3${4:+ [group: ${4^^}*]}" pick_suggest "$sugg" pick_suggest_noun "$noun" pick_desc "${5:-}"
   _tpl_section MG2374 menu_header
 }
-_pick_rows() {
+_pick_rows() {                # the rows of a picker WITH their rules (see _pick_rule_open); _pick_rows_raw = the bare rows, for a caller that frames them itself
+  local -a _prs_a=("$@")
+  [ "${1:-}" = -r ] && _prs_a=("${@:2}")
+  _pick_rule_open ${#_prs_a[@]}
+  _pick_rows_raw "$@"
+  _pick_rule_close
+}
+_pick_rows_raw() {
   local remote=0
   [ "${1:-}" = -r ] && { remote=1; shift; }
   local -a items=("$@")
@@ -681,22 +688,56 @@ _pick_rows() {
 #     WHAT / JOB / NOUN   "extensions" "delete" "extensions"  →  🗑️ Select extensions to delete · Suggestion: Use s-N command to pick extensions
 #     NAV      the path shown on the nav row            FILES  the files (array)           KEYS  the group keys in row order (array)
 #     LABELS   key → the row text (assoc)               OF     file → its group key (assoc)    OUT  the picked files (array, filled)
-#   Groups screen:   s-N · s-1,3 · s-2-4 · s-a · 1,3 · 2-4 (or a key typed: py,txt)  take WHOLE groups, done  ·  N  go INSIDE group N
-#   Inside a group:  its files, listed one by one: N · 1,3 · 2-4 · s-N · s-a  pick those files, done  ·  u  back to the groups
-#   rc 0 picked (OUT filled) · 1 u on the groups (the caller goes one question back) · 2 q / h / cc ran (unwind) · 3 the flow was cancelled
-_pick_group_rows() {          # the group rows: the main list's number column, the caller's label
-  local _pgr_i
-  for (( _pgr_i=0; _pgr_i<${#_pg_keys[@]}; _pgr_i++ )); do printf '%3d) %s\n' $(( _pgr_i + 1 )) "${_pg_lab[${_pg_keys[$_pgr_i]}]}"; done
+#   Like the Transfer picker, a pick is MARKED, not final: the row shows a green + (a ~ when only some of its files are marked) and the
+#   screen stays; picking a marked row again un-marks it.  c) confirms what is marked.
+#   Groups screen:   s-N · s-1,3 · s-2-4 · s-a · 1,3 · 2-4 (or a key typed: py,txt)  mark WHOLE groups  ·  N  go INSIDE group N
+#   Inside a group:  its files, one by one: N · 1,3 · 2-4 · s-N · s-a  mark those files  ·  u  back to the groups (the marks stay)
+#   rc 0 confirmed (OUT filled) · 1 u on the groups (the caller goes one question back) · 2 q / h / cc ran (unwind) · 3 the flow was cancelled
+# The rules above and below the rows.  The viewport draws them when it takes the list over (_VP_TAKEOVER_MIN rows or more, on a tty);
+# an empty list or no viewport (not a tty, VK_SMART_MENUS=0) nobody does, so the list prints them itself — exactly what _mc_options does.
+_PICK_RULE_OWN=0
+_pick_rule_open()  { _PICK_RULE_OWN=0; { _mc_managed && (( ${1:-0} >= ${_VP_TAKEOVER_MIN:-1} )); } || { _PICK_RULE_OWN=1; echo "$_MC_RULE"; }; }
+_pick_rule_close() { (( _PICK_RULE_OWN )) && echo "$_MC_RULE"; _PICK_RULE_OWN=0; return 0; }
+_pick_group_rows() {          # the group rows: the main list's number column, the caller's label, the mark of the rows picked
+  local _pgr_i _pgr_k _pgr_f _pgr_t _pgr_m _pgr_c
+  local -A _pgr_tot=() _pgr_on=()
+  for _pgr_f in "${_pg_files[@]}"; do
+    _pgr_k="${_pg_of[$_pgr_f]}"; _pgr_tot["$_pgr_k"]=$(( ${_pgr_tot[$_pgr_k]:-0} + 1 ))
+    [ -n "${_pg_mark[$_pgr_f]+x}" ] && _pgr_on["$_pgr_k"]=$(( ${_pgr_on[$_pgr_k]:-0} + 1 ))
+  done
+  _pick_rule_open ${#_pg_keys[@]}                        # ONE row (or no viewport): the viewport does not draw the rules, so print them here (same rule as _mc_options)
+  for (( _pgr_i=0; _pgr_i<${#_pg_keys[@]}; _pgr_i++ )); do
+    _pgr_k="${_pg_keys[$_pgr_i]}"; _pgr_t="${_pgr_tot[$_pgr_k]:-0}"; _pgr_m="${_pgr_on[$_pgr_k]:-0}"; _pgr_c=" "
+    if (( _pgr_m > 0 )); then
+      if (( _pgr_m >= _pgr_t )); then _pgr_c=$'\033[32m+\033[0m'; else _pgr_c=$'\033[32m~\033[0m'; fi
+    fi
+    printf '%s%2d) %s' "$_pgr_c" $(( _pgr_i + 1 )) "${_pg_lab[$_pgr_k]}"
+    (( _pgr_m > 0 && _pgr_m < _pgr_t )) && printf '  [%d selected]' "$_pgr_m"
+    printf '\n'
+  done
+  _pick_rule_close
+}
+_pick_marked_rows() {         # the files of one group: the standard picker rows (icons, 🔒) rendered ONCE, a green + on the marked ones
+  local _pmr_i _pmr_ln
+  local -a _pmr_rows=()
+  mapfile -t _pmr_rows < <(_pick_rows_raw "${_pg_in[@]}")
+  _pick_rule_open ${#_pg_in[@]}                           # the FILES counted, not the printed lines (an empty list prints one "empty" line that is not a row)
+  for (( _pmr_i=0; _pmr_i<${#_pmr_rows[@]}; _pmr_i++ )); do
+    _pmr_ln="${_pmr_rows[$_pmr_i]}"
+    [ -n "${_pg_mark[${_pg_in[$_pmr_i]}]+x}" ] && _pmr_ln=$'\033[32m+\033[0m'"${_pmr_ln:1}"
+    echo "$_pmr_ln"
+  done
+  _pick_rule_close
 }
 _pick_groups() {
   local _pg_icon="🛷" _pg_word="for"
   while :; do case "${1:-}" in -i) _pg_icon="$2"; shift 2 ;; -w) _pg_word="$2"; shift 2 ;; *) break ;; esac; done
   local _pg_what="$1" _pg_job="$2" _pg_noun="$3" _pg_nav="$4"
   local -n _pg_files="$5" _pg_keys="$6" _pg_lab="$7" _pg_of="$8" _pg_out="$9"
-  local _pg_open="" _pg_ch _pg_rc _pg_n _pg_i _pg_f _pg_t _pg_k
+  local _pg_open="" _pg_ch _pg_rc _pg_n _pg_i _pg_f _pg_t _pg_k _pg_new _pg_msg
   local is_select cleaned_input
-  local -a _pg_in=() _pg_idx=() _pg_tok=()
-  local -A _pg_want=() _pg_byname=()
+  local -a _pg_in=() _pg_idx=() _pg_tok=() _pg_hit=()
+  local -A _pg_byname=() _pg_mark=()
   for _pg_k in "${_pg_keys[@]}"; do _pg_byname["${_pg_k,,}"]="$_pg_k"; done
   _pg_out=()
   while true; do
@@ -708,16 +749,20 @@ _pick_groups() {
       _pg_in=()
       for _pg_f in "${_pg_files[@]}"; do [ "${_pg_of[$_pg_f]}" = "$_pg_open" ] && _pg_in+=("$_pg_f"); done
       _pick_header -s -i "$_pg_icon" -w "$_pg_word" -n "files" "files" "$_pg_job" "$_pg_nav  [${_pg_open}]"
-      _pick_rows "${_pg_in[@]}"
+      _pick_marked_rows
       _pg_n=${#_pg_in[@]}
     fi
-    _mc_footer_std -T MG2374
+    [ -n "$_pg_msg" ] && { echo "$_pg_msg"; _pg_msg=""; }
+    _mc_footer_std -T MG2374 -l "c:Confirm"
     _mc_read _pg_ch "${_TPL_ACCEPTOR} " || { _pg_rc=$?; _mc_unwind && return 2; return "$_pg_rc"; }
     _pg_ch="${_pg_ch#"${_pg_ch%%[![:space:]]*}"}"; _pg_ch="${_pg_ch%"${_pg_ch##*[![:space:]]}"}"
     case "$_pg_ch" in
       q|Q) _bvk_quit; return 2 ;;
       h|H|cc|CC) _mc_std_key "$_pg_ch"; _mc_unwind && return 2 ;;
       u|U) if [ -n "$_pg_open" ]; then _pg_open=""; else return 1; fi ;;
+      c|C)
+        _pg_out=(); for _pg_f in "${_pg_files[@]}"; do [ -n "${_pg_mark[$_pg_f]+x}" ] && _pg_out+=("$_pg_f"); done
+        if [ ${#_pg_out[@]} -eq 0 ]; then _pg_msg="🔴  Nothing selected yet — s-N marks a row, c confirms"; else return 0; fi ;;
       "") _bvk_invalid ;;
       *)
         _pg_idx=()
@@ -735,14 +780,22 @@ _pick_groups() {
             for _pg_i in "${!_pg_keys[@]}"; do [ "${_pg_keys[$_pg_i]}" = "${_pg_byname[$_pg_t]}" ] && _pg_idx+=($((_pg_i+1))); done
           done
         fi
-        if [ ${#_pg_idx[@]} -eq 0 ]; then _bvk_invalid; continue; fi
+        if [ ${#_pg_idx[@]} -eq 0 ]; then _pg_msg="$_BVK_MSG_INVALID"; continue; fi
+        # the files the picked rows stand for
+        _pg_hit=()
         if [ -z "$_pg_open" ]; then
+          local -A _pg_want=()
           for _pg_i in "${_pg_idx[@]}"; do _pg_want["${_pg_keys[$((_pg_i-1))]}"]=1; done
-          for _pg_f in "${_pg_files[@]}"; do [ -n "${_pg_want[${_pg_of[$_pg_f]}]+x}" ] && _pg_out+=("$_pg_f"); done
+          for _pg_f in "${_pg_files[@]}"; do [ -n "${_pg_want[${_pg_of[$_pg_f]}]+x}" ] && _pg_hit+=("$_pg_f"); done
+          unset _pg_want
         else
-          for _pg_i in "${_pg_idx[@]}"; do _pg_out+=("${_pg_in[$((_pg_i-1))]}"); done
+          for _pg_i in "${_pg_idx[@]}"; do _pg_hit+=("${_pg_in[$((_pg_i-1))]}"); done
         fi
-        return 0 ;;
+        # a pick toggles: if every file of it is marked already, un-mark them, else mark them all
+        _pg_new=0; for _pg_f in "${_pg_hit[@]}"; do [ -n "${_pg_mark[$_pg_f]+x}" ] || _pg_new=1; done
+        if (( _pg_new )); then for _pg_f in "${_pg_hit[@]}"; do _pg_mark["$_pg_f"]=1; done; _pg_t="➕ Selected"
+        else for _pg_f in "${_pg_hit[@]}"; do unset "_pg_mark[$_pg_f]"; done; _pg_t="➖ Unselected"; fi
+        _pg_msg="$_pg_t ${#_pg_hit[@]} file(s) — total selected: ${#_pg_mark[@]}  (c to confirm)" ;;
     esac
   done
 }

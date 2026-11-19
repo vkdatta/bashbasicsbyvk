@@ -27,6 +27,14 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #
 #  Disable at any time with:  export VK_SMART_MENUS=0
 
+# THE minimum number of rows the viewport takes over (rules, highlight, scrolling).  ONE row is a list too (owner's rule).
+# Everything that prints its own rules when the viewport does NOT take a list over (_mc_options, _mc_keyed, _pick_rule_open) reads this same
+# constant, so a list is drawn by exactly one party.  tests/static/t_rows.py fails when a literal count appears next to _mc_managed.
+declare -g _VP_TAKEOVER_MIN=1
+# ...for NUMBERED rows.  A LETTERED line is a key hint (the footer is made of them: "u) Back", "c) Confirm   x) Remove"), so a lettered list needs two
+# rows (_mc_keyed reads this one); with a minimum of 1 an empty list or a text prompt would take its own footer for a one-row menu.
+declare -g _VP_TAKEOVER_MIN_KEYED=2
+
 _sm_enabled=true
 [ "${VK_SMART_MENUS:-1}" = "0" ] && _sm_enabled=false
 # _sm_on is the single hot-path flag: 1 only when capture is both
@@ -220,7 +228,7 @@ _sm_detect() {
   done
 
   # ONE numbered row + a footer line of cells ("1) askclaude" / "c) Confirm   x) Remove   u) Back ...") is a one-row list with a
-  # footer, not a two-row menu: without this the footer was drawn INSIDE the body.
+  # footer, not a two-row menu: without this the footer was drawn INSIDE the body (the cells are cut off into the footer below).
   local _ftr_only=0 _fi
   if (( numc == 1 && altc >= 1 )); then
     _ftr_only=1
@@ -243,6 +251,20 @@ _sm_detect() {
     done
   fi
 
+  # A footer is never rows, whatever the menu kind (numbered, lettered, one row or many): in the trailing run of lettered / blank lines the footer
+  # starts at the first blank row or the first line of key cells (the chrome puts a linebreak above every footer).  This is what keeps
+  # "u) Back" (ONE cell) and "u) Up   q) Quit ..." (cells) out of the body of a one-row list and of a lettered (_mc_keyed) list.
+  local _fk _fs=$cut
+  for ((_fk=cut-1; _fk>=0; _fk--)); do
+    t="${blk_tok[$_fk]}"
+    [[ "$t" =~ ^[0-9]+$ ]] && break
+    _fs=$_fk
+  done
+  for ((_fk=_fs; _fk<cut; _fk++)); do
+    _sm_plain_len "${blk_text[$_fk]}"
+    if (( _sm_len == 0 )) || _sm_is_footer_line "${blk_text[$_fk]}"; then cut=$_fk; break; fi
+  done
+
   # trailing blanks just before the cut are spacing, not rows
   while (( cut > 0 )); do
     _sm_plain_len "${blk_text[$((cut-1))]}"
@@ -259,10 +281,13 @@ _sm_detect() {
   # loop below, so trailing lettered actions land in the footer once.
   last=$(( first + cut - 1 ))
 
-  # need at least two real choices to be worth taking over
-  local real=0
-  for i in "${_sm_rows_token[@]}"; do [ -n "$i" ] && real=$(( real + 1 )); done
-  (( real < 2 )) && return 1
+  # at least _VP_TAKEOVER_MIN numbered rows (one row is a list: it gets its rules and its highlight) or _VP_TAKEOVER_MIN_KEYED lettered ones
+  local real=0 realnum=0
+  for i in "${_sm_rows_token[@]}"; do
+    [ -n "$i" ] || continue
+    real=$(( real + 1 )); [[ "$i" =~ ^[0-9]+$ ]] && realnum=$(( realnum + 1 ))
+  done
+  (( realnum < _VP_TAKEOVER_MIN && real < _VP_TAKEOVER_MIN_KEYED )) && return 1
 
   # the options must still be adjacent to the prompt; if a pile of
   # other output came after them, this read is not that menu's read

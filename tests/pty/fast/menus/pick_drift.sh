@@ -21,12 +21,12 @@ out="$(D="$T/d" DSP="$DSP" BRW="$BRW" bash -c '
   declare -gA item_icon=() _LK_SET=() _FAV_LABEL=() _REC_LABEL=(); declare -ga items=()
   source "$DSP" >/dev/null 2>&1
   eval "$(awk "/^_desc_print_dim\\(\\) \\{/{f=1} f{print} /^_menu_header_flat\\(\\) \\{/{exit}" "$BRW" | sed "\$d")"
-  _pick_rows "$D/sub" "$D/a.zip" "$D/b.txt" "$D/run.sh" > "$D/../r1"
+  _pick_rows_raw "$D/sub" "$D/a.zip" "$D/b.txt" "$D/run.sh" > "$D/../r1"      # the bare rows: _pick_rows = these + the rules (tests/static/t_rows.py covers the rules)
   items=("$D/sub" "$D/a.zip" "$D/b.txt" "$D/run.sh"); display_items > "$D/../r2"
   _LK_SET["$D/a.zip"]=1; _lk_suffix_v() { _lk_suffix=" 🔒"; }
-  item_icon[$D/a.zip]=file; _pick_rows -r "$D/a.zip" > "$D/../r3"
+  item_icon[$D/a.zip]=file; _pick_rows_raw -r "$D/a.zip" > "$D/../r3"
 ' 2>&1)"
-[ -s "$T/r1" ] && cmp -s "$T/r1" "$T/r2" && ok "_pick_rows == display_items" || { bad "_pick_rows differs from display_items"; echo "$out" | head -5; diff "$T/r1" "$T/r2" | head -6; }
+[ -s "$T/r1" ] && cmp -s "$T/r1" "$T/r2" && ok "_pick_rows_raw == display_items" || { bad "_pick_rows_raw differs from display_items"; echo "$out" | head -5; diff "$T/r1" "$T/r2" | head -6; }
 grep -q '📦 a.zip' "$T/r1" && grep -q '⚙️ run.sh' "$T/r1" && ok "archive and executable icons" || bad "icons"
 grep -q '🔒' "$T/r3" && bad "remote row wears a local lock mark" || ok "remote rows have no lock mark"
 # 5. Find results: Find only supplies DATA (paths + engine extras); the screen is _results_view, the "==" display
