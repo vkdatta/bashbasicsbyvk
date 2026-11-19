@@ -200,12 +200,12 @@ local_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer_std -l "v:View selections"
+      _mc_footer_std -T MG2374 -l "v:View selections"
     else
-      _mc_footer_std -l "n:New folder" "c:Confirm destination"
+      _mc_footer_std -T MG2374 -l "n:New folder" "c:Confirm destination"
     fi
 
-    _mc_read nav_choice "Select: " || { _mc_unwind; return 1; }       # rc != 0: the flow was cancelled → leave at once
+    _mc_read nav_choice "${_TPL_ACCEPTOR} " || { _mc_unwind; return 1; }       # rc != 0: the flow was cancelled → leave at once
 
     case "$nav_choice" in
       q|Q) nav_selected_items=(); _bvk_quit; return 1 ;;
@@ -357,12 +357,12 @@ gcloud_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer_std -l "v:View selections"
+      _mc_footer_std -T MG2374 -l "v:View selections"
     else
-      _mc_footer_std -l "n:New folder" "c:Confirm destination"
+      _mc_footer_std -T MG2374 -l "n:New folder" "c:Confirm destination"
     fi
 
-    _mc_read gnav_choice "Select: " || { _mc_unwind; return 1; }
+    _mc_read gnav_choice "${_TPL_ACCEPTOR} " || { _mc_unwind; return 1; }
 
     case "$gnav_choice" in
       q|Q) gcloud_nav_selected_items=(); _bvk_quit; return 1 ;;      # the SAME quit as the local navigator

@@ -229,21 +229,19 @@ _st_draw() {
   _bvk_blk_park
   if (( prev > 1 )); then out+=$'\r\033['"$(( prev - 1 ))"$'A'; fi
 
-  out+="$nl"$'\n'                                          # space above
-  local hd="$path_title"
+  # The layout is the template 373QS6 (templates/bashbasicsbyvk_373QS6.sh.tpl): this screen paints ONE block in a single write, so the
+  # template is BUILT (_tpl_build, every row starts with $nl) from the data below; the geometry (_ST_DESC_N, _ST_TAIL, prev) is unchanged.
+  local hd="$path_title" _dl _lst="" _desc="" _sug="" hl _th _tb _tf
   [ -n "${fq:-}" ] && hd="$hd   [filter: =$fq]"
-  out+="$nl${_st_icon:-⚙️} ${hd:0:cols-4}"$'\n'                          # header
-  out+="$nl"$'\n'                                         # linebreak under the header
-  local _dl
-  for _dl in "${_ST_DESC_LN[@]}"; do out+="$nl"$'\033[2m'"$_dl"$'\033[0m\n'; done      # what this screen is, in plain words (between the header and the rule)
-  if (( top > 0 )); then out+="$nl   ▲ $top more above"$'\n'; else out+="$nl$_ST_RULE"$'\n'; fi
-
+  for _dl in "${_ST_DESC_LN[@]}"; do _desc+=$'\033[2m'"$_dl"$'\033[0m\n'; done              # what this screen is, in plain words (between the header and the rule)
+  _desc="${_desc%$'\n'}"
+  if (( top > 0 )); then _lst+="   ▲ $top more above"$'\n'; else _lst+="$_ST_RULE"$'\n'; fi
   for (( i=top; i<top+vis; i++ )); do
     val="${_st_val[$i]}"
     if [ "${_st_kind[$i]}" = h ]; then
       line="    ── ${_st_lbl[$i]}"
       line="${line:0:cols-1}"
-      out+="$nl"$'\033[2m'"$line"$'\033[0m\n'
+      _lst+=$'\033[2m'"$line"$'\033[0m\n'
       continue
     fi
     mark=""
@@ -259,27 +257,26 @@ _st_draw() {
     [ "${_st_kind[$i]}" = a ] && val="${val:+$val }›"
     printf -v line ' %2d) %s%-22s %s' "${_st_num[$i]}" "$mark" "${_st_lbl[$i]}" "$val"
     line="${line:0:cols-1}"
-    if (( i == cur )); then
-      out+="$nl"$'\033[1;7m'"$line"$'\033[0m\n'
-    else
-      out+="$nl$line"$'\n'
-    fi
+    if (( i == cur )); then _lst+=$'\033[1;7m'"$line"$'\033[0m\n'
+    else _lst+="$line"$'\n'; fi
   done
-
-  if (( top + vis < n )); then out+="$nl   ▼ $(( n - top - vis )) more below"$'\n'; else out+="$nl$_ST_RULE"$'\n'; fi
-  out+="$nl"$'\n'                                         # linebreak above the footer
-  out+="$nl${f1:0:cols-1}"$'\n'
-  out+="$nl${f2:0:cols-1}"$'\n'                                  # footer 2, or a blank spacer
+  if (( top + vis < n )); then _lst+="   ▼ $(( n - top - vis )) more below"$'\n'; else _lst+="$_ST_RULE"$'\n'; fi
+  _lst="${_lst%$'\n'}"
   _ST_TAIL=0
   if (( _ST_HINT_N > 0 )); then
-    local hl; for hl in "${_BVK_HINT_LN[@]}"; do out+="$nl"$'\033[2m'"$hl"$'\033[0m\n'; done
-    out+="$nl"$'\n'; _ST_TAIL=$(( _ST_HINT_N + 1 ))     # the suggestion rows + a blank line, only while there is a suggestion
+    for hl in "${_BVK_HINT_LN[@]}"; do _sug+=$'\033[2m'"$hl"$'\033[0m\n'; done
+    _ST_TAIL=$(( _ST_HINT_N + 1 ))     # the suggestion rows + a blank line (the trailing newline of the value), only while there is a suggestion
   fi
-  _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="Select:"   # print: the screen without the typed text
+  _tpl_clear
+  _tpl_set menu_name "${_st_icon:-⚙️} ${hd:0:cols-4}" menu_description "$_desc" menu_list "$_lst" \
+           footer_commands "${f1:0:cols-1}"$'\n'"${f2:0:cols-1}" menu_suggestions "$_sug"
+  _tpl_build -p "$nl" 373QS6 menu_header _th; _tpl_build -p "$nl" 373QS6 menu_body _tb; _tpl_build -p "$nl" 373QS6 menu_footer _tf
+  out+="$_th$_tb$_tf"
+  _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="${_TPL_ACCEPTOR:-Select:}"   # print: the screen without the typed text
   out+=$'\033[J'                                         # from the prompt row down: the old text (a block of rows) goes
   builtin printf '\033[?2026h%s' "$out"
   _BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0
-  _bvk_draw_input "Select: " "$buf" "${pos:-${#buf}}"      # THE typed-line drawer: cursor / selection, rows of a long text, the tap geometry
+  _bvk_draw_input "${_TPL_ACCEPTOR:-Select:} " "$buf" "${pos:-${#buf}}"      # THE typed-line drawer: cursor / selection, rows of a long text, the tap geometry
   builtin printf '\033[?2026l'
   prev=$(( vis + 9 + _ST_DESC_N + _ST_TAIL ))
 }
@@ -683,7 +680,7 @@ _st_run() {
   if (( prev > 0 )); then
     _TE_ANC=-1                                    # the line is left: no selection mark on it
     if (( _st_depth > 1 )); then _st_wipe; else
-      _bvk_blk_park; if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "Select: " "$buf" "${#buf}"; builtin printf '\r\033[J%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"
+      _bvk_blk_park; if declare -F _bvk_fit_input >/dev/null 2>&1; then _bvk_fit_input "${_TPL_ACCEPTOR} " "$buf" "${#buf}"; builtin printf '\r\033[J%s%s' "$_BVK_FIT_PROMPT" "$_BVK_FIT"
       else builtin printf '\r\033[2KSelect: %s' "$buf"; fi
     fi
   fi

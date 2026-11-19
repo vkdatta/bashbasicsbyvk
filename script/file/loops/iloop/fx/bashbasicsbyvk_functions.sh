@@ -160,27 +160,20 @@ _tm_define fx _fx_tab "🎨 Functions" "Functions" adf:"$_FX_TAB_ADF" udf:"$_FX_
 # It is always ONE line (cut with …), so the header keeps one height while folders and tabs change.
 
 # "X out of N here · T total": X shown now (after a filter), N in this folder, T everywhere (ADF: all functions; UDF: all scripts under execute/).
-_fx_count_line() {
-  local n="${#_all_items[@]}" t
+_fx_count_total() {                                # -> the total of the count row
+  local n="${#_all_items[@]}"
   (( n < ${#items[@]} )) && n="${#items[@]}"
-  if [ "$_fx_tab" = "udf" ]; then t="${_fx_udf_total:-$n}"; else t="${#_fx_adf_labels[@]}"; fi
-  _tm_count_line "$t"
+  if [ "$_fx_tab" = "udf" ]; then echo "${_fx_udf_total:-$n}"; else echo "${#_fx_adf_labels[@]}"; fi
 }
 
-_fx_menu_header() {
-  _tm_header fx "" "$_fx_adf_cur_staging"          # blank · title · tab bar · description (folder-specific on the ADF tab)
-  _fx_count_line
-  echo
+_fx_menu_header() {                                # template V3PX4Y (folder-specific description on the ADF tab)
+  local _p
   case "$_fx_tab" in
-    adf)
-      printf '📂 ADF path: %s\n' "$(_fx_adf_breadcrumb)"
-      ;;
-    *)
-      _bvk_src_tag_v
-      printf '📂 UDF path: %s%s%s\n' "$path" "${group_prefix:+ [group: ${group_prefix^^}*]}" "$_bst_out"
-      ;;
+    adf) _p="📂 ADF path: $(_fx_adf_breadcrumb)" ;;
+    *)   _bvk_src_tag_v
+         _p="📂 UDF path: $path${group_prefix:+ [group: ${group_prefix^^}*]}$_bst_out" ;;
   esac
-  _vp_filter_header_line
+  _tm_head -f "$_fx_adf_cur_staging" -c "$(_fx_count_total)" -n "$_p" fx
 }
 
 

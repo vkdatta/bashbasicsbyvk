@@ -11,9 +11,9 @@ handle_version() {
         _mc_header "📄 Version selected: $tag" \
                    "What would you like to do with the version?"
         _mc_options 0 "Install" "Info"
-        _mc_footer @file_menu
+        _tpl_footer YWW6WZ @file_menu
 
-        _bvk_read action "Select: " || return 1          # EOF (the terminal closed): leave, never spin on "invalid"
+        _bvk_read action "${_TPL_ACCEPTOR} " || return 1          # EOF (the terminal closed): leave, never spin on "invalid"
 
         case "$action" in
             0) _upg_do_install "$tag" "$tag" yes; return 1 ;;   # a good install exits (0) inside it

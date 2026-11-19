@@ -230,18 +230,14 @@ _tm_define sw _sw_tab "🔀 Switch" "Switch" bookmarks:"📌 Bookmarks" recents:
 # ── Headers / footers
 
 _sw_menu_header() {
-  _tm_header sw                                    # blank · title · tab bar · description (Switch|bookmarks · recents · favourites)
-  _tm_count_line
-  echo
-  local _loc
+  local _loc                                       # template V3PX4Y (Switch|bookmarks · recents · favourites)
   case "$_sw_tab" in
     recents) _loc="(folders you entered with cd · files you edited)" ;;
     favourites) _loc="⭐ favourites of: $_sw_outer_path" ;;
     *)       _bvk_src_tag_v
              _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}$_bst_out" ;;
   esac
-  printf '📂 %s\n' "$_loc"
-  _vp_filter_header_line
+  _tm_head -n "📂 $_loc" sw
 }
 
 _sw_menu_header_imaginary() {

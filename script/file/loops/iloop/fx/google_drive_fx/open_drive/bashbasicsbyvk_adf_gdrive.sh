@@ -42,14 +42,12 @@ gdp_row() {
   printf -v _vp_line ' %2d) ☁️  %-24s  %s%s' "$1" "$(_xui_trunc "${_GDP_NAME[$s]}" 24)" "$(_gdp_when "${_GDP_LAST[$s]}")" "$tag"
 }
 
-gdp_header() {
-  echo; echo "☁️  Google Drive profiles   (${#_GDP_NAME[@]} found in rclone)"
-  printf '📂 each profile keeps its own settings, buffers and selections in %s/<profile>/\n' "$_GD_BASE"
-  _vp_filter_header_line
+gdp_header() {                                     # template 7P68NA
+  _tpl_list_header "☁️  Google Drive profiles   (${#_GDP_NAME[@]} found in rclone)" "📂 each profile keeps its own settings, buffers and selections in $_GD_BASE/<profile>/"
 }
 
 gdp_footer() {
-  _mc_std_items -b; _mc_footer "#Select a number to open that Google Drive" "n:New profile (rclone config)" "rf" "${_MC_STD[@]}"
+  _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that Google Drive" "n:New profile (rclone config)" "rf" "${_MC_STD[@]}"
 }
 
 _gdp_cmd() {

@@ -269,13 +269,13 @@ _tm_define rules _rl_tab "📚 Rule Book" "Rule Book" rules:"🧩 Rules" last:"�
 
 # header: the template's title · tab bar · description (Rule Book|rules, Rule Book|rules:select / :display, Rule Book|last), then the count and the folder
 _rl_menu_header() {
-  _tm_header rules "" "$([ "$_rl_tab" = rules ] && printf '%s' "$_rl_cur")"
-  _tm_count_line
-  if [ "$_rl_tab" = rules ]; then
-    echo
-    printf '📂 Rule book path: /%s\n' "$_rl_cur"
+  local _f="" _n="" _g=()                          # template V3PX4Y: the rules tab shows the folder's words and its path row,
+  if [ "$_rl_tab" = rules ]; then                  # every other tab shows neither (and no blank row before the notes)
+    _f="$_rl_cur"; _n="📂 Rule book path: /$_rl_cur"
+  else _g=(-G)
   fi
-  _vp_filter_header_line
+  # the layout is the template V3PX4Y; this function only hands it the data
+  _tm_head -f "$_f" -n "$_n" "${_g[@]}" rules
 }
 
 # footer: the template's u q h cc — every rule command (c d r e-N em-N i-N ux ui .r …) is listed by cc, with its description

@@ -98,7 +98,7 @@ _xui_tab_redraw() {
 _xui_row() { _vp_row "$1" _XUI_SLOT; }
 
 # ── multi-row selection
-_xui_pick_header() { echo; echo "$_XUI_PICK_TITLE"; }
+_xui_pick_header() { _tpl_clear; _tpl_set menu_name "$_XUI_PICK_TITLE"; _tpl_section YWW6WZ menu_header; }    # a title only: the step-menu header (YWW6WZ)
 
 _xui_parse_sel() { _vp_parse_sel _XUI_SEL "$1"; }   # "1,3-5 | a | a-2" -> _XUI_SEL (display rows)
 

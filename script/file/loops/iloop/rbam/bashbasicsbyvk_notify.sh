@@ -87,12 +87,11 @@ nf_row() {
   [ "$_NF_ACT" = 1 ] && icon="📨"
   printf -v _vp_line ' %2d) %s %s' "$1" "$icon" "$(_xui_trunc "$_NF_T" 100)"
 }
-nf_header() {
-  echo; echo "🔔 Notifications"
-  [ "${#items[@]}" -eq 0 ] && echo "   Nothing new."
-  _vp_filter_header_line
+nf_header() {                                      # template 7P68NA
+  local _n=""; [ "${#items[@]}" -eq 0 ] && _n="   Nothing new."
+  _tpl_list_header "🔔 Notifications" "$_n"
 }
-nf_footer() { _mc_footer_std -b "N:open / answer" "r-N:dismiss" "rf"; }
+nf_footer() { _mc_footer_std -T 7P68NA -b "N:open / answer" "r-N:dismiss" "rf"; }
 
 # ── answers
 _nf_rbam_respond() {                         # rid true|false   (also used by the rbam list)
@@ -117,7 +116,7 @@ _nf_open() {
   echo; echo "   🔔 $_NF_T"
   if [ "$_NF_ACT" = 1 ]; then
     echo "      1. Yes   2. No   (anything else: decide later)"
-    _bvk_read a "   Select: "
+    _bvk_read a "   ${_TPL_ACCEPTOR} "
     case "$a" in
       1|y|Y) a=true ;; 2|n|N) a=false ;; *) echo "🕒 Left for later."; return 0 ;;
     esac

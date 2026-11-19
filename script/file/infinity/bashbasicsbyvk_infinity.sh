@@ -31,7 +31,7 @@ infinity_stones_menu() {
       "Extract Tables and Links from Web" "JavaScript Audit" "Python Audit" \
       "Git Push" "Generate SQL" "LocalHost" "Polyglot Clone Finder" -- @infinity
 
-    _bvk_read is_choice "Select: "
+    _bvk_read is_choice "${_TPL_ACCEPTOR} "
 
     case "$is_choice" in
     u|U|"") return ;;

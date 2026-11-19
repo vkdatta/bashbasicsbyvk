@@ -43,6 +43,21 @@ _LM_NEEDS[bashbasicsbyvk_rbam.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_csurf.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_gdrive.sh]="bashbasicsbyvk_run.sh bashbasicsbyvk_transfer.sh bashbasicsbyvk_carry.sh bashbasicsbyvk_staging_helpers.sh bashbasicsbyvk_staging_archive.sh bashbasicsbyvk_staging_buffer.sh bashbasicsbyvk_staging_upload.sh bashbasicsbyvk_staging_ux.sh"
 _LM_WITH[bashbasicsbyvk_functions.sh]="bashbasicsbyvk_adf_rename_csv.sh bashbasicsbyvk_adf_move_csv.sh bashbasicsbyvk_adf_copy_csv.sh bashbasicsbyvk_adf_shortcut_csv.sh bashbasicsbyvk_adf_upload_csv.sh bashbasicsbyvk_adf_map_csv.sh bashbasicsbyvk_adf_bookmark_csv.sh bashbasicsbyvk_adf_delete_common.sh bashbasicsbyvk_adf_delete_ext.sh bashbasicsbyvk_adf_delete_date.sh bashbasicsbyvk_adf_zip_csv.sh bashbasicsbyvk_adf_unzip_csv.sh bashbasicsbyvk_adf_delete_csv.sh bashbasicsbyvk_adf_upload_text_csv.sh bashbasicsbyvk_adf_import_link.sh bashbasicsbyvk_adf_selection.sh bashbasicsbyvk_adf_selected.sh bashbasicsbyvk_adf_gdrive.sh bashbasicsbyvk_adf_cfwp.sh bashbasicsbyvk_adf_github.sh"
+_tpl_file() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_file "$@"; }
+_tpl_set() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_set "$@"; }
+_tpl_clear() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_clear "$@"; }
+_tpl_load() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_load "$@"; }
+_tpl_trim_tail() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_trim_tail "$@"; }
+_tpl_val() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_val "$@"; }
+_tpl_put() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_put "$@"; }
+_tpl_emit() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_emit "$@"; }
+_tpl_walk() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_walk "$@"; }
+_tpl_section() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_section "$@"; }
+_tpl_render() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_render "$@"; }
+_tpl_build() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_build "$@"; }
+_tpl_list_header() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_list_header "$@"; }
+_tpl_footer() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_footer "$@"; }
+_tpl_check() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_check "$@"; }
 copy_to_clipboard() { _lm_stub bashbasicsbyvk_run.sh copy_to_clipboard "$@"; }
 handle_file() { _lm_stub bashbasicsbyvk_run.sh handle_file "$@"; }
 _hf_info() { _lm_stub bashbasicsbyvk_run.sh _hf_info "$@"; }
@@ -589,6 +604,7 @@ _hl_fr_report() { _lm_stub bashbasicsbyvk_health.sh _hl_fr_report "$@"; }
 _hl_report() { _lm_stub bashbasicsbyvk_health.sh _hl_report "$@"; }
 bvk_health() { _lm_stub bashbasicsbyvk_health.sh bvk_health "$@"; }
 _bvk_tidy_find() { _lm_stub bashbasicsbyvk_tidy.sh _bvk_tidy_find "$@"; }
+_bvk_tidy_show() { _lm_stub bashbasicsbyvk_tidy.sh _bvk_tidy_show "$@"; }
 bvk_tidy_cmd() { _lm_stub bashbasicsbyvk_tidy.sh bvk_tidy_cmd "$@"; }
 _tm_define() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_define "$@"; }
 _tm_idx() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_idx "$@"; }
@@ -600,7 +616,7 @@ _tm_bar_v() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_bar_v "$@"; }
 _tm_bar() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_bar "$@"; }
 _tm_desc_line() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_desc_line "$@"; }
 _tm_count_line() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_count_line "$@"; }
-_tm_header() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_header "$@"; }
+_tm_head() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_head "$@"; }
 _tm_footer() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_footer "$@"; }
 _tm_viewport() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_viewport "$@"; }
 _tm_tab_redraw() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_tab_redraw "$@"; }
@@ -879,7 +895,7 @@ _fx_adf_register_fx() { _lm_stub bashbasicsbyvk_functions.sh _fx_adf_register_fx
 _fx_adf_list_subfolders() { _lm_stub bashbasicsbyvk_functions.sh _fx_adf_list_subfolders "$@"; }
 _fx_adf_build_items() { _lm_stub bashbasicsbyvk_functions.sh _fx_adf_build_items "$@"; }
 _fx_adf_breadcrumb() { _lm_stub bashbasicsbyvk_functions.sh _fx_adf_breadcrumb "$@"; }
-_fx_count_line() { _lm_stub bashbasicsbyvk_functions.sh _fx_count_line "$@"; }
+_fx_count_total() { _lm_stub bashbasicsbyvk_functions.sh _fx_count_total "$@"; }
 _fx_menu_header() { _lm_stub bashbasicsbyvk_functions.sh _fx_menu_header "$@"; }
 _fx_tab_is_udf() { _lm_stub bashbasicsbyvk_functions.sh _fx_tab_is_udf "$@"; }
 _fx_menu_footer() { _lm_stub bashbasicsbyvk_functions.sh _fx_menu_footer "$@"; }

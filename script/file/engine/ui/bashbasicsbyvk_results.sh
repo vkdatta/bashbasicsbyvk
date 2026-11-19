@@ -26,7 +26,7 @@ _mc_footer_register results_apply a:Apply_to_ALL u.up cd:Change_directory q '|' 
 _results_is_preview() { [ "${_RES_APPLY:-0}" = 1 ]; }
 _dp_when results _results_is_preview a
 
-_results_footer() { if [ "${_RES_APPLY:-0}" = 1 ]; then _mc_footer @results_apply; else _menu_footer_lines; fi; }
+_results_footer() { if [ "${_RES_APPLY:-0}" = 1 ]; then _tpl_footer JR9TZ5 @results_apply; else _menu_footer_lines; fi; }
 
 _results_view() {
   local handler="" c rc=0 n p root="${_RES_ROOT:-$path}"

@@ -132,19 +132,16 @@ _upg_rowtext() {
 # ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar, steps ←/→ and builds the footer ──
 _tm_define upg _upg_tab "🔼 Upgrade" "Upgrade" stable:"📦 Stable" tags:"🧪 Tags (beta)"
 
-_upg_menu_header() {
-  _tm_header upg                                   # blank · title · tab bar · description (Upgrade|stable · tags)
-  _tm_count_line
-  echo
-  local inst; inst="$(_upg_installed)"
-  if [ -n "$inst" ]; then printf '📦 Installed: %s\n' "$inst"
-  else printf '📦 Installed: (not recorded yet — install once from here and it will be)\n'; fi
-  if [ "$_upg_tab" = stable ] && [ -n "$_UPG_S_ERR" ]; then printf '🔴  %s — rf to retry\n' "$_UPG_S_ERR"; fi
-  if [ "$_upg_tab" = tags ]   && [ -n "$_UPG_T_ERR" ]; then printf '🔴  %s — rf to retry\n' "$_UPG_T_ERR"; fi
+_upg_menu_header() {                               # template V3PX4Y (Upgrade|stable · tags)
+  local inst n; inst="$(_upg_installed)"
+  if [ -n "$inst" ]; then n="📦 Installed: $inst"
+  else n="📦 Installed: (not recorded yet — install once from here and it will be)"; fi
+  if [ "$_upg_tab" = stable ] && [ -n "$_UPG_S_ERR" ]; then n+=$'\n'"🔴  $_UPG_S_ERR — rf to retry"; fi
+  if [ "$_upg_tab" = tags ]   && [ -n "$_UPG_T_ERR" ]; then n+=$'\n'"🔴  $_UPG_T_ERR — rf to retry"; fi
   if [ "$_upg_tab" = stable ] && [ -z "$_UPG_S_ERR" ] && [ "${#items[@]}" -eq 0 ]; then
-    printf 'No stable releases are published yet — try the Tags tab, or m for the latest main.\n'
+    n+=$'\n'"No stable releases are published yet — try the Tags tab, or m for the latest main."
   fi
-  _vp_filter_header_line
+  _tm_head -n "$n" upg
 }
 
 # footer: the template's u q h cc (u = Back: this screen has no folders). Every other key (N i-N m rf -u …) is listed by cc.

@@ -42,11 +42,20 @@ _bvk_tidy_find() {
   [ -n "$_TIDY_ID" ]
 }
 
+# _bvk_tidy_show ID   the rows of the template file (comments left out), as the file has them
+_bvk_tidy_show() {
+  local f l; f="$(_tpl_file "$1" 2>/dev/null)"; [ -r "$f" ] || return 0
+  builtin printf '\n'
+  while IFS= read -r l || [ -n "$l" ]; do [[ "$l" == "#"* ]] && continue; builtin printf '   │ %s\n' "$l"; done < "$f"
+  builtin printf '\n'
+}
+
 # `tidy` — show the template ID, then copy / save
 bvk_tidy_cmd() {
   declare -F _lt_tool_begin >/dev/null 2>&1 && _lt_tool_begin
   if _bvk_tidy_find; then
-    builtin printf '🧶 Template ID: %s  (%s)\n   screen: %s   %s\n' "$_TIDY_ID" "$_TIDY_TMPL" "${_TIDY_KEY#*:}" "$_TIDY_FILE"
+    builtin printf '🧶 Template ID: %s  (%s)\n   screen: %s   %s\n   template: templates/bashbasicsbyvk_%s.sh.tpl\n' "$_TIDY_ID" "$_TIDY_TMPL" "${_TIDY_KEY#*:}" "$_TIDY_FILE" "$_TIDY_ID"
+    _bvk_tidy_show "$_TIDY_ID"
     declare -F _sm_reset >/dev/null 2>&1 && _sm_reset
     if declare -F _map_deliver >/dev/null 2>&1; then
       _map_deliver "$_TIDY_ID" "bvk-template-$_TIDY_ID.txt"

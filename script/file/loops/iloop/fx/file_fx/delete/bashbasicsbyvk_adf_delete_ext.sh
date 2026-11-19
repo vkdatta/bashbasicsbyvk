@@ -16,7 +16,7 @@ _de_s_pick() {
     lbl=".${exts[$i]}"; [ "${exts[$i]}" = "noext" ] && lbl="(no extension)"
     printf '%d) %s  (%d file(s))\n' $((i+1)) "$lbl" "${count[${exts[$i]}]}"
   done
-  _mc_text reply "Select: " "Pick one or more: numbers/ranges (1,3 or 2-4), extension names (py,txt), or a = all"
+  _mc_text reply "${_TPL_ACCEPTOR} " "Pick one or more: numbers/ranges (1,3 or 2-4), extension names (py,txt), or a = all"
   case $? in 0) ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac
   [ -z "$reply" ] && { echo "🚫 Cancelled"; return 3; }
 

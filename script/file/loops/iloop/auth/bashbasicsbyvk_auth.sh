@@ -373,14 +373,12 @@ _au_list_rowtext() {
   [ "${_BVK_AUTH_IDS[$_AU_SLOT]}" = "$_BVK_AUTH_ACTIVE" ] && mark="  ★ active"
   printf -v _vp_line ' %2d) 👤 %s  %s%s' "$1" "${items[$(( $1 - 1 ))]}" "${_BVK_AUTH_TAGS[$_AU_SLOT]}" "$mark"
 }
-_au_list_header() {
-  echo
-  echo "🔐 -auth — select user"
-  [ "${#_BVK_AUTH_IDS[@]}" -eq 0 ] && echo "   (no users yet — press c to create one, or ui to import)"
-  _vp_filter_header_line
+_au_list_header() {                                # template 7P68NA
+  local _n=""; [ "${#_BVK_AUTH_IDS[@]}" -eq 0 ] && _n="   (no users yet — press c to create one, or ui to import)"
+  _tpl_list_header "🔐 -auth — select user" "$_n"
 }
 _au_list_footer() {
-  _mc_std_items -b; _mc_footer "c:Create user" "r:Remove user" "|" "ux:Export users" "ui:Import users" "=:Filter" "|" "${_MC_STD[@]}"
+  _mc_std_items -b; _tpl_footer 7P68NA "c:Create user" "r:Remove user" "|" "ux:Export users" "ui:Import users" "=:Filter" "|" "${_MC_STD[@]}"
 }
 _au_list_build() {
   _bvk_auth_list
@@ -434,15 +432,15 @@ _bvk_rate_min() { awk -v p="$(_bvk_rate_per "$1")" 'BEGIN{printf "%g", p}'; }   
 _au_pause() { :; }   # no stranded "press any key": the message stays on screen and the menu redraws below it
 _au_trunc() { local s="$1" n="$2"; [ "${#s}" -gt "$n" ] && s="${s:0:$((n-1))}…"; printf '%s' "$s"; }
 
-_au_sub_header() {
-  echo; echo "👤 Acting as: $_AU_MAIL"
+_au_sub_header() {                                 # template 7P68NA
+  local _n=""
   case "$_AU_SCREEN" in
-    billing)  echo "🧾 Billing details — printed on your invoice (stored on this device)" ;;
-    recharge) echo "💳 Recharge — $(_bvk_rate_text) · minimum $(_bvk_money_fmt USD "$(_bvk_rate_min USD)") / $(_bvk_money_fmt INR "$(_bvk_rate_min INR)") per account" ;;
+    billing)  _n="🧾 Billing details — printed on your invoice (stored on this device)" ;;
+    recharge) _n="💳 Recharge — $(_bvk_rate_text) · minimum $(_bvk_money_fmt USD "$(_bvk_rate_min USD)") / $(_bvk_money_fmt INR "$(_bvk_rate_min INR)") per account" ;;
   esac
-  _vp_filter_header_line
+  _tpl_list_header "👤 Acting as: $_AU_MAIL" "$_n"
 }
-_au_sub_footer() { _mc_std_items -b; _mc_footer "=:Filter" "|" "${_MC_STD[@]}"; }
+_au_sub_footer() { _mc_std_items -b; _tpl_footer 7P68NA "=:Filter" "|" "${_MC_STD[@]}"; }
 
 _au_billing_build() {
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
@@ -616,13 +614,9 @@ _au_user_rowtext() {
   printf -v _vp_line ' %2d) %s%s' "$1" "${items[$(( $1 - 1 ))]}" "$mark"
 }
 _au_plain_rowtext() { printf -v _vp_line ' %2d) %s' "$1" "${items[$(( $1 - 1 ))]}"; }
-_au_user_header() {
-  echo
-  echo "👤 Acting as: $_AU_MAIL"
-  _vp_filter_header_line
-}
+_au_user_header() { _tpl_list_header "👤 Acting as: $_AU_MAIL"; }          # template 7P68NA
 _au_user_footer() {
-  _mc_std_items -b; _mc_footer "ux:Export" "ui:Import" "=:Filter" "|" "${_MC_STD[@]}"
+  _mc_std_items -b; _tpl_footer 7P68NA "ux:Export" "ui:Import" "=:Filter" "|" "${_MC_STD[@]}"
 }
 _au_user_build() {                       # returns 1 if the profile vanished
   _bvk_auth_list
@@ -669,7 +663,7 @@ _au_row() { _vp_row "$1" _AU_SLOT; }
 # ── the redrawer: exactly what `d` / `r` use in the outer loop (_multi_prompt_loop)
 # Rows stay on screen, typing 1,3-5 / a / a-2 lights them up live; Enter confirms.
 _AU_PICK_TITLE=""
-_au_pick_header() { echo; echo "$_AU_PICK_TITLE"; }
+_au_pick_header() { _tpl_clear; _tpl_set menu_name "$_AU_PICK_TITLE"; _tpl_section YWW6WZ menu_header; }      # a title only: the step-menu header (YWW6WZ)
 
 # _au_parse_sel "<1,3-5 | a | a-2>"  -> _AU_SEL = display rows
 _au_parse_sel() { _vp_parse_sel _AU_SEL "$1"; }

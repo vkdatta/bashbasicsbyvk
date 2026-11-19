@@ -46,7 +46,7 @@ _cs_load() {
 
 _cs_answer_offer() {                         # share id, alias
   echo "   📨 “${2:-$1}” was offered to you.   1. Yes   2. No"
-  local a; _bvk_read a "   Select: "
+  local a; _bvk_read a "   ${_TPL_ACCEPTOR} "
   case "$a" in
     1|y|Y) a=true ;; 2|n|N) a=false ;; *) echo "🕒 Left for later."; return 0 ;;
   esac
@@ -92,14 +92,12 @@ cs_row() {
 }
 # ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar and builds the footer ──
 _tm_define cs _CS_TAB "☁️  Cloud Surf" "Cloud Surf" 0:"📤 Given" 1:"📥 Received"
-cs_header() {
-  _tm_header cs                                    # blank · title · tab bar · description (Cloud Surf|0 · Cloud Surf|1)
-  _tm_count_line
-  echo
+cs_header() {                                      # template V3PX4Y (Cloud Surf|0 · Cloud Surf|1)
+  local _n=""
   if [ "${#items[@]}" -eq 0 ]; then
-    [ "$_CS_TAB" = 0 ] && echo "Nothing shared yet — use  ux-<items>  in the file surf." || echo "Nothing received yet."
+    [ "$_CS_TAB" = 0 ] && _n="Nothing shared yet — use  ux-<items>  in the file surf." || _n="Nothing received yet."
   fi
-  _vp_filter_header_line
+  _tm_head -n "$_n" cs
 }
 cs_footer() { _tm_footer -b; }                     # u q h cc: every other key (N x-N e-N r-N rf …) is listed by cc
 
@@ -201,12 +199,11 @@ cs_pp_row() {
   [ -n "${_PP_RID[$k]}" ] || tag="🔴 link removed"
   printf -v _vp_line ' %2d) 👤 %-28s [%s…]  %s' "$1" "$(_xui_trunc "${_PP_MAIL[$k]}" 28)" "${_PP_D30[$k]:0:6}" "$tag"
 }
-cs_pp_header() {
-  echo; echo "📦 “${_PP_ALIAS:-$_PP_ID}” — who can see it"
-  [ "${#items[@]}" -eq 0 ] && echo "   Nobody (everyone was revoked)."
-  _vp_filter_header_line
+cs_pp_header() {                                   # template 7P68NA
+  local _n=""; [ "${#items[@]}" -eq 0 ] && _n="   Nobody (everyone was revoked)."
+  _tpl_list_header "📦 “${_PP_ALIAS:-$_PP_ID}” — who can see it" "$_n"
 }
-cs_pp_footer() { _mc_footer_std -b "N:their files" "r-N:revoke person" "g:offer to more people" "t:all my files"; }
+cs_pp_footer() { _mc_footer_std -T 7P68NA -b "N:their files" "r-N:revoke person" "g:offer to more people" "t:all my files"; }
 
 _pp_revoke() {
   _xui_select_rows "REVOKE" "🚫 Revoke which people from this share?" "$1" || return 1
@@ -305,12 +302,12 @@ ct_row() {
 ct_header() {
   local crumb="“${_CT_ALIAS:-$_CT_ID}”" c
   for c in "${_CT_CRUMB[@]}"; do crumb+=" › $c"; done
-  echo; echo "📂 $crumb"
-  if   [ "$_CT_ROLE" = receiver ]; then echo "   from $_CT_FROM  ·  $(_xui_left "$_CT_EXP")"
-  elif [ -n "$_CT_RID" ];          then echo "   what ${_CT_MAILS:-this person} can see"
-  else                                  echo "   all files in this share (yours)"; fi
-  [ "${#items[@]}" -eq 0 ] && echo "   (empty)"
-  _vp_filter_header_line
+  local n                                          # template 7P68NA
+  if   [ "$_CT_ROLE" = receiver ]; then n="   from $_CT_FROM  ·  $(_xui_left "$_CT_EXP")"
+  elif [ -n "$_CT_RID" ];          then n="   what ${_CT_MAILS:-this person} can see"
+  else                                  n="   all files in this share (yours)"; fi
+  [ "${#items[@]}" -eq 0 ] && n+=$'\n'"   (empty)"
+  _tpl_list_header "📂 $crumb" "$n"
 }
 ct_footer() {
   local rv="r-N:revoke"
@@ -319,7 +316,7 @@ ct_footer() {
   local -a _f=("N:open" "d-N:download here")
   [ -n "$rv" ] && _f+=("$rv")
   _f+=("rf")
-  _mc_footer_std "${_f[@]}"
+  _mc_footer_std -T 7P68NA "${_f[@]}"
 }
 
 _ct_dest() { local d="${path:-$PWD}"; [ -d "$d" ] && [ -w "$d" ] || d="$PWD"; printf '%s' "$d"; }

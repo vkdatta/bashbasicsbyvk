@@ -67,12 +67,9 @@ rb_row() {
 }
 # ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar and builds the footer ──
 _tm_define rb _RB_TAB "🤝 RBAM" "RBAM" 0:"📤 Give access" 1:"📥 Receive access"
-rb_header() {
-  _tm_header rb                                    # blank · title · tab bar · description (RBAM|0 · RBAM|1)
-  _tm_count_line
-  echo
-  [ "${#items[@]}" -eq 0 ] && echo "Nobody here yet — type  ui  to add someone."
-  _vp_filter_header_line
+rb_header() {                                      # template V3PX4Y (RBAM|0 · RBAM|1)
+  local _n=""; [ "${#items[@]}" -eq 0 ] && _n="Nobody here yet — type  ui  to add someone."
+  _tm_head -n "$_n" rb
 }
 rb_footer() { _tm_footer -b; }                     # u q h cc: every other key (ui ux r-N sd N …) is listed by cc
 
@@ -172,7 +169,7 @@ _rb_answer() {
   else q="has offered to give you receive access. Become their receiver?"; fi
   echo "   📨 ${_RB_MAIL[$k]} [${_RB_D30[$k]}] $q"
   echo "      1. Yes   2. No"
-  local a; _bvk_read a "   Select: "
+  local a; _bvk_read a "   ${_TPL_ACCEPTOR} "
   case "$a" in 1|y|Y) _nf_rbam_respond "${_RB_RID[$k]}" true ;; 2|n|N) _nf_rbam_respond "${_RB_RID[$k]}" false ;; *) echo "🚫 No answer given." ;; esac
 }
 
@@ -236,15 +233,15 @@ ru_row() {
   [ "$st" = offered ] && tag="  ⏳ not accepted yet"
   printf -v _vp_line ' %2d) 📦 %-24s %9s  %s%s' "$1" "$(_xui_trunc "${_RU_ALIAS[$k]:-${_RU_ID[$k]}}" 24)" "$(_xui_hsize "${_RU_BYTES[$k]}")" "$(_xui_left "${_RU_EXP[$k]}")" "$tag"
 }
-ru_header() {
-  echo
-  if [ "$_RB_TAB" = 0 ]; then echo "👤 $_RU_MAIL can reach these of your shares:"; else echo "👤 $_RU_MAIL has shared these with you:"; fi
-  [ "${#items[@]}" -eq 0 ] && echo "   (nothing)"
-  _vp_filter_header_line
+ru_header() {                                      # template 7P68NA
+  local _t _n=""
+  if [ "$_RB_TAB" = 0 ]; then _t="👤 $_RU_MAIL can reach these of your shares:"; else _t="👤 $_RU_MAIL has shared these with you:"; fi
+  [ "${#items[@]}" -eq 0 ] && _n="   (nothing)"
+  _tpl_list_header "$_t" "$_n"
 }
 ru_footer() {
-  if [ "$_RB_TAB" = 0 ]; then _mc_footer_std -b "N:files" "r-N:revoke this person from a share"
-  else                        _mc_footer_std -b "N:files" "r-N:drop a share from my Cloud Surf"; fi
+  if [ "$_RB_TAB" = 0 ]; then _mc_footer_std -T 7P68NA -b "N:files" "r-N:revoke this person from a share"
+  else                        _mc_footer_std -T 7P68NA -b "N:files" "r-N:drop a share from my Cloud Surf"; fi
 }
 
 _ru_remove() {

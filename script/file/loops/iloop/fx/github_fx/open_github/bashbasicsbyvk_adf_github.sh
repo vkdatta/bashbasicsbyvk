@@ -107,14 +107,11 @@ ghp_row() {
   printf -v _vp_line ' %2d) %s %-34s %s%s' "$1" "$ic" "$(_xui_trunc "${_GHX_R_NAME[$s]}" 34)" "${_GHX_R_PUSHED[$s]:-—}" "$tag"
 }
 
-ghp_header() {
-  echo; echo "🐙 GitHub   ${#_GHX_R_NAME[@]} repo(s) · signed in as ${_GHX_LOGIN}"
-  printf '🔑 key: %s\n' "$_GHX_SRC"
-  printf '📂 downloads go to: %s\n' "$_GHX_NAV"
-  _vp_filter_header_line
+ghp_header() {                                     # template 7P68NA
+  _tpl_list_header "🐙 GitHub   ${#_GHX_R_NAME[@]} repo(s) · signed in as ${_GHX_LOGIN}" "🔑 key: $_GHX_SRC"$'\n'"📂 downloads go to: $_GHX_NAV"
 }
 
-ghp_footer() { _mc_std_items -b; _mc_footer "#Select a number to open that repo" "=:filter" "rf" "${_MC_STD[@]}"; }
+ghp_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that repo" "=:filter" "rf" "${_MC_STD[@]}"; }
 
 _ghp_cmd() {
   case "$1" in
@@ -162,14 +159,12 @@ ghr_row() {
   _vp_line="$line"
 }
 
-ghr_header() {
-  _tm_header ghr "🐙 $_GHX_REPO"                   # blank · title (the repo) · tab bar · description (GitHub|stable · tags)
-  _tm_count_line
-  echo
+ghr_header() {                                     # template V3PX4Y: the title is the repo (GitHub|stable · tags)
+  local _n=""
   if [ "${#items[@]}" -eq 0 ]; then
-    if [ "$_GHX_TAB" = stable ]; then echo "No stable releases yet — c creates one, or open the Tags tab."; else echo "No tags yet — c creates one."; fi
+    if [ "$_GHX_TAB" = stable ]; then _n="No stable releases yet — c creates one, or open the Tags tab."; else _n="No tags yet — c creates one."; fi
   fi
-  _vp_filter_header_line
+  _tm_head -t "🐙 $_GHX_REPO" -n "$_n" ghr
 }
 
 ghr_footer() { _tm_footer -b; }                    # u q h cc: every other key (c e r d g i-N rf, N · 1,3-5 · a · a-2) is listed by cc

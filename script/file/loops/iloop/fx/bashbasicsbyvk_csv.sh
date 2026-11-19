@@ -79,8 +79,8 @@ _file_picker() {
         # ── Render list (single rule at the bottom only — the fx menu above
         #    already ends with its own rule, so a top rule here doubled it) ──
         _pick_rows "${_fp_items[@]}"
-        _mc_footer_std
-        _mc_read _fp_choice "Select: " || { _mc_unwind; _fp_out=""; return 1; }       # rc != 0: the flow was cancelled
+        _mc_footer_std -T MG2374
+        _mc_read _fp_choice "${_TPL_ACCEPTOR} " || { _mc_unwind; _fp_out=""; return 1; }       # rc != 0: the flow was cancelled
 
         # strip surrounding whitespace
         _fp_choice="${_fp_choice#"${_fp_choice%%[![:space:]]*}"}"

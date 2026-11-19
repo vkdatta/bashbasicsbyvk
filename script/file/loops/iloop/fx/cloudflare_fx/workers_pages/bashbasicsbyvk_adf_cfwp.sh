@@ -84,15 +84,14 @@ cfw_row() {
 cfw_header() {
   local w=0 p=0 t
   for t in "${_CFW_TYPE[@]}"; do [ "$t" = Worker ] && w=$((w+1)) || p=$((p+1)); done
-  echo; echo "☁️  Cloudflare Workers and Pages   (${w} workers · ${p} pages)"
-  printf '📂 %s\n' "$_CFW_NAV"
-  if declare -F _tz_label >/dev/null 2>&1; then printf '🕒 Latest deployment shown in: %s\n' "$(_tz_label)"; fi
-  _vp_filter_header_line
+  local n="📂 $_CFW_NAV"                          # template 7P68NA
+  if declare -F _tz_label >/dev/null 2>&1; then n+=$'\n'"🕒 Latest deployment shown in: $(_tz_label)"; fi
+  _tpl_list_header "☁️  Cloudflare Workers and Pages   (${w} workers · ${p} pages)" "$n"
 }
 
 cfw_footer() {
   _mc_std_items -b
-  _mc_footer "#Select:  N · 1,3-5 · a (all) · a-2 (all except 2)" "r:live picker" "rf" "${_MC_STD[@]}" \
+  _tpl_footer 7P68NA "#Select:  N · 1,3-5 · a (all) · a-2 (all except 2)" "r:live picker" "rf" "${_MC_STD[@]}" \
     "#Recover  → $_CFW_NAV/<name>-recovered  (worker) · <name>-pages-recovered  (pages)" \
     "#Export   → e (all shown) · e-1,3-5 (picked)  as csv / json / both into the same folder"
 }

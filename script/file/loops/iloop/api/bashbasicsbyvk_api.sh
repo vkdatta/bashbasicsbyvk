@@ -449,37 +449,37 @@ _api_tick() {
 # "sorted: Time to expiry · smallest to largest  (s › Display › Sort order)"
 _api_sort_note() { _ms_label "${_MS_CTX:-links}"; printf 'sorted: %s  (s → Display → Sort order)' "$_ms_l"; }
 
-_api_menu_header() {
-  echo
+_api_menu_header() {                               # template 7P68NA
+  local _t _n
   case "$_API_SVC" in
     backup)
-      printf '🗄️  BACKUP (bk)   💳 balance: %s credits\n' "${_API_BAL:-?}"
-      printf '   copies taken just before you deleted something · %s · r-N restores here · c-N copies its link\n' "$(_api_sort_note)" ;;
+      _t="🗄️  BACKUP (bk)   💳 balance: ${_API_BAL:-?} credits"
+      _n="   copies taken just before you deleted something · $(_api_sort_note) · r-N restores here · c-N copies its link" ;;
     saved)
-      printf '💾 SAVED SURF (sv)   💳 balance: %s credits\n' "${_API_BAL:-?}"
-      printf '   things you stored with  save-  · no link exists · opens from any device with your e-mail, diseps and API key · r-N restores here · %s\n' "$(_api_sort_note)" ;;
+      _t="💾 SAVED SURF (sv)   💳 balance: ${_API_BAL:-?} credits"
+      _n="   things you stored with  save-  · no link exists · opens from any device with your e-mail, diseps and API key · r-N restores here · $(_api_sort_note)" ;;
     *)
-      printf '🔗 LINKS (api)   💳 balance: %s credits\n' "${_API_BAL:-?}"
-      printf '   %s · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine\n' "$(_api_sort_note)" ;;
+      _t="🔗 LINKS (api)   💳 balance: ${_API_BAL:-?} credits"
+      _n="   $(_api_sort_note) · shown by alias (up-1-3 as <alias>) · c-N copies a link · the key never leaves your machine" ;;
   esac
-  [ -n "$_API_ERR" ] && printf '   🔴  %s — rf to retry\n' "$_API_ERR"
+  [ -n "$_API_ERR" ] && _n+=$'\n'"   🔴  $_API_ERR — rf to retry"
   if [ -z "$_API_ERR" ] && [ "${#items[@]}" -eq 0 ]; then
     case "$_API_SVC" in
-      backup) printf '   No backups. They are made automatically when you delete (Settings → File API → Backup).\n' ;;
-      saved)  printf '   Nothing saved yet. Try  save-1-3  or  save-2 as notes.\n' ;;
-      *)      printf '   No active links. Make one with  up-1-3 as notes  or  c2c-2 as snippet.\n' ;;
+      backup) _n+=$'\n'"   No backups. They are made automatically when you delete (Settings → File API → Backup)." ;;
+      saved)  _n+=$'\n'"   Nothing saved yet. Try  save-1-3  or  save-2 as notes." ;;
+      *)      _n+=$'\n'"   No active links. Make one with  up-1-3 as notes  or  c2c-2 as snippet." ;;
     esac
   fi
-  _vp_filter_header_line
+  _tpl_list_header "$_t" "$_n"
 }
 
 _api_menu_footer() {
   case "$_API_SVC" in
-    backup) _mc_footer "#[Backup]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+    backup) _tpl_footer 7P68NA "#[Backup]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
       "N:Open" "r-N:Restore here" "c-N:Copy link" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf" "u" "bk:Close" ;;
-    saved)  _mc_footer "#[Saved]  ${#items[@]} saved   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+    saved)  _tpl_footer 7P68NA "#[Saved]  ${#items[@]} saved   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
       "N:Open" "r-N:Restore here" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf" "u" "sv:Close" ;;
-    *)      _mc_footer "#[Links]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+    *)      _tpl_footer 7P68NA "#[Links]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
       "N:Open" "c-N:Copy link (c-1,3-5)" "g-N:New address" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" \
       "rf" "u" "api:Close" ;;
   esac

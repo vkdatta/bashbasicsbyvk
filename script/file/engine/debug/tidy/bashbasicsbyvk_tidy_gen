@@ -1,28 +1,35 @@
 #!/usr/bin/env python3
-"""bashbasicsbyvk_tidy_gen — the TEMPLATE IDs of the menus (🧶 tidy).
+"""bashbasicsbyvk_tidy_gen — the TEMPLATES of the menus (🧶 tidy).
 
 A template ID names a LAYOUT TEMPLATE, not a screen: every screen built on the same template has the same ID (Delete and Rename are both
-"step menu").  The list says which template each screen (fn:NAME) and each command map (map:NAME) is built on.
+"item picker").  The ID is also the FILE: templates/bashbasicsbyvk_<ID>.sh.tpl.  The chain is   global definer (bashbasicsbyvk_tpl_defs.sh: every
+$section and {placeholder} defined once) -> .sh.tpl (the layout, reusing them) -> processor (bashbasicsbyvk_tpl.sh) -> the menu files, which call a template by ID.
+The list says which template each screen (fn:NAME) and each command map (map:NAME) is built on.
 
-  bashbasicsbyvk_tidy_gen --templates            the templates: ID, name, how many screens
+  bashbasicsbyvk_tidy_gen --templates            the templates: ID, name, how many screens, wired or declared
+  bashbasicsbyvk_tidy_gen --show ID              the template file and the placeholders it uses (with what each one is)
+  bashbasicsbyvk_tidy_gen --placeholders         every section / placeholder of the global definer and the templates that use it
   bashbasicsbyvk_tidy_gen --list                 every screen with its template ID
   bashbasicsbyvk_tidy_gen --set KEY TEMPLATE     move a screen to another template (TEMPLATE = its name or its ID); KEY = fn:NAME or map:NAME
-  bashbasicsbyvk_tidy_gen --newtemplate NAME     draw an ID for a new template
+  bashbasicsbyvk_tidy_gen --newtemplate NAME     draw an ID for a new template (--write then creates its .sh.tpl skeleton once a screen uses it)
   bashbasicsbyvk_tidy_gen --write                add every command map and menus.list function that is not listed yet (its template is guessed from the code); refresh the file column
   bashbasicsbyvk_tidy_gen --add KEY...           list a screen (guessed the same way; --set corrects a wrong guess)
-  bashbasicsbyvk_tidy_gen --check                the list is well formed and complete (the static suite t_tidy.py runs the same rules)
+  bashbasicsbyvk_tidy_gen --check                the list is well formed and complete, every template has its file, uses only defined placeholders (the static suite t_tidy.py runs the same rules)
 
 An ID is 6 characters, capital letters and digits (no 0/O/1/I), at least one of each, one per template, assigned ONCE and never changed."""
-import os, re, secrets, sys
+import glob, os, re, secrets, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FILE = os.path.abspath(os.path.join(HERE, '..', '..', '..'))                    # script/file
 LIST = os.path.join(HERE, 'bashbasicsbyvk_tidy.list')
+TPLDIR = os.path.join(FILE, 'templates')                                          # script/file/templates
+DEFS = os.path.join(TPLDIR, 'bashbasicsbyvk_tpl_defs.sh')
 ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 ID_RE = re.compile(r'^(?=.*[A-Z])(?=.*[0-9])[A-Z0-9]{6}$')
 KEY_RE = re.compile(r'^(fn|map):[A-Za-z_][A-Za-z0-9_.:-]*$')
-HEAD = ('# bashbasicsbyvk_tidy.list — the template of every menu (🧶 tidy prints its ID).   template ID | template | key | file\n'
-        '# One ID per TEMPLATE: screens built on the same template share the ID.  key: fn:<function that draws the screen> or map:<command map>.\n'
+HEAD = ('# bashbasicsbyvk_tidy.list — which TEMPLATE every menu is built on (🧶 tidy prints it).   template ID | template | key | file\n'
+        '# The ID is the file: templates/bashbasicsbyvk_<ID>.sh.tpl lays the screen out; bashbasicsbyvk_tpl_defs.sh defines every {placeholder} once;\n'
+        '# bashbasicsbyvk_tpl.sh is the processor.  Screens on the same template share the ID.  key: fn:<function that draws the screen> or map:<command map>.\n'
         '# The innermost listed function on the call stack wins, then the map.  Change a screen with  bashbasicsbyvk_tidy_gen --set KEY TEMPLATE.\n')
 
 
@@ -69,7 +76,7 @@ def menus_list_funcs():
     return out
 
 
-RULES = [('item picker', r'select_items_common|select_imaginary_items_common|_pk_header|_pick_header|_pick_rows|_pick_suggest'), ('split screen', r'_xui_loop|_xui_screen'), ('tabbed menu', r'\b_tm_[a-z]+'),
+RULES = [('item picker', r'select_items_common|select_imaginary_items_common|_pk_header|_pick_header|_pick_rows|_pick_suggest'), ('tabbed menu', r'\b_tm_[a-z]+'), ('list menu', r'_xui_loop|_xui_screen'),
          ('settings list', r'\b_st_run\b'), ('step menu', r'_mc_steps|_mc_select|_mc_text|_mc_header|_mc_options|_mc_footer|\b_bvk_menu\b|\b_bvk_yn\b')]
 
 
@@ -87,16 +94,110 @@ def guess(key, fns, mps, by_key):
     if kind == 'map':
         if name == 'main': return 'main list'
         if name == 'prompt': return 'step menu'
-        if name.startswith('xui_'): return 'split screen'
+        if name.startswith('xui_'): return 'tabbed menu' if name in ('xui_rb', 'xui_cs', 'xui_ghr') else 'list menu'
         for l in open(os.path.join(FILE, 'cmdmap', 'bashbasicsbyvk_menus.list'), encoding='utf-8'):
             p = [x.strip() for x in l.split('|')]
             if len(p) > 1 and p[0] == name and 'fn:' + p[1] in by_key: return by_key['fn:' + p[1]]
         return 'list menu'
-    if name.startswith('_xui_'): return 'split screen'
+    if name.startswith('_xui_'): return 'list menu'
     b = body_of(name, fns[name]) if name in fns else ''
     for t, rx in RULES:
         if re.search(rx, b): return t
     return 'list menu'
+
+
+def tpl_file(i): return os.path.join(TPLDIR, 'bashbasicsbyvk_%s.sh.tpl' % i)
+
+
+def defs():
+    """the global definer, read as data: ({section: desc}, {placeholder: (kind, spec, desc)})"""
+    secs, phs = {}, {}
+    if not os.path.exists(DEFS): return secs, phs
+    for l in open(DEFS, encoding='utf-8'):
+        m = re.match(r'_tpl_defsection\s+(\w+)\s+"([^"]*)"', l)
+        if m: secs[m.group(1)] = m.group(2); continue
+        m = re.match(r'_tpl_def\s+(\w+)\s+(var|text|fn|slot|prompt)\s+("[^"]*"|\S+)\s+"([^"]*)"', l)
+        if m: phs[m.group(1)] = (m.group(2), m.group(3).strip('"'), m.group(4))
+    return secs, phs
+
+
+def parse_tpl(i):
+    """-> (sections in order, {section: [rows]}, [names used], [conditions used]) of templates/bashbasicsbyvk_<ID>.sh.tpl, or None"""
+    f = tpl_file(i)
+    if not os.path.exists(f): return None
+    order, rowsd, used, conds = [], {}, [], []; sec = None
+    for l in open(f, encoding='utf-8').read().split('\n'):
+        if l.startswith('#'): continue
+        m = re.match(r'^\$([a-z_]+)\s*$', l)
+        if m: sec = m.group(1); order.append(sec); rowsd[sec] = []; continue
+        if sec is None: continue
+        rowsd[sec].append(l)
+        if l.startswith('?'):
+            c = re.match(r'^\?([a-z_]+)', l)
+            if c: conds.append(c.group(1))
+        used += re.findall(r'\{([a-z_]+)\}', l)
+    return order, rowsd, used, conds
+
+
+def tpl_problems(rs):
+    """the template files: one per ID, only defined sections and placeholders, nothing defined inside a template, every defined name used"""
+    bad = []; secs, phs = defs(); ids = sorted({i for i, _, _, _ in rs}); seen = set()
+    if not phs: bad.append('%s: no placeholder is defined' % os.path.relpath(DEFS, FILE))
+    for i in ids:
+        t = parse_tpl(i)
+        if t is None: bad.append('template %s: no file templates/bashbasicsbyvk_%s.sh.tpl (run --write)' % (i, i)); continue
+        order, rowsd, used, conds = t
+        for s_ in order:
+            if s_ not in secs: bad.append('template %s: section $%s is not defined in bashbasicsbyvk_tpl_defs.sh' % (i, s_))
+        if not order: bad.append('template %s: no $section in it' % i)
+        for n in used + conds:
+            if n not in phs: bad.append('template %s: {%s} is not defined in bashbasicsbyvk_tpl_defs.sh (define it there, once)' % (i, n))
+        seen |= set(used) | set(conds)
+        for s_, rr in rowsd.items():
+            for r in rr:
+                if re.match(r'^\s*(_tpl_def|declare|local)\b|^\s*\{[a-z_]+\}\s*=', r): bad.append('template %s: defines something (%r): templates only USE the definer' % (i, r.strip()[:40]))
+                if '{' in r and not re.search(r'\{[a-z_]+\}', r): bad.append('template %s: a "{" that is no placeholder: %r' % (i, r.strip()[:40]))
+        for r in rowsd.get('menu_header', []) + rowsd.get('menu_footer', []):          # a row that is only {fn/slot} is fine; fn / slot inside text is not printable inline
+            for n in re.findall(r'\{([a-z_]+)\}', r):
+                if n in phs and phs[n][0] in ('fn', 'slot') and not re.match(r'^(\?[a-z_]+ )?\{[a-z_]+\}$', r.strip()):
+                    bad.append('template %s: {%s} is a %s placeholder: it needs a row of its own' % (i, n, phs[n][0]))
+    for n in phs:
+        if n not in seen: bad.append('placeholder {%s} is defined but no template uses it' % n)
+    for f in glob.glob(os.path.join(TPLDIR, 'bashbasicsbyvk_*.sh.tpl')):
+        i = os.path.basename(f)[len('bashbasicsbyvk_'):-len('.sh.tpl')]
+        if i not in ids: bad.append('templates/%s: no screen in the list uses this template (delete the file or list a screen)' % os.path.basename(f))
+    return bad
+
+
+# wired = a menu file really calls the template by ID (grep): the rest are declared (layout fixed, the screen still draws itself)
+def wired(i):
+    n = 0
+    for dp, dn, fn in os.walk(FILE):
+        if os.path.abspath(dp).startswith(TPLDIR): continue
+        for f in fn:
+            if f.endswith('.sh'):
+                try:
+                    if re.search(r'_tpl_(section|render|build|footer)\s+(-p\s+\S+\s+)?' + i + r'\b', open(os.path.join(dp, f), encoding='utf-8', errors='ignore').read()): n += 1
+                except OSError: pass
+    return n
+
+
+SKELETON = """# %(id)s — %(name)s.  A template only USES what bashbasicsbyvk_tpl_defs.sh defines (sections $name, placeholders {name}); define a new one THERE, once.
+$menu_header
+
+{menu_name}
+
+{menu_description}
+
+$menu_body
+{menu_list}
+
+$menu_footer
+
+{footer_commands}
+{menu_suggestions}
+{footer_acceptor}
+"""
 
 
 def new_id(used):
@@ -124,6 +225,7 @@ def problems(rs, fns, mps):
         if 'map:' + m not in keys: bad.append('map:%s has no template ID (run --write)' % m)
     for fn in menus_list_funcs():
         if 'fn:' + fn not in keys: bad.append('fn:%s (menus.list) has no template ID (run --write)' % fn)
+    bad += tpl_problems(rs)
     return bad
 
 
@@ -142,7 +244,23 @@ def main(a):
         print('tidy: %d screens, %d templates, %s' % (len(rs), len({t for _, t, _, _ in rs}), 'OK' if not bad else '%d problems' % len(bad))); return 1 if bad else 0
     tid = {t: i for i, t, _, _ in rs}
     if a[0] == '--templates':
-        for t, i in sorted(tid.items(), key=lambda x: x[1]): print('%s  %-14s %d screens' % (i, t, sum(1 for r in rs if r[1] == t)))
+        for t, i in sorted(tid.items(), key=lambda x: x[1]):
+            w = wired(i); print('%s  %-14s %2d screens  %s  %s' % (i, t, sum(1 for r in rs if r[1] == t), 'wired (%d callers)' % w if w else 'declared       ', 'templates/bashbasicsbyvk_%s.sh.tpl' % i if os.path.exists(tpl_file(i)) else 'NO FILE'))
+        return 0
+    if a[0] == '--show' and len(a) == 2:
+        i = next((x for t, x in tid.items() if a[1] in (t, x)), None); p = parse_tpl(i) if i else None
+        if not p: print('no template', a[1]); return 2
+        _, phs = defs(); print(open(tpl_file(i), encoding='utf-8').read().rstrip('\n')); print()
+        for n in dict.fromkeys(p[2] + p[3]): print('  {%s}  %s  %s' % (n, phs.get(n, ('?',))[0], phs.get(n, ('', '', 'NOT DEFINED'))[2]))
+        return 0
+    if a[0] == '--placeholders':
+        secs, phs = defs(); users = {}
+        for i in tid.values():
+            p = parse_tpl(i)
+            if p:
+                for n in set(p[2] + p[3]) | set(p[0]): users.setdefault(n, []).append(i)
+        for n, d in secs.items(): print('$%-18s %-7s %s   [%s]' % (n, 'section', d, ' '.join(users.get(n, []))))
+        for n, (k, sp, d) in phs.items(): print('{%-17s} %-7s %s   [%s]' % (n, k, d, ' '.join(users.get(n, []))))
         return 0
     if a[0] == '--list':
         for i, t, k, p in sorted(rs, key=lambda r: (r[1], r[2])): print('%s  %-14s %-34s %s' % (i, t, k, p))
@@ -172,7 +290,11 @@ def main(a):
             kind, name = r[2].split(':', 1)
             r[3] = fns.get(name, r[3]) if kind == 'fn' else mps.get(name, r[3])
         rs.sort(key=lambda r: (r[1], r[2]))
-        save(rs); print('tidy: %d screens written' % len(rs)); return 0
+        save(rs); made = []
+        for t, i in tid.items():                                                       # every template has its file: a skeleton when it has none
+            if not os.path.exists(tpl_file(i)):
+                os.makedirs(TPLDIR, exist_ok=True); open(tpl_file(i), 'w', encoding='utf-8').write(SKELETON % {'id': i, 'name': t.upper()}); made.append(i)
+        print('tidy: %d screens written%s' % (len(rs), ('; template files created: ' + ' '.join(made)) if made else '')); return 0
     print(__doc__); return 2
 
 

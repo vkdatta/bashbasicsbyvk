@@ -33,7 +33,7 @@ _dd_s_pick() {
   for i in "${!keys[@]}"; do
     printf '%d) %s  (%d file(s))\n' $((i+1)) "${keys[$i]}" "${count[${keys[$i]}]}"
   done
-  _mc_text reply "Select: " "Pick one or more: numbers/ranges (1,3 or 2-4), or a = all"
+  _mc_text reply "${_TPL_ACCEPTOR} " "Pick one or more: numbers/ranges (1,3 or 2-4), or a = all"
   case $? in 0) ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac       # u = back to the level question
   [ -z "$reply" ] && { echo "🚫 Cancelled"; return 3; }
   return 0

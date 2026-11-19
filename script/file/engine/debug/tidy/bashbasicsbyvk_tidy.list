@@ -1,30 +1,48 @@
-# bashbasicsbyvk_tidy.list — the template of every menu (🧶 tidy prints its ID).   template ID | template | key | file
-# One ID per TEMPLATE: screens built on the same template share the ID.  key: fn:<function that draws the screen> or map:<command map>.
+# bashbasicsbyvk_tidy.list — which TEMPLATE every menu is built on (🧶 tidy prints it).   template ID | template | key | file
+# The ID is the file: templates/bashbasicsbyvk_<ID>.sh.tpl lays the screen out; bashbasicsbyvk_tpl_defs.sh defines every {placeholder} once;
+# bashbasicsbyvk_tpl.sh is the processor.  Screens on the same template share the ID.  key: fn:<function that draws the screen> or map:<command map>.
 # The innermost listed function on the call stack wins, then the map.  Change a screen with  bashbasicsbyvk_tidy_gen --set KEY TEMPLATE.
-7UH852 | item picker   | fn:_file_picker                  | loops/iloop/fx/bashbasicsbyvk_csv.sh
 7UH852 | item picker   | fn:_fx_sel_browse                | loops/iloop/fx/file_fx/selection/bashbasicsbyvk_adf_selection.sh
 7UH852 | item picker   | fn:_fx_sel_pick                  | loops/iloop/fx/file_fx/selection/bashbasicsbyvk_adf_selection.sh
-7UH852 | item picker   | fn:gcloud_navigator              | functions/transfer/bashbasicsbyvk_transfer.sh
-7UH852 | item picker   | fn:local_navigator               | functions/transfer/bashbasicsbyvk_transfer.sh
 7UH852 | item picker   | fn:select_imaginary_items_common | engine/ui/bashbasicsbyvk_browse.sh
 7UH852 | item picker   | fn:select_items_common           | engine/ui/bashbasicsbyvk_browse.sh
 7P68NA | list menu     | fn:_bvk_auth_sub_menu            | loops/iloop/auth/bashbasicsbyvk_auth.sh
 7P68NA | list menu     | fn:_bvk_auth_user_menu           | loops/iloop/auth/bashbasicsbyvk_auth.sh
-7P68NA | list menu     | fn:_results_view                 | engine/ui/bashbasicsbyvk_results.sh
-7P68NA | list menu     | fn:_view_selections_menu         | functions/transfer/bashbasicsbyvk_transfer.sh
+7P68NA | list menu     | fn:_cs_people_open               | loops/iloop/rbam/bashbasicsbyvk_csurf.sh
+7P68NA | list menu     | fn:_cs_tree_open                 | loops/iloop/rbam/bashbasicsbyvk_csurf.sh
+7P68NA | list menu     | fn:_fx_adf_cfwp                  | loops/iloop/fx/cloudflare_fx/workers_pages/bashbasicsbyvk_adf_cfwp.sh
+7P68NA | list menu     | fn:_fx_adf_gdrive                | loops/iloop/fx/google_drive_fx/open_drive/bashbasicsbyvk_adf_gdrive.sh
+7P68NA | list menu     | fn:_fx_adf_github                | loops/iloop/fx/github_fx/open_github/bashbasicsbyvk_adf_github.sh
+7P68NA | list menu     | fn:_rb_user_open                 | loops/iloop/rbam/bashbasicsbyvk_rbam.sh
+JR9TZ5 | main list     | fn:_results_view                 | engine/ui/bashbasicsbyvk_results.sh
+7P68NA | list menu     | fn:_ux_pick_people               | staging/fileapi/rbam/bashbasicsbyvk_staging_ux.sh
+YWW6WZ | step menu     | fn:_view_selections_menu         | functions/transfer/bashbasicsbyvk_transfer.sh
+7P68NA | list menu     | fn:_xui_loop                     | loops/iloop/rbam/bashbasicsbyvk_xui.sh
 7P68NA | list menu     | fn:api_menu                      | loops/iloop/api/bashbasicsbyvk_api.sh
 7P68NA | list menu     | fn:auth_menu                     | loops/iloop/auth/bashbasicsbyvk_auth.sh
-7P68NA | list menu     | fn:infinity_stones_menu          | infinity/bashbasicsbyvk_infinity.sh
+YWW6WZ | step menu     | fn:infinity_stones_menu          | infinity/bashbasicsbyvk_infinity.sh
+7P68NA | list menu     | fn:notify_menu                   | loops/iloop/rbam/bashbasicsbyvk_notify.sh
 7P68NA | list menu     | fn:snapshot_menu                 | staging/fileapi/snapshot/bashbasicsbyvk_staging_snapshot.sh
 7P68NA | list menu     | map:api                          | cmdmap/api/bashbasicsbyvk_api.map
 7P68NA | list menu     | map:auth                         | cmdmap/auth/bashbasicsbyvk_auth.map
 7P68NA | list menu     | map:auth_sub                     | cmdmap/auth_sub/bashbasicsbyvk_auth_sub.map
 7P68NA | list menu     | map:auth_user                    | cmdmap/auth_user/bashbasicsbyvk_auth_user.map
-7P68NA | list menu     | map:infinity                     | cmdmap/infinity/bashbasicsbyvk_infinity.map
-7P68NA | list menu     | map:rename                       | cmdmap/rename/bashbasicsbyvk_rename.map
-7P68NA | list menu     | map:results                      | cmdmap/results/bashbasicsbyvk_results.map
+YWW6WZ | step menu     | map:infinity                     | cmdmap/infinity/bashbasicsbyvk_infinity.map
+7UH852 | item picker   | map:rename                       | cmdmap/rename/bashbasicsbyvk_rename.map
+JR9TZ5 | main list     | map:results                      | cmdmap/results/bashbasicsbyvk_results.map
 7P68NA | list menu     | map:snapshot                     | cmdmap/snapshot/bashbasicsbyvk_snapshot.map
+7P68NA | list menu     | map:xui                          | cmdmap/xui/bashbasicsbyvk_xui.map
+7P68NA | list menu     | map:xui_cfw                      | cmdmap/xui_cfw/bashbasicsbyvk_xui_cfw.map
+7P68NA | list menu     | map:xui_cs_pp                    | cmdmap/xui_cs_pp/bashbasicsbyvk_xui_cs_pp.map
+7P68NA | list menu     | map:xui_ct                       | cmdmap/xui_ct/bashbasicsbyvk_xui_ct.map
+7P68NA | list menu     | map:xui_gdp                      | cmdmap/xui_gdp/bashbasicsbyvk_xui_gdp.map
+7P68NA | list menu     | map:xui_ghp                      | cmdmap/xui_ghp/bashbasicsbyvk_xui_ghp.map
+7P68NA | list menu     | map:xui_nf                       | cmdmap/xui_nf/bashbasicsbyvk_xui_nf.map
+7P68NA | list menu     | map:xui_ru                       | cmdmap/xui_ru/bashbasicsbyvk_xui_ru.map
 JR9TZ5 | main list     | map:main                         | cmdmap/main/bashbasicsbyvk_main.map
+MG2374 | pick screen   | fn:_file_picker                  | loops/iloop/fx/bashbasicsbyvk_csv.sh
+MG2374 | pick screen   | fn:gcloud_navigator              | functions/transfer/bashbasicsbyvk_transfer.sh
+MG2374 | pick screen   | fn:local_navigator               | functions/transfer/bashbasicsbyvk_transfer.sh
 373QS6 | settings list | fn:_st_choice_open               | settings/core/bashbasicsbyvk_settings_groups.sh
 373QS6 | settings list | fn:_st_duration_open             | settings/core/bashbasicsbyvk_settings_groups.sh
 373QS6 | settings list | fn:_st_run                       | settings/core/bashbasicsbyvk_settings_ui.sh
@@ -69,28 +87,6 @@ JR9TZ5 | main list     | map:main                         | cmdmap/main/bashbasi
 373QS6 | settings list | map:home                         | cmdmap/home/bashbasicsbyvk_home.map
 373QS6 | settings list | map:pending                      | cmdmap/pending/bashbasicsbyvk_pending.map
 373QS6 | settings list | map:settings                     | cmdmap/settings/bashbasicsbyvk_settings.map
-T5FL4F | split screen  | fn:_cs_people_open               | loops/iloop/rbam/bashbasicsbyvk_csurf.sh
-T5FL4F | split screen  | fn:_cs_tree_open                 | loops/iloop/rbam/bashbasicsbyvk_csurf.sh
-T5FL4F | split screen  | fn:_fx_adf_cfwp                  | loops/iloop/fx/cloudflare_fx/workers_pages/bashbasicsbyvk_adf_cfwp.sh
-T5FL4F | split screen  | fn:_fx_adf_gdrive                | loops/iloop/fx/google_drive_fx/open_drive/bashbasicsbyvk_adf_gdrive.sh
-T5FL4F | split screen  | fn:_fx_adf_github                | loops/iloop/fx/github_fx/open_github/bashbasicsbyvk_adf_github.sh
-T5FL4F | split screen  | fn:_rb_user_open                 | loops/iloop/rbam/bashbasicsbyvk_rbam.sh
-T5FL4F | split screen  | fn:_ux_pick_people               | staging/fileapi/rbam/bashbasicsbyvk_staging_ux.sh
-T5FL4F | split screen  | fn:_xui_loop                     | loops/iloop/rbam/bashbasicsbyvk_xui.sh
-T5FL4F | split screen  | fn:csurf_menu                    | loops/iloop/rbam/bashbasicsbyvk_csurf.sh
-T5FL4F | split screen  | fn:notify_menu                   | loops/iloop/rbam/bashbasicsbyvk_notify.sh
-T5FL4F | split screen  | fn:rbam_menu                     | loops/iloop/rbam/bashbasicsbyvk_rbam.sh
-T5FL4F | split screen  | map:xui                          | cmdmap/xui/bashbasicsbyvk_xui.map
-T5FL4F | split screen  | map:xui_cfw                      | cmdmap/xui_cfw/bashbasicsbyvk_xui_cfw.map
-T5FL4F | split screen  | map:xui_cs                       | cmdmap/xui_cs/bashbasicsbyvk_xui_cs.map
-T5FL4F | split screen  | map:xui_cs_pp                    | cmdmap/xui_cs_pp/bashbasicsbyvk_xui_cs_pp.map
-T5FL4F | split screen  | map:xui_ct                       | cmdmap/xui_ct/bashbasicsbyvk_xui_ct.map
-T5FL4F | split screen  | map:xui_gdp                      | cmdmap/xui_gdp/bashbasicsbyvk_xui_gdp.map
-T5FL4F | split screen  | map:xui_ghp                      | cmdmap/xui_ghp/bashbasicsbyvk_xui_ghp.map
-T5FL4F | split screen  | map:xui_ghr                      | cmdmap/xui_ghr/bashbasicsbyvk_xui_ghr.map
-T5FL4F | split screen  | map:xui_nf                       | cmdmap/xui_nf/bashbasicsbyvk_xui_nf.map
-T5FL4F | split screen  | map:xui_rb                       | cmdmap/xui_rb/bashbasicsbyvk_xui_rb.map
-T5FL4F | split screen  | map:xui_ru                       | cmdmap/xui_ru/bashbasicsbyvk_xui_ru.map
 YWW6WZ | step menu     | fn:_api_cmd_open                 | loops/iloop/api/bashbasicsbyvk_api.sh
 YWW6WZ | step menu     | fn:_arc_s_fmt                    | staging/extras/bashbasicsbyvk_staging_archive.sh
 YWW6WZ | step menu     | fn:_bb_credit_gate               | staging/fileapi/lib/bashbasicsbyvk_fileapi_lib.sh
@@ -143,7 +139,9 @@ YWW6WZ | step menu     | map:find                         | cmdmap/find/bashbasi
 YWW6WZ | step menu     | map:organise                     | cmdmap/organise/bashbasicsbyvk_organise.map
 YWW6WZ | step menu     | map:prompt                       | cmdmap/prompt/bashbasicsbyvk_prompt.map
 YWW6WZ | step menu     | map:transfer                     | cmdmap/transfer/bashbasicsbyvk_transfer.map
+V3PX4Y | tabbed menu   | fn:csurf_menu                    | loops/iloop/rbam/bashbasicsbyvk_csurf.sh
 V3PX4Y | tabbed menu   | fn:functions_menu                | loops/iloop/fx/bashbasicsbyvk_functions.sh
+V3PX4Y | tabbed menu   | fn:rbam_menu                     | loops/iloop/rbam/bashbasicsbyvk_rbam.sh
 V3PX4Y | tabbed menu   | fn:rules_menu                    | select/bashbasicsbyvk_rules.sh
 V3PX4Y | tabbed menu   | fn:switch_menu                   | loops/iloop/switch/bashbasicsbyvk_switch.sh
 V3PX4Y | tabbed menu   | fn:upgrade_menu                  | loops/iloop/upgrade/bashbasicsbyvk_upgrade.sh
@@ -151,3 +149,6 @@ V3PX4Y | tabbed menu   | map:fx                           | cmdmap/fx/bashbasics
 V3PX4Y | tabbed menu   | map:rules                        | cmdmap/rules/bashbasicsbyvk_rules.map
 V3PX4Y | tabbed menu   | map:switch                       | cmdmap/switch/bashbasicsbyvk_switch.map
 V3PX4Y | tabbed menu   | map:upgrade                      | cmdmap/upgrade/bashbasicsbyvk_upgrade.map
+V3PX4Y | tabbed menu   | map:xui_cs                       | cmdmap/xui_cs/bashbasicsbyvk_xui_cs.map
+V3PX4Y | tabbed menu   | map:xui_ghr                      | cmdmap/xui_ghr/bashbasicsbyvk_xui_ghr.map
+V3PX4Y | tabbed menu   | map:xui_rb                       | cmdmap/xui_rb/bashbasicsbyvk_xui_rb.map

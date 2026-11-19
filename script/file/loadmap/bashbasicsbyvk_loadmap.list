@@ -6,6 +6,7 @@ bashbasicsbyvk_print.sh|||the `print` command shim; reads what the last frame dr
 bashbasicsbyvk_smartmenu.sh|||smart menus + the `read` shim every prompt goes through
 bashbasicsbyvk_advert.sh|||the advertiser: menus declare their commands once; cc and the footer only render that list (budget 50, cc 0, footer 10)
 bashbasicsbyvk_menuchrome.sh|||footer keys / menu chrome
+bashbasicsbyvk_tpl_defs.sh|||GLOBAL DEFINER of the template architecture: every $section and {placeholder} defined once (tiny, declarative); the prompt word {footer_acceptor} is read by every prompt, so it is loaded before the first paint
 bashbasicsbyvk_cmdmap.sh|||the command-map engine (typed words, hints); loads the menucommands files it is asked for
 bashbasicsbyvk_cheatcode.sh|||cc cheat codes: _CC_PREFILL is read by the input readers
 bashbasicsbyvk_viewport.sh|||draws the main list (first paint) and reads keys
@@ -28,6 +29,7 @@ bashbasicsbyvk_notify.sh|||notification count in the header
 
 [bg]
 bashbasicsbyvk_loadmap_stubs.sh|||GENERATED lazy-load stubs and needs table (bashbasicsbyvk_loadmap_gen --write); sourced by the loader at the end of [fg], before the first paint (an [fg] function may call a [bg] / [no] one)
+bashbasicsbyvk_tpl.sh|bashbasicsbyvk_tpl_defs.sh||THE TEMPLATE PROCESSOR: reads a .sh.tpl and resolves its placeholders through the definer; stubs load it on the first header / footer / settings paint
 bashbasicsbyvk_run.sh|||opens / runs a file (Enter on a file); first background file because the first Enter may need it
 bashbasicsbyvk_textedit.sh|||the shared text-edit template (selection, word / line moves, cut / copy / paste, undo): every key loop calls it from its first key, the first background file after the run file
 bashbasicsbyvk_choose.sh|||the shared choice menu (_bvk_yn / _bvk_menu): most questions use it
@@ -87,6 +89,13 @@ bashbasicsbyvk_switch.sh|||sw: recents and bookmarks
 @call _snap_daemon_start | alien daemon: after the first paint
 
 [no]
+bashbasicsbyvk_373QS6.sh.tpl|||data: layout template 373QS6 (templates/, read by the processor; tidy prints the ID)
+bashbasicsbyvk_7P68NA.sh.tpl|||data: layout template 7P68NA (templates/, read by the processor; tidy prints the ID)
+bashbasicsbyvk_7UH852.sh.tpl|||data: layout template 7UH852 (templates/, read by the processor; tidy prints the ID)
+bashbasicsbyvk_JR9TZ5.sh.tpl|||data: layout template JR9TZ5 (templates/, read by the processor; tidy prints the ID)
+bashbasicsbyvk_MG2374.sh.tpl|||data: layout template MG2374 (templates/, read by the processor; tidy prints the ID)
+bashbasicsbyvk_V3PX4Y.sh.tpl|||data: layout template V3PX4Y (templates/, read by the processor; tidy prints the ID)
+bashbasicsbyvk_YWW6WZ.sh.tpl|||data: layout template YWW6WZ (templates/, read by the processor; tidy prints the ID)
 bashbasicsbyvk_apimenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_findmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_resultsmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)

@@ -26,7 +26,7 @@ exec 3>&1                                                   # the caller's stdou
 [ -t 1 ] || { [ -w /dev/tty ] && exec >/dev/tty; }
 if [ -t 0 ] && [ -t 1 ]; then
   _ak_nav=1; _cm_prompt_has_choices "$_ak_p" && _ak_nav=0
-  [ "$_ak_nav" = 1 ] && _mc_footer u q                      # the footer every menu prints above its prompt
+  [ "$_ak_nav" = 1 ] && _tpl_footer YWW6WZ u q                    # the footer every menu prints above its prompt
   if [ "$_ak_s" = 1 ]; then
     IFS= read -rs -p "$_ak_p" _ak_a || exit 2; echo >&2     # bvk-read-ok: a secret is read silently: nothing is drawn, so there is no line to edit
   else

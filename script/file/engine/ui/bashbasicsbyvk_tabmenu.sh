@@ -30,7 +30,7 @@
 #         STATEVAR  the variable that holds the CURRENT tab's key        (_rl_tab, _sw_tab, _RB_TAB …) — the screen keeps owning it
 #         Desc screen   the first half of the description keys:          "<Desc screen>|<tab key>"  or  "<Desc screen>|<tab key>:<folder>"
 #         key:Label     one per tab, left to right; the label is exactly what the bar prints and what a tap hits
-#    2. HEADER:  _tm_header NAME [title] [folder]   then the screen's own context lines, then  _vp_filter_header_line
+#    2. HEADER:  _tm_head [-t title] [-f folder] [-c total] [-n rows] [-G] NAME   draws the whole header from the template V3PX4Y (-n = the screen's own context rows)
 #    3. FOOTER:  _tm_footer [-b] [extra items…]     -b = the screen has no folders: u reads "Back", not "Up"
 #    4. KEYS:    _tm_key NAME "$choice" [nowrap]    in the loop, for  __sw_tab_right__ | __sw_tab_left__  (moves the state variable)
 #    5. REDRAW:  _tm_tab_redraw BUILD_FN SET_FN     in-place repaint after a tab change;   _tm_viewport HDR FTR [ROWTEXT]  sets the viewport
@@ -133,24 +133,28 @@ _tm_count_line() {
   printf '%s out of %s here%s\n' "$_tm_x" "$_tm_n" "${1:+ · $1 total}"
 }
 
-# _tm_header NAME [title] [folder]
-#   blank · title · blank · tab bar · blank · description.  The caller prints its context lines after it.
-_tm_header() {
-  local _tm_title="${2:-${_TM_TITLE[$1]}}"
-  echo
-  printf '%s\n\n' "$_tm_title"
-  printf '%s\n\n' "$(_tm_bar "$1")"
-  _tm_desc_line "$1" "${3:-}"
+# _tm_head [-t TITLE] [-f FOLDER] [-c TOTAL] [-n NOTES] [-G] NAME      the header of EVERY tabbed screen, drawn from the template V3PX4Y
+#   (templates/bashbasicsbyvk_V3PX4Y.sh.tpl): blank · title · blank · tab bar · blank · description · count row · blank · NOTES · filter row.
+#   -t title (default: the one _tm_define gave)  -f folder for the folder-specific description  -c total for the count row
+#   -n the screen's own rows (state, "empty" note, path; several rows = several lines)  -G no blank row before NOTES
+_tm_head() {
+  local _tm_t="" _tm_f="" _tm_c="" _tm_n="" _tm_g=1
+  while [[ "${1:-}" == -* ]]; do
+    case "$1" in -t) _tm_t="$2"; shift 2 ;; -f) _tm_f="$2"; shift 2 ;; -c) _tm_c="$2"; shift 2 ;; -n) _tm_n="$2"; shift 2 ;; -G) _tm_g=""; shift ;; *) break ;; esac
+  done
+  _tpl_clear
+  _tpl_set tab_name "$1" menu_name "${_tm_t:-${_TM_TITLE[$1]}}" tab_folder "$_tm_f" count_total "$_tm_c" menu_description "$_tm_n" tab_gap "$_tm_g"
+  _tpl_section V3PX4Y menu_header
 }
 
 # _tm_footer [-b] [extra footer items…]   u/q/h/cc, then whatever the screen adds (a "|" starts a new line)
 _tm_footer() {
   local _tm_u=tabmenu _tm_it
   [ "${1:-}" = -b ] && { _tm_u=tabmenu_back; shift; }
-  (( $# )) || { _mc_footer "@$_tm_u"; return; }
+  (( $# )) || { _tpl_footer V3PX4Y "@$_tm_u"; return; }
   local -a _f=()
   for _tm_it in ${_MC_FOOTERS[$_tm_u]}; do _f+=("${_tm_it//_/ }"); done      # the registered items above are the ONE copy of the standard keys
-  _mc_footer "${_f[@]}" "$@"
+  _tpl_footer V3PX4Y "${_f[@]}" "$@"
 }
 
 # _tm_viewport HEADER_FN FOOTER_FN [ROWTEXT_FN]   the viewport state every tabbed list screen sets (one call instead of seven lines)

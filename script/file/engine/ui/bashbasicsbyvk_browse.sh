@@ -355,13 +355,12 @@ _bvk_build_path_items() {
 #     u) Up   q) Close
 #     Select:
 # A caller passes only its title ("🗑️ Delete"); the action in the sentence is the title without the icon, in lower case.
+# The layout is the template 7UH852 (templates/bashbasicsbyvk_7UH852.sh.tpl); this file only hands it the data.
 _pk_header() {
-  echo; echo "$_PK_TITLE"; echo
-  _loc_rows
-  [ "$_vp_mode" == "imaginary" ] && [ -n "${_imag_banner:-}" ] && echo "$_imag_banner"
-  echo; echo "Select $_PK_WHAT to $_PK_ACTION"
+  _tpl_clear; _tpl_set menu_name "$_PK_TITLE" what "$_PK_WHAT" action "$_PK_ACTION" nav_path_text "" footer_style row footer_items "u.up q.close"
+  _tpl_section 7UH852 menu_header
 }
-_pk_footer() { echo; echo "u) Up   q) Close"; }
+_pk_footer() { _tpl_section 7UH852 menu_footer; }
 
 # _pk_set "<icon> <Title>" items|groups   → _PK_TITLE _PK_ACTION _PK_WHAT
 _pk_set() {
@@ -575,15 +574,15 @@ _bvk_hdr_status() {
 #
 #   📂 cd path: /data/data/com.termux/files/home          <- where the CURRENT SHELL is cd'ed ($PWD: it does not move while you browse)
 #   ☁️ nav path: /data/data/com.termux/files/home         <- where you are browsing (Drive / group / filter marks go here; the loaded-by tag is now the first field of the status row)
+# The layout is the template JR9TZ5 (templates/bashbasicsbyvk_JR9TZ5.sh.tpl); $1 = the function that prints the notice rows under the location rows.
 _menu_header() {
-  echo
-  _bvk_hdr_status; echo
-  echo
-  _loc_rows
+  _tpl_clear; _tpl_set header_notes "${1:-}"
+  _tpl_section JR9TZ5 menu_header
 }
 
 # the two location rows of the folder view (cd path / nav path, with the group and filter text): ONE printer, also used by the item picker (_pk_header)
-_loc_rows() {
+_loc_cd_row() { echo "📂 cd path: $PWD"; }
+_loc_nav_row() {
   if [ "${_GD_ACTIVE:-0}" = 1 ]; then _gd_view_path "$path"; else _gd_vp="$path"; fi      # Google Drive open: show the Drive path, not the mirror folder
   local _hdr_loc="☁️ nav path: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
   if [ -n "${_RES_HDR:-}" ]; then
@@ -605,9 +604,9 @@ _loc_rows() {
       fi
     fi
   fi
-  echo "📂 cd path: $PWD"
   echo "$_hdr_loc"
 }
+_loc_rows() { _loc_cd_row; _loc_nav_row; }
 
 # ── ONE pick screen for every "choose items / a destination / a file" job (transfer, csv, ...) ──
 # Same chrome as the main list: status row, cd path, nav path, and the rows come from the main row renderer (_item_line_text_v:
@@ -641,20 +640,12 @@ _pick_suggest() {
   _MC_PICK_SEL=1
   printf '\033[2mSuggestion: Use s-N command to pick %s\033[0m\n' "${1:-folders}"
 }
+# The layout is the template MG2374 (templates/bashbasicsbyvk_MG2374.sh.tpl).
 _pick_header() {
   local sugg=0
   [ "${1:-}" = -s ] && { sugg=1; shift; }
-  local what="$1" job="$2" nav="$3" pfx="${4:-}" desc="${5:-}" lw
-  lw="${what,,}"
-  echo
-  if [ -n "$what" ]; then
-    echo "🛷 Select $what for $job"
-    echo
-    if (( sugg )); then _pick_suggest; echo
-    else _desc_print_dim "${desc:-Select $lw|*}" && echo; fi
-  fi
-  echo "📂 cd path: $PWD"
-  echo "☁️ nav path: $nav${pfx:+ [group: ${pfx^^}*]}"
+  _tpl_clear; _tpl_set action "" footer_style row footer_items "u.up q.close" what "$1" job "$2" nav_path_text "$3${4:+ [group: ${4^^}*]}" pick_suggest "$sugg" pick_suggest_noun "" pick_desc "${5:-}"
+  _tpl_section MG2374 menu_header
 }
 _pick_rows() {
   local remote=0
@@ -681,8 +672,8 @@ _bvk_cd_shell() {
   _rc_record "$path"; _lt_cleanup; cd "$path" && exec "$SHELL"      # the in-app cd: the folder joins Recents
 }
 
-_menu_header_flat() {
-  _menu_header
+# the notice rows under the location rows: the flat view, then the grouped (imaginary) view
+_mh_notes_flat() {
   [ -s "${_SNAP_NOTICE:-}" ] && cat "$_SNAP_NOTICE"        # Snapshots paused: not enough credits
   declare -F _pn_hint >/dev/null 2>&1 && _pn_hint           # unfinished uploads are waiting: pn
   [ -n "${_sel_banner:-}" ] && echo "$_sel_banner"
@@ -691,21 +682,27 @@ _menu_header_flat() {
   if $_has_group_view; then
     _gv_banner_line; echo
   fi
+  return 0
 }
-
-_menu_header_imaginary() {
-  _menu_header
+_mh_notes_imaginary() {
   [ -n "${_sel_banner:-}" ] && echo "$_sel_banner"
   [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"
   echo "$_imag_banner"
 }
+_menu_header_flat() { _menu_header _mh_notes_flat; }
+_menu_header_imaginary() { _menu_header _mh_notes_imaginary; }
 
-
-_menu_footer_lines() {
-  if [ "${_GD_ACTIVE:-0}" = 1 ]; then _mc_footer @browse_gd; else _mc_footer @browse_main; fi
- if [ "${total:-0}" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
+# the footer of the folder view (template JR9TZ5): the registered keys, then the group-view note
+_mf_note() {
+  if [ "${total:-0}" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then
     echo "Group view is set but above threshold. Press fs to enable grouped display"
   fi
+  return 0
+}
+_menu_footer_lines() {
+  _tpl_clear; _TPL_FOOTER_ARR=("@browse_$([ "${_GD_ACTIVE:-0}" = 1 ] && echo gd || echo main)")
+  _tpl_set footer_style chrome footer_note _mf_note
+  _tpl_section JR9TZ5 menu_footer
 }
 
 
@@ -717,8 +714,8 @@ _hint_cur=""
 _hint_want=""
 
 _print_input_line() {
-  _BVK_SCR_PROMPT="Select:"
-  _bvk_draw_input "Select: " "$_buf" "$_pos"
+  _BVK_SCR_PROMPT="${_TPL_ACCEPTOR:-Select:}"
+  _bvk_draw_input "${_TPL_ACCEPTOR:-Select:} " "$_buf" "$_pos"
 }
 
 _update_highlight() {
