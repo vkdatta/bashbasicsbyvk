@@ -4,7 +4,7 @@
 # (No registration here — this file only defines helpers.)
 #
 # Reuses from organise: _batch_stat, _ts_to_ymd
-# Reuses from viewport: parse_selection
+# Reuses from browse: _pick_groups (the by-extension / by-date pick screen)
 
 # Non-hidden plain files in the current folder (same scope organise uses).
 _fxdel_list_files() {
@@ -12,17 +12,6 @@ _fxdel_list_files() {
   _out=()
   local f
   for f in "$path"/*; do [ -f "$f" ] && _out+=("$f"); done
-}
-
-# Parse a multi-pick reply ("1,3", "2-4", "a" = everything) against a list size.
-# Prints space-separated 1-based indices.
-_fxdel_pick_indices() {
-  local input="${1// /}" max="$2"
-  if [[ "${input,,}" == "a" ]]; then
-    seq 1 "$max"
-  else
-    parse_selection "$input" "$max"
-  fi
 }
 
 # Confirm, then remove everything in $selected_items.

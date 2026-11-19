@@ -50,6 +50,8 @@ _tpl_def menu_description var  ""      "plain words under the title: what the sc
 _tpl_def action           var  ""      "the verb of a picker: rename, delete, copy ..."
 _tpl_def what             var  "items" "what is being picked: items, groups, Destination ..."
 _tpl_def job              var  ""      "the job a picker is for: Transfer, Delete ..."
+_tpl_def icon             var  "🛷"    "the icon in front of a picker's title (🛷 Transfer, 🗑️ Delete ...)"
+_tpl_def job_word         var  "for"   "the word between what and job in a picker's title: for (Select Items for Transfer) · to (Select extensions to delete)"
 _tpl_def cd_path          fn   _tpl_p_cd_path          "the row  📂 cd path: <folder the app is in>"
 _tpl_def nav_path         fn   _tpl_p_nav_path         "the row  ☁️ nav path: <where the list is>  (+ group / filter text; a picker sets nav_path_text)"
 _tpl_def imaginary_banner fn   _tpl_p_imaginary_banner "the banner of an imaginary (grouped) list, when there is one"

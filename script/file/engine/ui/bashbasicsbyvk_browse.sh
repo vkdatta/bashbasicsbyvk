@@ -641,10 +641,20 @@ _pick_suggest() {
   printf '\033[2mSuggestion: Use s-N command to pick %s\033[0m\n' "${1:-folders}"
 }
 # The layout is the template MG2374 (templates/bashbasicsbyvk_MG2374.sh.tpl).
+#   -i ICON   the icon of the title (default 🛷)        -w WORD  the word between WHAT and JOB (default for; delete says to)
+#   -n NOUN   what the s-N suggestion names (default folders: "Use s-N command to pick extensions")
 _pick_header() {
-  local sugg=0
-  [ "${1:-}" = -s ] && { sugg=1; shift; }
-  _tpl_clear; _tpl_set action "" footer_style row footer_items "u.up q.close" what "$1" job "$2" nav_path_text "$3${4:+ [group: ${4^^}*]}" pick_suggest "$sugg" pick_suggest_noun "" pick_desc "${5:-}"
+  local sugg=0 icon="🛷" word="for" noun=""
+  while :; do
+    case "${1:-}" in
+      -s) sugg=1; shift ;;
+      -i) icon="$2"; shift 2 ;;
+      -w) word="$2"; shift 2 ;;
+      -n) noun="$2"; shift 2 ;;
+      *) break ;;
+    esac
+  done
+  _tpl_clear; _tpl_set action "" footer_style row footer_items "u.up q.close" icon "$icon" job_word "$word" what "$1" job "$2" nav_path_text "$3${4:+ [group: ${4^^}*]}" pick_suggest "$sugg" pick_suggest_noun "$noun" pick_desc "${5:-}"
   _tpl_section MG2374 menu_header
 }
 _pick_rows() {
@@ -663,6 +673,77 @@ _pick_rows() {
     _item_line_text_v "$i"; ln="$_ilt_out"
     if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "${items[i-1]}" "$ln"; then ln="$_smk_out"; fi     # selected with .s — green "+"
     printf '%s\n' "$ln"
+  done
+}
+
+# ── ONE pick screen for "choose files by GROUP" (delete by extension, delete by date, ...) — template MG2374, same chrome as the pickers above ──
+#   _pick_groups [-i ICON] [-w WORD] WHAT JOB NOUN NAV FILES KEYS LABELS OF OUT      (the last five are variable NAMES in the caller)
+#     WHAT / JOB / NOUN   "extensions" "delete" "extensions"  →  🗑️ Select extensions to delete · Suggestion: Use s-N command to pick extensions
+#     NAV      the path shown on the nav row            FILES  the files (array)           KEYS  the group keys in row order (array)
+#     LABELS   key → the row text (assoc)               OF     file → its group key (assoc)    OUT  the picked files (array, filled)
+#   Groups screen:   s-N · s-1,3 · s-2-4 · s-a · 1,3 · 2-4 (or a key typed: py,txt)  take WHOLE groups, done  ·  N  go INSIDE group N
+#   Inside a group:  its files, listed one by one: N · 1,3 · 2-4 · s-N · s-a  pick those files, done  ·  u  back to the groups
+#   rc 0 picked (OUT filled) · 1 u on the groups (the caller goes one question back) · 2 q / h / cc ran (unwind) · 3 the flow was cancelled
+_pick_group_rows() {          # the group rows: the main list's number column, the caller's label
+  local _pgr_i
+  for (( _pgr_i=0; _pgr_i<${#_pg_keys[@]}; _pgr_i++ )); do printf '%3d) %s\n' $(( _pgr_i + 1 )) "${_pg_lab[${_pg_keys[$_pgr_i]}]}"; done
+}
+_pick_groups() {
+  local _pg_icon="🛷" _pg_word="for"
+  while :; do case "${1:-}" in -i) _pg_icon="$2"; shift 2 ;; -w) _pg_word="$2"; shift 2 ;; *) break ;; esac; done
+  local _pg_what="$1" _pg_job="$2" _pg_noun="$3" _pg_nav="$4"
+  local -n _pg_files="$5" _pg_keys="$6" _pg_lab="$7" _pg_of="$8" _pg_out="$9"
+  local _pg_open="" _pg_ch _pg_rc _pg_n _pg_i _pg_f _pg_t _pg_k
+  local is_select cleaned_input
+  local -a _pg_in=() _pg_idx=() _pg_tok=()
+  local -A _pg_want=() _pg_byname=()
+  for _pg_k in "${_pg_keys[@]}"; do _pg_byname["${_pg_k,,}"]="$_pg_k"; done
+  _pg_out=()
+  while true; do
+    if [ -z "$_pg_open" ]; then
+      _pick_header -s -i "$_pg_icon" -w "$_pg_word" -n "$_pg_noun" "$_pg_what" "$_pg_job" "$_pg_nav"
+      _pick_group_rows
+      _pg_n=${#_pg_keys[@]}
+    else
+      _pg_in=()
+      for _pg_f in "${_pg_files[@]}"; do [ "${_pg_of[$_pg_f]}" = "$_pg_open" ] && _pg_in+=("$_pg_f"); done
+      _pick_header -s -i "$_pg_icon" -w "$_pg_word" -n "files" "files" "$_pg_job" "$_pg_nav  [${_pg_open}]"
+      _pick_rows "${_pg_in[@]}"
+      _pg_n=${#_pg_in[@]}
+    fi
+    _mc_footer_std -T MG2374
+    _mc_read _pg_ch "${_TPL_ACCEPTOR} " || { _pg_rc=$?; _mc_unwind && return 2; return "$_pg_rc"; }
+    _pg_ch="${_pg_ch#"${_pg_ch%%[![:space:]]*}"}"; _pg_ch="${_pg_ch%"${_pg_ch##*[![:space:]]}"}"
+    case "$_pg_ch" in
+      q|Q) _bvk_quit; return 2 ;;
+      h|H|cc|CC) _mc_std_key "$_pg_ch"; _mc_unwind && return 2 ;;
+      u|U) if [ -n "$_pg_open" ]; then _pg_open=""; else return 1; fi ;;
+      "") _bvk_invalid ;;
+      *)
+        _pg_idx=()
+        _nav_parse_select "$_pg_ch"
+        if _nav_sel_ok "$cleaned_input"; then
+          if [ -z "$_pg_open" ] && ! $is_select && _nav_index_ok "$cleaned_input" "$_pg_n"; then
+            _pg_open="${_pg_keys[$((cleaned_input-1))]}"; continue                 # a plain number on the groups: go INSIDE it
+          fi
+          _pg_idx=($(_nav_sel_expand "$cleaned_input" "$_pg_n"))
+        elif [ -z "$_pg_open" ]; then                                              # a key typed: py,txt · .json
+          IFS=',' read -ra _pg_tok <<< "${_pg_ch// /}"
+          for _pg_t in "${_pg_tok[@]}"; do
+            _pg_t="${_pg_t#.}"; _pg_t="${_pg_t,,}"; [ -z "$_pg_t" ] && continue
+            [ -n "${_pg_byname[$_pg_t]+x}" ] || { _pg_idx=(); break; }
+            for _pg_i in "${!_pg_keys[@]}"; do [ "${_pg_keys[$_pg_i]}" = "${_pg_byname[$_pg_t]}" ] && _pg_idx+=($((_pg_i+1))); done
+          done
+        fi
+        if [ ${#_pg_idx[@]} -eq 0 ]; then _bvk_invalid; continue; fi
+        if [ -z "$_pg_open" ]; then
+          for _pg_i in "${_pg_idx[@]}"; do _pg_want["${_pg_keys[$((_pg_i-1))]}"]=1; done
+          for _pg_f in "${_pg_files[@]}"; do [ -n "${_pg_want[${_pg_of[$_pg_f]}]+x}" ] && _pg_out+=("$_pg_f"); done
+        else
+          for _pg_i in "${_pg_idx[@]}"; do _pg_out+=("${_pg_in[$((_pg_i-1))]}"); done
+        fi
+        return 0 ;;
+    esac
   done
 }
 

@@ -3,50 +3,20 @@
 # adf-staging='file/delete/delete.by.extension'
 # ════════════════════════════════════════════════════════════════════════════
 #  ADF — delete.by.extension
-#  Lists the extensions found in the current folder (with counts). Pick one
-#  or more by number, range, or name (py,txt); a = all. Case-insensitive.
+#  Lists the extensions found in the current folder (with counts) on the ONE pick screen (_pick_groups, template MG2374).
+#  s-N / s-1,3 / s-a (or a name: py,txt) take whole extensions · N goes inside an extension and lists its files one by one.
 # ════════════════════════════════════════════════════════════════════════════
 
-# Two questions, one step each (_mc_steps: u = one question back): the extensions, then Confirm delete / Back up.
-# They share _fx_adf_delete_by_ext's locals (files count exts reply chosen).
+# Two questions, one step each (_mc_steps: u = one question back): the extensions (the pick screen, MG2374), then Confirm delete / Back up.
+# They share _fx_adf_delete_by_ext's locals (files exts label ext_of); selected_items is the global every delete flow fills.
 _de_s_pick() {
-  echo "🗑️  Delete by extension in $path:"
-  local i lbl
-  for i in "${!exts[@]}"; do
-    lbl=".${exts[$i]}"; [ "${exts[$i]}" = "noext" ] && lbl="(no extension)"
-    printf '%d) %s  (%d file(s))\n' $((i+1)) "$lbl" "${count[${exts[$i]}]}"
-  done
-  _mc_text reply "${_TPL_ACCEPTOR} " "Pick one or more: numbers/ranges (1,3 or 2-4), extension names (py,txt), or a = all"
-  case $? in 0) ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac
-  [ -z "$reply" ] && { echo "🚫 Cancelled"; return 3; }
-
-  chosen=()
-  local tok idx
-  local -a toks=()
-  IFS=',' read -ra toks <<< "${reply// /}"
-  for tok in "${toks[@]}"; do
-    tok="${tok#.}"; tok="${tok,,}"
-    [ -z "$tok" ] && continue
-    if [ -n "${count[$tok]+x}" ] && ! [[ "$tok" =~ ^[0-9]+$ ]]; then
-      chosen["$tok"]=1
-    else
-      for idx in $(_fxdel_pick_indices "$tok" "${#exts[@]}"); do
-        chosen["${exts[$((idx-1))]}"]=1
-      done
-    fi
-  done
-  [ ${#chosen[@]} -eq 0 ] && { echo "❌ No valid extensions selected"; return 3; }
-  return 0
+  _pick_groups -i 🗑️ -w to "extensions" "delete" "extensions" "$path" files exts label ext_of selected_items
+  case $? in 0) return 0 ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac
 }
 _de_s_confirm() {
-  local f b e rc
-  selected_items=()
-  for f in "${files[@]}"; do
-    b="${f##*/}"; e="${b##*.}"
-    [ "$e" = "$b" ] && e="noext"
-    [ -n "${chosen[${e,,}]+x}" ] && selected_items+=("$f")
-  done
-  echo "Selected extension(s): $(printf '.%s ' "${!chosen[@]}")"
+  local rc
+  _sel_summary selected_items "🗑️  About to delete"
+  _sel_preview selected_items
   _fxdel_run_selected; rc=$?
   case "$rc" in 1|2) return "$rc" ;; esac
   return 0
@@ -57,19 +27,23 @@ _fx_adf_delete_by_ext() {
   _fxdel_list_files files
   [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
 
-  local -A count=() chosen=()
+  local -A count=() label=() ext_of=()
   local f b e
   for f in "${files[@]}"; do
     b="${f##*/}"; e="${b##*.}"
     [ "$e" = "$b" ] && e="noext"
     e="${e,,}"
+    ext_of["$f"]="$e"
     count["$e"]=$(( ${count[$e]:-0} + 1 ))
   done
 
   local -a exts=()
   mapfile -t exts < <(printf '%s\n' "${!count[@]}" | sort)
+  for e in "${exts[@]}"; do
+    if [ "$e" = noext ]; then label["$e"]="(no extension)  (${count[$e]} file(s))"
+    else label["$e"]=".$e  (${count[$e]} file(s))"; fi
+  done
 
-  local reply
   _mc_steps _de_s_pick _de_s_confirm
   case $? in 0) ;; 1) echo "↩️  Back"; return ;; 2) return 1 ;; *) return ;; esac
 }

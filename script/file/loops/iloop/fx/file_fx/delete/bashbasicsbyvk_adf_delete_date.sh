@@ -5,10 +5,13 @@
 #  ADF — delete.by.date
 #  Group the current folder's files by day / month / year / decade (file
 #  modified date — same basis as organise), then pick one or more groups
-#  to delete. Uses organise's _batch_stat + _ts_to_ymd.
+#  on the ONE pick screen (_pick_groups, template MG2374): s-N takes whole
+#  dates, N goes inside a date and lists its files one by one.
+#  Uses organise's _batch_stat + _ts_to_ymd.
 # ════════════════════════════════════════════════════════════════════════════
 
-# Two questions, one step each (_mc_steps: u = one question back): the level, then the dates.  They fill _fx_adf_delete_by_date's locals.
+# Three steps (_mc_steps: u = one question back): the level, the dates (the pick screen, MG2374), then Confirm delete / Back up.
+# They fill _fx_adf_delete_by_date's locals (files lvl keys label key_of); selected_items is the global every delete flow fills.
 _dd_s_level() {
   _mc_select lvl "🗑️  Delete by date in $path (file modified date):" "Day     (e.g. 2024-03-15)" \
     "Month   (e.g. 2024-03)" "Year    (e.g. 2024)" "Decade  (e.g. 2020s)" || return $(( $? == 2 ? 2 : 1 ))
@@ -16,8 +19,9 @@ _dd_s_level() {
 }
 _dd_s_pick() {
   _batch_stat "$path"
-  count=(); key_of=(); keys=()
-  local f key i
+  local -A count=()
+  key_of=(); label=(); keys=()
+  local f key k
   for f in "${files[@]}"; do
     _ts_to_ymd "${_FILE_TS[$f]:-0}"
     case "$lvl" in
@@ -30,29 +34,14 @@ _dd_s_pick() {
     count["$key"]=$(( ${count[$key]:-0} + 1 ))
   done
   mapfile -t keys < <(printf '%s\n' "${!count[@]}" | sort)
-  for i in "${!keys[@]}"; do
-    printf '%d) %s  (%d file(s))\n' $((i+1)) "${keys[$i]}" "${count[${keys[$i]}]}"
-  done
-  _mc_text reply "${_TPL_ACCEPTOR} " "Pick one or more: numbers/ranges (1,3 or 2-4), or a = all"
-  case $? in 0) ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac       # u = back to the level question
-  [ -z "$reply" ] && { echo "🚫 Cancelled"; return 3; }
-  return 0
+  for k in "${keys[@]}"; do label["$k"]="$k  (${count[$k]} file(s))"; done
+  _pick_groups -i 🗑️ -w to "dates" "delete" "dates" "$path" files keys label key_of selected_items
+  case $? in 0) return 0 ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac       # u = back to the level question
 }
-
-# Third step: build the list, then Confirm delete / Back up (u there = the dates question again).
 _dd_s_confirm() {
-  local -A chosen=()
-  local idx f rc
-  for idx in $(_fxdel_pick_indices "$reply" "${#keys[@]}"); do
-    chosen["${keys[$((idx-1))]}"]=1
-  done
-  [ ${#chosen[@]} -eq 0 ] && { echo "❌ No valid selection"; return 3; }
-
-  selected_items=()
-  for f in "${files[@]}"; do
-    [ -n "${chosen[${key_of[$f]}]+x}" ] && selected_items+=("$f")
-  done
-  echo "Selected: $(printf '%s\n' "${!chosen[@]}" | sort | tr '\n' ' ')"
+  local rc
+  _sel_summary selected_items "🗑️  About to delete"
+  _sel_preview selected_items
   _fxdel_run_selected; rc=$?
   case "$rc" in 1|2) return "$rc" ;; esac
   return 0
@@ -63,8 +52,8 @@ _fx_adf_delete_by_date() {
   _fxdel_list_files files
   [ ${#files[@]} -eq 0 ] && { echo "No files"; return; }
 
-  local lvl reply
-  local -A count=() key_of=()
+  local lvl
+  local -A label=() key_of=()
   local -a keys=()
   _mc_steps _dd_s_level _dd_s_pick _dd_s_confirm
   case $? in 0) ;; 1) echo "↩️  Back"; return ;; 2) return 1 ;; *) return ;; esac

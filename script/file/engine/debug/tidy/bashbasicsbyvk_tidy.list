@@ -40,6 +40,7 @@ JR9TZ5 | main list     | map:results                      | cmdmap/results/bashb
 7P68NA | list menu     | map:xui_nf                       | cmdmap/xui_nf/bashbasicsbyvk_xui_nf.map
 7P68NA | list menu     | map:xui_ru                       | cmdmap/xui_ru/bashbasicsbyvk_xui_ru.map
 JR9TZ5 | main list     | map:main                         | cmdmap/main/bashbasicsbyvk_main.map
+MG2374 | pick screen   | fn:_pick_groups                  | engine/ui/bashbasicsbyvk_browse.sh
 MG2374 | pick screen   | fn:_file_picker                  | loops/iloop/fx/bashbasicsbyvk_csv.sh
 MG2374 | pick screen   | fn:gcloud_navigator              | functions/transfer/bashbasicsbyvk_transfer.sh
 MG2374 | pick screen   | fn:local_navigator               | functions/transfer/bashbasicsbyvk_transfer.sh
