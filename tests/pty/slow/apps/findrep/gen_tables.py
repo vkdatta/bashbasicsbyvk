@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generates script/file/engine/bvk-fr/src/bashbasicsbyvk_fr_tables.c from Python's Unicode data.
+"""Generates script/file/engine/native/bvk-fr/src/bashbasicsbyvk_fr_tables.c from Python's Unicode data.
 
-Run:  python3 -I tests/pty/slow/apps/findrep/gen_tables.py > script/file/engine/bvk-fr/src/bashbasicsbyvk_fr_tables.c
+Run:  python3 -I tests/pty/slow/apps/findrep/gen_tables.py > script/file/engine/native/bvk-fr/src/bashbasicsbyvk_fr_tables.c
 
 The engine (bvk-fr) has no libc locale / ICU dependency, so case mapping and the \\w \\d \\s classes come from these
 static tables: identical on every target (glibc static, musl, Android bionic) and identical to Python's `re` for str patterns.

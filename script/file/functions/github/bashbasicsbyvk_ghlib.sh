@@ -27,7 +27,7 @@ _gh_locate() {
   _GH_PY="$(command -v python3 || command -v python)"
   [ -n "$_GH_PY" ] || return 1
   local d
-  for d in "${SCRIPT_DIR:-}" "$_GH_LIB_DIR/../loops/iloop/fx/github_fx/gh"; do
+  for d in "${SCRIPT_DIR:-}" "$_GH_LIB_DIR/../../loops/iloop/fx/github_fx/gh"; do
     [ -n "$d" ] && [ -f "$d/bashbasicsbyvk_github" ] && { _GH_TOOL="$(cd -- "$d" && pwd)/bashbasicsbyvk_github"; return 0; }
   done
   d="$(command -v bashbasicsbyvk_github 2>/dev/null)"

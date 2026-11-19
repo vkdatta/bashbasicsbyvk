@@ -22,10 +22,10 @@ find "$D" -mindepth 1 -maxdepth 1 | sort > "$T/paths.txt"
 
 # ── (1) C == Python
 awk '/^_py_group_python\(\) \{/{f=1;next} f&&/^python3 - "\$@" <<.PYEOF.$/{g=1;next} g&&/^PYEOF$/{exit} g{print}' \
-  "$E/bashbasicsbyvk_displayer.sh" > "$T/twin.py"
+  "$E/ui/bashbasicsbyvk_displayer.sh" > "$T/twin.py"
 [ -s "$T/twin.py" ] && ok "python twin extracted" || bad "python twin not found in displayer.sh"
 if command -v cc >/dev/null 2>&1; then
-  ( cd "$E/bvk-ls" && mkdir -p "$T/b" && cc -O2 -std=c11 -Iinclude -D_FILE_OFFSET_BITS=64 -D_DEFAULT_SOURCE -o "$T/bvk-ls" src/*.c -pthread ) 2>"$T/cc.log" \
+  ( cd "$E/native/bvk-ls" && mkdir -p "$T/b" && cc -O2 -std=c11 -Iinclude -D_FILE_OFFSET_BITS=64 -D_DEFAULT_SOURCE -o "$T/bvk-ls" src/*.c -pthread ) 2>"$T/cc.log" \
     && ok "bvk-ls builds" || { bad "bvk-ls does not build"; cat "$T/cc.log"; }
   for lv in year,month,date,ext ext,year month date,ext; do
     for hl in 0 3 99; do
@@ -44,7 +44,7 @@ fi
 # ── (2)-(4) the real viewport
 cat > "$T/h.sh" <<'EOS'
 show_hidden_files=true; sort_mode=az; display_suffix_set=""; imaginary_mode=false
-source "$E/bashbasicsbyvk_displayer.sh"; source "$E/bashbasicsbyvk_viewport.sh"
+source "$E/ui/bashbasicsbyvk_displayer.sh"; source "$E/ui/bashbasicsbyvk_viewport.sh"
 _vp_probe_size() { _vp_rows_now=${ROWS:-24}; _vp_cols_now=${COLS:-70}; }
 _term_rows() { echo "${ROWS:-24}"; }
 _resolve_display_parts_v() { _rdp_bn="${1##*/}"; [ -d "$1" ] && _rdp_icon="📁" || _rdp_icon="📄"; }

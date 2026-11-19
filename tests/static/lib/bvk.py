@@ -124,7 +124,7 @@ def defined_functions():
 #      (engine + every *commands.sh + this map's .map file + tests/static/lib/*.sh).  Editing one .map re-dumps one map (~1 s); everything else is read from the cache.
 def _global_hash():
     h = hashlib.sha1()
-    paths = [os.path.join(F, 'engine', n) for n in ('bashbasicsbyvk_cmdmap.sh', 'bashbasicsbyvk_advert.sh', 'bashbasicsbyvk_cheatcode.sh')]
+    paths = [os.path.join(F, 'engine', 'commands', n) for n in ('bashbasicsbyvk_cmdmap.sh', 'bashbasicsbyvk_advert.sh', 'bashbasicsbyvk_cheatcode.sh')]
     for dp, dn, fn in os.walk(CMAP):
         for f in fn:
             if f.endswith('commands.sh'): paths.append(os.path.join(dp, f))

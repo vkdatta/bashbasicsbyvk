@@ -5,7 +5,7 @@
 # (3) the shared helper _xui_yes (Nuke / Remove / Revoke ... share and user lists) goes through _bvk_yn, so it is covered by (1)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"; S="$ROOT/script"; fail=0
 ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
-source "$S/file/settings/bashbasicsbyvk_choose.sh"
+source "$S/file/engine/ui/bashbasicsbyvk_choose.sh"
 
 t() { local want="$1" in="$2"; shift 2; local out; out=$(printf '%b' "$in" | { "$@"; echo "a=[$a] rc=$?"; }); [[ "$out" == *"$want" ]] && ok "$want  <- $(printf '%q' "$in")  ${*:2:2}" || bad "want '$want' got '${out##*$'\n'}'  <- $(printf '%q' "$in")  $*"; }
 # (1) a bare Enter does not answer a destructive question, whatever default the caller wrote; EOF backs out; a typed answer still works

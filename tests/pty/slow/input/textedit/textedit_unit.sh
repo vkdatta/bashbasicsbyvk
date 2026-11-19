@@ -1,7 +1,7 @@
-# Unit test of the text-edit template (script/file/engine/bashbasicsbyvk_textedit.sh): chord decoding, selection, word / line moves,
+# Unit test of the text-edit template (script/file/engine/ui/bashbasicsbyvk_textedit.sh): chord decoding, selection, word / line moves,
 # cut / copy / paste (the app's own clipboard), undo / redo, the reverse-video marking.  No terminal needed.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
-source "$ROOT/script/file/engine/bashbasicsbyvk_textedit.sh"
+source "$ROOT/script/file/engine/ui/bashbasicsbyvk_textedit.sh"
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $1: got [$2] want [$3]"; fi; }
 nop() { :; }

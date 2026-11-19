@@ -5,12 +5,12 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"; F="$ROOT/script/file"
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 SCRIPT_DIR="$F"; for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
-source "$F/engine/bashbasicsbyvk_cmdmap.sh"      # the footer declares through ADVERT, which reads the command map; the stubs below replace bvk_main_exec
+source "$F/engine/commands/bashbasicsbyvk_cmdmap.sh"      # the footer declares through ADVERT, which reads the command map; the stubs below replace bvk_main_exec
 _vp_usable() { _vp_usable_w=80; }; _vp_cells() { _vp_w=${#1}; }; _sm_on=0
 _bvk_read() { IFS= read -r "$1"; }; _BVK_TO_MAIN=0; _bvk_quit() { _BVK_TO_MAIN=1; return 0; }; _bvk_invalid() { echo "INVALID"; }
 bvk_main_exec() { echo "[ran $1]"; }
 parse_selection() { local p i; for p in ${1//,/ }; do if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then for ((i=BASH_REMATCH[1]; i<=BASH_REMATCH[2]; i++)); do [ "$i" -le "$2" ] && echo "$i"; done; elif [[ "$p" =~ ^[0-9]+$ ]] && [ "$p" -le "$2" ]; then echo "$p"; fi; done; }
-source "$F/engine/bashbasicsbyvk_menuchrome.sh"
+source "$F/engine/ui/bashbasicsbyvk_menuchrome.sh"
 eq() { [ "$2" = "$3" ] && ok "$1" || bad "$1: want [$3] got [$2]"; }
 sel() { local in="$1"; shift; local out rc; out=$(printf "$in" | { "$@"; echo "rc=$? v=${V:-} q=$_BVK_TO_MAIN"; } 2>&1); echo "${out##*$'\n'}"; }
 two() { _mc_select -d exact V "T" "exact|Exact Case|e" "any|Any Case|a"; }
@@ -34,7 +34,7 @@ eq "review: u is back (1)"         "$(rv 'u\n')" "rc=1 n=3 q=0"
 eq "review: q is quit (2), flag up, no redraw" "$(rv 'q\nc\n')" "rc=2 n=3 q=1"
 eq "review: EOF is cancelled, never spins"     "$(rv '')" "rc=3 n=3 q=0"
 # the tab menu footers come from the same standard
-eq "tabmenu footer = standard"  "$(grep -c 'std_nav' "$F/engine/bashbasicsbyvk_tabmenu.sh")" "2"
+eq "tabmenu footer = standard"  "$(grep -c 'std_nav' "$F/engine/ui/bashbasicsbyvk_tabmenu.sh")" "2"
 # drift: no hand-made u/q footers or private prompts outside the master
 d=$(grep -rnE '_mc_footer [^#]*"u(\.up)?" "q"' --include='*.sh' "$F" | grep -v 'menuchrome.sh' | head -3)
 [ -z "$d" ] && ok "no hand-made u/q footer (use _mc_footer_std)" || bad "hand-made footer: $d"

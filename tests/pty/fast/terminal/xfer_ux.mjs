@@ -1,8 +1,8 @@
 // The resilient transfer tool, ux pipeline + signals, against a tiny fake server (no worker needed).
 //   node tests/pty/fast/terminal/xfer_ux.mjs
 import http from "node:http"; import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { spawn } from "node:child_process"; import assert from "node:assert/strict";
-const XFER = path.resolve("script/file/staging/!buffer/fileapi/6 pending/bashbasicsbyvk_staging_pending_xfer");
-const JSLIB = path.resolve("script/file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_staging_jslib.js");   // bash hands this to the node tools (BB_JSLIB)
+const XFER = path.resolve("script/file/staging/fileapi/pending/bashbasicsbyvk_staging_pending_xfer");
+const JSLIB = path.resolve("script/file/staging/fileapi/lib/bashbasicsbyvk_staging_jslib.js");   // bash hands this to the node tools (BB_JSLIB)
 const got = new Map(); let failNext = 0, slow = 0, tokenBad = false;
 const srv = http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);

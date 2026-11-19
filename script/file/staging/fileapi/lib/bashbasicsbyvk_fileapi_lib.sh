@@ -2,7 +2,7 @@
 # bashbasicsbyvk_fileapi_lib.sh — the ONE place for the fileapi endpoint, transport hardening and
 # credential/response helpers. Sourced by:
 #   • cmd/bashbasicsbyvk_copy                          (stand-alone `bashbasicsbyvk_copy`)
-#   • file/staging/!buffer/bashbasicsbyvk_staging_upload.sh   (uploads/imports inside `o`)
+#   • file/staging/fileapi/upload/bashbasicsbyvk_staging_upload.sh   (uploads/imports inside `o`)
 # Keep security-relevant behaviour (TLS opts, no secrets in argv) here so a fix lands everywhere.
 
 WORKER_URL="https://fileapi.bashbasics.workers.dev"

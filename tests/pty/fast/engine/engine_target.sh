@@ -36,7 +36,7 @@ FH=i686 chk x86_64 GNU/Linux linux-gnu     amd64/linux
 dup="$(grep -rnE 'aarch64\|arm64\)' "$S" --include='*.sh' | grep -v 'bashbasicsbyvk_engine_target.sh' | head -3)"
 [ -z "$dup" ] && ok "no other file re-implements the CPU mapping" || bad "CPU mapping copied, call _bvk_engine_target instead: $dup"
 
-for f in "$S"/file/functions/_3bvk_import_cmd_delete.sh "$S/file/staging/!buffer/fileapi/_3bvk_import_cmd_copy.sh"; do
+for f in "$S"/file/functions/file_ops/_3bvk_import_cmd_delete.sh "$S/file/staging/fileapi/_3bvk_import_cmd_copy.sh"; do
   grep -q 'bashbasicsbyvk_engine_target.sh' "$f" && ok "$(basename "$f") loads engine_target (it cannot load displayer)" || bad "$(basename "$f") calls _bvk_xfer_bin but does not load engine_target"
 done
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"

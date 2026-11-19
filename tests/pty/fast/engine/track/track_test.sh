@@ -81,7 +81,7 @@ F="$ROOT/script/file"
 _is_archive() { return 1; }; _is_image() { return 1; }; _is_plugin() { return 1; }; _is_executable() { [ -x "$1" ]; }
 declare -gA item_icon=() _FAV_LABEL=() _REC_LABEL=()
 # shellcheck disable=SC1090
-eval "$(sed -n '/^_resolve_display_parts_v() {/,/^_shortcut_display_parts() {/p' "$F/engine/bashbasicsbyvk_displayer.sh" | sed '$d')"
+eval "$(sed -n '/^_resolve_display_parts_v() {/,/^_shortcut_display_parts() {/p' "$F/engine/ui/bashbasicsbyvk_displayer.sh" | sed '$d')"
 mkdir -p "$HOME/p"; printf '#!/bin/sh\n' > "$HOME/p/run.sh"; chmod +x "$HOME/p/run.sh"; mkdir -p "$HOME/p/dir"
 SB1="$(_swlink_write "$_SW_DIR" "$HOME/p/run.sh" run.sh)"; SB2="$(_swlink_write "$_SW_DIR" "$HOME/p/dir" dir)"
 _resolve_display_parts_v "$HOME/p/run.sh"; local_icon="$_rdp_icon"; _resolve_display_parts_v "$SB1"

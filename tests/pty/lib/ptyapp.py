@@ -39,12 +39,14 @@ class PtyApp:
     boot_timeout = 15      # the app must show its prompt within this time or the test fails (it does not sleep 4 s blindly)
     ready_text = 'Select:' # what the app shows when it waits for input
     entry = 'o'            # the script run with bash (found in the temp bin/)
+    entry_src = None       # a generated driver that lives OUTSIDE script/ (tests write it, never script/): linked into bin/ as `entry`
 
     def __init__(self, root, cols, rows, populate, env=None, answer_dsr=False, boot=True):
         """populate(home, work) fills the temp HOME / work dir. env: extra environment for the app.
         answer_dsr: answer the cursor-position query ESC[6n the way a real terminal does."""
         self.tmp = tempfile.mkdtemp(); binp = os.path.join(self.tmp, 'bin'); os.makedirs(binp)
         link_scripts(root, binp)
+        if self.entry_src: os.symlink(self.entry_src, os.path.join(binp, self.entry))
         home = os.path.join(self.tmp, 'home'); work = os.path.join(home, 'work'); os.makedirs(work)
         self.work = work
         populate(home, work)

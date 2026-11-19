@@ -4,10 +4,10 @@ set -u
 ROOT="$(pwd)"; F="$ROOT/script/file"
 SCRIPT_DIR="$F"
 for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
-source "$F/engine/bashbasicsbyvk_cmdmap.sh" 2>/dev/null
+source "$F/engine/commands/bashbasicsbyvk_cmdmap.sh" 2>/dev/null
 for f in "$F"/cmdmap/*/*commands.sh; do source "$f" 2>/dev/null; done
 _cm_boot 2>/dev/null
-source "$F/engine/bashbasicsbyvk_menuchrome.sh" 2>/dev/null
+source "$F/engine/ui/bashbasicsbyvk_menuchrome.sh" 2>/dev/null
 
 echo "=== PART 1: Settings/Home engine (_st_run) — what cc lists vs what the screen accepts ==="
 # cc list for ctx=st is hard-coded in _cc_collect

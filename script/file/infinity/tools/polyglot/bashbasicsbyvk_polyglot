@@ -94,7 +94,7 @@ def main(argv=None):
         try:
             import bashbasicsbyvk_deps as deps
         except ImportError as exc:       # not installed flat: bashbasicsbyvk_deps (script/file/engine) is not beside the tool
-            print(f"❌ {exc.name} not found next to the tool - reinstall bashbasicsbyvk, or from the repo: PYTHONPATH=script/file/engine")
+            print(f"❌ {exc.name} not found next to the tool - reinstall bashbasicsbyvk, or from the repo: PYTHONPATH=script/file/engine/deps")
             return 2
         if not deps.ensure(*_dependency_ids(sorted({lang for _, lang in paths}), a.parser, not a.no_xlsx), context="Polyglot", yes=a.yes):
             print("❌ numpy is required and is not installed (declined, or the install failed).")

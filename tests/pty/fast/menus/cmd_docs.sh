@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"; F="$ROOT/scrip
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 
 gen() ( SCRIPT_DIR="$F"; for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
-        source "$F/engine/bashbasicsbyvk_cmdmap.sh"; for f in "$F"/cmdmap/*/*commands.sh; do source "$f"; done; _cm_doc )
+        source "$F/engine/commands/bashbasicsbyvk_cmdmap.sh"; for f in "$F"/cmdmap/*/*commands.sh; do source "$f"; done; _cm_doc )
 cur() { sed -n '/<!-- cmd-ref:start -->/,/<!-- cmd-ref:end -->/p' "$DOC" | sed '1d;$d'; }
 
 new="$(gen)"

@@ -4,7 +4,7 @@ Rows:    every  _st_add TYPE "label" VALUE "hint" TAG  in that screen's builder 
 Titles and tags built at run time (a "$var" in them) cannot be checked here and are skipped; the table test checks the table itself."""
 import re, glob, sys
 root = sys.argv[1]
-src = open(f'{root}/settings/bashbasicsbyvk_settings_desc.sh', encoding='utf-8').read()
+src = open(f'{root}/settings/core/bashbasicsbyvk_settings_desc.sh', encoding='utf-8').read()
 body = src.split("<<'BVK_DESC_EOF'\n")[1].split('\nBVK_DESC_EOF')[0]
 keys = set(l.split('\t')[0] for l in body.split('\n') if l)
 files = {f: open(f, encoding='utf-8').read() for f in glob.glob(root + '/**/*.sh', recursive=True) if 'settings_desc' not in f}

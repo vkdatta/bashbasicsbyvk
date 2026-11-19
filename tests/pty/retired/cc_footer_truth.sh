@@ -4,8 +4,8 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; F="$ROOT/script/file"; SCRIPT_DIR="$F"
 for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
-source "$F/engine/bashbasicsbyvk_cmdmap.sh"; for f in "$F"/cmdmap/*/*commands.sh; do source "$f"; done; _cm_boot
-declare -gA _MC_KEYLABEL=([u.up]="Up" [z]="Cancel"); source "$F/engine/bashbasicsbyvk_advert.sh"
+source "$F/engine/commands/bashbasicsbyvk_cmdmap.sh"; for f in "$F"/cmdmap/*/*commands.sh; do source "$f"; done; _cm_boot
+declare -gA _MC_KEYLABEL=([u.up]="Up" [z]="Cancel"); source "$F/engine/commands/bashbasicsbyvk_advert.sh"
 fail=0; ok(){ echo "  ok   $*"; }; bad(){ echo "  FAIL $*"; fail=1; }
 has(){ local k; for k in "${_AD_CC_KEY[@]}"; do [ "$k" = "$1" ] && return 0; done; return 1; }
 infooter(){ local c; for c in "${_AD_FT_FREE[@]}" "${_AD_FT_PAID[@]}"; do [[ "$c" == "$1) "* ]] && return 0; done; return 1; }

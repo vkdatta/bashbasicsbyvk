@@ -1,4 +1,4 @@
-"""A word typed into a yes/no or choice box (script/file/settings/bashbasicsbyvk_choose.sh, _bc_word) goes through the command layer like at every
+"""A word typed into a yes/no or choice box (script/file/engine/ui/bashbasicsbyvk_choose.sh, _bc_word) goes through the command layer like at every
 prompt of the app: plain text is cleared, @word is text, a command runs and the question comes back, u leaves.  Before, _bc_cmd returned 0 for every
 word, so the hint row said "h -> Home" and Enter dropped it.  Real terminal (pty + tests/pty/lib/ptyapp.py).  usage: python3 typed_test.py"""
 import os, sys
@@ -13,10 +13,10 @@ exit 0
 '''
 o = open(os.path.join(root, 'script', 'o'), encoding='utf-8').read()
 head = o.split('_lt_mark "startup finished')[0]
-drv = os.path.join(root, 'script', 'typed_test_driver.sh')
+drv = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'typed_test_driver.sh')   # generated here, removed at the end: never inside script/
 
 class App(PtyApp):
-    entry = 'typed_test_driver.sh'; ready_text = 'READY'
+    entry = 'typed_test_driver.sh'; entry_src = drv; ready_text = 'READY'
 
 res = []
 def check(name, cond, why=''):

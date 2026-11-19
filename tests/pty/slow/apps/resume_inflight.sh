@@ -4,8 +4,8 @@
 set -u
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/wait_lib.sh"   # UTF-8 locale + wait_until / wait_port / settle (no fixed sleeps)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-X="$ROOT/script/file/staging/!buffer/fileapi/6 pending/bashbasicsbyvk_staging_pending_xfer"
-export BB_JSLIB="$ROOT/script/file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_staging_jslib.js"   # bash hands this to the node tools
+X="$ROOT/script/file/staging/fileapi/pending/bashbasicsbyvk_staging_pending_xfer"
+export BB_JSLIB="$ROOT/script/file/staging/fileapi/lib/bashbasicsbyvk_staging_jslib.js"   # bash hands this to the node tools
 T=$(mktemp -d); trap 'kill $MP 2>/dev/null; rm -rf "$T"' EXIT; MP=""
 cat > "$T/mock.js" <<'JS'
 // mock worker: stores a blob ONLY when its whole PUT body arrived (like R2 put). Shared 30 MB/s bandwidth.

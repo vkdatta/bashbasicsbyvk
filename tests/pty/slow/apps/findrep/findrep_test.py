@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Expected-vs-actual tests for the find & replace engines.
 
-  python3 -I tests/pty/slow/apps/findrep/findrep_test.py --engine ./bvk-fr [--engine script/file/functions/bashbasicsbyvk_findrep] [--n 1200] [--seed 1]
+  python3 -I tests/pty/slow/apps/findrep/findrep_test.py --engine ./bvk-fr [--engine script/file/functions/find_replace/bashbasicsbyvk_findrep] [--n 1200] [--seed 1]
 
 Every engine given is run on the same operations:
   * hand written scenarios (SCENARIOS below: the bugs that were reported + edge cases) with exact expectations

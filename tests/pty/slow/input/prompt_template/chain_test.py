@@ -68,7 +68,7 @@ def drive(name, argv, steps, want, nowant=(), env_extra=None, cwd=None, bindir=N
 # (bashbasicsbyvk_gitpush and bashbasicsbyvk_localhost are functions of the app now: tests/pty/slow/apps/infinity/infinity_test.py drives their questions in the real app)
 
 # ---- bashbasicsbyvk_recover_creds.py (Python): token -> account, the questions are steps (bashbasicsbyvk_ask.steps).  The prompts and the API are faked.
-sys.path[:0] = [os.path.join(ROOT, 'script/file/engine'), os.path.join(ROOT, 'script/file/loops/iloop/fx/cloudflare_fx/recover')]
+sys.path[:0] = [os.path.join(ROOT, 'script/file/engine/prompts'), os.path.join(ROOT, 'script/file/engine/deps'), os.path.join(ROOT, 'script/file/loops/iloop/fx/cloudflare_fx/recover')]
 import importlib
 rc = importlib.import_module('bashbasicsbyvk_recover_creds'); ask_mod = importlib.import_module('bashbasicsbyvk_ask')
 def py_case(name, resolved, accounts, answers, want):

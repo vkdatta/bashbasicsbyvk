@@ -12,7 +12,7 @@ fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 
 SCRIPT_DIR="$F"
 for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
-source "$F/engine/bashbasicsbyvk_cmdmap.sh"
+source "$F/engine/commands/bashbasicsbyvk_cmdmap.sh"
 for f in "$F"/cmdmap/*/*commands.sh; do source "$f"; done
 _cm_boot
 
@@ -74,7 +74,7 @@ grep -q '"rn:' "$SW" && bad "favourites footer advertises rn, the loop handles r
 # run the real remove with a fake bookmark list
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 eval "$(sed -n '/^_sw_remove_paths()/,/^}/p' "$SW")"
-eval "$(sed -n '/^_sp_resolve_itemlist()/,/^}/p' "$F/staging/buffer!/bashbasicsbyvk_staging_helpers.sh")"
+eval "$(sed -n '/^_sp_resolve_itemlist()/,/^}/p' "$F/staging/buffer/bashbasicsbyvk_staging_helpers.sh")"
 parse_selection() { local spec="$1" max="$2" p a b i; for p in ${spec//,/ }; do if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then for ((i=BASH_REMATCH[1]; i<=BASH_REMATCH[2]; i++)); do [ "$i" -le "$max" ] && echo "$i"; done; elif [[ "$p" =~ ^[0-9]+$ ]] && [ "$p" -le "$max" ]; then echo "$p"; fi; done; }
 _carry_forget() { :; }; read() { builtin printf -v "${@: -1}" '%s' "$ANS"; }
 _bvk_yn() { builtin printf -v "$1" '%s' "$ANS"; }       # the yes/no menu answers with $ANS here
@@ -86,7 +86,7 @@ ANS=n; _sw_remove_paths "b-1" >/dev/null; [ -e "$T/a.swlink" ] && ok "b-1 answer
 ANS=y; _sw_remove_paths "b-1,3" >/dev/null; { [ ! -e "$T/a.swlink" ] && [ ! -e "$T/c.swlink" ]; } && ok "b-1,3 removes both" || bad "b-1,3 failed"
 
 # ── (5)
-BK="$F/staging/!buffer/fileapi/3 backup/bashbasicsbyvk_staging_backup.sh"
+BK="$F/staging/fileapi/backup/bashbasicsbyvk_staging_backup.sh"
 n=$(grep -c '_bvk_read nm "Name this backup' "$BK"); m=$(grep '_bvk_read nm "Name this backup' "$BK" | grep -c '|| {.*_CM_BACKED.*return 1.*return 3')   # the one prompt (_bkd_read_name): u = 1 (back), anything else = 3 (cancel)
 [ "$n" = "$m" ] && [ "$n" -ge 1 ] && ok "backup: every 'Name this backup' prompt returns when cancelled (u = back, else cancel)" || bad "backup: a name prompt ignores a cancel ($m of $n)"
 grep -A2 'Name this backup' "$BK" | grep -q '_CM_ABORT' && ok "backup: checks _CM_ABORT after the name prompt" || bad "backup: no _CM_ABORT check"
@@ -110,12 +110,12 @@ hand=$(grep -rniE '"(u|q|z|rf)(\.[a-z]+)?:|_mc_footer_register .*[ ](u|q|z|rf)(\
 [ -z "$hand" ] && ok "no footer retypes a generic label (u q z rf come from _MC_KEYLABEL)" || bad "hand-typed generic footer label: $hand"
 # every named variant a footer uses (u.up ...) exists in the table
 vars=""; while builtin read -r v; do
-  ( source "$F/engine/bashbasicsbyvk_menuchrome.sh" 2>/dev/null; [ -n "${_MC_KEYLABEL[$v]-}" ] ) || vars+="$v "
+  ( source "$F/engine/ui/bashbasicsbyvk_menuchrome.sh" 2>/dev/null; [ -n "${_MC_KEYLABEL[$v]-}" ] ) || vars+="$v "
 done < <(grep -rhoE '(^|[ "])(u|q|z|rf)\.[a-z]+([ "]|$)' --include='*.sh' "$F" | grep -oE '(u|q|z|rf)\.[a-z]+' | sort -u)
 [ -z "$vars" ] && ok "every named footer variant (u.up ...) is defined in _MC_KEYLABEL" || bad "footer uses variants _MC_KEYLABEL does not define: $vars"
 ( declare -F _lt_b >/dev/null || { _lt_b(){ :; }; _lt_e(){ :; }; }
   _vp_usable() { _vp_usable_w=80; }; _vp_cells() { _vp_w=${#1}; }; _sm_on=0
-  source "$F/engine/bashbasicsbyvk_menuchrome.sh"
+  source "$F/engine/ui/bashbasicsbyvk_menuchrome.sh"
   out="$(_mc_footer u u.up q z rf "x:Nuke")"
   [[ "$out" == *"u) Back   u) Up   q) Quit   z) Cancel   rf) Refresh   x) Nuke"* ]] ) \
   && ok "bare footer keys render their canonical label next to a custom one" || bad "bare footer keys do not render u) Back q) Quit z) Cancel rf) Refresh"

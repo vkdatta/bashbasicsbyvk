@@ -1,18 +1,18 @@
 # KNOWN drift of suite shell: one stable id per line. Owner-only file. A finding listed here does not fail the run; a new one does.
 rmvar:file/select/bashbasicsbyvk_rules.sh:_rl_cmd_rename:431
-testvar:file/engine/bashbasicsbyvk_deps.sh:_dep_install:733
-testvar:file/engine/bashbasicsbyvk_deps.sh:_dep_install:737
-testvar:file/engine/bashbasicsbyvk_deps.sh:_dep_need:684
-testvar:file/functions/bashbasicsbyvk_organise.sh:_day_dest:134
-testvar:file/functions/bashbasicsbyvk_organise.sh:_month_dest:122
-testvar:file/functions/bashbasicsbyvk_organise.sh:_year_dest:109
-testvar:file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_staging_svc.sh:_svc_upload:131
-testvar:file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_staging_svc.sh:_svc_upload:38
-testvar:file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_staging_svc.sh:_svc_upload:77
-testvar:file/staging/!buffer/fileapi/1 upload/bashbasicsbyvk_staging_upload.sh:_up_do_multipart_upload:565
-testvar:file/staging/!buffer/fileapi/1 upload/bashbasicsbyvk_staging_upload.sh:_up_do_multipart_upload:599
-testvar:file/staging/!buffer/fileapi/1 upload/bashbasicsbyvk_staging_upload.sh:_up_do_multipart_upload:653
-testvar:file/staging/!buffer/fileapi/1 upload/bashbasicsbyvk_staging_upload.sh:_up_do_multipart_upload:690
-testvar:file/staging/!buffer/fileapi/6 pending/bashbasicsbyvk_staging_pending.sh:_pn_xfer:118
-testvar:file/staging/!buffer/fileapi/6 pending/bashbasicsbyvk_staging_pending.sh:_pn_xfer:139
-testvar:file/staging/!buffer/other/bashbasicsbyvk_staging_archive.sh:_decompress_paths:233
+testvar:file/engine/deps/bashbasicsbyvk_deps.sh:_dep_install:733
+testvar:file/engine/deps/bashbasicsbyvk_deps.sh:_dep_install:737
+testvar:file/engine/deps/bashbasicsbyvk_deps.sh:_dep_need:684
+testvar:file/functions/file_ops/bashbasicsbyvk_organise.sh:_day_dest:134
+testvar:file/functions/file_ops/bashbasicsbyvk_organise.sh:_month_dest:122
+testvar:file/functions/file_ops/bashbasicsbyvk_organise.sh:_year_dest:109
+testvar:file/staging/fileapi/lib/bashbasicsbyvk_staging_svc.sh:_svc_upload:131
+testvar:file/staging/fileapi/lib/bashbasicsbyvk_staging_svc.sh:_svc_upload:38
+testvar:file/staging/fileapi/lib/bashbasicsbyvk_staging_svc.sh:_svc_upload:77
+testvar:file/staging/fileapi/upload/bashbasicsbyvk_staging_upload.sh:_up_do_multipart_upload:565
+testvar:file/staging/fileapi/upload/bashbasicsbyvk_staging_upload.sh:_up_do_multipart_upload:599
+testvar:file/staging/fileapi/upload/bashbasicsbyvk_staging_upload.sh:_up_do_multipart_upload:653
+testvar:file/staging/fileapi/upload/bashbasicsbyvk_staging_upload.sh:_up_do_multipart_upload:690
+testvar:file/staging/fileapi/pending/bashbasicsbyvk_staging_pending.sh:_pn_xfer:118
+testvar:file/staging/fileapi/pending/bashbasicsbyvk_staging_pending.sh:_pn_xfer:139
+testvar:file/staging/extras/bashbasicsbyvk_staging_archive.sh:_decompress_paths:233

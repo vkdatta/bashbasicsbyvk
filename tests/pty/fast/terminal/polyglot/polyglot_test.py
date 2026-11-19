@@ -23,7 +23,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE.parents[4] / "script" / "file"
 TOOL = SCRIPT / "infinity" / "tools" / "polyglot"
-sys.path[:0] = [str(TOOL), str(SCRIPT / "engine"), str(SCRIPT / "infinity" / "tools" / "js_audit")]
+sys.path[:0] = [str(TOOL), str(SCRIPT / "engine" / "deps"), str(SCRIPT / "infinity" / "tools" / "js_audit")]
 
 import bashbasicsbyvk_deps as deps                                                                  # noqa: E402
 import bashbasicsbyvk_polyglot_extractor as ex                                                      # noqa: E402
@@ -548,7 +548,7 @@ class DependencyIdTests(unittest.TestCase):
         self.assertNotIn("?openpyxl", self.ids(["python"], xlsx=False))
 
     def test_every_id_is_in_the_registry(self):
-        reg = (SCRIPT / "engine" / "bashbasicsbyvk_deps.list").read_text()
+        reg = (SCRIPT / "engine" / "deps" / "bashbasicsbyvk_deps.list").read_text()
         for i in self.ids(sorted(LANGUAGES)):
             name = i.lstrip("?")
             self.assertTrue(f"|{name}|" in reg or name.startswith("tree_sitter_"), name)

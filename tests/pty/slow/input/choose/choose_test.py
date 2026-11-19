@@ -1,4 +1,4 @@
-"""The choice menu (script/file/settings/bashbasicsbyvk_choose.sh): yes/no/cancel, radio [o], checkbox [x], action menus.
+"""The choice menu (script/file/engine/ui/bashbasicsbyvk_choose.sh): yes/no/cancel, radio [o], checkbox [x], action menus.
 Real terminal (pty + tests/pty/lib/ptyapp.py) around a tiny driver made from the real startup of script/o, so the menu runs with the
 whole command layer loaded.  usage: python3 choose_test.py"""
 import os, sys, re
@@ -18,10 +18,10 @@ exit 0
 '''
 o = open(os.path.join(root, 'script', 'o'), encoding='utf-8').read()
 head = o.split('_lt_mark "startup finished')[0]
-drv = os.path.join(root, 'script', 'choose_test_driver.sh')
+drv = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'choose_test_driver.sh')   # generated here, removed at the end: never inside script/
 
 class App(PtyApp):
-    entry = 'choose_test_driver.sh'; ready_text = 'READY'
+    entry = 'choose_test_driver.sh'; entry_src = drv; ready_text = 'READY'
 
 res = []
 def check(name, cond, why=''):

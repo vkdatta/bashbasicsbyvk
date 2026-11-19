@@ -6,7 +6,7 @@ import os, pty, sys, select, time, subprocess, signal, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'lib'))
 from vt import Screen          # the shared VT emulator (tests/pty/lib/vt.py): where on the screen did the bar land?
 ROOT = sys.argv[1]
-SL = f'{ROOT}/script/file/engine/bashbasicsbyvk_smartload.sh'
+SL = f'{ROOT}/script/file/engine/ui/bashbasicsbyvk_smartload.sh'
 F = float(os.environ.get('TEST_TIME_FACTOR', '1') or 1)
 GRACE_MS = 400
 WIPE = '\x1b[K\x1b[?25h'
@@ -129,7 +129,7 @@ check(has_bar(o), 'default delay: a wait longer than 0.5 s shows the bar', f'no 
 
 # 12) a transfer's PROGRESS bar always wins over the LOADING bar: begin wipes a bar that is already showing and keeps it away, end lets it come back.
 #     The pair is taken from the real fileapi lib (never a copy of it in the test).
-LIB = f'{ROOT}/script/file/staging/!buffer/fileapi/0 lib/bashbasicsbyvk_fileapi_lib.sh'
+LIB = f'{ROOT}/script/file/staging/fileapi/lib/bashbasicsbyvk_fileapi_lib.sh'
 GET = f'eval "$(grep -E \'^_bb_progress_(begin|end)\\(\\)\' "{LIB}")"; '
 o = run_pty(GET + '_sl_ready; _sl_enter "" "" "Prep"; sleep 1.0; _bb_progress_begin; echo MARK_P1; sleep 1.2; echo MARK_P2; _bb_progress_end; sleep 1.2; _sl_ready; echo MARK_END')   # lint-wait-ok: the wait is the behaviour under test
 b1, w1, p1, p2 = o.find('░'), o.find(WIPE), o.find('MARK_P1'), o.find('MARK_P2')
@@ -205,7 +205,7 @@ check(has_bar(o), 'debug off (the default): nothing changes', f'bar lost with de
 
 # 13) every call that lets a transfer tool draw its own bar sits between _bb_progress_begin and _bb_progress_end (a new call site that forgets it fails here)
 import re
-FA = f'{ROOT}/script/file/staging/!buffer/fileapi'
+FA = f'{ROOT}/script/file/staging/fileapi'
 DRAWS = re.compile(r'_BVK_XFER_BIN"\s+(send|pack)\b|_pn_xfer\s+"\$pipe"|_crypto_fetch_archive\s+"\$link"|_ux_core\s+pack\b|\|\s*_crypto_stream_pack\b')
 unwrapped = []
 for dp, _, fns in os.walk(FA):

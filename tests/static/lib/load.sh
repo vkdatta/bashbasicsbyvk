@@ -11,10 +11,10 @@ _bvk_src() { local f="$1"; [ -f "$f" ] || { echo "LOAD FAIL: missing $f" >&2; re
 bvk_load() {   # [cc]  — "cc" also loads advert.sh + cheatcode.sh
   local d f want_cc="${1:-}"
   for d in "$BVK_F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
-  [ "$want_cc" = cc ] && { declare -gA _MC_KEYLABEL=([u.up]="Up" [z]="Cancel"); _bvk_src "$BVK_F/engine/bashbasicsbyvk_advert.sh" || return $?; }
-  _bvk_src "$BVK_F/engine/bashbasicsbyvk_cmdmap.sh" || return $?
+  [ "$want_cc" = cc ] && { declare -gA _MC_KEYLABEL=([u.up]="Up" [z]="Cancel"); _bvk_src "$BVK_F/engine/commands/bashbasicsbyvk_advert.sh" || return $?; }
+  _bvk_src "$BVK_F/engine/commands/bashbasicsbyvk_cmdmap.sh" || return $?
   for f in "$BVK_F"/cmdmap/*/*commands.sh; do _bvk_src "$f" || return $?; done
-  [ "$want_cc" = cc ] && { _bvk_src "$BVK_F/engine/bashbasicsbyvk_cheatcode.sh" || return $?; }
+  [ "$want_cc" = cc ] && { _bvk_src "$BVK_F/engine/commands/bashbasicsbyvk_cheatcode.sh" || return $?; }
   _cm_boot
   local k h
   for k in "${!_CM_DEF[@]}"; do h="${_CM_DEF[$k]#*|}"; h="${h%%|*}"; case "$h" in -|back|"") ;; *) declare -F "$h" >/dev/null || eval "$h() { :; }" ;; esac; done

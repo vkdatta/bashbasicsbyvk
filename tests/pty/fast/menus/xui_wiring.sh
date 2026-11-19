@@ -62,7 +62,7 @@ PY
 # 2. what the command map says
 SCRIPT_DIR="$F"
 for d in "$F"/cmdmap/*/; do PATH="$PATH:${d%/}"; done
-source "$F/engine/bashbasicsbyvk_cmdmap.sh"
+source "$F/engine/commands/bashbasicsbyvk_cmdmap.sh"
 for f in "$F"/cmdmap/*/*commands.sh; do source "$f"; done
 _cm_boot; _cm_ensure_all
 nscreens=0 nkeys=0

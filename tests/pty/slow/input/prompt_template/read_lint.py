@@ -142,9 +142,9 @@ def iter_reads(text):
 
 # Files that ARE the editors / key loops / process plumbing: a raw `read` is their job.  Nothing else may read the terminal itself.
 ENGINE_ALLOW = (
-    'engine/bashbasicsbyvk_viewport.sh', 'engine/bashbasicsbyvk_browse.sh', 'engine/bashbasicsbyvk_mouse.sh',
-    'engine/bashbasicsbyvk_smartmenu.sh', 'engine/bashbasicsbyvk_cmdmap.sh', 'settings/bashbasicsbyvk_settings_ui.sh',
-    'engine/bashbasicsbyvk_textedit.sh', 'engine/bashbasicsbyvk_smartload.sh', 'loadmap/bashbasicsbyvk_loadmap.sh',
+    'engine/ui/bashbasicsbyvk_viewport.sh', 'engine/ui/bashbasicsbyvk_browse.sh', 'engine/ui/bashbasicsbyvk_mouse.sh',
+    'engine/ui/bashbasicsbyvk_smartmenu.sh', 'engine/commands/bashbasicsbyvk_cmdmap.sh', 'settings/core/bashbasicsbyvk_settings_ui.sh',
+    'engine/ui/bashbasicsbyvk_textedit.sh', 'engine/ui/bashbasicsbyvk_smartload.sh', 'loadmap/bashbasicsbyvk_loadmap.sh',
 )
 def classify(line, m, parsed, lstart):
     """'data' (fed from a file / pipe / here-string / while condition) or 'terminal'."""
@@ -227,7 +227,7 @@ check('2b. every bvk-read-ok marker states a reason (%d markers)' % len(markers)
 
 rd = sum(len(re.findall(r'^_bvk_read\(\)', open(p, encoding='utf-8', errors='replace').read(), re.M)) for p, rel, k in files() if k == 'sh')
 check('3a. _bvk_read is defined exactly once', rd == 1, rd)
-need = ['file/engine/bashbasicsbyvk_ask', 'file/engine/_3bvk_import_ask.sh', 'file/engine/bashbasicsbyvk_ask.py']
+need = ['file/engine/prompts/bashbasicsbyvk_ask', 'file/engine/prompts/_3bvk_import_ask.sh', 'file/engine/prompts/bashbasicsbyvk_ask.py']
 check('3b. the ask tool, its import file and its python door exist', all(os.path.isfile(os.path.join(SCRIPT, n)) for n in need), need)
 
 # 4. behaviour: the tool runs the shared editor

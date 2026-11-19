@@ -2,7 +2,7 @@
 # The choice menu without a terminal: the same question as one plain line, answers read from stdin (scripts, tests, pipes).
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"; fail=0
 ok() { echo "PASS $*"; }; bad() { echo "FAIL $*"; fail=1; }
-source "$ROOT/script/file/settings/bashbasicsbyvk_choose.sh"
+source "$ROOT/script/file/engine/ui/bashbasicsbyvk_choose.sh"
 t() { local want="$1" in="$2"; shift 2; local out; out=$(printf '%b' "$in" | { "$@"; echo "a=[$a] rc=$?"; }); [[ "$out" == *"$want" ]] && ok "$want  <- $(printf '%q' "$in")" || bad "want '$want' got '${out##*$'\n'}'  <- $(printf '%q' "$in")"; }
 t 'a=[y] rc=0' 'y\n'   _bvk_yn a "Q?" -d n
 t 'a=[] rc=1'  '\n'    _bvk_yn a "Q?" -d n   # no default: a bare Enter answers nothing (-d is ignored)

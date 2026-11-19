@@ -6,7 +6,7 @@
 # (4) settings_ui.sh draws without settings_desc.sh loaded (a stand-alone caller must not break)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"; D="$ROOT/script/file"; fail=0
 ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
-f="$D/settings/bashbasicsbyvk_settings_desc.sh"
+f="$D/settings/core/bashbasicsbyvk_settings_desc.sh"
 
 # (1)
 tbl="$(sed -n "/<<'BVK_DESC_EOF'/,/^BVK_DESC_EOF/p" "$f" | sed '1d;$d')"
@@ -50,7 +50,7 @@ python3 -I "$ROOT/tests/pty/fast/menus/settings_desc/coverage.py" "$D" || fail=1
 # (4)
 out="$(bash -c '
   _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){ :; }; _lt_ready(){ :; }
-  source "'"$D"'/engine/bashbasicsbyvk_viewport.sh"; source "'"$D"'/engine/bashbasicsbyvk_textedit.sh"; source "'"$D"'/settings/bashbasicsbyvk_settings_ui.sh"
+  source "'"$D"'/engine/ui/bashbasicsbyvk_viewport.sh"; source "'"$D"'/engine/ui/bashbasicsbyvk_textedit.sh"; source "'"$D"'/settings/core/bashbasicsbyvk_settings_ui.sh"
   declare -F _st_desc_prepare >/dev/null && echo DESC_LOADED
   rows=40; cols=80; title=T; parent_title=""; cur=-1; _st_kind=(); _st_tag=()
   _vp_rows_now=40; _vp_cols_now=80
