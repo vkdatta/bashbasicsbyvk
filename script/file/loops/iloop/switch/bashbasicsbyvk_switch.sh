@@ -207,9 +207,8 @@ _sw_remove_paths() {
     _sp_resolve_itemlist "$spec" || return 0
     selected_items=("${sp_resolved[@]}")
   else
-    echo "🗑️  Select bookmark(s) to remove:"
-    if $imaginary_mode; then select_imaginary_items_common "$path" "$group_prefix" || return 0
-    else select_items_common "REMOVE BOOKMARK" allow_a || return 0; fi
+    if $imaginary_mode; then select_imaginary_items_common "$path" "$group_prefix" "🗑️ Remove bookmark" || return 0
+    else select_items_common "🗑️ Remove bookmark" allow_a || return 0; fi
   fi
   n=${#selected_items[@]}
   [ "$n" -eq 0 ] && { echo "📜  Nothing selected"; return 0; }

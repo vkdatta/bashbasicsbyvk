@@ -382,12 +382,11 @@ _fav_sw_remove() {                 # _fav_sw_remove <dir> [b | b-1,3 | x]
   local dir raw="${2:-}" spec=""; dir=$(_fav_norm "$1")
   case "$raw" in [bB]-*) spec="${raw:2}" ;; esac
   [ ${#items[@]} -eq 0 ] && { echo "📜  No favourites here"; return; }
-  echo "🗑️  Remove favourite(s) — the files themselves are NOT touched"
   if [ -n "$spec" ]; then
     sp_resolved=(); _sp_resolve_itemlist "$spec" || return
     selected_items=("${sp_resolved[@]}")
   else
-    select_items_common "REMOVE FAVOURITE" allow_a || return
+    select_items_common "🗑️ Remove favourite" allow_a || return
   fi
   _fav_lock
   _fav_cache_key=""; _fav_load "$dir" >/dev/null 2>&1

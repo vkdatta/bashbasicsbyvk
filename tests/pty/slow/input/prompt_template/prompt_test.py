@@ -43,8 +43,8 @@ def case(name, fn):
 
 # each opener brings the app to ONE prompt and returns its label
 def main_prompt(a): return 'Select:'
-def picker(a):      a.line('d'); a.wait_text('DELETE (ranges'); return 'Item numbers:' if 'Item numbers:' in a.text() else 'Select:'
-def confirm(a):     a.line('d'); a.wait_text('DELETE (ranges'); a.line('1'); a.wait_text('Confirm delete'); return 'Select:'
+def picker(a):      a.line('d'); a.wait_text('Select items to delete'); return 'Select:'
+def confirm(a):     a.line('d'); a.wait_text('Select items to delete'); a.line('1'); a.wait_text('Confirm delete'); return 'Select:'
 def settings(a):    a.line('s'); a.wait_text('Settings'); return 'Select:'
 def typed_line(a):  a.line('c'); a.line('1'); a.wait_text('Enter folder names'); return '(separated by ,):'     # the typed-line prompt (_bvk_read / _cm_line_edit)
 OPENERS = [('main Select:', main_prompt), ('item numbers (delete picker)', picker), ('choice box (Confirm delete)', confirm), ('Settings', settings), ('typed-line prompt (Create: folder names)', typed_line)]

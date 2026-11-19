@@ -26,7 +26,7 @@ def run(cols, names, sel, keys, env=None, cfg=None):
     return t
 t = run(50, ['base.tar.gz'], '1', [])
 check('✏️ Rename' in t and 'u) Up   q) Close' in t and 'Old: base.tar.gz' in t and 'New:' in t, 'screen: title, rows, footer, Old / New')
-check('Item numbers' not in t and 'RENAME (supports' not in t and 'Select: 1' in t, 'one screen: the picker is a plain "Select:" prompt, no old "Item numbers" header')
+check('Item numbers' not in t and 'RENAME (supports' not in t and 'Select items to rename' in t and 'cd path:' in t and 'Select: 1' in t, 'one screen: the shared picker (title, location rows, Select items to rename, plain "Select:" prompt)')
 check(t.count('1) ') == 1 and t.count('Old:') == 1, 'the item list is drawn once; only Old / New is added under it')
 check(t.index('u) Up   q) Close') < t.index('Select: 1') < t.index('Old: base.tar.gz') < t.index('New:'), 'order: footer, Select, Old, New')
 t = run(50, ['base.tar.gz'], '1', ['\x1b[A'])

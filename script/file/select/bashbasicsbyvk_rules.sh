@@ -390,7 +390,7 @@ _rl_cmd_delete() {
     return 1
   fi
   if [ "${#items[@]}" -eq 0 ]; then echo "📜  No rules here"; return 1; fi
-  select_items_common "DELETE" allow_a || return 1
+  select_items_common "🗑️ Delete" allow_a || return 1
   local -a doomed=(); local p
   for p in "${selected_items[@]}"; do
     if _rl_is_bundle "$p"; then doomed+=("$p"); else echo "🔒 Skipping protected item: ${p##*/}"; fi

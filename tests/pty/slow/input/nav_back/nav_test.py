@@ -74,7 +74,7 @@ case('Settings > q  = main loop', ['s', 'q'], lambda a: a.alive and last_header(
 case('main > q  exits the app', ['q'], lambda a: not a.alive, 'q on the main loop must exit')
 # --- u inside a flow = ONE question / menu back (never the file list, never the whole flow)
 TITLES = ['Where?', 'Match case?', 'Pattern type?', 'Find mode in', 'Create:', 'Organise files in', 'Number of years to group',
-          'Extract what?', 'Which lines?', 'Step 1: Choose mode', 'SELECT SOURCE', 'Compress as', 'How many lines', '\u270f\ufe0f Rename', 'Old:', 'Confirm delete', 'Back up before deleting', 'DELETE (ranges', 'nav path:']
+          'Extract what?', 'Which lines?', 'Step 1: Choose mode', 'SELECT SOURCE', 'Compress as', 'How many lines', '\u270f\ufe0f Rename', 'Old:', 'Confirm delete', 'Back up before deleting', 'Select items to delete', 'nav path:']
 def last_title(a):
     best, bi = '', -1
     for i, l in enumerate(a.scr.lines()):
@@ -100,7 +100,7 @@ case('Archive > name prompt > u  = format menu', ['z-1', '1', 'u'], at('Compress
 # --- delete: Confirm delete -> Back up before deleting; u = ONE question back (BB-121120261200-1)
 ASK = 'backup_mode=ask'
 case('Delete > Back up before deleting > u  = Confirm delete', ['d', '1', 'y', 'u'], at('Confirm delete'), 'u at the backup question must show Confirm delete again', ASK)
-case('Delete > Confirm delete > u  = the item picker', ['d', '1', 'u'], at('DELETE (ranges'), 'u at Confirm delete must show the item picker again', ASK)
-case('Delete > Back up > u > u  = the item picker', ['d', '1', 'y', 'u', 'u'], at('DELETE (ranges'), 'two u must walk back two questions, not leave the delete', ASK)
+case('Delete > Confirm delete > u  = the item picker', ['d', '1', 'u'], at('Select items to delete'), 'u at Confirm delete must show the item picker again', ASK)
+case('Delete > Back up > u > u  = the item picker', ['d', '1', 'y', 'u', 'u'], at('Select items to delete'), 'two u must walk back two questions, not leave the delete', ASK)
 case('Delete > Back up > c  = nothing deleted', ['d', '1', 'y', 'c'], lambda a: a.alive and at('nav path:')(a) and os.path.exists(os.path.join(a.work, 'alpha.txt')), 'c must cancel and keep the file', ASK)
 print('ALL OK' if all(results) else 'FAILED'); sys.exit(0 if all(results) else 1)

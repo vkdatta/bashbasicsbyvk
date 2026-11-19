@@ -142,34 +142,8 @@ _rn_finalize() {
   return 0
 }
 
-# The rename screen is ONE screen (the same pieces as a Settings screen):
-#   ✏️ Rename · what it does (the Settings description) · the items · u) Up   q) Close · Select: 1-5
+# The rename screen is the shared item picker (select_items_common, browse.sh): title, location rows, "Select items to rename", the items, u) Up   q) Close, Select:
 # then, for each chosen item, only  Old: name / New:  is added below it (the screen is not drawn again).
-# _rn_pick_header / _rn_pick_footer are the picker's header / footer hooks (_multi_header_hook / _multi_footer_hook).
-_rn_pick_header() {
-  echo; echo "✏️ Rename"; echo
-  # the description: the same table and the same wrapping as a Settings screen (one shared printer, also used by the pick screen)
-  _desc_print_dim "Rename item|*" && echo
-  return 0
-}
-_rn_pick_footer() { echo; echo "u) Up   q) Close"; }
-
-# _rn_select_items → selected_items.  rc 1 = nothing chosen (u / q / blank / bad numbers).
-_rn_select_items() {
-  if [ ${#items[@]} -eq 0 ]; then echo "❌ No items available"; return 1; fi
-  local _multi_allow_a=false _multi_header_hook=_rn_pick_header _multi_footer_hook=_rn_pick_footer _multi_label="Select" _multi_hdr_gap=1 _prompt="RENAME"
-  local -A _msel_set=()
-  local _buf _pos itemlist idx
-  _vp_mode="items"
-  _multi_prompt_loop
-  itemlist="${_buf// /}"
-  case "${itemlist,,}" in u|q|"") return 1 ;; esac
-  local indices=($(parse_selection "$itemlist" "${#items[@]}"))
-  selected_items=()
-  for idx in "${indices[@]}"; do selected_items+=("${items[$((idx-1))]}"); done
-  if [ ${#selected_items[@]} -eq 0 ]; then echo "❌ No valid items selected"; return 1; fi
-  return 0
-}
 
 # _rn_name_prompt ITEM N TOTAL → _RN_FINAL.  rc 0 named · 1 blank / refused (skip this item) · 2 u (back to the item picker).   Adds  Old: / New:  under the screen above.
 _rn_name_prompt() {
@@ -200,7 +174,7 @@ _rename_single_mutation() {
   local _rn_back
   while true; do                                 # u at a New: prompt comes back here: the item picker again
   _rn_back=0
-  _rn_select_items || return
+  select_items_common "✏️ Rename" || return
 
   # a long selection is not asked item by item: it goes straight to the CSV rename (rename.select.items.csv)
   local _lim="${rename_csv_above:-5}"

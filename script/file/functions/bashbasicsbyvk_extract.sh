@@ -284,7 +284,7 @@ _xtr_s_result() {                                                     # run it, 
 
 handle_xtr() {
   local raw="$1" what mode xmode sub n="" n2="" unit kindname noun dlabel=""
-  _sp_files_only "${raw#xtr-}" "xtr-" "EXTRACT" "can't be extracted" || return 0
+  _sp_files_only "${raw#xtr-}" "xtr-" "📦 Extract" "can't be extracted" || return 0
   # u = one question back; on the first question it leaves xtr- (back to where it was called from)
   _mc_steps _xtr_s_what _xtr_s_mode _xtr_s_sub _xtr_s_n _xtr_s_n2 _xtr_s_result
   return 0

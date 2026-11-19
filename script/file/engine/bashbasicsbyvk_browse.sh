@@ -345,23 +345,50 @@ _bvk_build_path_items() {
   fi
 }
 
-# select_items_common <PROMPT> [allow_a]
+# ── ONE item-picker screen for every "choose items to <action>" job in the folder view (Rename, Delete, Remove bookmark / favourite, Unorganise, Extract, Info ...)
+#     <icon> <Title>
+#
+#     📂 cd path / ☁️ nav path        (the same rows as the folder view: _loc_rows)
+#
+#     Select items to <action>
+#     ─────  the rows  ─────
+#     u) Up   q) Close
+#     Select:
+# A caller passes only its title ("🗑️ Delete"); the action in the sentence is the title without the icon, in lower case.
+_pk_header() {
+  echo; echo "$_PK_TITLE"; echo
+  _loc_rows
+  [ "$_vp_mode" == "imaginary" ] && [ -n "${_imag_banner:-}" ] && echo "$_imag_banner"
+  echo; echo "Select $_PK_WHAT to $_PK_ACTION"
+}
+_pk_footer() { echo; echo "u) Up   q) Close"; }
+
+# _pk_set "<icon> <Title>" items|groups   → _PK_TITLE _PK_ACTION _PK_WHAT
+_pk_set() {
+  _PK_TITLE="$1"; _PK_WHAT="$2"
+  _PK_ACTION="${1#* }"; _PK_ACTION="${_PK_ACTION,,}"
+}
+
+# select_items_common "<icon> <Title>" [allow_a]
 #   allow_a: also accept  a  (all)  and  a-<exclusions>  (all except),
 #            e.g. a-1-5,7 — same grammar as the c-/m-/s- staging shortcuts.
+# rc 1 = nothing chosen (u / q / blank / bad numbers).
 select_items_common() {
-  local prompt="$1"
+  local _PK_TITLE _PK_ACTION _PK_WHAT
+  _pk_set "$1" items
   local _multi_allow_a=false
   [ "${2:-}" == "allow_a" ] && _multi_allow_a=true
   if [ ${#items[@]} -eq 0 ]; then
     echo "❌ No items available"
     return 1
   fi
-  local _prompt="$prompt"
+  local _multi_header_hook=_pk_header _multi_footer_hook=_pk_footer _multi_label="Select" _multi_hdr_gap=1 _prompt="$1"
   local -A _msel_set=()
   local _buf _pos itemlist
   _vp_mode="items"
   _multi_prompt_loop
   itemlist="${_buf// /}"
+  case "${itemlist,,}" in u|q|"") return 1 ;; esac
   local indices=()
   if $_multi_allow_a && [[ "$itemlist" == "a" ]]; then
     indices=($(seq 1 "${#items[@]}"))
@@ -385,19 +412,27 @@ select_items_common() {
   return 0
 }
 
+# select_imaginary_items_common PATH PREFIX ["<icon> <Title>"]
+#   a title = the shared picker screen above ("Select groups to <action>"); no title = a step inside a flow (Transfer) that has its own header
 select_imaginary_items_common() {
   local p="$1"
   local pfx="$2"
-  local prompt="${3:-DELETE}"
+  local _PK_TITLE _PK_ACTION _PK_WHAT
+  local _multi_header_hook="" _multi_footer_hook="" _multi_label="" _multi_hdr_gap=0
+  if [ -n "${3:-}" ]; then
+    _pk_set "$3" groups
+    _multi_header_hook=_pk_header _multi_footer_hook=_pk_footer _multi_label="Select" _multi_hdr_gap=1
+  fi
   if [ "${#imaginary_map[@]}" -eq 0 ]; then
     echo "❌ No groups available"
     return 1
   fi
-  local _prompt="$prompt"
+  local _prompt="${3:-GROUPS}"
   local -A _msel_set=()
   local _buf _pos
   _vp_mode="imaginary"
   _multi_prompt_loop
+  case "${_buf// /}" in [uUqQ]|"") return 1 ;; esac
   local indices=($(parse_selection "$_buf" "${#imaginary_map[@]}"))
   if [ "${#indices[@]}" -eq 0 ]; then
     echo "❌ No valid groups selected"
@@ -544,6 +579,11 @@ _menu_header() {
   echo
   _bvk_hdr_status; echo
   echo
+  _loc_rows
+}
+
+# the two location rows of the folder view (cd path / nav path, with the group and filter text): ONE printer, also used by the item picker (_pk_header)
+_loc_rows() {
   if [ "${_GD_ACTIVE:-0}" = 1 ]; then _gd_view_path "$path"; else _gd_vp="$path"; fi      # Google Drive open: show the Drive path, not the mirror folder
   local _hdr_loc="☁️ nav path: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
   if [ -n "${_RES_HDR:-}" ]; then

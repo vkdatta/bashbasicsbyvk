@@ -249,13 +249,13 @@ def t_sm_dbl(a):
     return a.alive and 'What would you like to do' not in a.text(), 'a double click on option 3 must accept it (the menu closes)'
 case('read -p menu: double click -> accepts', t_sm_dbl)
 
-# ── the Item numbers picker
+# ── the item picker (Select items to delete / Select:)
 def picker(a):
     a.send(b'd\r', 1.5)
-    return 'Item numbers' in a.text()
+    return 'Select items to delete' in a.text()
 def pk(a):
     for l in reversed(a.lines()):
-        if 'Item numbers:' in l: return l.split('Item numbers:', 1)[1].strip()
+        if 'Select:' in l: return l.split('Select:', 1)[1].strip()
 def t_picker(a):
     if not picker(a): return False, 'the picker did not open'
     for n in (7, 9): a.click(item_row(a, n))

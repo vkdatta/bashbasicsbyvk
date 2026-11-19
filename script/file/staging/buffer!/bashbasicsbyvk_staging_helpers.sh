@@ -347,7 +347,7 @@ _sp_guard_and_resolve() {
 }
 
 # Files-only pick for the commands that cannot work on a folder (i-  xtr-).
-# Usage: _sp_files_only "$itemlist" "$pfx" "$LABEL" "can't be extracted"  || return 0
+# Usage: _sp_files_only "$itemlist" "$pfx" "<icon> Title" "can't be extracted"  || return 0
 #   itemlist  what was typed after the prefix (1,3  1-5  a  a-2). EMPTY = ask now with the shared item picker (the one `d` uses).
 #   A folder in the pick refuses the WHOLE pick: "<names> are folders, which can't be extracted." (nothing runs, pick again).
 # On success sp_files[] holds the file paths.

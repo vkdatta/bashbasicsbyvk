@@ -7,7 +7,7 @@ from ptyapp import PtyApp
 def pop(home, work):
     open(os.path.join(work, 'base.tar.gz'), 'w').write('x')
 a = PtyApp(ROOT, 100, 40, pop, env=dict(VK_SMARTLOAD_GRACE_MS='300'))
-a.send('r\r', until=lambda: 'Item numbers' in a.text())
+a.send('r\r', until=lambda: 'Select items to rename' in a.text())
 a.send('1\r', until=lambda: 'New:' in a.text())
 a.send('print\r', until=lambda: 'Copy to clipboard' in a.text())
 a.send('u\r', until=lambda: 'Copy to clipboard' not in a.text().split('Old:')[-1])

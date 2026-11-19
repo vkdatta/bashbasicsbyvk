@@ -96,7 +96,7 @@ _fi_show() {
 # i-<items>
 handle_info() {
   local raw="$1"
-  _sp_files_only "${raw#i-}" "i-" "INFO" "info can't be used on" || return 0
+  _sp_files_only "${raw#i-}" "i-" "📜 Info" "info can't be used on" || return 0
   _fi_show "${sp_files[@]}"
   return 0
 }

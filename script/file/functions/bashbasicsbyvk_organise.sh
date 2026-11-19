@@ -207,7 +207,7 @@ if [ "$uch" = "1" ]; then
 _carry_flatten_into "$path" "$path" 2   # locks + shortcuts follow; a locked empty folder is kept
 echo "💫 All files brought to current location. Empty folders removed."
 else
-if select_items_common "UNORGANISE (folders only)"; then
+if select_items_common "🔄 Unorganise (folders only)"; then
 for dir in "${selected_items[@]}"; do
 [ -d "$dir" ] || continue
 _carry_flatten_into "$path" "$dir" 1
