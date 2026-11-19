@@ -588,6 +588,8 @@ _hl_xfer_report() { _lm_stub bashbasicsbyvk_health.sh _hl_xfer_report "$@"; }
 _hl_fr_report() { _lm_stub bashbasicsbyvk_health.sh _hl_fr_report "$@"; }
 _hl_report() { _lm_stub bashbasicsbyvk_health.sh _hl_report "$@"; }
 bvk_health() { _lm_stub bashbasicsbyvk_health.sh bvk_health "$@"; }
+_bvk_tidy_find() { _lm_stub bashbasicsbyvk_tidy.sh _bvk_tidy_find "$@"; }
+bvk_tidy_cmd() { _lm_stub bashbasicsbyvk_tidy.sh bvk_tidy_cmd "$@"; }
 _tm_define() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_define "$@"; }
 _tm_idx() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_idx "$@"; }
 _tm_step() { _lm_stub bashbasicsbyvk_tabmenu.sh _tm_step "$@"; }

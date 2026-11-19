@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""bashbasicsbyvk_tidy_gen — the template-ID list of every menu (🧶 tidy).
+
+  bashbasicsbyvk_tidy_gen --write        add an ID for every command map and every menus.list function that has none; refresh the file column
+  bashbasicsbyvk_tidy_gen --add KEY...   give an ID to a screen (fn:NAME for a function that draws a screen, map:NAME for a command map)
+  bashbasicsbyvk_tidy_gen --list         print the list (ID, key, file)
+  bashbasicsbyvk_tidy_gen --check        the list is well formed and complete (the static suite t_tidy.py runs the same rules)
+
+An ID is 6 characters, capital letters and digits (no 0/O/1/I), at least one of each, unique, assigned ONCE and never changed:
+renaming a function means editing its key here, not drawing a new ID."""
+import os, re, secrets, sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+FILE = os.path.abspath(os.path.join(HERE, '..', '..', '..'))                    # script/file
+LIST = os.path.join(HERE, 'bashbasicsbyvk_tidy.list')
+ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+ID_RE = re.compile(r'^(?=.*[A-Z])(?=.*[0-9])[A-Z0-9]{6}$')
+KEY_RE = re.compile(r'^(fn|map):[A-Za-z_][A-Za-z0-9_.:-]*$')
+HEAD = ('# bashbasicsbyvk_tidy.list — the template ID of every menu (🧶 tidy prints it).   ID | key | file\n'
+        '# key: fn:<function that draws the screen>  or  map:<command map>.  The innermost listed function on the call stack wins, then the map.\n'
+        '# IDs are assigned once by bashbasicsbyvk_tidy_gen and never change; the file column is refreshed by --write.\n')
+
+
+def rows():
+    out = []
+    if os.path.exists(LIST):
+        for l in open(LIST, encoding='utf-8'):
+            if not l.strip() or l.lstrip().startswith('#'): continue
+            p = [x.strip() for x in l.rstrip('\n').split('|')]
+            p += [''] * (3 - len(p)); out.append(p[:3])
+    return out
+
+
+def functions():
+    """{name: relative path of its file} — the first definition under script/file"""
+    d = {}; fre = re.compile(r'^([A-Za-z_][A-Za-z0-9_.:-]*)\(\)\s*\{')
+    for dp, dn, fn in os.walk(FILE):
+        for f in sorted(fn):
+            if not f.endswith('.sh') or f == 'bashbasicsbyvk_loadmap_stubs.sh': continue
+            p = os.path.join(dp, f)
+            for l in open(p, encoding='utf-8', errors='ignore'):
+                m = fre.match(l)
+                if m: d.setdefault(m.group(1), os.path.relpath(p, FILE))
+    return d
+
+
+def maps():
+    d = {}
+    for dp, dn, fn in os.walk(os.path.join(FILE, 'cmdmap')):
+        for f in fn:
+            if f.endswith('.map'):
+                for l in open(os.path.join(dp, f), encoding='utf-8'):
+                    m = re.match(r'@menu\s+(\S+)', l)
+                    if m: d[m.group(1)] = os.path.relpath(os.path.join(dp, f), FILE); break
+    return d
+
+
+def menus_list_funcs():
+    out = []
+    for l in open(os.path.join(FILE, 'cmdmap', 'bashbasicsbyvk_menus.list'), encoding='utf-8'):
+        if l.startswith('#') or '|' not in l: continue
+        p = [x.strip() for x in l.split('|')]
+        if len(p) > 1 and p[1] not in ('-', ''): out.append(p[1])
+    return out
+
+
+def new_id(used):
+    while True:
+        i = ''.join(secrets.choice(ALPHA) for _ in range(6))
+        if ID_RE.match(i) and i not in used: return i
+
+
+def problems(rs, fns, mps):
+    bad = []; seen = {}; keys = {}
+    for i, k, f in rs:
+        if not ID_RE.match(i): bad.append('bad ID %r (6 capital letters/digits, at least one of each): %s' % (i, k))
+        if i in seen: bad.append('ID %s is used twice: %s and %s' % (i, seen[i], k))
+        seen[i] = k
+        if not KEY_RE.match(k): bad.append('bad key %r' % k); continue
+        if k in keys: bad.append('key %s listed twice' % k)
+        keys[k] = i
+        kind, name = k.split(':', 1)
+        if kind == 'fn' and name not in fns: bad.append('%s: no such function' % k)
+        if kind == 'map' and name not in mps: bad.append('%s: no such command map' % k)
+        if kind == 'fn' and name in fns and f != fns[name]: bad.append('%s: file column says %r, the function is in %r (run --write)' % (k, f, fns[name]))
+        if kind == 'map' and name in mps and f != mps[name]: bad.append('%s: file column says %r, the map is %r (run --write)' % (k, f, mps[name]))
+    for m in mps:
+        if 'map:' + m not in keys: bad.append('map:%s has no template ID (run --write)' % m)
+    for fn in menus_list_funcs():
+        if 'fn:' + fn not in keys: bad.append('fn:%s (menus.list) has no template ID (run --write)' % fn)
+    return bad
+
+
+def save(rs):
+    w = max([len(k) for _, k, _ in rs] + [4])
+    with open(LIST, 'w', encoding='utf-8') as f:
+        f.write(HEAD)
+        for i, k, p in rs: f.write('%s | %s | %s\n' % (i, k.ljust(w), p))
+
+
+def main(a):
+    fns = functions(); mps = maps(); rs = rows()
+    if not a or a[0] == '--check':
+        bad = problems(rs, fns, mps)
+        for b in bad: print('  ' + b)
+        print('tidy: %d template IDs, %s' % (len(rs), 'OK' if not bad else '%d problems' % len(bad))); return 1 if bad else 0
+    if a[0] == '--list':
+        for i, k, p in rs: print('%s  %-34s %s' % (i, k, p))
+        return 0
+    if a[0] in ('--write', '--add'):
+        used = {i for i, _, _ in rs}; have = {k for _, k, _ in rs}; want = []
+        if a[0] == '--add': want = a[1:]
+        else: want = ['map:' + m for m in sorted(mps)] + ['fn:' + f for f in menus_list_funcs()]
+        for k in want:
+            if k in have: continue
+            if not KEY_RE.match(k): print('bad key', k); return 2
+            kind, name = k.split(':', 1)
+            if (kind == 'fn' and name not in fns) or (kind == 'map' and name not in mps): print('unknown', k); return 2
+            i = new_id(used); used.add(i); have.add(k); rs.append([i, k, ''])
+        for r in rs:
+            kind, name = r[1].split(':', 1)
+            r[2] = fns.get(name, r[2]) if kind == 'fn' else mps.get(name, r[2])
+        rs.sort(key=lambda r: (r[1].split(':')[0] != 'map', r[1]))
+        save(rs); print('tidy: %d template IDs written' % len(rs)); return 0
+    print(__doc__); return 2
+
+
+if __name__ == '__main__': sys.exit(main(sys.argv[1:]))

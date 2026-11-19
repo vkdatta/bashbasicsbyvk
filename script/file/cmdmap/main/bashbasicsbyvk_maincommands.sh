@@ -88,6 +88,7 @@ cmd_def clear    exact  bvk_main_exec  util   "Forget the command cache (hash -r
 cmd_def sast     exact  bvk_main_exec  util   "Static security scan"
 cmd_def sys      exact  bvk_main_exec  util   "System information: OS, device, CPU, memory, disk, battery"
 cmd_def print    exact  bvk_main_exec  tool   "Print what is on screen — copy it or save as txt"
+cmd_def tidy     exact  bvk_main_exec  tool   "🧶 Template ID of this menu — copy it or save as txt"
 cmd_def loadtime word   bvk_main_exec  tool   "Load time: what each screen change cost (loadtime 2 · loadtime all)"
 cmd_def cc       exact  bvk_main_exec  tool   "Cheat codes — pick a command, it lands in the prompt"
 cmd_def kl       exact  bvk_main_exec  util   "Kill every process of this user (kill -9 -1)"

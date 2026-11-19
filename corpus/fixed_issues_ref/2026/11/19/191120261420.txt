@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+New command `tidy` (🧶): every menu gets a unique 6-character template ID (capital letters and digits), and typing `tidy` at any prompt that takes u or q prints the ID of the screen you are on and asks copy to clipboard / save as txt (like `print`). Purpose: the owner can say "change all menus with template ID A to the layout of template ID B" and the agent finds them from one list instead of searching the code.
+
+1. HOW DID YOU DEBUG
+Read how `print` is wired (cmd_def in maincommands.sh, `print)` arm of bvk_main_exec, a `print` line in every non-xui map, loadmap [bg], `_map_deliver` for the copy/save question). Counted the screen-drawing functions (menus.list functions, `_st_run` Settings screens, `_mc_steps` / `_mc_select` wizard steps, pickers, xui loops). Tested the lookup with fake nested functions (picker inside a wizard gives the picker's ID; unknown function falls back to the map; unknown map falls back to main). Ran `bash tests/run.sh` (10/10 incl. the new tidy suite), cmd_docs, the loadmap check, and the real resolver for `tidy` in all 31 maps. The live app in a terminal was NOT run.
+
+1. CAUSE
+There was no stable name for a menu: titles are dynamic and one command map covers many screens.
+
+1. FIX
+engine/debug/tidy/: `bashbasicsbyvk_tidy.sh` (`bvk_tidy_cmd`: the innermost function on the call stack that the list names is the screen, else the map of the menu that is up, else main), `bashbasicsbyvk_tidy.list` (ID | key | file; keys `fn:NAME` / `map:NAME`; 143 entries: all 31 maps, every menus.list function, and the wizard steps, pickers and Settings screens), `bashbasicsbyvk_tidy_gen` (`--write` adds IDs for new maps and menus.list functions, `--add fn:NAME` for any other screen, `--check`, `--list`). IDs are assigned once and never change. Wiring: `cmd_def tidy` (main), `tidy)` arm in bvk_main_exec, `tidy` line after `print` in the 21 maps that have it (xui_* inherit), loadmap list + stubs, llms-full command reference, tests/static/t_tidy.py + suites.list. Lesson: a new screen function that draws a menu needs `bashbasicsbyvk_tidy_gen --add fn:NAME`; a new map or menus.list function is picked up by `--write`, and the tidy suite fails until it has an ID.

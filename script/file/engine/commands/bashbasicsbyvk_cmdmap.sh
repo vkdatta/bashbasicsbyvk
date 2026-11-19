@@ -469,6 +469,7 @@ bvk_main_exec() {
     sys)    bashbasicsbyvk_sys ;;
     -auth)  auth_menu ;;
     print)  bvk_print_cmd ;;
+    tidy)   bvk_tidy_cmd ;;
     loadtime|loadtime\ *) bvk_loadtime_cmd "$c" ;;
     cc)     bvk_cc_cmd ;;
     *)      return 1 ;;

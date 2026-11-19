@@ -68,6 +68,7 @@ sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
 sys        .mapto()  sys        from bashbasicsbyvk_maincommands.sh
 kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
 print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
+tidy       .mapto()  tidy       from bashbasicsbyvk_maincommands.sh
 loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
 cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh
 pn         .mapto()  pn         from bashbasicsbyvk_maincommands.sh

@@ -255,6 +255,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `sw` | act | Switch — recents & tabs |  |
 | `sys` | util | System information: OS, device, CPU, memory, disk, battery |  |
 | `t` | act | Transfer — copy / move, Google Drive |  |
+| `tidy` | tool | 🧶 Template ID of this menu — copy it or save as txt |  |
 | `u` | act | Up one folder / back |  |
 | `ul-` | act | Unlock items | `ul-1,3` |
 | `up-` | act | Upload — expiring link | `up-1` |

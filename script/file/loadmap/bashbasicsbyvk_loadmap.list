@@ -75,6 +75,7 @@ bashbasicsbyvk_findsettings.sh|||tool, run as its own process
 bashbasicsbyvk_renamesettings.sh|||tool, run as its own process (Settings > Rename)
 bashbasicsbyvk_deps.sh|||the central dependency installer (asked only when a program is missing)
 bashbasicsbyvk_health.sh|||the health check command
+bashbasicsbyvk_tidy.sh|||the `tidy` command: the template ID of the menu you are on (lazy: only when tidy is typed)
 bashbasicsbyvk_tabmenu.sh|||master template of every tabbed menu (rules, sw, upgrade, fx ...): they call _tm_define when their file loads, so it sits before the first of them
 bashbasicsbyvk_rules.sh|||.r rule book
 bashbasicsbyvk_planetary_resources.sh|||planetary resources, bash flavour: the lock track.sh / favourites.sh take, the daemons' lifecycle helpers; the local daemon is woken after the first paint (@call below)
@@ -216,7 +217,9 @@ bashbasicsbyvk_choose.py|||python helper, run as a process: the python door to b
 bashbasicsbyvk_lt.py|||python helper, run as a process
 bashbasicsbyvk_main.map|||command-map wiring, read as data
 bashbasicsbyvk_mapgen|||tool, run as its own process
+bashbasicsbyvk_tidy_gen|||tool, run as its own process (template IDs of the menus)
 bashbasicsbyvk_menus.list|||data
+bashbasicsbyvk_tidy.list|||data: the template ID of every menu (bashbasicsbyvk_tidy_gen)
 bashbasicsbyvk_open|||stand-alone command, run as its own process
 bashbasicsbyvk_organise.map|||command-map wiring, read as data
 bashbasicsbyvk_overwrite|||stand-alone command, run as its own process
