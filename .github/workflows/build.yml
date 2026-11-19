@@ -51,7 +51,7 @@ jobs:
 
   build:
     needs: build-darwin
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -61,14 +61,20 @@ jobs:
 
       - name: Install cross-compilers
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-aarch64-linux-gnu \
-            gcc-x86-64-linux-gnu \
-            gcc-arm-linux-gnueabihf \
-            libc6-dev-armhf-cross \
-            gcc-i686-linux-gnu \
-            libc6-dev-i386-cross
+          echo 'Acquire::Retries "5"; Acquire::http::Timeout "30"; Acquire::https::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/80-retries
+          for i in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y --no-install-recommends --fix-missing \
+              gcc-aarch64-linux-gnu \
+              gcc-x86-64-linux-gnu \
+              gcc-arm-linux-gnueabihf \
+              libc6-dev-armhf-cross \
+              gcc-i686-linux-gnu \
+              libc6-dev-i386-cross; then
+              exit 0
+            fi
+            echo "apt failed (attempt $i), retrying in 15s"; sleep 15
+          done
+          exit 1
 
       # zig cc cross-compiles the FreeBSD C engines (no FreeBSD machine needed).
       # Needs Zig >= 0.15: FreeBSD libc headers/stubs are not bundled in 0.13/0.14 (the 'stdio.h' file not found failure).
@@ -284,6 +290,7 @@ jobs:
 
             git commit -m "${COMMIT_MESSAGE}"
 
+            git pull --rebase origin main
             git push origin HEAD:main
           else
             echo "No binary changes detected. Skipping commit."
