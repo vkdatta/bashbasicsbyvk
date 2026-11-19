@@ -262,6 +262,10 @@ _cm_resolve() {
   _CM_ACT=none; _CM_KEY=""; _CM_DESC=""; _CM_EX=""; _CM_CLASS=""; _CM_IMPL=0; _CM_HANDLER=""
   [ "${#t}" -gt 255 ] && return 0          # no command is that long: it is plain text (a big paste is never matched row by row)
   t="${t,,}"
+  # a picker's own grammar (_pick_suggest): s-3 · s-a · s-a-1,2 · s-2-4 select what is on the list; it beats the main  s-  (select buffer)
+  if [ "${_MC_PICK_SEL:-0}" = 1 ] && [[ "$t" =~ ^s-([0-9]|a($|-[0-9])) ]]; then
+    _CM_ACT=local; _CM_KEY="s-"; _CM_DESC="Select a folder itself"; _CM_EX="s-3 · s-a · s-a-1,2"; return 0
+  fi
   local n=${#_ct_key[@]}
   for (( i=0; i<n; i++ )); do
     _cm_match "${_ct_kind[i]}" "${_ct_key[i]}" "$t" || continue
@@ -650,7 +654,7 @@ _cm_prompt_collect() {
       _CM_LOCAL["${BASH_REMATCH[1],,}"]="${lab:-answer}"
     fi
   done <<< "$p"
-  # the keys the footer above the prompt printed ("u) Up   z) Cancel   v) View ...") are this prompt's own answers too: they reach it as typed
+  # the keys the footer above the prompt printed ("u) Up   v) View ...") are this prompt's own answers too: they reach it as typed
   local k; [ "${_MC_UNDER_FOOTER:-0}" = 1 ] && for k in "${!_MC_PRINTED[@]}"; do [ -n "${_CM_LOCAL[$k]+x}" ] || _CM_LOCAL["$k"]="printed in the footer"; done
   # numbers are rows / counts, never commands
   for k in "${!_CM_LOCAL[@]}"; do [[ "$k" =~ ^[0-9]+$ ]] && unset '_CM_LOCAL[$k]'; done

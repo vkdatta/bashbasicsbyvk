@@ -612,8 +612,10 @@ _loc_rows() {
 # ── ONE pick screen for every "choose items / a destination / a file" job (transfer, csv, ...) ──
 # Same chrome as the main list: status row, cd path, nav path, and the rows come from the main row renderer (_item_line_text_v:
 # icons, 🔒 marks, + marks), so a picker can never look different from the folder view.  A job only passes its name.
-#   _pick_header WHAT JOB NAV_PATH [PREFIX] [DESC]     WHAT = Items | Destination | ...      →  🛷 Select <WHAT> for <JOB>   (WHAT empty: no title, e.g. a results screen)
+#   _pick_header [-s] WHAT JOB NAV_PATH [PREFIX] [DESC]   WHAT = Items | Destination | ...      →  🛷 Select <WHAT> for <JOB>   (WHAT empty: no title, e.g. a results screen)
+#   -s  folders can be selected as they are: the line under the title is the s-N suggestion (_pick_suggest) and s-N is the picker's word
 #   DESC empty → the Settings description of "Select <what in lower case>|*" (settings_desc.sh); same wrapping as every Settings screen
+#   The screen is: title, one dim line, the two path rows, the rows.  No status row, no step banner above it.
 #   _pick_rows [-r] PATH...                              -r = the paths are on a remote machine (no lock marks)
 _desc_print_dim() {          # _desc_print_dim TEXT_OR_KEY — a dim, wrapped description (the rows-gate and wrapping of the Rename screen)
   local txt="$1" rows cols i dmax
@@ -633,16 +635,23 @@ _desc_print_dim() {          # _desc_print_dim TEXT_OR_KEY — a dim, wrapped de
   fi
   return 0
 }
+# _pick_suggest [NOUN]   the ONE suggestion line of every picker that can select a folder / set as it is (transfer, the fx item picker):
+#   it also makes s-N the picker's own word for its next prompt (_MC_PICK_SEL: cmdmap _cm_resolve, _mc_footer, cc)
+_pick_suggest() {
+  _MC_PICK_SEL=1
+  printf '\033[2mSuggestion: Use s-N command to pick %s\033[0m\n' "${1:-folders}"
+}
 _pick_header() {
+  local sugg=0
+  [ "${1:-}" = -s ] && { sugg=1; shift; }
   local what="$1" job="$2" nav="$3" pfx="${4:-}" desc="${5:-}" lw
   lw="${what,,}"
   echo
-  if declare -F _bvk_hdr_status >/dev/null 2>&1; then _bvk_hdr_status; echo; fi
-  echo
   if [ -n "$what" ]; then
     echo "🛷 Select $what for $job"
-    _desc_print_dim "${desc:-Select $lw|*}" || true
     echo
+    if (( sugg )); then _pick_suggest; echo
+    else _desc_print_dim "${desc:-Select $lw|*}" && echo; fi
   fi
   echo "📂 cd path: $PWD"
   echo "☁️ nav path: $nav${pfx:+ [group: ${pfx^^}*]}"

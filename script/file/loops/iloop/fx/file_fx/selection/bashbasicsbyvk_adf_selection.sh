@@ -79,8 +79,8 @@ _fx_sel_flat() {
 
 # The picker.  Same convention as the transfer navigator (_nav_parse_select):
 #     5     a set → open it · a folder → go inside · a file → select it
-#     w5    select it as it is (a whole set, or a folder without going in)      w1,3 · 2-4 · wa   several / all
-#     c) take what is chosen   v) review / remove   u) back   z) cancel
+#     s-5   select it as it is (a whole set, or a folder without going in)      s-1,3 · 2-4 · s-a · s-a-1,2   several / all / all except
+#     c) take what is chosen   v) review / remove   u) back
 # Chosen items land in the caller's sel[].  Items taken from a ONCE set (s-) leave that set; s-- sets and the .s selection stay.
 declare -ga _PK_CHOSEN=()
 declare -gA _PK_HAVE=()
@@ -105,25 +105,25 @@ _fx_sel_browse() {
       if [ -d "$p" ] && [ ! -L "$p" ]; then rows+=("📁 $(_sel_short "$p")"); else rows+=("📄 $(_sel_short "$p")"); fi
     done
     _mc_header "🎯 $title (${#its[@]}):"
+    echo; _pick_suggest; echo
     if [ ${#its[@]} -eq 0 ]; then echo "  (empty)"; else _mc_options 1 "${rows[@]}"; fi
-    _mc_footer_std "v:Review chosen" "c:Take chosen" "z" "#tip: use prefix 'w' to select a folder (w1,3 · 2-4 · wa)"
+    _mc_footer_std -l "v:Review chosen" "c:Take chosen"
     _mc_read ch "Select: " || { _mc_unwind; return 1; }          # rc != 0: the flow was cancelled → leave at once
     case "$ch" in
       u|U|"") return 0 ;;
-      z|Z) echo "🚫 Cancelled"; return 1 ;;
       q|Q) _bvk_quit; return 1 ;;
       h|H|cc|CC) _mc_std_key "$ch"; _mc_unwind && return 1 ;;
       c|C) [ ${#_PK_CHOSEN[@]} -gt 0 ] && return 2; echo "🔴  Nothing chosen yet" ;;
       v|V) _view_selections_menu _PK_CHOSEN; rc=$?
            _PK_HAVE=(); for p in "${_PK_CHOSEN[@]}"; do _PK_HAVE["$p"]=1; done
            case $rc in 0) return 2 ;; 2|3) return 1 ;; esac ;;       # confirmed · q / cancelled: leave, never draw this list again
-      wa|WA|a|A) _fx_sel_pick_add "${its[@]}" ;;
+      a|A) _fx_sel_pick_add "${its[@]}" ;;
       *)
         _nav_parse_select "$ch"
-        if [[ "$cleaned_input" =~ ^[0-9,\-]+$ ]]; then
+        if _nav_sel_ok "$cleaned_input"; then
           if $is_select; then
             local -a picked=()
-            for idx in $(parse_selection "$cleaned_input" "${#its[@]}"); do picked+=("${its[$((idx-1))]}"); done
+            for idx in $(_nav_sel_expand "$cleaned_input" "${#its[@]}"); do picked+=("${its[$((idx-1))]}"); done
             [ ${#picked[@]} -eq 0 ] && _bvk_invalid || _fx_sel_pick_add "${picked[@]}"
           elif _nav_index_ok "$cleaned_input" "${#its[@]}"; then
             p="${its[$((cleaned_input-1))]}"
@@ -153,11 +153,12 @@ _fx_sel_pick() {
       else _sp_load_set part "${_k_f[$i]}" "${_k_n[$i]}"; rows+=("${_k_n[$i]} >  (${#part[@]})  ${_k_t[$i]} $([ "${_k_t[$i]}" = once ] && echo 's-' || echo 's--')"); fi
     done
     _mc_header "🎯 Selected items — pick what this action works on:"
+    echo; _pick_suggest "sets"; echo
     _mc_options 1 "${rows[@]}"
-    _mc_footer_std -b "v:Review chosen" "c:Take chosen" "z" "#tip: N opens a set · use prefix 'w' to take a whole set (w1,2 · wa)"
+    _mc_footer_std -b -l "v:Review chosen" "c:Take chosen"
     _mc_read ch "Select: " || { _mc_unwind; return 1; }
     case "$ch" in
-      z|Z|u|U|"") echo "🚫 Cancelled"; return 1 ;;
+      u|U|"") echo "🚫 Cancelled"; return 1 ;;
       q|Q) _bvk_quit; return 1 ;;
       h|H|cc|CC) _mc_std_key "$ch"; _mc_unwind && return 1 ;;
       c|C) [ ${#_PK_CHOSEN[@]} -gt 0 ] && break; echo "🔴  Nothing chosen yet" ;;
@@ -165,10 +166,10 @@ _fx_sel_pick() {
            _PK_HAVE=(); for p in "${_PK_CHOSEN[@]}"; do _PK_HAVE["$p"]=1; done
            case $rc in 0) break ;; 2|3) return 1 ;; esac ;;
       *)
-        [[ "$ch" == [aA] || "$ch" == [wW][aA] ]] && ch="w1-${#_k_n[@]}"
+        [[ "$ch" == [aA] ]] && ch="s-a"
         _nav_parse_select "$ch"
-        if [[ "$cleaned_input" =~ ^[0-9,\-]+$ ]]; then
-          local -a idxs=($(parse_selection "$cleaned_input" "${#_k_n[@]}"))
+        if _nav_sel_ok "$cleaned_input"; then
+          local -a idxs=($(_nav_sel_expand "$cleaned_input" "${#_k_n[@]}"))
           if [ ${#idxs[@]} -eq 0 ]; then _bvk_invalid
           elif $is_select; then
             for idx in "${idxs[@]}"; do

@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+`z` was still a generic "Cancel / back" key of the shared menu chrome (label, footer profile, free advert key) although `u` already means back everywhere. Wanted: no z as back/cancel anywhere; `u` does that job. (`z` as the main command "Organise" is a different command and stays.)
+
+1. HOW DID YOU DEBUG
+Follow-up of BB-191120261230-1 (pickers). grep for z in footers, case arms, `_MC_KEYLABEL`, `_AD_FREE_KEYS`, footer profiles, docs and tests. No footer or loop still printed or handled z as back after the picker change; the remaining z was in the shared tables. Ran static suite once (9/9), cmd_docs, loadmap check, cmd_drift (one failure, identical on the untouched upload: its stub lacks `_ad_footer_allow`).
+
+1. CAUSE
+The label table, the `cancel_back` footer profile and the free-key list of the advert registry still declared z.
+
+1. FIX
+menuchrome.sh: `[z]=Cancel` and the `cancel_back` profile removed. advert.sh: `_AD_FREE_KEYS` without z. Comments in cmdmap.sh and find.sh say u. tests/pty/fast/menus/cmd_drift.sh no longer expects `z) Cancel`.
+
+2. ISSUE IN BRIEF
+`sast` (static security scan) was advertised in the cheat codes of every menu (switch, fx, api, settings ...).
+
+2. HOW DID YOU DEBUG
+grep `^sast` in script/file/cmdmap: one `mapto main` line per map; cc lists every non-blocked line.
+
+2. CAUSE
+Every map carried the inherited line.
+
+2. FIX
+`sast .mapto() block()` in every map except main (main keeps it). The xui_* maps never had it.

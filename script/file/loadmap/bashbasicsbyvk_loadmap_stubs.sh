@@ -185,6 +185,8 @@ _in_selection() { _lm_stub bashbasicsbyvk_transfer.sh _in_selection "$@"; }
 _view_selections_menu() { _lm_stub bashbasicsbyvk_transfer.sh _view_selections_menu "$@"; }
 _nav_review_leave() { _lm_stub bashbasicsbyvk_transfer.sh _nav_review_leave "$@"; }
 _nav_parse_select() { _lm_stub bashbasicsbyvk_transfer.sh _nav_parse_select "$@"; }
+_nav_sel_ok() { _lm_stub bashbasicsbyvk_transfer.sh _nav_sel_ok "$@"; }
+_nav_sel_expand() { _lm_stub bashbasicsbyvk_transfer.sh _nav_sel_expand "$@"; }
 _nav_index_ok() { _lm_stub bashbasicsbyvk_transfer.sh _nav_index_ok "$@"; }
 _nav_add_range() { _lm_stub bashbasicsbyvk_transfer.sh _nav_add_range "$@"; }
 local_navigator() { _lm_stub bashbasicsbyvk_transfer.sh local_navigator "$@"; }

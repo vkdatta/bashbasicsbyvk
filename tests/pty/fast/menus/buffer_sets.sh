@@ -12,9 +12,10 @@ for n in bashbasicsbyvk_choose.sh bashbasicsbyvk_fileapi_lib.sh bashbasicsbyvk_s
          bashbasicsbyvk_staging_move.sh bashbasicsbyvk_staging_shortcut.sh bashbasicsbyvk_staging_bookmark.sh bashbasicsbyvk_select.sh bashbasicsbyvk_adf_selection.sh; do
   f="$(bvk_need "$n")" || exit 1; source "$f"
 done
-eval "$(sed -n '/^_nav_parse_select()/,/^}/p;/^_nav_index_ok()/,/^}/p' "$(bvk_need bashbasicsbyvk_transfer.sh)")"
+eval "$(sed -n '/^_nav_parse_select()/,/^}/p;/^_nav_sel_ok()/p;/^_nav_sel_expand()/,/^}/p;/^_nav_index_ok()/,/^}/p' "$(bvk_need bashbasicsbyvk_transfer.sh)")"
 # ---- stubs: the screen and the answers
 _mc_header() { echo "$@"; }; _mc_options() { local n="$1"; shift; local l; for l in "$@"; do echo "${n}) $l"; n=$((n+1)); done; }; _mc_footer() { :; }
+_pick_suggest() { echo "Suggestion: Use s-N command to pick ${1:-folders}"; }
 _mc_footer_std() { :; }; _mc_unwind() { return 1; }; _mc_std_key() { :; }; _mc_read() { read -e -r -p "$2" "$1"; }; _bvk_read() { read -r -p "$2" "$1"; }   # the shared templates (menuchrome.sh), screen only
 _bvk_quit() { :; }; _bvk_invalid() { echo "INVALID"; }
 parse_selection() { local spec="$1" max="$2" p i; for p in ${spec//,/ }; do if [[ "$p" =~ ^([0-9]+)-([0-9]+)$ ]]; then for ((i=BASH_REMATCH[1]; i<=BASH_REMATCH[2]; i++)); do [ "$i" -le "$max" ] && echo "$i"; done; elif [[ "$p" =~ ^[0-9]+$ ]] && [ "$p" -le "$max" ]; then echo "$p"; fi; done; }
@@ -70,23 +71,26 @@ sel=(); ANS=(); _fx_sel_need >/dev/null; [ "${sel[*]}" = "$T/w/d.txt" ] && ok "n
 handle_staging_stage "s-1,2 as pick1" >/dev/null; handle_staging_stage "s--3,4 as keep1" >/dev/null
 # entries are listed: s-- sets (keep1), s- sets (pick1), flat items
 sel=(); ANS=(1 2 c); _fx_sel_need >/dev/null; [ "${sel[*]}" = "$T/w/d.txt" ] && [ "$(cnt "$_SP_SL_FILE")" = 2 ] && [ "$(cnt "$_SP_SL_ONCE_FILE")" = 2 ] && ok "N opens a set, a file number selects it; nothing leaves s-- / untouched sets" || bad "drill: ${sel[*]}"
-sel=(); ANS=(w2 c); _fx_sel_need >/dev/null; [ "${#sel[@]}" = 2 ] && [ "$(cnt "$_SP_SL_ONCE_FILE")" = 0 ] && ok "w2 takes the whole once set, which then leaves" || bad "w2: ${sel[*]} / $(cnt "$_SP_SL_ONCE_FILE")"
-sel=(); ANS=(w1 c); _fx_sel_need >/dev/null; [ "${#sel[@]}" = 2 ] && [ "$(cnt "$_SP_SL_FILE")" = 2 ] && ok "a taken s-- set stays" || bad "w1 persistent: $(cnt "$_SP_SL_FILE")"
-sel=(); ANS=(w2 c); _fx_sel_need >/dev/null; [ "${sel[0]}" = "$T/w/d.txt" ] && ok "flat items are the last row of the picker" || bad "flat row: ${sel[*]}"
-sel=(); ANS=(z); _fx_sel_need >/dev/null && bad "z must cancel" || ok "z cancels (return 1)"
-# folder convention: N enters a folder, wN takes it whole
+sel=(); ANS=(s-2 c); _fx_sel_need >/dev/null; [ "${#sel[@]}" = 2 ] && [ "$(cnt "$_SP_SL_ONCE_FILE")" = 0 ] && ok "s-2 takes the whole once set, which then leaves" || bad "s-2: ${sel[*]} / $(cnt "$_SP_SL_ONCE_FILE")"
+sel=(); ANS=(s-1 c); _fx_sel_need >/dev/null; [ "${#sel[@]}" = 2 ] && [ "$(cnt "$_SP_SL_FILE")" = 2 ] && ok "a taken s-- set stays" || bad "s-1 persistent: $(cnt "$_SP_SL_FILE")"
+sel=(); ANS=(s-2 c); _fx_sel_need >/dev/null; [ "${sel[0]}" = "$T/w/d.txt" ] && ok "flat items are the last row of the picker" || bad "flat row: ${sel[*]}"
+sel=(); ANS=(u); _fx_sel_need >/dev/null && bad "u must cancel" || ok "u cancels (return 1)"
+# folder convention: N enters a folder, s-N takes it whole
 : > "$_SP_SL_FILE"; printf '@fold\t%s\n' "$T/w/sub" > "$_SP_SL_FILE"
 sel=(); ANS=(1 1 1 c); _fx_sel_need >/dev/null; [ "${sel[0]}" = "$T/w/sub/in.txt" ] && ok "N on a folder goes inside; a file there is selected" || bad "inside: ${sel[*]}"
-sel=(); ANS=(1 w1 c); _fx_sel_need >/dev/null; [ "${sel[0]}" = "$T/w/sub" ] && ok "w1 on a folder selects the folder itself" || bad "w-folder: ${sel[*]}"
+sel=(); ANS=(1 s-1 c); _fx_sel_need >/dev/null; [ "${sel[0]}" = "$T/w/sub" ] && ok "s-1 on a folder selects the folder itself" || bad "w-folder: ${sel[*]}"
 # prefix convention
-is_select=; cleaned_input=; _nav_parse_select "w3"; { $is_select && [ "$cleaned_input" = 3 ]; } && ok "transfer prefix is w" || bad "w prefix"
-_nav_parse_select "s3"; { ! $is_select; } && ok "s is no longer the select prefix" || bad "s prefix still select"
+is_select=; cleaned_input=; _nav_parse_select "s-3"; { $is_select && [ "$cleaned_input" = 3 ]; } && ok "select prefix is s-N" || bad "s-N prefix"
+_nav_parse_select "w3"; { ! $is_select && [ "$cleaned_input" = w3 ]; } && ok "w is no longer the select prefix" || bad "w prefix still select"
+_nav_parse_select "s-a-1,2,3-10"; { $is_select && [ "$cleaned_input" = "a-1,2,3-10" ] && _nav_sel_ok "$cleaned_input"; } && ok "s-a-1,2,3-10 parses (all except)" || bad "s-a-N"
+_nav_parse_select "s-6,7-9"; { $is_select && [ "$cleaned_input" = "6,7-9" ] && [ "$(_nav_sel_expand "$cleaned_input" 12 | xargs)" = "6 7 8 9" ]; } && ok "s-6,7-9 selects 6 7 8 9" || bad "s-6,7-9"
+[ "$(_nav_sel_expand a 4 | xargs)" = "1 2 3 4" ] && [ "$(_nav_sel_expand a-2,3 5 | xargs)" = "1 4 5" ] && ok "s-a = all, s-a-2,3 = all except 2 and 3" || bad "s-a expand"
 
 # ---- 6  unnamed s- / s-- items are the "flat items" of the picker (no `as` needed); the row is hidden when empty
 : > "$_SP_SL_FILE"; : > "$_SP_SL_ONCE_FILE"; : > "$_SEL_FILE"
 handle_staging_stage "s-1,2" >/dev/null
-sel=(); ANS=(w1 c); _fx_sel_need >/dev/null; [ "${#sel[@]}" = 2 ] && [ "$(cnt "$_SP_SL_ONCE_FILE")" = 0 ] && ok "plain s-1,2 (no name) reaches fx as flat items, and leaves s- once taken" || bad "unnamed s-: ${sel[*]} / $(cnt "$_SP_SL_ONCE_FILE")"
-handle_staging_stage "s--1" >/dev/null; sel=(); ANS=(w1 c); _fx_sel_need >/dev/null; [ "${#sel[@]}" = 1 ] && [ "$(cnt "$_SP_SL_FILE")" = 1 ] && ok "unnamed s-- item is taken and stays" || bad "unnamed s--"
+sel=(); ANS=(s-1 c); _fx_sel_need >/dev/null; [ "${#sel[@]}" = 2 ] && [ "$(cnt "$_SP_SL_ONCE_FILE")" = 0 ] && ok "plain s-1,2 (no name) reaches fx as flat items, and leaves s- once taken" || bad "unnamed s-: ${sel[*]} / $(cnt "$_SP_SL_ONCE_FILE")"
+handle_staging_stage "s--1" >/dev/null; sel=(); ANS=(s-1 c); _fx_sel_need >/dev/null; [ "${#sel[@]}" = 1 ] && [ "$(cnt "$_SP_SL_FILE")" = 1 ] && ok "unnamed s-- item is taken and stays" || bad "unnamed s--"
 handle_staging_stage "s-2 as only" >/dev/null; : > "$_SP_SL_FILE"; : > "$_SEL_FILE"
 out=$(ANS=(z); _fx_sel_need 2>&1); echo "$out" | grep -q "flat items" && bad "empty flat row shown" || ok "empty flat items row is hidden"
 

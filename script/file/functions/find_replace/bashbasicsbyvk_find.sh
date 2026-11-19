@@ -234,12 +234,12 @@ _find_csv_rows() {
 }
 
 # ── 4-6  Find & replace, many rows from a CSV
-# Steps (in order): pick the CSV (z = back) · the questions set to "ask every time" · read + preview + "Apply all?" (u = back).
+# Steps (in order): pick the CSV (u = back) · the questions set to "ask every time" · read + preview + "Apply all?" (u = back).
 # They share the locals of _find_replace_csv (csv_finds, csv_reps, abs_csv_file).
 _find_step_csvfile() {
   open_csv_menu && [ -n "$csv_file" ] && return 0
   _mc_unwind && return 2
-  return 1                                       # z / nothing picked = back one menu (Single / Multi)
+  return 1                                       # u / nothing picked = back one menu (Single / Multi)
 }
 _find_step_csv_confirm() {
   local ok

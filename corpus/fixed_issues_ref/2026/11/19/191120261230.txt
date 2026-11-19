@@ -1,0 +1,35 @@
+1. ISSUE IN BRIEF
+The Transfer item picker (and the csv / zip file picker and the fx selected-items pickers) drew a status row, a long dim description, a one-row footer with `z) Cancel` and, in the fx pickers, a `#tip` line. Wanted: one short layout (title, one suggestion line, cd / nav path, rows, `v) View selections` on its own row, then `u q h cc`), and no `z` cancel command in these pickers.
+
+1. HOW DID YOU DEBUG
+Read AGENTS.md, the corpus index (no earlier note on these pickers' footers), `_pick_header` / `_pick_rows` (browse.sh), `local_navigator` / `gcloud_navigator` (transfer.sh), `_file_picker` (csv.sh) and `_fx_sel_browse` / `_fx_sel_pick` (adf_selection.sh). Checked `_mc_footer_std` and `_mc_footer` to see how a footer row break (`|`) is printed. Rendered the new footer by sourcing menuchrome.sh with stubs (verified by running). Ran `bash tests/run.sh` once (9/9), `tests/pty/fast/menus/buffer_sets.sh`, `pick_drift.sh`, `cmd_docs.sh`. The live screen in a real terminal was NOT run.
+
+1. CAUSE
+Each picker passed its own footer items (`"z"`, `#tip`) and `_pick_header` always printed the status row and the Settings description (`Select items|*`, which also named w and z).
+
+1. FIX
+browse.sh: `_pick_header` loses the status row, takes `-s` (prints the shared `_pick_suggest` line instead of the description). menuchrome.sh: `_mc_footer_std -l` puts the screen's own actions on a row of their own. transfer.sh, csv.sh, adf_selection.sh: `z` removed from footers and `case`s; `u` at the top folder now steps back out of the picker (it was the only other way out; z used to do it); the `Step 2` / `Step 3` banners are gone. settings_desc.sh: `Select items|*` deleted (nothing reads it), `Select destination|*` no longer names z. Lesson: a footer feature belongs in `_mc_footer_std`, never a hand-made second row.
+
+2. ISSUE IN BRIEF
+The picker prefix that selects a folder as it is (instead of opening it) was `w` (`w3`). Wanted: `s-N` everywhere: `s-3`, `s-6,7-9`, `s-a` (all), `s-a-1,2,3-10` (all except those).
+
+2. HOW DID YOU DEBUG
+grep for `_nav_parse_select`, `w1`, `prefix 'w'` (transfer local + GCloud, fx pickers, buffer_sets.sh). Read `_cm_resolve`: the typed word `s-3` matched the main `s-` (select buffer; blocked in the transfer map), so the command layer would have refused it before the picker saw it. Ran buffer_sets.sh (updated: s-N, s-a, s-a-N cases) and the static suite.
+
+2. CAUSE
+`w` was a bare letter the command layer ignored; `s-` is a real command prefix, so the picker's grammar had to be declared as the picker's own word.
+
+2. FIX
+transfer.sh: `_nav_parse_select` reads `s-` (and still a plain list `1,3` / `2-4`), new `_nav_sel_ok`, `_nav_sel_expand` (a, a-except via `_sp_parse_all_except`, else `parse_selection`); `_nav_add_range` uses it. adf_selection.sh uses the same three. `_pick_suggest` sets `_MC_PICK_SEL=1` for one prompt; `_cm_resolve` then returns `local` for `s-<digit>` / `s-a` / `s-a-<digit>`; `_mc_footer` registers `s-` as the prompt's own key (cc lists it, the footer does not print it); `_mc_read` clears the flag. Lesson: a new typed grammar that starts with a mapped prefix needs the resolver told, not only the picker's `case`.
+
+3. ISSUE IN BRIEF
+`sast` (static security scan) was listed in the Transfer menu's cheat codes though it has no place in a picker.
+
+3. HOW DID YOU DEBUG
+grep `sast`: every map wires it to the main command; the cc of a menu lists every non-blocked map line. Ran cmd_docs.sh and the static suite after the change.
+
+3. CAUSE
+The transfer map carried the same `sast` line as every other map (`mapto main`).
+
+3. FIX
+bashbasicsbyvk_transfer.map: `sast .mapto() block()`. Other menus' maps keep it.

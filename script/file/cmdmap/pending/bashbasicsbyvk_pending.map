@@ -66,7 +66,7 @@ health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
 disk       .mapto()  disk       from bashbasicsbyvk_maincommands.sh
 ram        .mapto()  ram        from bashbasicsbyvk_maincommands.sh
 clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
-sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  block()
 print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
 loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh
 cc         .mapto()  cc         from bashbasicsbyvk_maincommands.sh

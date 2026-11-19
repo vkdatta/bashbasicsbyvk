@@ -107,18 +107,18 @@ done < <(grep -rhoE '_mc_footer[^#]*' --include='*.sh' "$F" | grep -oE '"[^" ]+:
 # a generic key (u q z rf) is NEVER written "key:Label", in any spelling, quoted or in a registered footer: a bare key (or a named variant
 # such as u.up) takes its label from _MC_KEYLABEL.  No exceptions list: a different meaning gets a variant in the table.
 hand=$(grep -rniE '"(u|q|z|rf)(\.[a-z]+)?:|_mc_footer_register .*[ ](u|q|z|rf)(\.[a-z]+)?:[A-Za-z]' --include='*.sh' "$F" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | head -3)
-[ -z "$hand" ] && ok "no footer retypes a generic label (u q z rf come from _MC_KEYLABEL)" || bad "hand-typed generic footer label: $hand"
+[ -z "$hand" ] && ok "no footer retypes a generic label (u q rf come from _MC_KEYLABEL)" || bad "hand-typed generic footer label: $hand"
 # every named variant a footer uses (u.up ...) exists in the table
 vars=""; while builtin read -r v; do
   ( source "$F/engine/ui/bashbasicsbyvk_menuchrome.sh" 2>/dev/null; [ -n "${_MC_KEYLABEL[$v]-}" ] ) || vars+="$v "
-done < <(grep -rhoE '(^|[ "])(u|q|z|rf)\.[a-z]+([ "]|$)' --include='*.sh' "$F" | grep -oE '(u|q|z|rf)\.[a-z]+' | sort -u)
+done < <(grep -rhoE '(^|[ "])(u|q|rf)\.[a-z]+([ "]|$)' --include='*.sh' "$F" | grep -oE '(u|q|rf)\.[a-z]+' | sort -u)
 [ -z "$vars" ] && ok "every named footer variant (u.up ...) is defined in _MC_KEYLABEL" || bad "footer uses variants _MC_KEYLABEL does not define: $vars"
 ( declare -F _lt_b >/dev/null || { _lt_b(){ :; }; _lt_e(){ :; }; }
   _vp_usable() { _vp_usable_w=80; }; _vp_cells() { _vp_w=${#1}; }; _sm_on=0
   source "$F/engine/ui/bashbasicsbyvk_menuchrome.sh"
-  out="$(_mc_footer u u.up q z rf "x:Nuke")"
-  [[ "$out" == *"u) Back   u) Up   q) Quit   z) Cancel   rf) Refresh   x) Nuke"* ]] ) \
-  && ok "bare footer keys render their canonical label next to a custom one" || bad "bare footer keys do not render u) Back q) Quit z) Cancel rf) Refresh"
+  out="$(_mc_footer u u.up q rf "x:Nuke")"
+  [[ "$out" == *"u) Back   u) Up   q) Quit   rf) Refresh   x) Nuke"* ]] ) \
+  && ok "bare footer keys render their canonical label next to a custom one" || bad "bare footer keys do not render u) Back q) Quit rf) Refresh"
 
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"
 exit "$fail"

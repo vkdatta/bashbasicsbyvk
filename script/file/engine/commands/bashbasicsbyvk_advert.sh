@@ -8,7 +8,7 @@
 #      _ad_accept KEY "description" [PRIO] [SHOWN]
 #                    KEY    what is typed ("clr", "r-", "a-2")        PRIO  footer priority, higher first (0 = cc only)
 #                    SHOWN  how the footer writes it ("r-N")          default KEY
-#      _ad_free   KEY "description" [SHOWN]     a standard key (u q z rf h cc): always in the footer, costs nothing
+#      _ad_free   KEY "description" [SHOWN]     a standard key (u q rf h cc): always in the footer, costs nothing
 #
 #  and two advertisers RENDER that list, as it is.  They do no lookup, no crawling, no judging:
 #
@@ -30,7 +30,7 @@
 _AD_BUDGET=50
 _AD_COST_CC=0
 _AD_COST_FOOTER=10
-_AD_FREE_KEYS=" u q z rf h cc "         # standard keys: printed on every menu, cost nothing
+_AD_FREE_KEYS=" u q rf h cc "         # standard keys: printed on every menu, cost nothing
 
 declare -g  _AD_MENU=""
 declare -ga _AD_KEY=() _AD_DESC=() _AD_PRIO=() _AD_SHOWN=() _AD_ISFREE=() _AD_SHORT=()

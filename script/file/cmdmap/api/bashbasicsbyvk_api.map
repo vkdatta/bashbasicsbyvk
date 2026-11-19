@@ -70,7 +70,7 @@ scr-sync   .mapto()  block()
 .ai        .mapto()  block()
 health     .mapto()  health     from bashbasicsbyvk_maincommands.sh
 clear      .mapto()  clear      from bashbasicsbyvk_maincommands.sh
-sast       .mapto()  sast       from bashbasicsbyvk_maincommands.sh
+sast       .mapto()  block()
 kl         .mapto()  kl         from bashbasicsbyvk_maincommands.sh
 print      .mapto()  print      from bashbasicsbyvk_maincommands.sh
 loadtime   .mapto()  loadtime   from bashbasicsbyvk_maincommands.sh

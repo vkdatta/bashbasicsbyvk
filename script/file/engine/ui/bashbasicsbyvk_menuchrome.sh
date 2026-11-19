@@ -56,11 +56,11 @@
 declare -gA _MC_FOOTERS=()
 _MC_RULE="   ─────────────────────────────"
 
-# ONE label per generic key. A footer item written as the bare key ("u", "q", "z", "rf") takes its label from here, so
+# ONE label per generic key. A footer item written as the bare key ("u", "q", "rf") takes its label from here, so
 # the wording cannot drift between menus. A generic key that really means something else gets a NAMED variant in this table
 # ("u.up" = u) Up, go up a folder); the part after the dot is only a name, the key shown is the part before it.
 # A generic key is NEVER written "key:Label" (tests/pty/fast/menus/cmd_drift.sh fails on it, whatever the spelling): add a variant here instead.
-declare -gA _MC_KEYLABEL=([u]=Back [u.up]=Up [u.prefix]="Remove last prefix" [q]=Quit [z]=Cancel [rf]=Refresh)
+declare -gA _MC_KEYLABEL=([u]=Back [u.up]=Up [u.prefix]="Remove last prefix" [q]=Quit [rf]=Refresh)
 
 # ── CONTROL-01: the return contract of every template below, and the one unwind test
 _MC_OK=0; _MC_BACK=1; _MC_QUIT=2; _MC_EOF=3
@@ -103,7 +103,8 @@ if ! declare -F _ad_open >/dev/null 2>&1; then
   else source "bashbasicsbyvk_advert.sh"; fi
 fi
 declare -g _MC_UNDER_FOOTER=0
-declare -gA _MC_PRINTED=()     # the keys the LAST footer printed ("u", "z", "v" ...): a plain prompt under it takes them as its own answers (cmdmap _cm_prompt_collect)
+declare -g _MC_PICK_SEL=0      # 1 while a picker that takes s-N is on screen (_pick_suggest): cmdmap _cm_resolve then reads s-3 · s-a · s-a-1,2 as the picker's own word
+declare -gA _MC_PRINTED=()     # the keys the LAST footer printed ("u", "v" ...): a plain prompt under it takes them as its own answers (cmdmap _cm_prompt_collect)
 _mc_footer() {
   local -a items=()
   local unders=0
@@ -118,12 +119,14 @@ _mc_footer() {
   _vp_usable; local cols=$_vp_usable_w          # the ONE width source (viewport)
   (( cols < 18 )) && cols=18
   # ADVERT: this footer DECLARES the commands its menu takes (cc lists all of them) and then prints what the budget buys (advert.sh:
-  # a footer command costs _AD_COST_FOOTER, a menu has _AD_BUDGET; standard keys u q z rf h cc are free).  No lookup here.
+  # a footer command costs _AD_COST_FOOTER, a menu has _AD_BUDGET; standard keys u q rf h cc are free).  No lookup here.
   _ad_open ""; _ad_menu_now
   _ad_from_footer_items "${items[@]}"
   _ad_from_dispatcher "${_AD_MENU:-main}"
   _ad_from_map "${_AD_MENU:-main}" "" menu lite
   _ad_footer_reset
+  # a picker that takes s-N (_pick_suggest) owns that key at its prompt (and cc lists it) though the footer never prints it
+  [ "${_MC_PICK_SEL:-0}" = 1 ] && _MC_PRINTED["s-"]="Select a folder itself: s-3 · s-a · s-a-1,2 · s-2-4"
   local it cell line="" out=() shown
   for it in "${items[@]}"; do
     if [ "$it" = "|" ]; then
@@ -189,15 +192,18 @@ _mc_std_items() {                      # -> _MC_STD = the standard keys as foote
   _MC_STD=(); for it in ${_MC_FOOTERS[$p]}; do _MC_STD+=("${it//_/ }"); done
 }
 _mc_footer_std() {
-  local prof=std_nav it intail=0
-  [ "${1:-}" = -b ] && { prof=std_nav_back; shift; }
+  local prof=std_nav it intail=0 own=0
+  while [ "${1:-}" = -b ] || [ "${1:-}" = -l ]; do         # -b back profile · -l the screen's own actions on a row of their own, the standard keys under it
+    [ "$1" = -b ] && prof=std_nav_back || own=1; shift
+  done
   local -a head=() tail=() nav=()
   for it in "$@"; do
     [[ "$it" == "|" || "$it" == "#"* ]] && intail=1
     if (( intail )); then tail+=("$it"); else head+=("$it"); fi
   done
   for it in ${_MC_FOOTERS[$prof]}; do nav+=("${it//_/ }"); done
-  _mc_footer "${head[@]}" "${nav[@]}" "${tail[@]}"
+  if (( own && ${#head[@]} )); then _mc_footer "${head[@]}" "|" "${nav[@]}" "${tail[@]}"
+  else _mc_footer "${head[@]}" "${nav[@]}" "${tail[@]}"; fi
 }
 
 # _mc_std_key TYPED   the two standard keys that open a screen: h (Home) and cc (Cheat codes).
@@ -221,7 +227,7 @@ _mc_read() {
   local _mr_a _mr_rc
   _CM_BACKED=0; _MC_UNDER_FOOTER=1          # this prompt is drawn right under a footer: the keys it printed are this prompt's own
   _bvk_read _mr_a "$2"; _mr_rc=$?
-  _MC_UNDER_FOOTER=0
+  _MC_UNDER_FOOTER=0; _MC_PICK_SEL=0        # s-N is a picker's key for ONE prompt (_pick_suggest sets it again when the picker draws)
   (( _mr_rc )) && { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 1; }; return 3; }
   _mr_a="${_mr_a%$'\r'}"
   printf -v "$1" '%s' "$_mr_a"
@@ -446,5 +452,4 @@ _mc_footer_register file_menu    u.up q h:Home
 _mc_footer_register browse_main  u.up cd:Change_directory q '|' h:Home s:Settings -h:Help -u:Upgrade
 _mc_footer_register back_quit    u.up q h:Home cc:Cheat_codes       # = std_nav: the numbered option menus (create, organise, find ...)
 _mc_footer_register back_only    u
-_mc_footer_register cancel_back  z u
 _mc_footer_register infinity     u.up q

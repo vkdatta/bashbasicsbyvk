@@ -117,16 +117,26 @@ _nav_review_leave() {
 
 # ── input helpers shared by the local and the gcloud navigator
 # THE prefix convention of every "pick items / go inside" list (the transfer navigators, and the fx <action>.selected.items picker):
-#     5      a folder → go INSIDE it · a file → select it
-#     w5     SELECT the item (a folder is taken whole, not entered)      w1,3 · w2-4 · 1,3 · 2-4 → select several
-# _nav_parse_select <typed>  → is_select (true when it starts with w, or has a , or - : "pick several") and cleaned_input (the typed text
-# without the w) in the CALLER's variables.
+#     5        a folder → go INSIDE it · a file → select it
+#     s-5      SELECT the item (a folder is taken whole, not entered)
+#     s-a      select everything on the list          s-a-1,2,3-10   everything except those      s-6,7-9 · s-2-4   several
+#     1,3 · 2-4   (no prefix) also select several
+# _nav_parse_select <typed>  → is_select (true when it starts with s-, or has a , or - : "pick several") and cleaned_input (the typed text
+# without the s-) in the CALLER's variables.  The caller checks cleaned_input with _nav_sel_ok and expands it with _nav_sel_expand.
 _nav_parse_select() {
-  is_select=false
-  [[ "$1" =~ ^[wW] ]] && is_select=true
-  cleaned_input=$(printf '%s' "$1" | sed 's/[Ww]\([0-9]\)/\1/g; s/^[Ww]//')
-  [[ "$cleaned_input" =~ [,\-] ]] && is_select=true
+  is_select=false; cleaned_input="$1"
+  if [[ "${1,,}" =~ ^s-(.*)$ ]]; then is_select=true; cleaned_input="${BASH_REMATCH[1]}"
+  elif [[ "$1" =~ [,\-] ]]; then is_select=true; fi
   return 0
+}
+# _nav_sel_ok <cleaned>  → 0 when it is a row list  3 · 1,3-5 · a · a-1,2   (a number, a range, a list, or all / all-except)
+_nav_sel_ok() { [[ "${1,,}" =~ ^([0-9,\-]+|a(-[0-9,\-]+)?)$ ]]; }
+# _nav_sel_expand <cleaned> <count>  → prints the picked row numbers, one line "1 3 4 5"  (a = all · a-1,2 = all except 1 and 2 · else parse_selection)
+_nav_sel_expand() {
+  local s="${1,,}"
+  if   [ "$s" = a ];           then seq 1 "$2" | tr '\n' ' '; echo
+  elif [[ "$s" =~ ^a-(.+)$ ]]; then _sp_parse_all_except "${BASH_REMATCH[1]}" "$2"
+  else                              parse_selection "$s" "$2"; fi
 }
 # _nav_index_ok <typed> <count>  → 0 when <typed> is a row number 1..<count>
 _nav_index_ok() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le "$2" ]; }
@@ -137,7 +147,7 @@ _nav_index_ok() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le "$2" ];
 _nav_add_range() {
   local -n _ar_items="$2" _ar_sel="$3"
   local indices idx item added=0 skipped=0 msg
-  indices=($(parse_selection "$1" "${#_ar_items[@]}"))
+  indices=($(_nav_sel_expand "$1" "${#_ar_items[@]}"))
   if [ ${#indices[@]} -eq 0 ]; then echo "🔴  No valid numbers"; return 0; fi
   for idx in "${indices[@]}"; do
     item="${_ar_items[$((idx-1))]}"
@@ -166,7 +176,7 @@ local_navigator() {
   while true; do
     nav_last_browsed_path="$nav_path"
     # ONE pick screen (browse.sh): the same header, rows, icons and 🔒 marks as the folder view
-    if [ "$mode" == "source" ]; then _pick_header "Items" "Transfer" "$nav_path" "$nav_prefix"
+    if [ "$mode" == "source" ]; then _pick_header -s "Items" "Transfer" "$nav_path" "$nav_prefix"
     else _pick_header "Destination" "Transfer" "$nav_path" "$nav_prefix"; fi
 
     local nav_imaginary=false
@@ -190,9 +200,9 @@ local_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer_std "v:View selections" "z"
+      _mc_footer_std -l "v:View selections"
     else
-      _mc_footer_std "n:New folder" "c:Confirm destination" "z"
+      _mc_footer_std -l "n:New folder" "c:Confirm destination"
     fi
 
     _mc_read nav_choice "Select: " || { _mc_unwind; return 1; }       # rc != 0: the flow was cancelled → leave at once
@@ -200,15 +210,13 @@ local_navigator() {
     case "$nav_choice" in
       q|Q) nav_selected_items=(); _bvk_quit; return 1 ;;
       h|H|cc|CC) _mc_std_key "$nav_choice"; _mc_unwind && return 1 ;;
-      z|Z)
-        echo "🚫 Navigation cancelled"
-        return 1
-        ;;
       u|U)
         if [ "$nav_path" != "/" ]; then
           nav_path=$(dirname "$nav_path")
           nav_prefix=""
           nav_force_show=false
+        else
+          return 1                     # already at the top: u steps back out of the picker (z, the old cancel, is gone)
         fi
         ;;
       n|N)
@@ -267,7 +275,7 @@ local_navigator() {
             local is_select cleaned_input
             _nav_parse_select "$nav_choice"
 
-            if [[ "$cleaned_input" =~ ^[0-9,\-]+$ ]]; then
+            if _nav_sel_ok "$cleaned_input"; then
               if $is_select; then
                 _nav_add_range "$cleaned_input" nav_items nav_selected_items
               else
@@ -325,7 +333,7 @@ gcloud_navigator() {
   [ -z "$remote_path" ] && remote_path="$HOME"
 
   while true; do
-    if [ "$mode" == "source" ]; then _pick_header "Items" "Transfer (GCloud)" "gcloud:$remote_path"
+    if [ "$mode" == "source" ]; then _pick_header -s "Items" "Transfer (GCloud)" "gcloud:$remote_path"
     else _pick_header "Destination" "Transfer (GCloud)" "gcloud:$remote_path"; fi
 
     local listing
@@ -349,9 +357,9 @@ gcloud_navigator() {
     fi
 
     if [ "$mode" == "source" ]; then
-      _mc_footer_std "v:View selections" "z"
+      _mc_footer_std -l "v:View selections"
     else
-      _mc_footer_std "n:New folder" "c:Confirm destination" "z"
+      _mc_footer_std -l "n:New folder" "c:Confirm destination"
     fi
 
     _mc_read gnav_choice "Select: " || { _mc_unwind; return 1; }
@@ -359,12 +367,9 @@ gcloud_navigator() {
     case "$gnav_choice" in
       q|Q) gcloud_nav_selected_items=(); _bvk_quit; return 1 ;;      # the SAME quit as the local navigator
       h|H|cc|CC) _mc_std_key "$gnav_choice"; _mc_unwind && return 1 ;;
-      z|Z)
-        echo "🚫 GCloud navigation cancelled"
-        return 1
-        ;;
       u|U)
-        remote_path=$(dirname "$remote_path")
+        if [ "$remote_path" != "/" ]; then remote_path=$(dirname "$remote_path")
+        else return 1; fi              # already at the top: u steps back out of the picker (z, the old cancel, is gone)
         ;;
       n|N)
         if [ "$mode" == "dest" ]; then
@@ -400,7 +405,7 @@ gcloud_navigator() {
           local is_select cleaned_input
           _nav_parse_select "$gnav_choice"
 
-          if [[ "$cleaned_input" =~ ^[0-9,\-]+$ ]]; then
+          if _nav_sel_ok "$cleaned_input"; then
             if $is_select; then
               _nav_add_range "$cleaned_input" remote_items gcloud_nav_selected_items "$remote_path"
             else
@@ -697,8 +702,8 @@ _get_mime_type() {
   echo "$mime"
 }
 
-# Transfer is a wizard of four steps (mode, source, destination, action).  Each is one step for _mc_steps: u / z = back to the step before,
-# q = leave.  They fill transfer_menu's locals.  (Inside a navigator u still means one folder up: only its z cancel steps back.)
+# Transfer is a wizard of four steps (mode, source, destination, action).  Each is one step for _mc_steps: u = back to the step before,
+# q = leave.  They fill transfer_menu's locals.  (Inside a navigator u means one folder up; at the top folder it steps back.)
 _t_s_mode() {
   _mc_select t_mode "📦 TRANSFER — Step 1: Choose mode" \
     "Intra-location (Current CLI → Current CLI [Up Down])" \
@@ -709,8 +714,6 @@ _t_s_mode() {
   return 0
 }
 _t_s_source() {
-  echo
-  echo "📦 TRANSFER — Step 2: Select source items"
   local _t_nrc
   step2_ok=false
   if [ "$t_mode" == "5" ]; then
@@ -726,12 +729,10 @@ _t_s_source() {
     _mc_unwind && return 2
     if [ $_t_nrc -eq 0 ] && [ ${#nav_selected_items[@]} -gt 0 ]; then selected_items=("${nav_selected_items[@]}"); step2_ok=true; fi
   fi
-  $step2_ok || return 1                    # z / nothing selected: back to Step 1
+  $step2_ok || return 1                    # u at the top / nothing selected: back to Step 1
   return 0
 }
 _t_s_dest() {
-  echo
-  echo "📦 TRANSFER — Step 3: Choose destination"
   local _t_nrc
   dest_ok=false; final_dest=""
   case "$t_mode" in
@@ -749,7 +750,7 @@ _t_s_dest() {
     5) local_navigator "dest" "$HOME"; _t_nrc=$?; _mc_unwind && return 2
        [ $_t_nrc -eq 0 ] && { final_dest="$nav_result_path"; dest_ok=true; } ;;
   esac
-  $dest_ok && [ -n "$final_dest" ] || return 1     # z / nothing chosen: back to Step 2
+  $dest_ok && [ -n "$final_dest" ] || return 1     # u at the top / nothing chosen: back to Step 2
   return 0
 }
 _t_s_action() {
