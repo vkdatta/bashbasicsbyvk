@@ -621,6 +621,7 @@ _desc_print_dim() {          # _desc_print_dim TEXT_OR_KEY — a dim, wrapped de
   rows=$(_term_rows 2>/dev/null); cols=$(_term_cols 2>/dev/null)
   [ "${_vp_rows_now:-0}" -gt 0 ] 2>/dev/null && { rows=$_vp_rows_now; cols=$_vp_cols_now; }
   [[ "$rows" =~ ^[0-9]+$ ]] || rows=24; [[ "$cols" =~ ^[0-9]+$ ]] || cols=60
+  declare -F _lm_need >/dev/null 2>&1 && _lm_need bashbasicsbyvk_settings_desc.sh     # the table is a [bg] file: _ST_DESC does not exist before it loads (a stand-alone door has no idle time to load it)
   if declare -F _st_desc_load >/dev/null 2>&1; then { [ -n "${_ST_DESC[Settings|*]:-}" ] || _st_desc_load; }; fi
   [ -n "${_ST_DESC[$txt]:-}" ] && txt="${_ST_DESC[$txt]}"
   [[ "$txt" == *"|*" ]] && return 1                          # still a bare key: the table is not there, so show nothing rather than the key

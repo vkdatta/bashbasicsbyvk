@@ -146,13 +146,15 @@ _nav_index_ok() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le "$2" ];
 # and prints the summary.  With <dir> the stored path is  <dir>/<item without its trailing />  (GCloud: names are relative), else the item itself.
 _nav_add_range() {
   local -n _ar_items="$2" _ar_sel="$3"
-  local indices idx item added=0 skipped=0 msg
+  local indices idx item added=0 skipped=0 refused=0 msg
   indices=($(_nav_sel_expand "$1" "${#_ar_items[@]}"))
   if [ ${#indices[@]} -eq 0 ]; then echo "🔴  No valid numbers"; return 0; fi
   for idx in "${indices[@]}"; do
     item="${_ar_items[$((idx-1))]}"
     [ $# -ge 4 ] && item="$4/${item%/}"
-    if _in_selection "$item" "${_ar_sel[@]}"; then
+    if [ -n "${_PF_ACTIVE:-}" ] && ! _pf_allows "$item"; then     # a python filepicker call: its allow / block rules (pickfilter.sh)
+      refused=$((refused+1))
+    elif _in_selection "$item" "${_ar_sel[@]}"; then
       skipped=$((skipped+1))
     else
       _ar_sel+=("$item")
@@ -161,6 +163,7 @@ _nav_add_range() {
   done
   msg="➕ Added $added item(s)"
   [ $skipped -gt 0 ] && msg="$msg (skipped $skipped duplicate(s))"
+  [ $refused -gt 0 ] && msg="$msg (not allowed here: $refused)"
   echo "$msg — total selected: ${#_ar_sel[@]}  (v to review)"
 }
 
@@ -176,7 +179,7 @@ local_navigator() {
   while true; do
     nav_last_browsed_path="$nav_path"
     # ONE pick screen (browse.sh): the same header, rows, icons and 🔒 marks as the folder view
-    if [ "$mode" == "source" ]; then _pick_header -s "Items" "Transfer" "$nav_path" "$nav_prefix"
+    if [ "$mode" == "source" ]; then _pick_header -s ${_PF_NOUN:+-n "$_PF_NOUN"} "Items" "${_PF_JOB:-Transfer}" "$nav_path" "$nav_prefix" "${_PF_DESC:-}"
     else _pick_header "Destination" "Transfer" "$nav_path" "$nav_prefix"; fi
 
     local nav_imaginary=false
@@ -196,6 +199,7 @@ local_navigator() {
         build_all_items "$nav_path"
         nav_items=("${items[@]}")
       fi
+      [ -n "${_PF_ACTIVE:-}" ] && _pf_filter_items nav_items      # a python filepicker call: hide the files its rules refuse (pickfilter.sh)
       _pick_rows "${nav_items[@]}"
     fi
 

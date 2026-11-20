@@ -96,7 +96,10 @@ _tpl_p_tab_description() { _tm_desc_line "${_TPL_VAL[tab_name]-}" "${_TPL_VAL[ta
 _tpl_p_count_line() { _tm_count_line "${_TPL_VAL[count_total]-}"; }
 # the picker's dim line under the title (+ the blank row after it); the caller's own wording or the Settings description
 _tpl_p_pick_note() {
-  if [ "${_TPL_VAL[pick_suggest]-}" = 1 ]; then _pick_suggest "${_TPL_VAL[pick_suggest_noun]-}"; echo
+  if [ "${_TPL_VAL[pick_suggest]-}" = 1 ]; then
+    _pick_suggest "${_TPL_VAL[pick_suggest_noun]-}"
+    [ -n "${_TPL_VAL[pick_desc]-}" ] && _desc_print_dim "${_TPL_VAL[pick_desc]}"      # a caller's own wording (the python file picker's rules); no caller of -s passed one before
+    echo
   else _desc_print_dim "${_TPL_VAL[pick_desc]:-Select ${_TPL_VAL[what],,}|*}" && echo; fi
   return 0
 }

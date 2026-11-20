@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# bashbasicsbyvk_filepicker — THE file / folder picker for every tool that runs as its own process (bash or python): the app's own Transfer picker
+# (N opens a folder or picks a file, s-N / s-a / 1,3-5 pick several, v reviews and confirms), with rules about what can be picked.  The sibling of
+# bashbasicsbyvk_yn / _ask / _choose.
+#
+#   paths=$(bashbasicsbyvk_filepicker "allow(files,folders); allow.ext(csv)" [-s START_FOLDER] [-f NAME_SHOWN_IN_THE_TITLE])
+#
+#   stdout = the picked paths, one per line (absolute); the picker is drawn on the TERMINAL, also when the caller's stdin / stdout are pipes.
+#   exit 0 = picked · 2 = nothing picked (q / u / Ctrl-D) · 3 = cannot ask (not installed: a broken install) · 64 = the commands were not understood (stderr says why)
+#
+#   allow(files,folders)  allow(files)  allow(folders)   these kinds can be picked
+#   block(folders)        block(files)                    these kinds can NOT be picked
+#   allow.ext(csv)        allow.ext(csv,tsv)              ONLY files with these extensions (and, alone, no folders)
+#   block.ext(txt)        every file EXCEPT these extensions
+#   Several commands: join them with ;     A leading "3bvk.filepicker." is accepted and ignored.
+# The rules live in bashbasicsbyvk_pickfilter.sh; the picker is local_navigator (bashbasicsbyvk_transfer.sh): nothing is drawn here.
+# shellcheck disable=SC1090
+declare -F _pf_run >/dev/null 2>&1 || source "_3bvk_import_filepicker.sh" 2>/dev/null
+declare -F _lm_fg >/dev/null 2>&1 || { echo "bashbasicsbyvk_filepicker: the file picker is not installed (reinstall bashbasicsbyvk)." >&2; exit 3; }
+_fpk_spec="${1-}"; shift 2>/dev/null; _fpk_start="$PWD"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -s) _fpk_start="${2-$PWD}"; shift $(( $# >= 2 ? 2 : 1 )) ;;
+    -f) export BVK_PICK_FOR="${2-}"; shift $(( $# >= 2 ? 2 : 1 )) ;;
+    *) shift ;;
+  esac
+done
+[ -d "$_fpk_start" ] || { echo "bashbasicsbyvk_filepicker: start folder not found: $_fpk_start" >&2; exit 64; }
+exec 3>&1                                                   # the caller's stdout: only the picked paths go there
+[ -t 0 ] || { [ -r /dev/tty ] && exec </dev/tty; }
+[ -t 1 ] || { [ -w /dev/tty ] && exec >/dev/tty; }
+_lm_need bashbasicsbyvk_pickfilter.sh                        # the rules first: a wrong command is refused before anything is loaded or drawn
+_pf_parse "$_fpk_spec" || { echo "bashbasicsbyvk_filepicker: $_PF_ERR" >&2; exit 64; }
+_lm_fg >/dev/null || exit 3                                 # the app's [fg] files; their start-up output (apply_colors: colours + clear screen) is not the caller's business
+_bvk_go_bin 2>/dev/null                                     # once, here in the main shell (the engine probe o runs at start-up)
+_pf_run "$_fpk_spec" "$_fpk_start"; _fpk_rc=$?
+if [ "$_fpk_rc" -eq 0 ]; then printf '%s\n' "${nav_selected_items[@]}" >&3; exit 0; fi
+exit "$_fpk_rc"

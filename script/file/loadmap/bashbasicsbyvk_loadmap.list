@@ -176,6 +176,7 @@ _3bvk_import_cmd_delete.sh|||import file of a stand-alone tool (its own process,
 _3bvk_import_deps.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_ask.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_yn.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+_3bvk_import_filepicker.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 bashbasicsbyvk_api.map|||command-map wiring, read as data
 bashbasicsbyvk_auth.map|||command-map wiring, read as data
 bashbasicsbyvk_auth_sub.map|||command-map wiring, read as data
@@ -223,6 +224,9 @@ bashbasicsbyvk_yn|||tool, run as its own process: THE yes/no question (native me
 bashbasicsbyvk_yn.py|||python helper, run as a process
 bashbasicsbyvk_choose|||tool, run as its own process: THE one-of-many / many-of-many question (native menu) for every stand-alone tool
 bashbasicsbyvk_choose.py|||python helper, run as a process: the python door to bashbasicsbyvk_choose
+bashbasicsbyvk_filepicker|||tool, run as its own process: THE file / folder picker (the Transfer picker + allow / block rules) for every stand-alone tool
+bashbasicsbyvk_filepicker.py|||python helper, run as a process: the python door to bashbasicsbyvk_filepicker
+bashbasicsbyvk_pickfilter.sh|||the allow / block rules and the runner of the python file picker; loaded by the door (its own process) or by the app when a python tool asks (_inf_q_filepicker)
 bashbasicsbyvk_lt.py|||python helper, run as a process
 bashbasicsbyvk_main.map|||command-map wiring, read as data
 bashbasicsbyvk_mapgen|||tool, run as its own process

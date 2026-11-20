@@ -91,6 +91,23 @@ _inf_q_ask() {     # "Prompt: " [-i text] [-s] [-b] [-S] [-m]
   fi
 }
 
+_inf_q_filepicker() {     # "commands" [-s START] [-f NAME]  — the Transfer picker with allow / block rules (bashbasicsbyvk_pickfilter.sh); answer = the picked paths, one per line
+  local _spec="${1-}" _start="${path:-$PWD}" _for="" _rc=0
+  shift 2>/dev/null
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -s) _start="${2-$_start}"; shift $(( $# >= 2 ? 2 : 1 )) ;;
+      -f) _for="${2-}"; shift $(( $# >= 2 ? 2 : 1 )) ;;
+      *) shift ;;
+    esac
+  done
+  _INF_OUT=""
+  [ -d "$_start" ] || _start="${path:-$PWD}"
+  _pf_parse "$_spec" || { _INF_RC=64; return; }
+  BVK_PICK_FOR="$_for" _pf_run "$_spec" "$_start"; _rc=$?
+  if (( _rc == 0 )); then _INF_RC=0; _INF_OUT="$(printf '%s\n' "${nav_selected_items[@]}")"; else _INF_RC=2; fi
+}
+
 # one request from the python tool (fd 8) -> one answer (fd 9).  A request = N, then N arguments, each ended by a NUL; the answer = RC NUL TEXT NUL.
 _inf_serve_one() {
   local _n="" _a="" _i
@@ -102,6 +119,7 @@ _inf_serve_one() {
     yn)     _inf_q_yn "${_av[@]:1}" ;;
     choose) _inf_q_choose "${_av[@]:1}" ;;
     ask)    _inf_q_ask "${_av[@]:1}" ;;
+    filepicker) _inf_q_filepicker "${_av[@]:1}" ;;
   esac
   printf '%s\0%s\0' "$_INF_RC" "$_INF_OUT" >&9
   return 0

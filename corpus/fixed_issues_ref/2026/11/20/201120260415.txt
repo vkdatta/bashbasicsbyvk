@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+Python code had no way to ask the user to pick files or folders with the app's own picker (the Transfer source picker with s-N, ranges and a review screen), limited by rules such as "only csv files", "folders only" or "everything except txt".
+
+1. HOW DID YOU DEBUG
+Read AGENTS.md, the stand-alone doors (bashbasicsbyvk_choose / _yn / _ask and their .py twins, bashbasicsbyvk_qbridge.py), the Infinity bridge (_inf_serve_one in bashbasicsbyvk_infinity_run.sh), local_navigator / _nav_add_range in bashbasicsbyvk_transfer.sh and _pick_header / _pick_rows in bashbasicsbyvk_browse.sh. Ran the new door under the repo's PtyApp harness on a folder with csv / txt / py / tar.gz files and two folders: all four rule kinds, s-N pick, review, confirm, refusal of a blocked folder, bad command (exit 64), and the python module (pick returns a list, ValueError on a bad command). The in-app route (_inf_q_filepicker) was written but NOT run. Static suite: footer and intent time out in the sandbox on the untouched tree too; no new findings elsewhere.
+
+1. CAUSE
+No door existed for the picker, and local_navigator had no way to refuse items.
+
+1. FIX
+New bashbasicsbyvk_pickfilter.sh (command parser, _pf_allows, _pf_filter_items, _pf_run), door bashbasicsbyvk_filepicker + .py, _3bvk_import_filepicker.sh, load-map lines. local_navigator and _nav_add_range ask the rules only while _PF_ACTIVE is set, so Transfer is unchanged. _tpl_p_pick_note now prints a caller-given description in -s mode (no earlier caller passed one). _inf_serve_one answers a "filepicker" request. Lesson: a door must run _lm_fg with stdout silenced, because apply_colors recolours and clears the terminal at load.
+
+2. ISSUE IN BRIEF
+_desc_print_dim failed with an arithmetic error in a stand-alone process that had loaded only the [fg] files, because it read _ST_DESC before the [bg] file that declares it was loaded.
+
+2. HOW DID YOU DEBUG
+The error appeared the first time the new door printed a pick description under a pty; read _desc_print_dim and the load map (settings_desc.sh is [bg]).
+
+2. CAUSE
+The guard read ${_ST_DESC[...]} before _st_desc_load; a stub makes the function exist but the array does not.
+
+2. FIX
+_desc_print_dim in bashbasicsbyvk_browse.sh calls _lm_need bashbasicsbyvk_settings_desc.sh first (rule: a function reading another file's variable loads that file).

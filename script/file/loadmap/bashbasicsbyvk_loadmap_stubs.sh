@@ -1034,6 +1034,7 @@ _inf_sub() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_sub "$@"; }
 _inf_q_yn() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_q_yn "$@"; }
 _inf_q_choose() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_q_choose "$@"; }
 _inf_q_ask() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_q_ask "$@"; }
+_inf_q_filepicker() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_q_filepicker "$@"; }
 _inf_serve_one() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_serve_one "$@"; }
 _inf_py() { _lm_stub bashbasicsbyvk_infinity_run.sh _inf_py "$@"; }
 bvk_gitpush() { _lm_stub bashbasicsbyvk_gitpush.sh bvk_gitpush "$@"; }
@@ -1238,3 +1239,11 @@ _gd_strip_pointers() { _lm_stub bashbasicsbyvk_gdrive.sh _gd_strip_pointers "$@"
 _gd_export_cmd() { _lm_stub bashbasicsbyvk_gdrive.sh _gd_export_cmd "$@"; }
 _gd_info() { _lm_stub bashbasicsbyvk_gdrive.sh _gd_info "$@"; }
 handle_gd_cmd() { _lm_stub bashbasicsbyvk_gdrive.sh handle_gd_cmd "$@"; }
+_pf_kind() { _lm_stub bashbasicsbyvk_pickfilter.sh _pf_kind "$@"; }
+_pf_has() { _lm_stub bashbasicsbyvk_pickfilter.sh _pf_has "$@"; }
+_pf_parse() { _lm_stub bashbasicsbyvk_pickfilter.sh _pf_parse "$@"; }
+_pf_kind_ok() { _lm_stub bashbasicsbyvk_pickfilter.sh _pf_kind_ok "$@"; }
+_pf_allows() { _lm_stub bashbasicsbyvk_pickfilter.sh _pf_allows "$@"; }
+_pf_filter_items() { _lm_stub bashbasicsbyvk_pickfilter.sh _pf_filter_items "$@"; }
+_pf_describe() { _lm_stub bashbasicsbyvk_pickfilter.sh _pf_describe "$@"; }
+_pf_run() { _lm_stub bashbasicsbyvk_pickfilter.sh _pf_run "$@"; }
