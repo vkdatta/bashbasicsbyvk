@@ -869,6 +869,10 @@ _vp_goto() {
   fi
 }
 
+# An arrow / Home / End / Page key moves the highlight and echoes the row number onto the Select line.  The number is only an echo of the
+# highlight, so it is marked as typed (_HL_TYPED, see _hl_typed_clear): Backspace that erases it drops the highlight too.
+_nav_echo_hl() { _buf="$_hl_index"; _pos=${#_buf}; _HL_TYPED="$_hl_index"; }
+
 _nav_jump_to() {
   $_can_nav || return 0
   _vp_count
@@ -877,7 +881,7 @@ _nav_jump_to() {
   (( target < 1 )) && target=1
   (( target > _vp_n )) && target=$_vp_n
   _hl_index=$target
-  _buf="$_hl_index"; _pos=${#_buf}
+  _nav_echo_hl
   if [ "$target" -eq "$old" ]; then $_vp_input_fn; else _vp_goto "$old" "$_hl_index"; fi
   return 0
 }
@@ -1088,7 +1092,7 @@ _rc_nav() {         # rc 1 = leave the prompt (a tab switch)
           _hl_index=$(( _hl_index - 1 ))
           [ "$_hl_index" -lt 1 ] && _hl_index="$_vp_n"
         fi
-        _buf="$_hl_index"; _pos=${#_buf}
+        _nav_echo_hl
         _vp_goto "$old" "$_hl_index"
       fi ;;
     down)
@@ -1099,7 +1103,7 @@ _rc_nav() {         # rc 1 = leave the prompt (a tab switch)
           _hl_index=$(( _hl_index + 1 ))
           [ "$_hl_index" -gt "$_vp_n" ] && _hl_index=1
         fi
-        _buf="$_hl_index"; _pos=${#_buf}
+        _nav_echo_hl
         _vp_goto "$old" "$_hl_index"
       fi ;;
     pgup)   _nav_jump_to $(( _hl_index - _vp_page_step )) ;;

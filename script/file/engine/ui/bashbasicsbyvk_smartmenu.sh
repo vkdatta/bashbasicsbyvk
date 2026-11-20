@@ -412,6 +412,9 @@ _sm_looks_command() {
       [[ "$_sm_cmd_letters" == *"$ch"* ]] || _sm_cmd_letters+="$ch"
     fi
   done
+  # a picker that takes s-N (_pick_suggest) says so in its header suggestion, not in the footer: s is its command letter all the same,
+  # so s-3 · s-a · s-2-4 highlight the rows live, exactly as on the main list
+  if [ "${_MC_PICK_SEL:-0}" = 1 ]; then [[ "$_sm_cmd_letters" == *s* ]] || _sm_cmd_letters+="s"; fi
   [ -n "$_sm_cmd_letters" ]
 }
 
@@ -440,7 +443,8 @@ _sm_split_command() {
   local b="$1"
   _sm_cmd_prefix=""; _sm_sel_body="$b"
   # dashed form first: one or more letters then one/two dashes
-  if [[ "$b" =~ ^([A-Za-z][A-Za-z0-9]*-{1,2})([0-9].*)?$ ]]; then
+  if [[ "$b" =~ ^([A-Za-z][A-Za-z0-9]*-{1,2})([0-9]|a($|-[0-9])).*$|^([A-Za-z][A-Za-z0-9]*-{1,2})$ ]]; then
+    [[ "$b" =~ ^([A-Za-z][A-Za-z0-9]*-{1,2})(.*)$ ]]
     _sm_cmd_prefix="${BASH_REMATCH[1]}"
     _sm_sel_body="${BASH_REMATCH[2]}"
     return
@@ -464,6 +468,13 @@ _sm_compute_msel() {
   local body="$1" n=${#_sm_rows_text[@]} part a z i
   local IFS=','
   local -a parts
+  if [[ "$body" == a ]]; then                    # s-a: every selectable row
+    for ((i=1; i<=n; i++)); do _sm_row_selectable "$i" && _msel_set[$i]=1; done
+    return 0
+  elif [[ "$body" =~ ^a-([0-9][0-9,-]*)$ ]]; then  # s-a-1,2: every selectable row except those
+    for i in $(_sp_parse_all_except "${BASH_REMATCH[1]}" "$n"); do _sm_row_selectable "$i" && _msel_set[$i]=1; done
+    return 0
+  fi
   read -ra parts <<< "$body"
   for part in "${parts[@]}"; do
     part="${part// /}"

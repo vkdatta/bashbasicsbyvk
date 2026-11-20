@@ -914,7 +914,6 @@ _fx_adf_upload_select_csv() { _lm_stub bashbasicsbyvk_adf_upload_csv.sh _fx_adf_
 _fx_adf_map_select_csv() { _lm_stub bashbasicsbyvk_adf_map_csv.sh _fx_adf_map_select_csv "$@"; }
 _fx_adf_bookmark_select_csv() { _lm_stub bashbasicsbyvk_adf_bookmark_csv.sh _fx_adf_bookmark_select_csv "$@"; }
 _fxdel_list_files() { _lm_stub bashbasicsbyvk_adf_delete_common.sh _fxdel_list_files "$@"; }
-_fxdel_pick_indices() { _lm_stub bashbasicsbyvk_adf_delete_common.sh _fxdel_pick_indices "$@"; }
 _fxdel_run_selected() { _lm_stub bashbasicsbyvk_adf_delete_common.sh _fxdel_run_selected "$@"; }
 _de_s_pick() { _lm_stub bashbasicsbyvk_adf_delete_ext.sh _de_s_pick "$@"; }
 _de_s_confirm() { _lm_stub bashbasicsbyvk_adf_delete_ext.sh _de_s_confirm "$@"; }

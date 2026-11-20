@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+On the pick screens (Select dates to delete, and the other pickers made by _pick_groups) typing s-N did not highlight the row, unlike the main list.
+
+1. HOW DID YOU DEBUG
+Ran the real app in a pty (fx > file > delete > delete.by.date > Day) and typed s, -, 1: the redraw after "1" had no reverse-video row. Read the smart-menu mode logic: _sm_classify_mode only picks the "command" grammar (the one that highlights c-1,3 / s-N live) when the FOOTER shows a dashed example; this picker prints s-N only in the header suggestion (_pick_suggest), so the menu stayed in "single" mode and no selection set was built. Checked Enter on s-1 still marks the row, and the static suite (12/12).
+
+1. CAUSE
+The picker's footer does not mention s-N, so the smart menu never learned that s is a command letter here.
+
+1. FIX
+smartmenu.sh _sm_looks_command: while _MC_PICK_SEL=1 (a picker that takes s-N is on screen) s is added to the command letters. _sm_split_command and _sm_compute_msel also understand s-a and s-a-1,2 (all rows, all but those), so those highlight too. Erasing the text drops the highlight as before.

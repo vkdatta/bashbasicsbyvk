@@ -620,7 +620,7 @@ _vp_geometry() {
   # "s → Settings"), notices and the loading bar are drawn there, never on the line being typed on.
   # It is one row on a wide screen and two on a narrow one (a phone): a suggestion longer than the row expands onto the second row
   # (_bvk_hint_wrap) instead of being cut.  _vp_hint_row stays the 0/1 flag "this prompt has the area", _vp_hint_n is its height.
-  _vp_hint_row=0; _vp_hint_n=0
+  _vp_hint_row=0; _vp_hint_n=0; _vp_hint_cap=1
   if _vp_wants_hint_row; then _bvk_hint_area_on "$rows"; fi
 
   min_rows=3
@@ -1195,8 +1195,16 @@ _bvk_room() { local _rm_n=0; (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$_buf" 
 # (_cm_line_edit) both turn it on here, so the suggestion sits above the text everywhere.  $1 = the screen's rows (default: now).
 _bvk_hint_area_on() {
   local rows="${1:-${_vp_rows_now:-24}}"
-  _vp_hint_row=1; _vp_hint_n=1
-  (( ${_vp_cols_now:-80} < ${BVK_HINT_WIDE:-100} && rows >= 24 )) && _vp_hint_n=2
+  # THE gap rule (the Settings look, on every prompt): a blank row under the footer, then the suggestion, then a blank row above the prompt:
+  #     footer  /  (blank)  /  suggestion  /  (blank)  /  Select:
+  # _vp_hint_n = every reserved row (gap + text rows + the rest); _vp_hint_cap = how many of them a suggestion may use.  A one-row suggestion
+  # leaves the last reserved row blank = the gap under it; a long one on a narrow screen uses it (nothing is cut).  A short screen
+  # (under 24 rows) keeps the gap above only.  The painter (_bvk_hint_paint) never writes the first row.
+  _vp_hint_row=1; _vp_hint_n=2; _vp_hint_cap=1
+  if (( rows >= 24 )); then
+    _vp_hint_n=3
+    (( ${_vp_cols_now:-80} < ${BVK_HINT_WIDE:-100} )) && _vp_hint_cap=2
+  fi
   return 0
 }
 # The live suggestion above the prompt: re-evaluated on every redraw of the typed line (_bvk_draw_input), painted by _bvk_hint_paint.
@@ -1217,12 +1225,14 @@ _input_hint_sync() {
   _bvk_hint_paint "$_hint_want"                        # the painter expands a long suggestion onto the next row (_bvk_hint_wrap); "" wipes it
 }
 
-_bvk_hint_paint() {   # $1 text ("" = wipe)  $2 sgr (default dim).  A long text expands onto the next reserved row (_bvk_hint_wrap).
-  local n=${_vp_hint_n:-1} i up sgr="${2:-2}" out="" ln
-  _BVK_HINT_N=0; [ -n "$1" ] && _bvk_hint_wrap "$1" "$n"
+_bvk_hint_paint() {   # $1 text ("" = wipe)  $2 sgr (default dim).  The first reserved row is the gap above and is never written; a long text expands onto the next rows (_bvk_hint_wrap).
+  local n=${_vp_hint_n:-1} i j up sgr="${2:-2}" out="" ln g=1 cap
+  (( n < 2 )) && g=0                                    # a one-row area (nothing else reserves it) has no gap row
+  cap=${_vp_hint_cap:-1}; (( cap > n - g )) && cap=$(( n - g )); (( cap < 1 )) && cap=1
+  _BVK_HINT_N=0; [ -n "$1" ] && _bvk_hint_wrap "$1" "$cap"
   for (( i=0; i<n; i++ )); do
     up=$(( ${_BLK_CROW:-0} + n - i ))                     # row i of the area, counted up from the cursor's row
-    ln=""; (( i < _BVK_HINT_N )) && ln=$'\033['"$sgr"'m'"${_BVK_HINT_LN[i]}"$'\033[0m'
+    j=$(( i - g )); ln=""; (( j >= 0 && j < _BVK_HINT_N )) && ln=$'\033['"$sgr"'m'"${_BVK_HINT_LN[j]}"$'\033[0m'
     out+=$'\033['"$up"$'A\r\033[2K'"$ln"$'\033['"$up"$'B'
   done
   builtin printf '%s\r' "$out"

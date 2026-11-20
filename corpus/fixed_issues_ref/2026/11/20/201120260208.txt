@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+On the main list, Down highlights an item and puts its number on the Select line; Backspace then erases the number but the item stays highlighted.
+
+1. HOW DID YOU DEBUG
+Read corpus BB-211020260830-4 and BB-251020261341-3 (the same symptom for typed numbers). Read _hl_typed_clear (viewport.sh), _sync_highlight_from_buf, _rc_nav and _nav_jump_to (browse.sh): the arrows set _hl_index and _buf but never _HL_TYPED, so _hl_typed_clear found "not typed" and kept the highlight. Ran the real app in a pty at 60 columns (Down, then Backspace): before the change the row repaint kept the highlight, after it the row is repainted plain. Checked from the redraw bytes, not from a colour screenshot.
+
+1. CAUSE
+Only a number typed by hand was marked as "the highlight came from typing"; the number an arrow key echoes onto the line was not, so erasing it did not drop the highlight.
+
+1. FIX
+browse.sh: new helper _nav_echo_hl (sets _buf, _pos and _HL_TYPED from _hl_index) replaces the three copies in _rc_nav (up, down) and _nav_jump_to (pgup, pgdn, home, end). Lesson: every place that echoes the highlight onto the line must also say it is an echo.
+
+2. ISSUE IN BRIEF
+Between the footer and the Select line the main list and every other menu with a typed prompt had no gap: on a wide screen the suggestion sat directly under the footer and directly above Select, and with no suggestion there was one blank row; Settings and Home (_st_draw) already showed a blank row, the suggestion, then a blank row. Wanted the same clean look everywhere.
+
+2. HOW DID YOU DEBUG
+Rendered the real app in a pty (60 and 120 columns): main list, fx, Home, Settings, the create menu and the goto prompt, idle and with a typed letter. Read _bvk_hint_area_on and _bvk_hint_paint (viewport.sh) and every reader of _vp_hint_n (mouse.sh, cmdmap.sh, smartmenu.sh, xui.sh): they only use it as the count of rows between footer and prompt, so the gap could be added inside that count. Ran the static suite once (12/12, no new finding). Settings and Home were not changed (they size their own tail); the screens a tap or the mouse wheel touch were not exercised in a pty.
+
+2. CAUSE
+The reserved suggestion area was only as tall as the suggestion (one row, two on a narrow screen) and the painter used its first row, so nothing separated the suggestion from the footer or from the prompt.
+
+2. FIX
+viewport.sh _bvk_hint_area_on reserves one gap row plus the text rows (3 rows on a screen of 24+ rows, 2 on a shorter one) and sets _vp_hint_cap, the number of rows a suggestion may use (1 wide, 2 narrow); _bvk_hint_paint never writes the first row and wraps the text into _vp_hint_cap rows, so a one-row suggestion keeps a blank row under it. _vp_hint_cap is made local wherever _vp_hint_n is (cmdmap.sh _cm_line_edit, xui.sh borrow list, geometry reset). Every menu, picker, smart menu and typed-line prompt goes through these two functions, so all of them get the gaps. Idle, a prompt now shows 3 blank rows above it (it was 1 or 2), because the block height is fixed while painting. A suggestion that wraps to two rows on a narrow screen uses the bottom gap row. loadmap stubs regenerated (new function _nav_echo_hl).
