@@ -620,7 +620,7 @@ _vp_geometry() {
   # "s → Settings"), notices and the loading bar are drawn there, never on the line being typed on.
   # It is one row on a wide screen and two on a narrow one (a phone): a suggestion longer than the row expands onto the second row
   # (_bvk_hint_wrap) instead of being cut.  _vp_hint_row stays the 0/1 flag "this prompt has the area", _vp_hint_n is its height.
-  _vp_hint_row=0; _vp_hint_n=0; _vp_hint_cap=1
+  _vp_hint_row=0; _vp_hint_n=0; _vp_hint_cap=1; _vp_hint_max=0
   if _vp_wants_hint_row; then _bvk_hint_area_on "$rows"; fi
 
   min_rows=3
@@ -628,7 +628,7 @@ _vp_geometry() {
   (( min_rows < 1 )) && min_rows=1
 
   while :; do
-    chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_n ))
+    chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_max ))
     (( rows - chrome >= min_rows )) && break
     if   (( _vp_ftr_show > 0 ));  then _vp_ftr_show=$(( _vp_ftr_show - 1 ))
     elif (( _vp_ind > 0 ));       then _vp_ind=0
@@ -639,7 +639,7 @@ _vp_geometry() {
 
   _vp_apply_chrome_budget
 
-  chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_n ))
+  chrome=$(( _vp_hdr_show + 2 * _vp_ind + _vp_ftr_show + 1 + _vp_hint_max ))
   _vp_page=$(( rows - chrome ))
   (( _vp_page < 1 )) && _vp_page=1
   (( _vp_page > _vp_R )) && _vp_page=$_vp_R
@@ -1193,20 +1193,23 @@ _bvk_room() { local _rm_n=0; (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$_buf" 
 # The cursor is on row _BLK_CROW of the prompt block; it ends where it started (column 0).
 # The suggestion area ABOVE a prompt: ONE row on a wide screen, two on a narrow one (a phone).  Menus (_vp_render) and the typed-line prompt
 # (_cm_line_edit) both turn it on here, so the suggestion sits above the text everywhere.  $1 = the screen's rows (default: now).
-_bvk_hint_area_on() {
+_bvk_hint_area_on() {   # [ROWS] [noblk]   noblk = the caller does not keep the viewport's block height (the typed-line editor)
   local rows="${1:-${_vp_rows_now:-24}}"
-  # THE gap rule (the Settings look, on every prompt): a blank row under the footer, then the suggestion, then a blank row above the prompt:
-  #     footer  /  (blank)  /  suggestion  /  (blank)  /  Select:
-  # _vp_hint_n = every reserved row (gap + text rows + the rest); _vp_hint_cap = how many of them a suggestion may use.  A one-row suggestion
-  # leaves the last reserved row blank = the gap under it; a long one on a narrow screen uses it (nothing is cut).  A short screen
-  # (under 24 rows) keeps the gap above only.  The painter (_bvk_hint_paint) never writes the first row.
-  _vp_hint_row=1; _vp_hint_n=2; _vp_hint_cap=1
+  # THE gap rule, on every prompt (the Settings look):  idle = footer / (blank) / Select:   a suggestion = footer / (blank) / suggestion /
+  # (blank) / Select:.  The area is NOT a fixed reservation: it is ONE blank row until a suggestion appears, then it grows (the prompt moves
+  # down, _bvk_hint_resize) and shrinks back when the suggestion goes.  The page is sized for the biggest it can get (_vp_hint_max), so growing
+  # never pushes the top of the block off the screen.  _vp_hint_n = the rows it has NOW (all are counted by _vp_dist, the mouse, _blk_h).
+  _vp_hint_row=1; _vp_hint_n=1; _vp_hint_cap=1; _vp_hint_gapb=1; _vp_hint_trk=1
+  [ "${2:-}" = noblk ] && _vp_hint_trk=0
   if (( rows >= 24 )); then
-    _vp_hint_n=3
     (( ${_vp_cols_now:-80} < ${BVK_HINT_WIDE:-100} )) && _vp_hint_cap=2
+  else
+    _vp_hint_gapb=0                                     # a short screen keeps the gap above only
   fi
+  _vp_hint_max=$(( 1 + _vp_hint_cap + _vp_hint_gapb ))
   return 0
 }
+
 # The live suggestion above the prompt: re-evaluated on every redraw of the typed line (_bvk_draw_input), painted by _bvk_hint_paint.
 # "=" has its own hint (live filter, main Select: only); everything else is the command map's live suggestion: kind text for a typed-line
 # prompt (the picker, the line editor), menu for the others.  The text is read through _ED_BUF (the loop's buffer name; _buf outside a loop).
@@ -1225,20 +1228,45 @@ _input_hint_sync() {
   _bvk_hint_paint "$_hint_want"                        # the painter expands a long suggestion onto the next row (_bvk_hint_wrap); "" wipes it
 }
 
-_bvk_hint_paint() {   # $1 text ("" = wipe)  $2 sgr (default dim).  The first reserved row is the gap above and is never written; a long text expands onto the next rows (_bvk_hint_wrap).
-  local n=${_vp_hint_n:-1} i j up sgr="${2:-2}" out="" ln g=1 cap
-  (( n < 2 )) && g=0                                    # a one-row area (nothing else reserves it) has no gap row
-  cap=${_vp_hint_cap:-1}; (( cap > n - g )) && cap=$(( n - g )); (( cap < 1 )) && cap=1
+# _bvk_hint_resize NEWH   give the area NEWH rows: the prompt (its whole block: a long text spans rows) moves down / up and keeps its text.
+#   grow:   scroll the screen d rows with newlines (the block ends on the last row), then insert d blank rows above the prompt (ESC[L)
+#   shrink: delete d rows above the prompt (ESC[M); what was under the prompt is blank
+_bvk_hint_resize() {
+  local nh=$1 cur=${_vp_hint_n:-1} i d crow=${_BLK_CROW:-0} brow=${_BLK_ROWS:-1} out=""
+  (( nh == cur )) && return 0
+  if (( nh > cur )); then
+    d=$(( nh - cur ))
+    (( brow - 1 - crow > 0 )) && out+=$'\033['"$(( brow - 1 - crow ))"$'B'
+    for (( i=0; i<d; i++ )); do out+=$'\n'; done
+    out+=$'\033['"$(( d + brow - 1 ))"$'A\r\033['"$d"$'L'$'\033['"$(( d + crow ))"$'B'
+    (( ${_vp_hint_trk:-0} )) && _blk_h=$(( _blk_h + d ))
+  else
+    d=$(( cur - nh ))
+    out+=$'\033['"$(( crow + d ))"$'A\r\033['"$d"$'M'
+    (( crow > 0 )) && out+=$'\033['"$crow"$'B'
+    (( ${_vp_hint_trk:-0} )) && _blk_h=$(( _blk_h - d ))
+  fi
+  _vp_hint_n=$nh
+  builtin printf '%s' "$out"
+  (( ${_vp_hint_trk:-0} )) && _set_available_above "$_blk_h"
+  return 0
+}
+_bvk_hint_paint() {   # $1 text ("" = wipe)  $2 sgr (default dim).  Row 0 of the area is the gap under the footer and is never written; the text goes below it, a gap row under the text.
+  local n i j up sgr="${2:-2}" out="" ln cap=${_vp_hint_cap:-1}
   _BVK_HINT_N=0; [ -n "$1" ] && _bvk_hint_wrap "$1" "$cap"
+  if (( _BVK_HINT_N > 0 )); then _bvk_hint_resize $(( 1 + _BVK_HINT_N + ${_vp_hint_gapb:-1} )); else _bvk_hint_resize 1; fi
+  n=${_vp_hint_n:-1}
   for (( i=0; i<n; i++ )); do
     up=$(( ${_BLK_CROW:-0} + n - i ))                     # row i of the area, counted up from the cursor's row
-    j=$(( i - g )); ln=""; (( j >= 0 && j < _BVK_HINT_N )) && ln=$'\033['"$sgr"'m'"${_BVK_HINT_LN[j]}"$'\033[0m'
+    j=$(( i - 1 )); ln=""; (( j >= 0 && j < _BVK_HINT_N )) && ln=$'\033['"$sgr"'m'"${_BVK_HINT_LN[j]}"$'\033[0m'
     out+=$'\033['"$up"$'A\r\033[2K'"$ln"$'\033['"$up"$'B'
   done
   builtin printf '%s\r' "$out"
 }
-_bvk_hint_leave() {   # the prompt is being left (cursor on the block's LAST row): wipe the rows above its FIRST row
-  local n=${_vp_hint_n:-1} i up out=""
+_bvk_hint_leave() {   # the prompt is being left (cursor on the block's LAST row): give the area back (one blank row again) and wipe it
+  local n i up out="" sc=${_BLK_CROW:-0}
+  _BLK_CROW=$(( ${_BLK_ROWS:-1} - 1 )); _bvk_hint_resize 1; _BLK_CROW=$sc
+  n=${_vp_hint_n:-1}
   for (( i=0; i<n; i++ )); do up=$(( ${_BLK_ROWS:-1} + i )); out+=$'\033['"$up"$'A\r\033[2K\033['"$up"$'B'; done
   builtin printf '%s\r' "$out"
 }

@@ -8,4 +8,4 @@ Ran the real app in a pty (fx > file > delete > delete.by.date > Day) and typed 
 The picker's footer does not mention s-N, so the smart menu never learned that s is a command letter here.
 
 1. FIX
-smartmenu.sh _sm_looks_command: while _MC_PICK_SEL=1 (a picker that takes s-N is on screen) s is added to the command letters. _sm_split_command and _sm_compute_msel also understand s-a and s-a-1,2 (all rows, all but those), so those highlight too. Erasing the text drops the highlight as before.
+smartmenu.sh: a picker that takes s-N (_MC_PICK_SEL, set by _pick_suggest) keeps its single-pick look and keys; _sm_sync_from_buf now first calls _sm_pick_sync, which builds _msel_set from an s- text (s-3, s-2-4, s-a, s-a-1,2 through _sm_compute_msel, which learned a and a-N) and repaints the rows that changed; _vp_hl_fn is _sm_is_hl_pick (the single row or a selected row). Erasing the text drops the highlight. An earlier attempt switched the whole menu to the "command" mode: that also added a help line under the footer, a marker column on every row and different keys, so it was dropped.

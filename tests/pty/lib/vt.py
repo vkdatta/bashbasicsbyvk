@@ -46,7 +46,7 @@ class Screen:
             i += 1
     def _csi(self, a, f):
         n = int(a.split(';')[0]) if a and a.split(';')[0].isdigit() else None
-        self.wrap = False if f in 'ABCDGKJ' else self.wrap
+        self.wrap = False if f in 'ABCDGKJLM' else self.wrap
         if f == 'A': self.r = max(0, self.r - (n or 1))
         elif f == 'B': self.r = min(self.rows - 1, self.r + (n or 1))
         elif f == 'C': self.c = min(self.cols - 1, self.c + (n or 1))
@@ -60,6 +60,10 @@ class Screen:
                 self.buf[self.r][self.c:] = [' '] * (self.cols - self.c)
                 for k in range(self.r + 1, self.rows): self.buf[k] = [' '] * self.cols
             elif n == 2: self.buf = [[' '] * self.cols for _ in range(self.rows)]
+        elif f == 'L':                                         # insert lines at the cursor row (the rows below move down, the bottom ones fall off)
+            for _ in range(n or 1): self.buf.insert(self.r, [' '] * self.cols); self.buf.pop()
+        elif f == 'M':                                         # delete lines at the cursor row (the rows below move up, blank rows come in at the bottom)
+            for _ in range(n or 1): self.buf.pop(self.r); self.buf.append([' '] * self.cols)
         elif f == 's': self.saved = (self.r, self.c)          # save / restore cursor (the app repaints list rows that way)
         elif f == 'u': self.r, self.c = self.saved
         elif f == 'H':

@@ -412,9 +412,6 @@ _sm_looks_command() {
       [[ "$_sm_cmd_letters" == *"$ch"* ]] || _sm_cmd_letters+="$ch"
     fi
   done
-  # a picker that takes s-N (_pick_suggest) says so in its header suggestion, not in the footer: s is its command letter all the same,
-  # so s-3 · s-a · s-2-4 highlight the rows live, exactly as on the main list
-  if [ "${_MC_PICK_SEL:-0}" = 1 ]; then [[ "$_sm_cmd_letters" == *s* ]] || _sm_cmd_letters+="s"; fi
   [ -n "$_sm_cmd_letters" ]
 }
 
@@ -515,7 +512,20 @@ _sm_next_selectable() {
 
 # map the typed buffer onto the row whose token matches, so a
 # menu numbered 0..2 highlights correctly (single-select mode)
+# A picker that takes s-N (_MC_PICK_SEL, set by _pick_suggest) keeps the single-pick look and keys, and only adds the live highlight of an
+# s- selection: s-3 · s-a · s-a-1,2 · s-2-4 highlight their rows as they are typed, exactly as on the main list (_msel_set, _sm_is_hl_pick).
+_sm_is_hl_pick() { [ "$1" -eq "${_hl_index:-0}" ] || [ -n "${_msel_set[$1]+x}" ]; }
+_sm_pick_sync() {
+  local -A _old=(); local k
+  for k in "${!_msel_set[@]}"; do _old[$k]=1; done
+  _msel_set=()
+  [[ "$_buf" =~ ^s-{1,2}(.+)$ ]] && _sm_compute_msel "${BASH_REMATCH[1]}"
+  for k in "${!_old[@]}";      do [ -z "${_msel_set[$k]+x}" ] && _vp_repaint_row "$k"; done
+  for k in "${!_msel_set[@]}"; do [ -z "${_old[$k]+x}" ]      && _vp_repaint_row "$k"; done
+  (( ${#_msel_set[@]} > 0 ))
+}
 _sm_sync_from_buf() {
+  if [ "${_MC_PICK_SEL:-0}" = 1 ] && _sm_pick_sync; then _hl_typed_clear; return 0; fi    # an s- selection: its rows are lit, no single row is
   [ -z "$_buf" ] && { _hl_typed_clear; return 0; }     # typed text erased: drop the highlight that typing put there
   local i n=${#_sm_rows_token[@]} old="${_hl_index:-0}"
   (( ${#_buf} > ${_CM_LIVE_MAX:-56} )) && { _hl_typed_clear; return 0; }   # longer than any token/command: no live lookup (Enter is the fallback)
@@ -776,6 +786,7 @@ _sm_run() {
     _msel_set=()
   else
     _vp_hl_fn=_vp_is_hl_single
+    [ "${_MC_PICK_SEL:-0}" = 1 ] && { _vp_hl_fn=_sm_is_hl_pick; _msel_set=(); }
     _vp_rowtext_fn=_sm_rowtext
   fi
 

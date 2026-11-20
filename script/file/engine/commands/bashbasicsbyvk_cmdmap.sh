@@ -727,8 +727,8 @@ _cm_line_edit() {
   _cm_prompt_has_choices "$_ce_prompt" && no_cmds=1
   [ "${_CM_ON:-0}" = 1 ] || no_cmds=1                        # no command layer (a stand-alone tool, bashbasicsbyvk_ask): no command words, no suggestion row
   # the suggestion area above the prompt (one row, two on a narrow screen): the same area, painter and wipe as a menu's
-  local _vp_hint_row=0 _vp_hint_n=0 _vp_hint_cap=1 _hint_cur="" _hint_want="" _i
-  _bvk_hint_area_on                                          # also without a command layer: the notices (too large) go here, as on every menu; _cm_hint says nothing then
+  local _vp_hint_row=0 _vp_hint_n=0 _vp_hint_cap=1 _vp_hint_max=0 _vp_hint_gapb=1 _vp_hint_trk=0 _hint_cur="" _hint_want="" _i
+  _bvk_hint_area_on "" noblk                                          # also without a command layer: the notices (too large) go here, as on every menu; _cm_hint says nothing then
   _BVK_SCR_PROMPT="${_ce_prompt##*$'\n'}"
   _BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0
   # lines above the prompt row are printed once; then the (blank) suggestion rows; the prompt row + text are (re)drawn by _bvk_draw_input
