@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+The GitHub UI pty test (tests/pty/slow/apps/github/ui_test.py) failed 5 checks and timed out: download, cc, and the three rename checks. In the app, renaming ONE item (r-N on a single row) froze at "Working on r-N..." and never showed the new-name prompt.
+
+HOW DID YOU DEBUG
+Ran the test on the untouched archive: the same 5 failures, so not caused by the open.github.self / others work. The first failing screen showed "Select: -2 / Invalid selection": after i-1 (info mode, _bvk_info_wait = "press any key") the next command g-2 lost its first letter, and every later step ran from the wrong menu. Fixed the test, the rename hang remained. Reproduced r-2 in a pty with SHELLOPTS=xtrace and read the raw tail: _bvk_read looped forever in its option parser, called as  _bvk_read new "   v1.2 -> " -i v1.2 -I.
+
+CAUSE
+(a) Test: info mode now waits for a key (_bvk_info_wait); the test never sent one. (b) App: _xui_loop runs every handler under shopt -s nocasematch, so in _bvk_read the pattern  -i)  also matched -I; with one argument left,  shift 2  fails and does not shift, so the while loop never ended. Every _bvk_read call that passes -i followed by -I (rename of one item, edit of one title) hung inside an xui screen.
+
+FIX
+smartmenu.sh _bvk_read: the option parser runs with nocasematch switched off and puts it back before reading; -i also survives a missing value (shift 2 || shift). ui_test.py: a key is sent after the info check. New: mock_github.py answers /users/<u>/repos (public repos; a name with none = 404) and ui_test.py run_others covers open.github.others (ask for names, unknown name warning, saved file, read only, cc, x). Lesson: a case on option letters that differ only by case must never run under nocasematch.

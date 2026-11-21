@@ -29,8 +29,8 @@ def start(E, key=True, extra=None):
     env = {"BVK_GH_API": E.api, "GH_TOKEN": None, "GITHUB_PAT": None, "GITHUB_TOKEN": mg.GOOD if key else None}; env.update(extra or {})
     return PtyApp(ROOT, 110, 45, lambda h, w: None, env=env, answer_dsr=True)    # a real terminal answers the cursor-position query the mouse code asks
 
-def to_github(a, wait_for):
-    L(a, "fx"); L(a, "3"); L(a, "1", t=4, until=lambda: wait_for in a.text())
+def to_github(a, wait_for, which="1"):                 # 1 = open.github.self · 2 = open.github.others
+    L(a, "fx"); L(a, "3"); L(a, which, t=4, until=lambda: wait_for in a.text())
 
 def run_no_key():
     E = gt.Env(); gt.seed(E); a = start(E, key=False)
@@ -65,6 +65,7 @@ def run_screens():
         a.send("\x1b[D"); a.wait(lambda: "[📦 Stable]" in a.text()); a.settle()
         L(a, "i-1", until=lambda: "first release" in a.text())
         check("info: release notes of row 1", "stable release" in a.text() and "first release" in a.text(), a)
+        a.send(" "); a.settle()       # info mode waits for any key (_bvk_info_wait); without it the next command loses its first letter
 
         # download with depth 1, no release files
         dest = os.path.join(E.tmp, "dl")
@@ -119,8 +120,36 @@ def run_screens():
         check("u twice goes back out of the repo and the repo list", a.alive and "Select" in a.text(), a)
     finally: a.close(); E.close()
 
+def run_others():
+    """open.github.others: no names yet -> c asks, typed names (one unknown) -> the public repos of the known user, READ ONLY
+    (no e / r / d, info works), x removes, the names are saved on this machine."""
+    E = gt.Env(); R, c1, c2 = gt.seed(E); E.state.add("o/second", private=True)
+    a = start(E)
+    try:
+        to_github(a, "Add GitHub user names", "2")
+        check("others: nothing saved yet -> it asks for user names (type or choose file(s))", "Type user names" in a.text() and "Choose file(s)" in a.text(), a)
+        L(a, "1", until=lambda: "comma separated" in a.text()); L(a, "o,nobody", t=4, until=lambda: "GitHub others" in a.text())
+        t = a.text()
+        check("others: the user's public repo is listed, the private one is not, an unknown name is a warning", "o/r" in t and "o/second" not in t and "nobody" in t and "no such user" in t and "read only" in t, a)
+        saved = [os.path.join(d, f) for d, _, fs in os.walk(a.tmp) for f in fs if f == "others.txt"]
+        check("others: the names are saved on this machine, one per line", bool(saved) and open(saved[0]).read().split() == ["o", "nobody"], a)
+        L(a, "1", t=4, until=lambda: "[📦 Stable]" in a.text())
+        check("others: a repo opens with Stable / Tags and says read only", "(read only)" in a.text() and "v1.0" in a.text(), a)
+        for k in ("e-1", "r-1", "d-1", "c"):
+            L(a, k); t = a.text().split("Select: " + k)[-1]
+            check("others: '%s' (a write key) is refused, no menu opens" % k, "What do you want to change" not in t and "release AND its git tag" not in t and "Tag name" not in t and "Rename" not in t.replace("Select", ""), a)
+        L(a, "i-1", until=lambda: "first release" in a.text())
+        check("others: info works", "stable release" in a.text() and "first release" in a.text(), a)
+        a.send(" "); a.settle()
+        L(a, "cc", until=lambda: "Download" in a.text()); t = a.text().split("Cheat codes · this screen")[-1]
+        check("others: cc lists download, info and reload but no write command", "Download" in t and "Reload" in t and "Rename" not in t and "Delete" not in t and "Edit" not in t and "Create" not in t, a)
+        L(a, "u"); L(a, "u"); a.settle()
+        L(a, "x", until=lambda: "Which user names" in a.text())
+        check("others: x lists the saved names to remove", "1) [ ] o" in a.text() and "nobody" in a.text(), a)
+    finally: a.close(); E.close()
+
 if __name__ == "__main__":
-    for f in (run_no_key, run_screens):
+    for f in (run_no_key, run_screens, run_others):
         try: f()
         except Exception as e:
             import traceback; traceback.print_exc(); FAILS.append(f.__name__)

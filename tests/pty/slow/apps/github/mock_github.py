@@ -92,6 +92,13 @@ def make_handler(state):
                 items = [{"full_name": r.full, "private": r.private, "fork": r.fork, "archived": r.archived, "is_template": False,
                           "description": r.desc, "pushed_at": "2026-10-%02dT10:00:00Z" % (10 + i)} for i, r in enumerate(state.repos.values())]
                 return self._page(items, qs)
+            mu = re.match(r"^/users/([^/]+)/repos$", p)              # another person's repos: the public ones; a name with no repo here = no such user
+            if mu and method == "GET":
+                own = [r for r in state.repos.values() if r.full.split("/")[0] == mu.group(1)]
+                if not own:
+                    return self._send(404, {"message": "Not Found"})
+                return self._page([{"full_name": r.full, "private": r.private, "fork": r.fork, "archived": r.archived, "is_template": False,
+                                    "description": r.desc, "pushed_at": "2026-10-10T10:00:00Z"} for r in own if not r.private], qs)
             m = re.match(r"^/repos/([^/]+/[^/]+)(/.*)?$", p)
             if not m or m.group(1) not in state.repos:
                 return self._send(404, {"message": "Not Found"})

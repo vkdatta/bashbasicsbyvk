@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+fx -> github had one button, open github, that only opened the signed-in person's own repos from the local key. Wanted: two buttons, open.github.self (the old behaviour) and open.github.others (saved GitHub user names, all their public repos, read only with the same info and download actions).
+
+HOW DID YOU DEBUG
+Read adf_github.sh, the python engine, the ghp / ghr command maps, xui.sh (_xui_loop, _xui_select_rows) and the csv picker (_file_picker). Verified by reading, bash -n, py_compile, loadmap_gen --check and cmd_docs.sh --write; the static suite and any pty run are reported in the delivery.
+
+CAUSE
+The repo list, the Stable / Tags screen and the action menu were hard-wired to the signed-in user's own repos and to the write actions (create, edit, rename, delete).
+
+FIX
+bashbasicsbyvk_github: new command user-repos (public repos of other users, one "!" row per unknown user) sharing the new repo_row() with repos. bashbasicsbyvk_adf_github.sh: _fx_adf_github split into _ghx_start + _fx_adf_github_self (unchanged flow) and _fx_adf_github_others; _ghx_open_repo shared by both lists; saved names in ~/.config/bashbasicsbyvk/github/others.txt (read as data); c adds names (typed, or file(s) read through _file_picker, every comma separated value of every line) and x removes them (many-of-many menu, yes/no with no default); screen gho = the repo list fed with other data (gho_* call ghp_* / ghr_*); screen ghq = the Stable / Tags screen with only g, g-, i-, rf declared, so cc and the footer never advertise a write key; _ghx_run_action and _ghx_actions also refuse e / r / d while _GHX_RO=1. New command maps xui_gho and xui_ghq, four loadmap lines, stubs regenerated. Lesson: a read-only view is a screen with its own map, not the write screen with blocked keys.

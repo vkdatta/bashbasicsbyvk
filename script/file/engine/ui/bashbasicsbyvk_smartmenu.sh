@@ -910,9 +910,11 @@ _bvk_noemoji() {
 _bvk_read() {
   local __br_v="$1" __br_p="$2"; shift 2
   local -a __br_f=(-r); local __br_ifs=0 __br_e=1 _CE_MULTI=0          # _CE_MULTI: read by the line editor: 1 = the answer keeps its line breaks
+  local __br_nc=0
+  shopt -q nocasematch && { __br_nc=1; shopt -u nocasematch; }         # the xui loops run handlers with nocasematch: -i and -I are DIFFERENT options here (-I matched -i and looped forever)
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      -i) __br_f+=(-i "${2-}"); shift 2 ;;
+      -i) __br_f+=(-i "${2-}"); shift 2 || shift ;;
       -I) __br_ifs=1; shift ;;
       -m) _CE_MULTI=1; shift ;;                     # a multi-line answer (a commit message): the default is ONE line, a pasted line break becomes a space
       -s) __br_f+=(-s); __br_e=0; shift ;;          # a secret / one key: the plain silent read (nothing is drawn, so nothing to edit)
@@ -920,6 +922,7 @@ _bvk_read() {
       *)  shift ;;
     esac
   done
+  (( __br_nc )) && shopt -s nocasematch
   (( __br_e )) && __br_f+=(-e)
   if (( __br_ifs )); then IFS= read "${__br_f[@]}" -p "$__br_p" "$__br_v"; else read "${__br_f[@]}" -p "$__br_p" "$__br_v"; fi   # bvk-read-ok: the body of _bvk_read itself: the ONE place -p is passed, into the read shim and on to the editor
 }

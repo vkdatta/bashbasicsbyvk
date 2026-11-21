@@ -1,0 +1,11 @@
+# bashbasicsbyvk_xui_ghq.map — wiring for one repo of another GitHub user (read only: Stable / Tags tabs)
+# Chosen by _cm_ctx_find when _XUI_PFX=ghq (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_ghq
+@kind   menu
+@back   u
+@parent xui
+
+g          .mapto()  g          from bashbasicsbyvk_xui_ghqmenucommands.sh
+g-         .mapto()  g-         from bashbasicsbyvk_xui_ghqmenucommands.sh
+i-         .mapto()  i-         from bashbasicsbyvk_xui_ghqmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_ghqmenucommands.sh

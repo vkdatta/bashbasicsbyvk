@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_adf_github.sh
-# adf-staging='github/open github'
+# adf-staging='github/open.github.self'  and  'github/open.github.others'
 # ════════════════════════════════════════════════════════════════════════════
-#  ADF — github → open github        (the screens; the work lives in bashbasicsbyvk_github, helpers in bashbasicsbyvk_ghlib.sh)
+#  ADF — github → open.github.self / open.github.others   (the screens; the work lives in bashbasicsbyvk_github, helpers in bashbasicsbyvk_ghlib.sh)
 #
-#  fx → github → open github
+#  fx → github → open.github.others    other people's projects, READ ONLY (info + download, the same screens and actions as below):
+#       c   add GitHub user names: type them comma separated, or choose file(s) that hold them comma separated  (saved on this machine)
+#       x   remove saved user names
+#       the list shows every public repo of every saved user; pick one → Stable / Tags tabs with  g (download)  i-N (info)  rf  u  only.
+#
+#  fx → github → open.github.self      YOUR repos (everything below)
 #    1. finds your GitHub key on this machine (environment, ~/.bashrc and the secrets files it sources, gh CLI, git-credentials,
 #       netrc). None found → says so and tells you to put  export GITHUB_TOKEN="..."  in ~/.bashrc (or the secrets file it sources).
 #    2. shows ALL your repos.  Pick one → two tabs, like the upgrade loop:   📦 Stable   🔖 Tags      (←/→)
@@ -27,6 +32,8 @@ declare -ga _GHX_T_TAG=() _GHX_T_TYPE=() _GHX_T_SHA=() _GHX_T_STATE=()
 declare -gA _GHX_S_HAS=()
 declare -ga _GHX_PICK=()
 _GHX_BUSY=""
+_GHX_RO=0                                                  # 1 = other people's repos: no create / edit / rename / delete anywhere
+declare -ga _GHX_USERS=() _GHX_U_ERR=()
 
 # ── key
 _ghx_no_key_help() {
@@ -116,10 +123,7 @@ ghp_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open th
 _ghp_cmd() {
   case "$1" in
     rf) _ghx_fetch_repos || echo "❌ Reload failed."; return 0 ;;
-    [0-9]*)
-      _xui_row "$1" || { _bvk_invalid; return 1; }
-      _GHX_REPO="${_GHX_R_NAME[$_XUI_SLOT]}"; _GHX_TAB="stable"
-      if ! _ghx_load_repo; then echo "❌ $_GHX_MSG"; return 1; fi
+    [0-9]*) _ghx_pick_repo "$1" || return 1
       _xui_enter
       _xui_screen ghr
       _xui_loop _ghr_cmd
@@ -128,6 +132,14 @@ _ghp_cmd() {
     fx|sw|api|.r|-u) echo "↩️  Go back with  u  first."; return 1 ;;
     *) return 9 ;;
   esac
+}
+
+# a typed row number of a repo list → _GHX_REPO + its releases and tags loaded (the caller then opens ghr or ghq)
+_ghx_pick_repo() {
+  _xui_row "$1" || { _bvk_invalid; return 1; }
+  _GHX_REPO="${_GHX_R_NAME[$_XUI_SLOT]}"; _GHX_TAB="stable"
+  if ! _ghx_load_repo; then echo "❌ $_GHX_MSG"; return 1; fi
+  return 0
 }
 
 # ── repo screen: Stable / Tags
@@ -512,12 +524,17 @@ _ghx_create_release_for() {      # a tag that was just made → its stable relea
 _ghx_actions() {                 # rows picked (_XUI_SEL) → what to do with them
   local act
   _ghx_pick_names
-  _bvk_menu act -t "${#_GHX_PICK[@]} selected in $_GHX_REPO" -i "🐙" \
-    "e:Edit title, notes, tag message, commit message" "r:Rename" "d:Delete" "g:Download (clone at the tag)" "i:Info" || return 1
+  if [ "$_GHX_RO" = 1 ]; then                                # other people's repo: read only = download and info
+    _bvk_menu act -t "${#_GHX_PICK[@]} selected in $_GHX_REPO (read only)" -i "🐙" "g:Download (clone at the tag)" "i:Info" || return 1
+  else
+    _bvk_menu act -t "${#_GHX_PICK[@]} selected in $_GHX_REPO" -i "🐙" \
+      "e:Edit title, notes, tag message, commit message" "r:Rename" "d:Delete" "g:Download (clone at the tag)" "i:Info" || return 1
+  fi
   _ghx_run_action "$act"
 }
 
 _ghx_run_action() {
+  case "$1" in e|r|d) [ "$_GHX_RO" = 1 ] && { echo "🔒 Read only: $_GHX_REPO is not yours."; return 1; } ;; esac
   case "$1" in
     e) _ghx_edit ;;
     r) _ghx_rename ;;
@@ -548,8 +565,155 @@ _ghr_cmd() {
   esac
 }
 
-# ── the button
-_fx_adf_github() {
+# ── other people (open.github.others): saved user names → their repos, read only
+# The saved names are one file of plain lines, read as DATA (never sourced): one GitHub user / org name per line.
+_ghx_users_file() { printf '%s' "${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/github/others.txt"; }
+
+_ghx_users_load() {
+  _GHX_USERS=(); local f l; f="$(_ghx_users_file)"
+  [ -f "$f" ] || return 0
+  while IFS= read -r l || [ -n "$l" ]; do
+    l="${l%$'\r'}"; [ -n "$l" ] && _GHX_USERS+=("$l")
+  done < "$f"
+}
+
+_ghx_users_save() {
+  local f; f="$(_ghx_users_file)"
+  mkdir -p "${f%/*}" 2>/dev/null || { echo "❌ cannot write ${f%/*}"; return 1; }
+  if [ "${#_GHX_USERS[@]}" -gt 0 ]; then printf '%s\n' "${_GHX_USERS[@]}" > "$f"; else : > "$f"; fi
+}
+
+# _ghx_users_add "a, b,c"  → adds every valid new name (case-insensitive duplicates skipped), says what it did; rc 0 when something was added
+_ghx_users_add() {
+  local raw="$1" n u have added=0 bad=() dup=()
+  local -a want=()
+  IFS=',' read -r -a want <<<"${raw//$'\n'/,}"
+  for n in "${want[@]}"; do
+    _csv_trim n
+    n="${n#@}"
+    [ -n "$n" ] || continue
+    if [[ ! "$n" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,38})$ ]]; then bad+=("$n"); continue; fi
+    have=0; for u in "${_GHX_USERS[@]}"; do [ "${u,,}" = "${n,,}" ] && have=1; done
+    if [ "$have" = 1 ]; then dup+=("$n"); continue; fi
+    _GHX_USERS+=("$n"); added=$((added+1))
+  done
+  [ "$added" -gt 0 ] && echo "   ✅ added $added user name(s)"
+  [ "${#dup[@]}" -gt 0 ] && echo "   (already saved: ${dup[*]})"
+  [ "${#bad[@]}" -gt 0 ] && echo "   ❌ not a GitHub user name, skipped: ${bad[*]}  (letters, digits and - only, up to 39)"
+  [ "$added" -gt 0 ]
+}
+
+# c: type names, or choose file(s) holding them (every comma separated value of every line)
+_ghx_users_c() {
+  local how="" f line again="" changed=0
+  _bvk_menu how -t "Add GitHub user names" -i "🐙" \
+    "t:Type user names (comma separated)" "f:Choose file(s) with user names (comma separated)" || return 1
+  case "$how" in
+    t) _xui_ask "User names, comma separated (e.g. torvalds,gvanrossum)" || return 1
+       _ghx_users_add "$_XUI_IN" && changed=1 ;;
+    f) while :; do
+         _file_picker "csv txt" _GHX_UFILE || break
+         [ -n "$_GHX_UFILE" ] || break
+         line="$(cat -- "$_GHX_UFILE" 2>/dev/null)"
+         if [ -z "$line" ]; then echo "   (the file is empty)"; else _ghx_users_add "$line" && changed=1; fi
+         _bvk_yn again "Choose another file?" || break
+         [ "$again" = y ] || break
+       done ;;
+    *) return 1 ;;
+  esac
+  [ "$changed" = 1 ] && _ghx_users_save
+  return 0
+}
+
+# x: remove saved names (many-of-many menu, then a yes / no with no default)
+_ghx_users_x() {
+  local picked="" ans="" i k keep=() rows=() n
+  [ "${#_GHX_USERS[@]}" -gt 0 ] || { echo "📜  No saved user names."; return 1; }
+  for i in "${!_GHX_USERS[@]}"; do rows+=("$((i+1)):${_GHX_USERS[$i]}"); done
+  _bvk_menu picked -m -t "Remove GitHub user names" -i "🗑️" -q "Which user names do you want to remove?" "${rows[@]}" || return 1
+  [ -n "$picked" ] || { echo "🚫 Nothing chosen."; return 1; }
+  n=0; for k in $picked; do n=$((n+1)); done
+  _bvk_ask ans "Remove $n user name(s)? Their repos disappear from this list." -d none; _ghx_yes_rc $? "$ans" || return 1
+  for i in "${!_GHX_USERS[@]}"; do
+    case " $picked " in *" $((i+1)) "*) ;; *) keep+=("${_GHX_USERS[$i]}") ;; esac
+  done
+  _GHX_USERS=("${keep[@]}")
+  _ghx_users_save
+}
+
+_ghx_fetch_others() {            # every saved user's public repos → the same _GHX_R_* lists the repo screen draws
+  local out n v fl p d
+  _GHX_R_NAME=(); _GHX_R_VIS=(); _GHX_R_FLAGS=(); _GHX_R_PUSHED=(); _GHX_R_DESC=(); _GHX_U_ERR=()
+  [ "${#_GHX_USERS[@]}" -gt 0 ] || return 0
+  out="$(_gh_run user-repos "${_GHX_USERS[@]}" 2>/dev/null)" || return 1
+  while IFS="$_GH_US" read -r n v fl p d; do
+    [ -n "$n" ] || continue
+    if [ "$n" = "!" ]; then _GHX_U_ERR+=("$v: $fl"); continue; fi
+    _GHX_R_NAME+=("$n"); _GHX_R_VIS+=("$v"); _GHX_R_FLAGS+=("$fl"); _GHX_R_PUSHED+=("$p"); _GHX_R_DESC+=("$d")
+  done <<<"$out"
+  return 0
+}
+
+# the list screen of other people's repos: the repo list (ghp) fed with other data
+gho_build()  { ghp_build; }
+gho_row()    { ghp_row "$@"; }
+gho_header() {
+  local e="" x
+  for x in "${_GHX_U_ERR[@]}"; do e+=$'\n'"⚠️  $x"; done
+  _tpl_list_header "🐙 GitHub others   ${#_GHX_R_NAME[@]} repo(s) of ${#_GHX_USERS[@]} user(s) · read only" "👥 ${_GHX_USERS[*]:-no user names yet: c adds some}${e}"$'\n'"📂 downloads go to: $_GHX_NAV"
+}
+gho_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that repo" "c:Add users" "x:Remove users" "=:filter" "rf" "${_MC_STD[@]}"; }
+
+_gho_cmd() {
+  case "$1" in
+    c)  _ghx_users_c && { _ghx_fetch_others || echo "❌ Could not read the repos (offline, or API rate limit)."; }; return 0 ;;
+    x)  _ghx_users_x && { _ghx_fetch_others || echo "❌ Could not read the repos (offline, or API rate limit)."; }; return 0 ;;
+    rf) _ghx_fetch_others || echo "❌ Reload failed."; return 0 ;;
+    [0-9]*) _ghx_pick_repo "$1" || return 1
+      _xui_enter
+      _xui_screen ghq
+      _xui_loop _ghq_cmd
+      _xui_leave
+      return 0 ;;
+    fx|sw|api|.r|-u) echo "↩️  Go back with  u  first."; return 1 ;;
+    *) return 9 ;;
+  esac
+}
+
+# one repo of someone else: the Stable / Tags screen (ghr) with read-only keys only: g download · i-N info · rf
+_tm_define ghq _GHX_TAB "🐙 repo" "GitHub" stable:"📦 Stable" tags:"🔖 Tags"
+ghq_build()  { ghr_build; }
+ghq_row()    { ghr_row "$@"; }
+ghq_header() {
+  local _n=""
+  if [ "${#items[@]}" -eq 0 ]; then
+    if [ "$_GHX_TAB" = stable ]; then _n="No stable releases — open the Tags tab."; else _n="No tags."; fi
+  fi
+  _tm_head -t "🐙 $_GHX_REPO  (read only)" -n "$_n" ghq
+}
+ghq_footer() { _tm_footer -b; }
+
+_ghq_cmd() {
+  case "$1" in
+    __sw_tab_right__|__sw_tab_left__)
+      _tm_key ghq "$1"
+      return 3 ;;
+    rf) _ghx_reload; return 0 ;;
+    i-*)
+      _xui_parse_sel "${1#*-}" || return 1
+      _ghx_pick_names; _ghx_run_action i; _bvk_info_wait; return 0 ;;
+    g|g-*)
+      _xui_select_rows "SELECT" "🐙  Which items?" "$1" || return 1
+      _ghx_pick_names; _ghx_run_action g; return 0 ;;
+    [0-9]*|a|a-*)
+      _xui_parse_sel "$1" || return 1
+      _ghx_actions; return 0 ;;
+    *) return 9 ;;
+  esac
+}
+
+# ── the buttons
+_ghx_start() {                   # what both buttons need: the dependency, the download folder, the engine, a key
   _dep_need -c "GitHub" github || return 1
   _GHX_NAV="${_fx_outer_path:-$path}"                       # the navigation path, NOT $PWD
   if ! _gh_locate; then echo "❌ GitHub needs Python 3 and bashbasicsbyvk_github (the engine) — not found."; return 1; fi
@@ -558,6 +722,12 @@ _fx_adf_github() {
     if [ "$_GHX_MSG" = none ]; then _ghx_no_key_help "${_GHX_NONE[@]}"; else echo "❌ $_GHX_MSG"; fi
     return 1
   fi
+  return 0
+}
+
+_fx_adf_github_self() {
+  _GHX_RO=0
+  _ghx_start || return 1
   if ! _ghx_fetch_repos; then echo "❌ Could not read your repos from GitHub (offline, or API rate limit)."; return 1; fi
   if [ "${#_GHX_R_NAME[@]}" -eq 0 ]; then echo "📜  GitHub shows no repo for $_GHX_LOGIN."; return 1; fi
   _xui_enter
@@ -567,4 +737,23 @@ _fx_adf_github() {
   unset BVK_GH_PICK
 }
 
-_fx_adf_register "open github" "_fx_adf_github" "github/open github"
+_fx_adf_github_others() {
+  _GHX_RO=1
+  _ghx_start || { _GHX_RO=0; return 1; }
+  _ghx_users_load
+  if [ "${#_GHX_USERS[@]}" -eq 0 ]; then                    # nothing saved yet: ask for names first (u = leave)
+    echo "👥 No GitHub user names saved yet."
+    _ghx_users_c || { _GHX_RO=0; unset BVK_GH_PICK; return 1; }
+    [ "${#_GHX_USERS[@]}" -gt 0 ] || { _GHX_RO=0; unset BVK_GH_PICK; return 1; }
+  fi
+  if ! _ghx_fetch_others; then echo "❌ Could not read the repos (offline, or API rate limit)."; _GHX_RO=0; unset BVK_GH_PICK; return 1; fi
+  _xui_enter
+  _xui_screen gho
+  _xui_loop _gho_cmd
+  _xui_leave
+  _GHX_RO=0
+  unset BVK_GH_PICK
+}
+
+_fx_adf_register "open.github.self"   "_fx_adf_github_self"   "github/open.github.self"
+_fx_adf_register "open.github.others" "_fx_adf_github_others" "github/open.github.others"

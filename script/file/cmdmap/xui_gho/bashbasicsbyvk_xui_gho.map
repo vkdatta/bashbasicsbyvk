@@ -1,0 +1,10 @@
+# bashbasicsbyvk_xui_gho.map — wiring for the repos of other GitHub users (fx → github → open.github.others)
+# Chosen by _cm_ctx_find when _XUI_PFX=gho (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_gho
+@kind   menu
+@back   u
+@parent xui
+
+c          .mapto()  c          from bashbasicsbyvk_xui_ghomenucommands.sh
+x          .mapto()  x          from bashbasicsbyvk_xui_ghomenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_ghomenucommands.sh

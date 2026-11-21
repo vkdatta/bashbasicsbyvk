@@ -121,6 +121,8 @@ bashbasicsbyvk_xui_csmenucommands.sh|||command-map commands of one menu (loaded 
 bashbasicsbyvk_xui_nfmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_ghpmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_ghrmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_ghomenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_ghqmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_cfwmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_gdpmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_cs_ppmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
@@ -287,6 +289,8 @@ bashbasicsbyvk_xui.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_cs.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_ghp.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_ghr.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_gho.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_ghq.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_cfw.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_gdp.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_cs_pp.map|||command-map wiring, read as data

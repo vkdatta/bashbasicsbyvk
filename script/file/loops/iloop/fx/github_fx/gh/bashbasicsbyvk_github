@@ -12,6 +12,7 @@ Key (token) discovery - nothing is ever asked for, nothing is ever stored, nothi
 
     bashbasicsbyvk_github auth                          one line  OK<US>login<US>source<US>index | NONE<US>searched places
     bashbasicsbyvk_github repos                         every repo you can reach
+    bashbasicsbyvk_github user-repos USER [USER..]      the public repos of other GitHub users / orgs (read only use; a name GitHub does not know = a "!" row)
     bashbasicsbyvk_github releases REPO [--all]         stable releases (newest first); --all adds drafts and pre-releases
     bashbasicsbyvk_github tags REPO                     every tag, newest version first, with its release (if any)
     bashbasicsbyvk_github info REPO TAG                 everything about one tag / release
@@ -571,15 +572,44 @@ def cmd_auth(args):
     print(US.join(["REJECTED", last])); return 5
 
 
+def repo_row(r):
+    """one GitHub repo object -> the row the repo list screens draw (shared by `repos` and `user-repos`)"""
+    flags = ("F" if r.get("fork") else "") + ("A" if r.get("archived") else "") + ("T" if r.get("is_template") else "")
+    return US.join([r["full_name"], "private" if r.get("private") else "public", flags,
+                    (r.get("pushed_at") or "")[:10], one_line(r.get("description") or "")])
+
+
 def cmd_repos(args):
     seen, rows = set(), []
     for r in paginate("/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&direction=desc"):
         if r["full_name"] in seen:
             continue
         seen.add(r["full_name"])
-        flags = ("F" if r.get("fork") else "") + ("A" if r.get("archived") else "") + ("T" if r.get("is_template") else "")
-        rows.append(US.join([r["full_name"], "private" if r.get("private") else "public", flags,
-                             (r.get("pushed_at") or "")[:10], one_line(r.get("description") or "")]))
+        rows.append(repo_row(r))
+    print("\n".join(rows))
+    return 0
+
+
+_USER_NAME = re.compile(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})')
+
+
+def cmd_user_repos(args):
+    """the repos other people own (what GitHub shows for them: public ones), user by user.
+       A user that cannot be read is one row  !<US>user<US>why  and the others still print.  rc 3 when no user was given."""
+    seen, rows, users = set(), [], [u for u in args if u]
+    if not users:
+        return 3
+    for u in users:
+        if not _USER_NAME.fullmatch(u):
+            rows.append(US.join(["!", u, "not a valid GitHub user name"])); continue
+        try:
+            for r in paginate("/users/%s/repos?type=owner&sort=pushed&direction=desc" % urllib.parse.quote(u)):
+                if r["full_name"] not in seen:
+                    seen.add(r["full_name"]); rows.append(repo_row(r))
+        except GhError as e:
+            if e.status == 5 or e.status == 401:
+                raise
+            rows.append(US.join(["!", u, "no such user on GitHub" if e.status == 404 else str(e)]))
     print("\n".join(rows))
     return 0
 
@@ -1072,7 +1102,7 @@ def _job(args):
     return Job(args[args.index("--job") + 1])
 
 
-COMMANDS = {"auth": cmd_auth, "repos": cmd_repos, "releases": cmd_releases, "tags": cmd_tags, "info": cmd_info, "get": cmd_get,
+COMMANDS = {"auth": cmd_auth, "repos": cmd_repos, "user-repos": cmd_user_repos, "releases": cmd_releases, "tags": cmd_tags, "info": cmd_info, "get": cmd_get,
             "create-release": cmd_create_release, "create-tag": cmd_create_tag, "edit": cmd_edit, "rename": cmd_rename,
             "delete": cmd_delete, "clone": cmd_clone, "parse-releases": cmd_parse_releases, "parse-commit": cmd_parse_commit}
 
