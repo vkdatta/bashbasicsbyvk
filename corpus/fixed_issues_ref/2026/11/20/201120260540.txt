@@ -1,0 +1,11 @@
+1. ISSUE IN BRIEF
+The one-blank-row gap rule (a blank row between the footer and the Select: line, and blank / suggestion / blank while typing) was missing on every Settings-style screen whose second footer row holds keys: the choice questions (_bvk_menu, _bvk_yn, the destructive confirm, e.g. the Project info "What do you want to do with this" screen) and the "Nothing to choose here" / "No match" states. The suggestion sat directly under the footer and, idle, Select: sat directly under it.
+
+1. HOW DID YOU DEBUG
+Reproduced the Project info screen in a pty with the same _bvk_menu call and read the rendered rows (idle and after typing u). Rendered real Settings for comparison: its gap is only the empty second footer row (template 373QS6 gets "f1\n" + "" ), so it was correct by accident. Surveyed the other families the same way, idle and typed, on the untouched tree and the fixed tree: main list, Settings and its 10 groups, Home, cc, _mc_select (with -x, -s, -d), the pickers: all already correct. Only _st_run screens with a used footer row 2 missed it: _bvk_menu, _bvk_yn, _bvk_yn on a destructive question, and the empty-list state.
+
+1. CAUSE
+_st_draw (bashbasicsbyvk_settings_ui.sh) built footer_commands as f1 + newline + f2. With f2 empty that ends in a newline = the gap row; with f2 holding keys (paid footer cells, the empty-list notes) the next row was the suggestion / Select: directly.
+
+1. FIX
+When f2 is not empty, _st_draw adds one trailing newline to footer_commands (the gap row) and counts it in _ST_TAIL, so the redraw height (prev) and the mouse rows (_st_click: footer 2 at 1+tail, footer 1 at 2+tail) stay right. Screens with an empty f2 are byte-for-byte as before. Checked idle, typed, erased and retyped on _bvk_menu; static suite 12/12; pty settings_keys and settings_deep pass (menu_templates fails the same on the untouched tree in this sandbox).

@@ -1,5 +1,5 @@
 """Real-app UI test (pty + a tiny terminal emulator, vt.py): a pasted multi-line text is shown as multi-line, the left arrow
-moves INSIDE the text (never onto the 'Select:' label), >512 characters are refused with a notice.
+moves INSIDE the text (never onto the 'Select:' label), a 3000-character paste is accepted whole.
 tests/pty/lib/stresstest/input.txt is bare paste data. usage: python3 ui_test.py [cols]"""
 import os, sys, shutil
 here = os.path.dirname(os.path.abspath(__file__)); root = os.path.abspath(os.path.join(here, '..', '..', '..', '..', '..'))
@@ -46,14 +46,14 @@ send(b'\x1b[C', 0.5); check('RIGHT moves forward again', lambda: scr.cursor == (
 # a newline must not be an Enter: nothing was accepted yet (still on the same prompt)
 a.settle(0.3); check('no Enter was triggered by the line breaks', 'Invalid' not in ''.join(rows()))
 send(b'\x1b[F', 0.3)
-# limit
+# no limit: a long paste (a 3000-character commit message) is taken whole, never refused for its length
 send(b'\x7f' * 60, 5.0, quiet=0.3)      # one write: 60 backspaces clear the text (no per-key assertion needed here)
 a.settle(0.3)
-paste("y" * 513)
-check('513 characters are refused with a notice', lambda: any('Too large' in l for l in rows()), '')
-check('...and nothing was inserted', lambda: not any('yyyyyyyyyy' in l for l in rows()))
+paste("y" * 3000)
+check('3000 characters are accepted: no notice', lambda: not any('Too large' in l for l in rows()), '')
+check('...and the text was inserted', lambda: any('yyyyyyyyyy' in l for l in rows()))
 paste("z" * 500); paste("w" * 20)
-check('a paste that would pass 512 in total is refused', lambda: any('Too large' in l for l in rows()))
+check('a second paste on top of it is accepted too', lambda: not any('Too large' in l for l in rows()))
 send(b'\r', 3.0)
 a.wait(lambda: 'Invalid selection' in ''.join(rows()), 8); a.settle(0.4)           # the answer must appear, and nothing may follow it
 check('Enter accepts the text as ONE input (one "Invalid selection", no cascade)', ''.join(rows()).count('Invalid selection') == 1)

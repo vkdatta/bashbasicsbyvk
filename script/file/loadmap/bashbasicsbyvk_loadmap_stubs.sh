@@ -111,6 +111,7 @@ _bc_can_draw() { _lm_stub bashbasicsbyvk_choose.sh _bc_can_draw "$@"; }
 _bc_build() { _lm_stub bashbasicsbyvk_choose.sh _bc_build "$@"; }
 _bc_hit() { _lm_stub bashbasicsbyvk_choose.sh _bc_hit "$@"; }
 _bc_index() { _lm_stub bashbasicsbyvk_choose.sh _bc_index "$@"; }
+_bc_wordrow() { _lm_stub bashbasicsbyvk_choose.sh _bc_wordrow "$@"; }
 _bc_act() { _lm_stub bashbasicsbyvk_choose.sh _bc_act "$@"; }
 _bc_leave() { _lm_stub bashbasicsbyvk_choose.sh _bc_leave "$@"; }
 _bc_word() { _lm_stub bashbasicsbyvk_choose.sh _bc_word "$@"; }

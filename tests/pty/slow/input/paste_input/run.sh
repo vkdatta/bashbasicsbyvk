@@ -14,7 +14,7 @@ check() {  # name editor bracketed file expect(accept|refuse)
   local out; out="$(RESULT_OUT="$T/r" timeout 60 python3 "$D/driver.py" "$ROOT" "$2" "$3" "$T/$4" 1)"
   local fin red len; fin=$(sed -n 's/FINISHED_BEFORE_ENTER=//p' <<<"$out"); red=$(sed -n 's/REDRAWS=//p' <<<"$out"); len=$(sed -n 's/RESULT_LEN=//p' <<<"$out")
   local good=0
-  if [ "$5" = accept ]; then [ "$fin" = 0 ] && [ "${len:--1}" -gt 300 ] && [ "${len:--1}" -le 512 ] && [ "${red:-99}" -le 40 ] && good=1
+  if [ "$5" = accept ]; then [ "$fin" = 0 ] && [ "${len:--1}" -gt 300 ] && [ "${len:--1}" -le 20000 ] && [ "${red:-99}" -le 40 ] && good=1
   else [ "$fin" = 0 ] && [ "${len:--1}" = 0 ] && good=1; fi     # refused: the editor answered with an EMPTY row (len 0). -1 = it never answered: that is a failure, not a refusal
   if [ "$good" = 1 ]; then echo "PASS $1 ($2 bracketed=$3, result $len chars, $red redraws)"
   else echo "FAIL $1 ($2 bracketed=$3): $out" | tr '\n' ' '; echo; fail=1; fi
@@ -26,9 +26,9 @@ open(t+'/s400.txt','w').write(b[:400])
 PY
 for ed in cm browse multi; do for b in 1 0; do
   check "400-char paste is accepted as text, not Enter" $ed $b s400.txt accept
-  check "10 KB paste is refused (over 512), nothing taken" $ed $b s.txt refuse
-  check "100000-char paste is refused quickly"            $ed $b big.txt refuse
+  check "10 KB paste is accepted whole (under the 20000 ceiling)" $ed $b s.txt accept
+  check "100000-char paste is refused quickly (over the ceiling)" $ed $b big.txt refuse
 done; done
-echo "--- real app: multi-line display, left arrow, 512 limit"
+echo "--- real app: multi-line display, left arrow, the 20000 ceiling"
 for c in 80 40; do python3 "$D/ui_test.py" $c | grep -E "FAIL|ALL OK|FAILED" | sed "s/^/[$c cols] /" || fail=1; done
 rm -rf "$T"; exit $fail

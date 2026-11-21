@@ -267,9 +267,13 @@ _st_draw() {
     for hl in "${_BVK_HINT_LN[@]}"; do _sug+=$'\033[2m'"$hl"$'\033[0m\n'; done
     _ST_TAIL=$(( _ST_HINT_N + 1 ))     # the suggestion rows + a blank line (the trailing newline of the value), only while there is a suggestion
   fi
+  # The gap rule: one blank row between the footer and the Select line (or the suggestion).  When footer 2 is empty, that row IS footer 2
+  # (Settings); when footer 2 holds keys (a choice question's answers, a screen with commands) the gap is one more row, counted in _ST_TAIL.
+  local _gap=""
+  if [ -n "$f2" ]; then _gap=$'\n'; _ST_TAIL=$(( _ST_TAIL + 1 )); fi
   _tpl_clear
   _tpl_set menu_name "${_st_icon:-⚙️} ${hd:0:cols-4}" menu_description "$_desc" menu_list "$_lst" \
-           footer_commands "${f1:0:cols-1}"$'\n'"${f2:0:cols-1}" menu_suggestions "$_sug"
+           footer_commands "${f1:0:cols-1}"$'\n'"${f2:0:cols-1}$_gap" menu_suggestions "$_sug"
   _tpl_build -p "$nl" 373QS6 menu_header _th; _tpl_build -p "$nl" 373QS6 menu_body _tb; _tpl_build -p "$nl" 373QS6 menu_footer _tf
   out+="$_th$_tb$_tf"
   _BVK_SCR_RAW="$out"; _BVK_SCR_EXTRA=""; _BVK_SCR_PROMPT="${_TPL_ACCEPTOR:-Select:}"   # print: the screen without the typed text
@@ -408,7 +412,16 @@ _st_follow() {
     (( typed > 0 )) && [ "$cur" = "${_st_nrow[$typed]:-x}" ] && cur=-1
     typed=0; return 0
   fi
-  [[ "$buf" =~ ^[0-9]+$ ]] || return 0
+  if [[ ! "$buf" =~ ^[0-9]+$ ]]; then
+    # a typed ANSWER WORD (y, n, yes ...) highlights its row the way a number does (and a radio row's [o] follows the highlight).  Only a screen that
+    # declares its words does this (_ST_WORDFN: _bvk_menu / _bvk_yn); it sets _ST_WORDNUM = the row number the word answers, 0 = "the start of an
+    # answer, keep what is highlighted", -1 = not an answer: nothing stays highlighted, so Space / Enter cannot act on a stale row.
+    [ -n "${_ST_WORDFN:-}" ] || return 0
+    _ST_WORDNUM=-1; "$_ST_WORDFN" "${buf,,}"
+    if (( _ST_WORDNUM > 0 )) && [ -n "${_st_nrow[$_ST_WORDNUM]:-}" ]; then cur=${_st_nrow[$_ST_WORDNUM]}; typed=$_ST_WORDNUM
+    elif (( _ST_WORDNUM < 0 )); then cur=-1; typed=0; fi
+    return 0
+  fi
   if (( ${#buf} > 9 )); then k=0; else k=$(( 10#$buf )); fi        # nine digits at most: a longer run would wrap around in bash arithmetic
   if (( k >= 1 && k <= _st_cnt )); then cur=${_st_nrow[$k]}; typed=$k
   else cur=-1; typed=0; fi
@@ -474,14 +487,14 @@ _st_paste_text() {      # a pasted text goes into the row in ONE step; it is acc
   _st_d="$1"
   (( navbuf )) && { buf=""; navbuf=0; }
   _st_drop_sel
-  if (( ${#buf} + ${#_st_d} > ${_BVK_MAX_INPUT:-512} )); then _bvk_too_large_text $(( ${#buf} + ${#_st_d} )); _st_msg="$_BVK_NOTICE"; _st_d=""; fi
+  if (( ${_BVK_MAX_INPUT:-20000} > 0 && ${#buf} + ${#_st_d} > ${_BVK_MAX_INPUT:-20000} )); then _bvk_too_large_text $(( ${#buf} + ${#_st_d} )); _st_msg="$_BVK_NOTICE"; _st_d=""; fi
   if [ -z "$_st_d" ]; then _BVK_PASTE_ENTER=0     # refused (too large) or empty: its Enter must not run what was typed before it (the engine reads this after the paste)
   elif [ -z "$buf" ] && [ "${_st_d:0:1}" = "=" ]; then buf="$_st_d"; _st_fq_sync; cur=-1; top=0
   elif [[ "$buf" == =* ]]; then _st_type "$_st_d"; _st_fq_sync; cur=-1; top=0
   else _st_type "$_st_d"; _st_follow; need=0; fi
 }
 
-# _st_run "Title" build_fn act_fn ["legacy hint"] [cmd_fn]
+# _st_run "Title" build_fn act_fn ["legacy hint"] [cmd_fn] [word_fn]
 #   cmd_fn BUF — optional: gets typed text before the number/command rules; return 0 = handled
 # ── the loop of a Settings screen: HOOKS around THE typed-line loop (_bvk_edit_run, bashbasicsbyvk_viewport.sh)
 # Nothing here reads a key: the engine does (editing keys, paste + burst paste, mouse, the hand-back, the typed line drawn by _bvk_draw_input).  These
@@ -636,7 +649,7 @@ _st_type_key() {      # a typed character
   _st_d="$1"
   (( navbuf )) && [ "$_st_d" != "?" ] && { buf=""; navbuf=0; }
   _st_drop_sel        # the number an arrow put on the line is replaced by what is typed
-  if (( ${#buf} >= ${_BVK_MAX_INPUT:-512} )); then _bvk_too_large_text $(( ${#buf} + 1 )); _st_msg="$_BVK_NOTICE"
+  if (( ${_BVK_MAX_INPUT:-20000} > 0 && ${#buf} >= ${_BVK_MAX_INPUT:-20000} )); then _bvk_too_large_text $(( ${#buf} + 1 )); _st_msg="$_BVK_NOTICE"
   elif [ -z "$buf" ] && [ "$_st_d" = "=" ]; then buf="="; fq=""; cur=-1; top=0
   elif [ "$_st_d" = "?" ] && [[ "$buf" =~ ^[0-9]*$ ]]; then          # ?  = read the whole explanation of the highlighted row (no Enter needed)
     _st_wipe; _st_tty_cooked; declare -F _st_desc_show >/dev/null 2>&1 && _st_desc_show; _st_tty_raw
@@ -648,6 +661,7 @@ _st_type_key() {      # a typed character
 _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}" cmdfn="${5:-}"
   local _ST_CMDFN="$cmdfn"      # the screen declares its typed commands with "$_ST_CMDFN --cc"  (key|description|prio|shown|short per line)
+  local _ST_WORDFN="${6:-}" _ST_WORDNUM=-1   # optional: "$_ST_WORDFN word" sets _ST_WORDNUM = the row a typed answer word belongs to (_st_follow highlights it)
   local cur=-1 top=0 prev=0 n buf="" pos=0 posb="" _st_wasf=0 num path_title fq="" _sdq="" need=1 page="${_vp_page_step:-10}" navbuf=0 typed=0
   local parent_title="${_st_title_now:-}"
   # This screen draws its suggestion INSIDE its own block (_st_draw, _ST_HINT).  _vp_hint_row is the main menu's global flag "the prompt has the

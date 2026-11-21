@@ -1,0 +1,23 @@
+1. ISSUE IN BRIEF
+On a yes/no question, typing 1 or 2 highlighted the row and checked its [o] box, but typing y or n (or yes / no) did not: the answer words were only looked up on Enter.
+
+1. HOW DID YOU DEBUG
+Rendered _bvk_yn in a pty and typed 1, y, n, ye, yes, x with backspaces, on the untouched tree and the fixed tree. Read _st_follow (settings_ui.sh): it is the one live-highlight function and it returns at once for anything that is not digits. _bvk_menu already resolves answer words with _bc_index (the lookup Enter uses).
+
+1. CAUSE
+_st_follow only knew row numbers.
+
+1. FIX
+_st_run takes an optional 6th argument word_fn (local _ST_WORDFN); _st_follow asks it for the row a typed word answers (_ST_WORDNUM: row number / 0 keep the highlight / -1 clear it) and highlights that row like a number. _bvk_menu passes _bc_wordrow (an exact answer word highlights its row, a word that only starts one - "ye" - keeps the highlight, anything else clears it, a many-of-many box is left alone). Screens that pass no word_fn (Settings, Home ...) behave as before. Checked: y / n / yes highlight and check, backspace clears, ye keeps, x clears, Enter answers.
+
+2. ISSUE IN BRIEF
+A paste of a few thousand characters (a commit message in gitpush, 3000 characters) was refused with "Too large: N characters (limit 512)" at every prompt: one global limit of 512 was enforced separately by the editor, the main prompt and the Settings-style screens.
+
+2. HOW DID YOU DEBUG
+grep for _BVK_MAX_INPUT / _bvk_room / _bvk_too_large; pasted 3000, 20000 and 30000 characters into the real commit-message prompt (_bvk_read -m), a yes/no box and the main prompt on the untouched tree (refused: GOT_LEN=0, notice shown) and the fixed tree (accepted whole: GOT_LEN=3000). Other length checks found are field validation (email 256, name 160, address 800, .ai query 500) and were left alone.
+
+2. CAUSE
+A blanket cap, repeated at each editor with its own default (512).
+
+2. FIX
+Every enforcement point reads the single variable _BVK_MAX_INPUT (viewport.sh) and treats 0 as "no limit"; none has a number of its own. In the tree the value is one ceiling of 20000, a freeze guard only (a 100000-character paste takes about 8 s), defined once. The two pty tests that asserted the old refusal (paste_input/ui_test.py, prompt_template/prompt_test.py) now assert that 3000 characters are accepted on every prompt kind. Note: the ceiling value and paste_input/run.sh in the tree were not written in this session's edits (the files changed at the same time as my edits); I kept them because they are consistent with the fix and tested.

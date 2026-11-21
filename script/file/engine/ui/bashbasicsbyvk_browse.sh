@@ -982,7 +982,7 @@ _rc_edited() {
 _rc_paste_text() {
   local t="$1"
   [ -z "$t" ] && return 0
-  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _print_input_line drain; return 0; }   # over 512 characters: refused, redrawn
+  _bvk_room "${#t}" || { _bvk_too_large $(( ${#_buf} + ${#t} )) _print_input_line drain; return 0; }   # refused only above the one ceiling (_BVK_MAX_INPUT, viewport.sh)
   _rc_drop_sel                                       # a paste over a selection replaces it
   if [ -z "$_buf" ] && [ "${t:0:1}" = "=" ]; then
     if _filter_on_char "="; then t="${t:1}"; fi   # the filter starts (snapshot, hint) ... (if it did not: "=" stays part of the text)

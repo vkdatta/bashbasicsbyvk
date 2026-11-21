@@ -15,6 +15,7 @@ ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 # stub for _bvk_paste_burst: $BURST = "N:TEXT:ENTER" -> on the Nth key read it answers "that key began a paste of TEXT (+ Enter if ENTER=1)"
 read -r -d '' HARNESS <<'EOF'
 source "$UI"; source "$VP"; source "$MS"; source "$TE"
+[ -n "${LIMIT:-}" ] && _BVK_MAX_INPUT="$LIMIT"      # the app's ceiling is 20000; a test that needs a refusal sets a small one here
 _st_draw() { echo "D cur=$cur buf=[$buf]"; }
 _bvk_paste_on() { :; }; _bvk_paste_off() { :; }; _bvk_mouse_rearm() { :; }; _BVK_MOUSE_ON=1
 _N=0
@@ -70,10 +71,12 @@ OUT="$(run '3\n')";     chk "3, Enter -> row 3 opens (unchanged)"             gr
 OUT="$(run '3 ')";      chk "3, Space -> row 3 toggles (unchanged)"           grep -qx 'ACT 2 toggle' <<<"$OUT"
 OUT="$(run '1000\x7f\x7f\x7f ')"; chk "1000, 3x Backspace, then Space -> row 1 (the number is valid again)" grep -qx 'ACT 0 toggle' <<<"$OUT"
 
-# 4. a refused paste does not bring its Enter along
-OUT="$(run '3x' BURST='2:@900:1')"
+# 4. a refused paste does not bring its Enter along  (the ceiling is 20000: a small one is set here to keep the mechanism covered)
+OUT="$(run '3x' BURST='2:@900:1' LIMIT=512)"
 chk "too-large paste + Enter: the Enter is NOT run (row 3 stays closed)"      test "$(acts "$OUT")" = 0
 chk "too-large paste: the line keeps what was typed"                          grep -qx 'D cur=2 buf=\[3\]' <<<"$(last_d "$OUT")"
+OUT="$(run '3x' BURST='2:@900:0')"
+chk "a 900-character paste is taken whole (the ceiling is 20000)"                grep -qE 'D cur=2 buf=\[3x{900}\]' <<<"$(last_d "$OUT")"
 OUT="$(run '1x' BURST='2:1:1')"
 chk "accepted paste + Enter: the Enter runs (11 -> row 11)"                   grep -qx 'ACT 10 toggle' <<<"$OUT"
 

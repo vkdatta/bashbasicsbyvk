@@ -110,18 +110,14 @@ def mk_multiline(opener):                       # a paste with a line break is k
         return nxt.strip().startswith('cd'), 'the second line of the paste is not on its own row: %r' % nxt
     return t
 
-def mk_toolarge(opener):                        # a paste over the limit: the SAME notice, in the suggestion rows ABOVE the prompt, and nothing is inserted (one wording, one place)
+def mk_longpaste(opener):                       # a paste past the old 512 limit is taken whole on every kind of prompt: no notice
     def t(a):
         lab = opener(a)
-        a.send(b'\x1b[200~' + b'x' * 600 + b'\x1b[201~', 1.0)
+        a.send(b'\x1b[200~' + b'x' * 700 + b'\x1b[201~', 1.5)
         r, line = a.prow(lab)
         if r is None: return False, 'cannot find the prompt row'
-        ls = a.lines()
-        above = ' '.join(ls[max(0, r - 4):r - 1]); below = ls[r] if r < len(ls) else ''
-        if 'xxxx' in line: return False, 'the over-long paste was inserted: %r' % line[:80]
-        if 'Too large' in line: return False, 'the notice is drawn ON the prompt row: %r' % line[:100]
-        if 'Too large' in below and 'Too large' not in above: return False, 'the notice is drawn BELOW the prompt: %r' % below
-        return 'Too large: 600 characters (limit 512)' in above, 'no "Too large: 600 characters (limit 512)" notice in the rows above the prompt: %r' % above
+        if any('Too large' in l for l in a.lines()): return False, 'a paste was refused for its length'
+        return 'xxxx' in line, 'the long paste was not inserted: %r' % line[:80]
     return t
 
 for name, op in OPENERS:
@@ -130,5 +126,5 @@ for name, op in OPENERS:
     case('tap on an empty prompt hands the touch back: ' + name, mk_empty_tap(op))
     case('the suggestion is above the prompt: ' + name, mk_hint_above(op))
     case('a pasted line break is kept as rows: ' + name, mk_multiline(op))
-    case('too large: one notice, above the prompt: ' + name, mk_toolarge(op))
+    case('a 700-character paste is accepted: ' + name, mk_longpaste(op))
 print('ALL OK' if all(results) else 'FAILED'); sys.exit(0 if all(results) else 1)

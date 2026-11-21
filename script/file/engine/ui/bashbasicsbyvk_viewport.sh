@@ -878,7 +878,8 @@ _read_key_seq() {
 # The block starts on the prompt's own row and grows downward (all rows are shown unless the text is taller than the screen; then the window follows the
 # cursor). Left/right/typing move the cursor INSIDE it, across rows. Up/down/PgUp/PgDn/Home/End still move the list:
 # the loops call _bvk_blk_park first (cursor back on the first row) so every row-relative repaint stays correct.
-_BVK_MAX_INPUT=512           # an input longer than this is refused, whatever menu it is typed or pasted into
+_BVK_MAX_INPUT=20000         # THE ONE ceiling, only a guard against a freeze (a 100000-character paste takes ~8 s to process): 6x a 3000-character commit message, never a limit anyone meets.
+                             # Every editor asks _bvk_room / this variable, none has a number of its own.  0 = no ceiling at all.
 _BLK_ROWS=1; _BLK_CROW=0; _BLK_TOP=0; _BVK_FIT_COL=0
 
 _bvk_blk_reset() {           # back to a plain one-row prompt: wipe the extra rows
@@ -1051,7 +1052,7 @@ _bvk_edit_type() {   # a typed character: ctrl bytes never get in; the length li
   _is_ctrl_char "$1" && return 0
   local cur="${!_ED_BUF}" n=0
   (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$cur" "${!_ED_POS}"; n=$_TE_N; }     # a selected text is replaced by what is typed
-  if (( ${#cur} - n + 1 > _BVK_MAX_INPUT )); then
+  if (( _BVK_MAX_INPUT > 0 && ${#cur} - n + 1 > _BVK_MAX_INPUT )); then
     if [ -n "${_ED_TOOLARGE:-}" ]; then "$_ED_TOOLARGE" $(( ${#cur} + 1 )); else _bvk_too_large $(( ${#cur} + 1 )) "$_ED_REDRAW"; fi
     return 0
   fi
@@ -1059,11 +1060,11 @@ _bvk_edit_type() {   # a typed character: ctrl bytes never get in; the length li
   [ -n "${_ED_EDITED:-}" ] && "$_ED_EDITED"
   return 0
 }
-_bvk_edit_paste() {   # TEXT: a paste at the cursor.  Over the limit it is refused and the notice says so; a selection is replaced by it
+_bvk_edit_paste() {   # TEXT: a paste at the cursor (refused only above the one ceiling _BVK_MAX_INPUT); a selection is replaced by it
   local t="$1" cur="${!_ED_BUF}" n=0
   [ -z "$t" ] && return 0
   (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$cur" "${!_ED_POS}"; n=$_TE_N; }
-  if (( ${#cur} - n + ${#t} > _BVK_MAX_INPUT )); then
+  if (( _BVK_MAX_INPUT > 0 && ${#cur} - n + ${#t} > _BVK_MAX_INPUT )); then
     _bvk_too_large $(( ${#cur} - n + ${#t} )) "$_ED_REDRAW" drain
     return 0
   fi
@@ -1179,9 +1180,9 @@ _bvk_cursor_to() {
   if (( _pos > old )); then builtin printf '\033[%dC' "$_BVK_W"; else builtin printf '\033[%dD' "$_BVK_W"; fi
 }
 
-# the limit: _bvk_room N = N more characters still fit into _buf
+# the ceiling: _bvk_room N = N more characters still fit into _buf (always, while _BVK_MAX_INPUT is 0 = no ceiling)
 # (a selected text is replaced by what is typed, so it does not count: see bashbasicsbyvk_textedit.sh)
-_bvk_room() { local _rm_n=0; (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$_buf" "$_pos"; _rm_n=$_TE_N; }; (( ${#_buf} - _rm_n + $1 <= _BVK_MAX_INPUT )); }
+_bvk_room() { (( _BVK_MAX_INPUT > 0 )) || return 0; local _rm_n=0; (( ${_TE_ANC:--1} >= 0 )) && { _te_sel_len "$_buf" "$_pos"; _rm_n=$_TE_N; }; (( ${#_buf} - _rm_n + $1 <= _BVK_MAX_INPUT )); }
 # a one-line red notice on the row under the input (it stays until the next key); the cursor is put back where it was
 # ── the suggestion row
 # ONE row directly above the "Select:" line (between the footer and the prompt):

@@ -77,6 +77,19 @@ _bc_index() {   # key or alt key ($1, lower case) -> _bc_ix, or return 1
   return 1
 }
 
+# a typed word -> the row it answers (word_fn of _st_run: _st_follow highlights that row while it is typed, so  y  looks like  1  does).
+# _ST_WORDNUM = the row number · 0 = leave the highlight (a many-of-many box takes 1,3-5 / a-2, or a word that only STARTS an answer) · -1 = not an answer
+_bc_wordrow() {
+  local _bc_w="$1" _bc_j
+  _ST_WORDNUM=-1
+  (( _bc_multi )) && { _ST_WORDNUM=0; return 0; }
+  if _bc_index "$_bc_w"; then _ST_WORDNUM=$(( _bc_ix + 1 )); return 0; fi
+  for _bc_j in "${!_bc_key[@]}"; do
+    case " ${_bc_alt[$_bc_j]}" in *" $_bc_w"*) _ST_WORDNUM=0; return 0 ;; esac
+  done
+  return 0
+}
+
 # a row was activated by Enter / Space / a double tap (act_fn of _st_run)
 _bc_act() {
   local _bc_kk="${_st_tag[$1]}"
@@ -273,7 +286,7 @@ _bvk_menu() {
   # run it as a sub screen: it wipes itself when it ends; the terminal goes back to normal only if we switched it on
   local _bc_outer=$_st_depth
   _st_depth=$(( _bc_outer + 1 ))
-  _st_run "$_bc_title" _bc_build _bc_act "" _bc_cmd
+  _st_run "$_bc_title" _bc_build _bc_act "" _bc_cmd _bc_wordrow
   _st_depth=$_bc_outer
   (( _bc_outer == 0 )) && { _st_tty_cooked; _st_stty=""; }
 
