@@ -47,6 +47,8 @@ D|git|cmd|git|*=git|git|reads and writes repositories (GitHub screens, upgrade, 
 D|gh|cmd|gh|termux=gh;apt=@gh-apt+curl;dnf=@gh-dnf;yum=@gh-dnf;pacman=github-cli;apk=github-cli;zypper=gh;brew=gh|GitHub CLI (gh)|signs in to GitHub and creates / pushes repositories|git||
 D|rclone|cmd|rclone|dev:termux=rclone;brew=rclone;*=@rclone+curl|rclone|talks to Google Drive and other clouds|||Termux: pkg install rclone.  Linux / VM / cloud shell / WSL / container: the official build from downloads.rclone.org goes to ~/bin (no root).  Then run: rclone config
 D|sqlite3|cmd|sqlite3|termux=sqlite;apt=sqlite3;dnf=sqlite;yum=sqlite;pacman=sqlite;apk=sqlite;zypper=sqlite3;brew=sqlite|SQLite|reads the browser / app databases for the load-time report|||
+D|openssl|cmd|openssl|*=openssl|OpenSSL|the crypto library gcloud's Python needs (Termux does not ship it by default)|||
+D|ssh|cmd|ssh|termux=openssh;apt=openssh-client;dnf=openssh-clients;yum=openssh-clients;pacman=openssh;apk=openssh-client;zypper=openssh;brew=openssh|OpenSSH client|connects to Cloud Shell (gcloud cloud-shell ssh)|||
 D|tzdata|file|$TZDIR/Asia/Kolkata,/usr/share/zoneinfo/Asia/Kolkata,/usr/lib/zoneinfo/Asia/Kolkata,/usr/share/lib/zoneinfo/Asia/Kolkata,/etc/zoneinfo/Asia/Kolkata,$PREFIX/share/zoneinfo/Asia/Kolkata,/system/usr/share/zoneinfo/tzdata|termux=tzdata;apt=tzdata;dnf=tzdata;yum=tzdata;pacman=tzdata;apk=tzdata;zypper=timezone|Timezone database|lists every timezone and converts times correctly, including daylight saving|||
 
 # ── archive tools ────────────────────────────────────────────────────────────
@@ -65,7 +67,7 @@ D|zsh|cmd|zsh|*=zsh|zsh|runs .zsh files|||
 D|php|cmd|php|termux=php;apt=php-cli;dnf=php-cli;yum=php-cli;pacman=php;apk=php;zypper=php;brew=php|PHP|runs .php files|||
 D|perl|cmd|perl|*=perl|Perl|runs .pl files|||
 D|ruby|cmd|ruby|*=ruby|Ruby|runs .rb files|||
-D|gcloud|cmd|gcloud||Google Cloud CLI (gcloud)|copies to and from Google Cloud Storage|||Not in the system package lists: install it from https://cloud.google.com/sdk/docs/install
+D|gcloud|cmd|gcloud|*=@gcloud+curl+tar+python3+openssl|Google Cloud CLI (gcloud)|opens Cloud Shell (fx > cloudshell) and copies to and from Google Cloud Storage|||Official build from dl.google.com, unpacked to ~/google-cloud-sdk (no root) and linked onto PATH. Then run: gcloud auth login
 
 # ── Termux only (not installable elsewhere: skipped on a normal Linux / macOS) ──
 D|termux-tools|cmd|termux-open-url|termux=termux-tools|Termux tools (termux-open, termux-open-url, termux-share)|opens links and files and shares them with other Android apps|||
@@ -142,6 +144,7 @@ F|upgrade|Upgrade loop (-u)|curl git|
 F|github|GitHub screens (fx > github)|python3|git gh
 F|gitpush|Push a folder to GitHub (bashbasicsbyvk_gitpush)|git gh|nodejs
 F|gdrive|Google Drive (fx > google drive)|python3 rclone|
+F|cloudshell|Cloud Shell (fx > cloudshell)|gcloud ssh|
 F|transfer|Transfers (rclone based)|rclone|gcloud
 F|cloudflare.recover|Cloudflare recover|python3|wrangler
 # Tools under infinity/

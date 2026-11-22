@@ -50,6 +50,7 @@ bashbasicsbyvk_bundle_io.sh|||tool, run as its own process
 bashbasicsbyvk_action_confirm_key.sh|||tool, run as its own process
 bashbasicsbyvk_archive_formats.sh|||tool, run as its own process
 bashbasicsbyvk_ghlib.sh|||tool, run as its own process
+bashbasicsbyvk_cslib.sh|||Cloud Shell helpers (accounts, gcloud switch / login, connect bar, kill): loaded on the first call of fx > cloudshell
 bashbasicsbyvk_exactbytes.sh|||eb- command (exact bytes of items); only loaded when eb- is typed, its stub loads it
 bashbasicsbyvk_fileinfo.sh|||i- command (info of files); only loaded when i- is typed, its stub loads it
 bashbasicsbyvk_extract.sh|||xtr- command (extract lines / words / characters / bytes); only loaded when xtr- is typed, its stub loads it
@@ -123,6 +124,8 @@ bashbasicsbyvk_xui_ghpmenucommands.sh|||command-map commands of one menu (loaded
 bashbasicsbyvk_xui_ghrmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_ghomenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_ghqmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_ghumenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_cshmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_cfwmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_gdpmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_cs_ppmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
@@ -140,7 +143,7 @@ bashbasicsbyvk_upgrade.sh|||upgrade loop (-u)
 bashbasicsbyvk_version.sh|||version menu (Install / Info) opened by a number in the upgrade loop
 bashbasicsbyvk_api.sh|||api: link manager
 bashbasicsbyvk_pending.sh|||pn: pending uploads menu
-bashbasicsbyvk_functions.sh||bashbasicsbyvk_adf_rename_csv.sh,bashbasicsbyvk_adf_move_csv.sh,bashbasicsbyvk_adf_copy_csv.sh,bashbasicsbyvk_adf_shortcut_csv.sh,bashbasicsbyvk_adf_upload_csv.sh,bashbasicsbyvk_adf_map_csv.sh,bashbasicsbyvk_adf_bookmark_csv.sh,bashbasicsbyvk_adf_delete_common.sh,bashbasicsbyvk_adf_delete_ext.sh,bashbasicsbyvk_adf_delete_date.sh,bashbasicsbyvk_adf_zip_csv.sh,bashbasicsbyvk_adf_unzip_csv.sh,bashbasicsbyvk_adf_delete_csv.sh,bashbasicsbyvk_adf_upload_text_csv.sh,bashbasicsbyvk_adf_import_link.sh,bashbasicsbyvk_adf_selection.sh,bashbasicsbyvk_adf_selected.sh,bashbasicsbyvk_adf_gdrive.sh,bashbasicsbyvk_adf_cfwp.sh,bashbasicsbyvk_adf_github.sh|fx menu (and the registry the adf_* files fill)
+bashbasicsbyvk_functions.sh||bashbasicsbyvk_adf_rename_csv.sh,bashbasicsbyvk_adf_move_csv.sh,bashbasicsbyvk_adf_copy_csv.sh,bashbasicsbyvk_adf_shortcut_csv.sh,bashbasicsbyvk_adf_upload_csv.sh,bashbasicsbyvk_adf_map_csv.sh,bashbasicsbyvk_adf_bookmark_csv.sh,bashbasicsbyvk_adf_delete_common.sh,bashbasicsbyvk_adf_delete_ext.sh,bashbasicsbyvk_adf_delete_date.sh,bashbasicsbyvk_adf_zip_csv.sh,bashbasicsbyvk_adf_unzip_csv.sh,bashbasicsbyvk_adf_delete_csv.sh,bashbasicsbyvk_adf_upload_text_csv.sh,bashbasicsbyvk_adf_import_link.sh,bashbasicsbyvk_adf_selection.sh,bashbasicsbyvk_adf_selected.sh,bashbasicsbyvk_adf_gdrive.sh,bashbasicsbyvk_adf_cfwp.sh,bashbasicsbyvk_adf_github.sh,bashbasicsbyvk_adf_cloudshell.sh|fx menu (and the registry the adf_* files fill)
 bashbasicsbyvk_adf_rename_csv.sh|||tool, run as its own process
 bashbasicsbyvk_adf_move_csv.sh|||tool, run as its own process
 bashbasicsbyvk_adf_copy_csv.sh|||tool, run as its own process
@@ -161,6 +164,7 @@ bashbasicsbyvk_adf_selected.sh|||tool, run as its own process
 bashbasicsbyvk_adf_gdrive.sh|||tool, run as its own process
 bashbasicsbyvk_adf_cfwp.sh|||tool, run as its own process
 bashbasicsbyvk_adf_github.sh|||tool, run as its own process
+bashbasicsbyvk_adf_cloudshell.sh|||fx > cloudshell > launch.cloudshell screens (registered into the fx menu through the WITH column of functions.sh)
 bashbasicsbyvk_udf_io.sh|||UDF export / import
 bashbasicsbyvk_infinity.sh|||i: infinity stones
 bashbasicsbyvk_infinity_run.sh|||Infinity tools run inside the app: _inf_sub (bash tools), _inf_py (python tools, questions asked by the app)
@@ -291,6 +295,8 @@ bashbasicsbyvk_xui_ghp.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_ghr.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_gho.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_ghq.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_ghu.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_csh.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_cfw.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_gdp.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_cs_pp.map|||command-map wiring, read as data

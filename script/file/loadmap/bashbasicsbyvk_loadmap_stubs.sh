@@ -38,11 +38,12 @@ _LM_NEEDS[bashbasicsbyvk_adf_selected.sh]="bashbasicsbyvk_functions.sh"
 _LM_NEEDS[bashbasicsbyvk_adf_gdrive.sh]="bashbasicsbyvk_functions.sh"
 _LM_NEEDS[bashbasicsbyvk_adf_cfwp.sh]="bashbasicsbyvk_functions.sh"
 _LM_NEEDS[bashbasicsbyvk_adf_github.sh]="bashbasicsbyvk_tabmenu.sh bashbasicsbyvk_functions.sh"
+_LM_NEEDS[bashbasicsbyvk_adf_cloudshell.sh]="bashbasicsbyvk_cslib.sh bashbasicsbyvk_functions.sh"
 _LM_NEEDS[bashbasicsbyvk_xui.sh]="bashbasicsbyvk_switch.sh bashbasicsbyvk_functions.sh"
 _LM_NEEDS[bashbasicsbyvk_rbam.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_csurf.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_gdrive.sh]="bashbasicsbyvk_run.sh bashbasicsbyvk_transfer.sh bashbasicsbyvk_carry.sh bashbasicsbyvk_staging_helpers.sh bashbasicsbyvk_staging_archive.sh bashbasicsbyvk_staging_buffer.sh bashbasicsbyvk_staging_upload.sh bashbasicsbyvk_staging_ux.sh"
-_LM_WITH[bashbasicsbyvk_functions.sh]="bashbasicsbyvk_adf_rename_csv.sh bashbasicsbyvk_adf_move_csv.sh bashbasicsbyvk_adf_copy_csv.sh bashbasicsbyvk_adf_shortcut_csv.sh bashbasicsbyvk_adf_upload_csv.sh bashbasicsbyvk_adf_map_csv.sh bashbasicsbyvk_adf_bookmark_csv.sh bashbasicsbyvk_adf_delete_common.sh bashbasicsbyvk_adf_delete_ext.sh bashbasicsbyvk_adf_delete_date.sh bashbasicsbyvk_adf_zip_csv.sh bashbasicsbyvk_adf_unzip_csv.sh bashbasicsbyvk_adf_delete_csv.sh bashbasicsbyvk_adf_upload_text_csv.sh bashbasicsbyvk_adf_import_link.sh bashbasicsbyvk_adf_selection.sh bashbasicsbyvk_adf_selected.sh bashbasicsbyvk_adf_gdrive.sh bashbasicsbyvk_adf_cfwp.sh bashbasicsbyvk_adf_github.sh"
+_LM_WITH[bashbasicsbyvk_functions.sh]="bashbasicsbyvk_adf_rename_csv.sh bashbasicsbyvk_adf_move_csv.sh bashbasicsbyvk_adf_copy_csv.sh bashbasicsbyvk_adf_shortcut_csv.sh bashbasicsbyvk_adf_upload_csv.sh bashbasicsbyvk_adf_map_csv.sh bashbasicsbyvk_adf_bookmark_csv.sh bashbasicsbyvk_adf_delete_common.sh bashbasicsbyvk_adf_delete_ext.sh bashbasicsbyvk_adf_delete_date.sh bashbasicsbyvk_adf_zip_csv.sh bashbasicsbyvk_adf_unzip_csv.sh bashbasicsbyvk_adf_delete_csv.sh bashbasicsbyvk_adf_upload_text_csv.sh bashbasicsbyvk_adf_import_link.sh bashbasicsbyvk_adf_selection.sh bashbasicsbyvk_adf_selected.sh bashbasicsbyvk_adf_gdrive.sh bashbasicsbyvk_adf_cfwp.sh bashbasicsbyvk_adf_github.sh bashbasicsbyvk_adf_cloudshell.sh"
 _tpl_file() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_file "$@"; }
 _tpl_set() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_set "$@"; }
 _tpl_clear() { _lm_stub bashbasicsbyvk_tpl.sh _tpl_clear "$@"; }
@@ -273,6 +274,19 @@ _gh_releases_rows() { _lm_stub bashbasicsbyvk_ghlib.sh _gh_releases_rows "$@"; }
 _gh_commit_row() { _lm_stub bashbasicsbyvk_ghlib.sh _gh_commit_row "$@"; }
 _gh_tags_newest_first() { _lm_stub bashbasicsbyvk_ghlib.sh _gh_tags_newest_first "$@"; }
 _gh_print_body() { _lm_stub bashbasicsbyvk_ghlib.sh _gh_print_body "$@"; }
+_cs_locate() { _lm_stub bashbasicsbyvk_cslib.sh _cs_locate "$@"; }
+_cs_gc() { _lm_stub bashbasicsbyvk_cslib.sh _cs_gc "$@"; }
+_cs_cfg_file() { _lm_stub bashbasicsbyvk_cslib.sh _cs_cfg_file "$@"; }
+_cs_accounts_load() { _lm_stub bashbasicsbyvk_cslib.sh _cs_accounts_load "$@"; }
+_cs_accounts_save() { _lm_stub bashbasicsbyvk_cslib.sh _cs_accounts_save "$@"; }
+_cs_accounts_add() { _lm_stub bashbasicsbyvk_cslib.sh _cs_accounts_add "$@"; }
+_cs_status_load() { _lm_stub bashbasicsbyvk_cslib.sh _cs_status_load "$@"; }
+_cs_is_authed() { _lm_stub bashbasicsbyvk_cslib.sh _cs_is_authed "$@"; }
+_cs_use() { _lm_stub bashbasicsbyvk_cslib.sh _cs_use "$@"; }
+_cs_login() { _lm_stub bashbasicsbyvk_cslib.sh _cs_login "$@"; }
+_cs_bar() { _lm_stub bashbasicsbyvk_cslib.sh _cs_bar "$@"; }
+_cs_launch() { _lm_stub bashbasicsbyvk_cslib.sh _cs_launch "$@"; }
+_cs_kill() { _lm_stub bashbasicsbyvk_cslib.sh _cs_kill "$@"; }
 _eb_commas() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_commas "$@"; }
 _eb_unit() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_unit "$@"; }
 _eb_dir_bytes() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_dir_bytes "$@"; }
@@ -560,6 +574,9 @@ _dep_recipe_gh_apt() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_gh_apt "$@"; 
 _dep_recipe_gh_dnf() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_gh_dnf "$@"; }
 _dep_path_line() { _lm_stub bashbasicsbyvk_deps.sh _dep_path_line "$@"; }
 _dep_recipe_rclone() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_rclone "$@"; }
+_dep_bin_on_path() { _lm_stub bashbasicsbyvk_deps.sh _dep_bin_on_path "$@"; }
+_dep_gcloud_target() { _lm_stub bashbasicsbyvk_deps.sh _dep_gcloud_target "$@"; }
+_dep_recipe_gcloud() { _lm_stub bashbasicsbyvk_deps.sh _dep_recipe_gcloud "$@"; }
 _dep_run() { _lm_stub bashbasicsbyvk_deps.sh _dep_run "$@"; }
 _dep_lane_sys() { _lm_stub bashbasicsbyvk_deps.sh _dep_lane_sys "$@"; }
 _dep_pip_one() { _lm_stub bashbasicsbyvk_deps.sh _dep_pip_one "$@"; }
@@ -974,6 +991,7 @@ _ghx_no_key_help() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_no_key_help "$@"
 _ghx_sign_in() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_sign_in "$@"; }
 _ghx_fetch_repos() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_fetch_repos "$@"; }
 _ghx_load_repo() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_load_repo "$@"; }
+_ghx_load_branches() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_load_branches "$@"; }
 _ghx_reload() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_reload "$@"; }
 ghp_build() { _lm_stub bashbasicsbyvk_adf_github.sh ghp_build "$@"; }
 ghp_row() { _lm_stub bashbasicsbyvk_adf_github.sh ghp_row "$@"; }
@@ -1032,12 +1050,17 @@ _ghx_users_save() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_users_save "$@"; 
 _ghx_users_add() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_users_add "$@"; }
 _ghx_users_c() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_users_c "$@"; }
 _ghx_users_x() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_users_x "$@"; }
-_ghx_fetch_others() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_fetch_others "$@"; }
+_ghx_fetch_user() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_fetch_user "$@"; }
 gho_build() { _lm_stub bashbasicsbyvk_adf_github.sh gho_build "$@"; }
 gho_row() { _lm_stub bashbasicsbyvk_adf_github.sh gho_row "$@"; }
 gho_header() { _lm_stub bashbasicsbyvk_adf_github.sh gho_header "$@"; }
 gho_footer() { _lm_stub bashbasicsbyvk_adf_github.sh gho_footer "$@"; }
 _gho_cmd() { _lm_stub bashbasicsbyvk_adf_github.sh _gho_cmd "$@"; }
+ghu_build() { _lm_stub bashbasicsbyvk_adf_github.sh ghu_build "$@"; }
+ghu_row() { _lm_stub bashbasicsbyvk_adf_github.sh ghu_row "$@"; }
+ghu_header() { _lm_stub bashbasicsbyvk_adf_github.sh ghu_header "$@"; }
+ghu_footer() { _lm_stub bashbasicsbyvk_adf_github.sh ghu_footer "$@"; }
+_ghu_cmd() { _lm_stub bashbasicsbyvk_adf_github.sh _ghu_cmd "$@"; }
 ghq_build() { _lm_stub bashbasicsbyvk_adf_github.sh ghq_build "$@"; }
 ghq_row() { _lm_stub bashbasicsbyvk_adf_github.sh ghq_row "$@"; }
 ghq_header() { _lm_stub bashbasicsbyvk_adf_github.sh ghq_header "$@"; }
@@ -1046,6 +1069,19 @@ _ghq_cmd() { _lm_stub bashbasicsbyvk_adf_github.sh _ghq_cmd "$@"; }
 _ghx_start() { _lm_stub bashbasicsbyvk_adf_github.sh _ghx_start "$@"; }
 _fx_adf_github_self() { _lm_stub bashbasicsbyvk_adf_github.sh _fx_adf_github_self "$@"; }
 _fx_adf_github_others() { _lm_stub bashbasicsbyvk_adf_github.sh _fx_adf_github_others "$@"; }
+_csh_add() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _csh_add "$@"; }
+_csh_signin() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _csh_signin "$@"; }
+_csh_create() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _csh_create "$@"; }
+_csh_remove() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _csh_remove "$@"; }
+_csh_activate() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _csh_activate "$@"; }
+_csh_open() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _csh_open "$@"; }
+_csh_kill() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _csh_kill "$@"; }
+csh_build() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh csh_build "$@"; }
+csh_row() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh csh_row "$@"; }
+csh_header() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh csh_header "$@"; }
+csh_footer() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh csh_footer "$@"; }
+_csh_cmd() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _csh_cmd "$@"; }
+_fx_adf_cloudshell() { _lm_stub bashbasicsbyvk_adf_cloudshell.sh _fx_adf_cloudshell "$@"; }
 _fx_udf_edit_item() { _lm_stub bashbasicsbyvk_udf_io.sh _fx_udf_edit_item "$@"; }
 _fx_udf_export() { _lm_stub bashbasicsbyvk_udf_io.sh _fx_udf_export "$@"; }
 _fx_udf_import() { _lm_stub bashbasicsbyvk_udf_io.sh _fx_udf_import "$@"; }

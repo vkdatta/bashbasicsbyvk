@@ -29,7 +29,8 @@ def reaches(fn, seen=()):
     if fn in seen or fn not in BODY: return False
     b = '\n'.join(l for l in BODY[fn].split('\n') if not l.lstrip().startswith('#'))
     ok = bool(ROOT_CALL.search(b)) or any(t != fn and t in BODY and reaches(t, seen + (fn,)) for t in set(TOK.findall(b)))
-    memo[fn] = ok; return ok
+    if ok or not seen: memo[fn] = ok          # a "no" found inside a cycle only means "not through the functions already on the path": never cache it (the result depended on hash order)
+    return ok
 hooks = {}
 for p in bvk.bash_files():
     if bvk.is_stub_file(p): continue

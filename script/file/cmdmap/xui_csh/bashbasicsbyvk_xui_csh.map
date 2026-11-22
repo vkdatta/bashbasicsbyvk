@@ -1,0 +1,11 @@
+# bashbasicsbyvk_xui_csh.map — wiring for the Cloud Shell profiles screen (fx → cloudshell → launch.cloudshell)
+# Chosen by _cm_ctx_find when _XUI_PFX=csh (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_csh
+@kind   menu
+@back   u
+@parent xui
+
+c          .mapto()  c          from bashbasicsbyvk_xui_cshmenucommands.sh
+x          .mapto()  x          from bashbasicsbyvk_xui_cshmenucommands.sh
+k          .mapto()  k          from bashbasicsbyvk_xui_cshmenucommands.sh
+rf         .mapto()  rf         from bashbasicsbyvk_xui_cshmenucommands.sh

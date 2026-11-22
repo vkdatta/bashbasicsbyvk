@@ -386,6 +386,7 @@ _dep_plan() {
       *)   if [[ "$v" == @* ]]; then
              r="${v#@}"; name="${r%%+*}"; pre=""; [[ "$r" == *+* ]] && pre="${r#*+}"
              if [ "$name" = rclone ] && ! _dep_rclone_target; then _PL_NA+=("$id"); _PL_HOW[$id]="no official rclone build here ($_DEP_RC_WHY)"; continue; fi
+             if [ "$name" = gcloud ] && ! _dep_gcloud_target; then _PL_NA+=("$id"); _PL_HOW[$id]="no official gcloud build here ($_DEP_GC_WHY)"; continue; fi
              _PL_RECIPE+=("$name"); _PL_HOW[$id]="$(_dep_recipe_text "$name")"
              for p in ${pre//+/ }; do
                _dep_resolve "$p" && [ "${_DEP_ST[$p]:-0}" != 1 ] && ! _dep_probe_one "$p" && _dep_pkgval "$p" && { _dep_plan_sys "$_DEP_VAL" ""; _PL_EXTRA+=("${_DEP_LABEL[$p]}"); }
@@ -403,12 +404,14 @@ _dep_recipe_text() {
     gh-dnf) printf '%s' "adds GitHub's official rpm repository (cli.github.com) to this computer, then installs gh" ;;
     rclone) if _dep_rclone_target; then printf '%s' "downloads rclone ($_DEP_RC_URL) into ~/bin, no root needed, and puts ~/bin on PATH"
             else printf '%s' "no official rclone build for this CPU / device ($_DEP_RC_WHY)"; fi ;;
+    gcloud) if _dep_gcloud_target; then printf '%s' "downloads the Google Cloud CLI ($_DEP_GC_URL) into ~/google-cloud-sdk, no root needed, and links gcloud onto PATH"
+            else printf '%s' "no official gcloud build for this CPU / device ($_DEP_GC_WHY)"; fi ;;
     *)      printf '%s' "install recipe $1" ;;
   esac
 }
 
-# does the recipe need root?  (gh adds a system repository; rclone is a user-space download into ~/bin)
-_dep_recipe_root() { case "$1" in rclone) return 1 ;; *) return 0 ;; esac; }
+# does the recipe need root?  (gh adds a system repository; rclone and gcloud are user-space downloads into the home folder)
+_dep_recipe_root() { case "$1" in rclone|gcloud) return 1 ;; *) return 0 ;; esac; }
 
 # rclone's own name for this machine -> _DEP_RC_URL ; rc 1 + _DEP_RC_WHY when there is none.
 # The CPU / OS table is _bvk_engine_target (the one place, AGENTS.md rule 9); only rclone's spelling of it is here.
@@ -453,7 +456,7 @@ _dep_path_line() {   # _dep_path_line FILE LINE : append once, never twice
 }
 
 _dep_recipe_rclone() {
-  local tmp dest="$HOME/bin" line shn
+  local tmp dest="$HOME/bin"
   _dep_rclone_target || { echo "rclone: $_DEP_RC_WHY"; return 1; }
   if [ "${BVK_DEPS_DRYRUN:-0}" = 1 ]; then _dep_say "   would: download $_DEP_RC_URL, unzip rclone into $dest, chmod 755, put $dest on PATH (once)"; return 0; fi
   command -v curl >/dev/null 2>&1 || { echo "curl is required to download rclone"; return 1; }
@@ -471,6 +474,14 @@ PY
   fi
   chmod 755 "$dest/rclone"; rm -rf "$tmp"
   "$dest/rclone" version >/dev/null 2>&1 || { echo "the downloaded rclone does not run on this machine"; return 1; }
+  _dep_bin_on_path "$dest"
+  hash -r 2>/dev/null
+  return 0
+}
+
+# put DEST (~/bin: user-space installs) on PATH for good: the README's line in ~/.bashrc (and .zshrc / fish), and for this run.  Shared by rclone and gcloud.
+_dep_bin_on_path() {
+  local dest="$1" line shn
   case ":$PATH:" in
     *":$dest:"*) ;;
     *) line='export PATH="$HOME/bin:$PATH"'                                  # exactly the README's line (literal $HOME)
@@ -483,6 +494,47 @@ PY
        [ "${_DEP_DEVICE:-}" = macos-arm ] || [ "${_DEP_DEVICE:-}" = macos-intel ] && _dep_path_line "$HOME/.zshrc" "$line"
        PATH="$dest:$PATH" ;;                                                 # this run (and the app) finds it at once
   esac
+  return 0
+}
+
+# Google's own name for this machine -> _DEP_GC_URL ; rc 1 + _DEP_GC_WHY when there is none.  (In Google's file names "arm" = 64-bit ARM.)
+# Termux (android) takes the linux build, the way Google's Linux instructions do.  The CPU / OS table is _bvk_engine_target (rule 9).
+_dep_gcloud_target() {
+  _DEP_GC_URL=""; _DEP_GC_WHY=""
+  local os arch=""
+  _dep_device
+  [ "$_DEP_DEVICE" = android-other ] && { _DEP_GC_WHY="Android without Termux: install Termux (F-Droid) first"; return 1; }
+  declare -F _bvk_engine_target >/dev/null 2>&1 || { _DEP_GC_WHY="the CPU table (bashbasicsbyvk_engine_target.sh) is not loaded"; return 1; }
+  _bvk_engine_target
+  case "$_bet_os" in android|linux) os=linux ;; darwin) os=darwin ;; *) _DEP_GC_WHY="Google ships no gcloud build for $_bet_os"; return 1 ;; esac
+  case "$_bet_m" in arm64) arch=arm ;; amd64) arch=x86_64 ;; 386) [ "$os" = linux ] && arch=x86 ;; esac
+  [ -n "$arch" ] || { _DEP_GC_WHY="$(uname -m 2>/dev/null) on $_bet_os: Google ships no build for this CPU"; return 1; }
+  _DEP_GC_URL="https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-$os-$arch.tar.gz"
+}
+
+# gcloud, the way Google's tarball install does it, in the home folder (no root): download, unpack to ~/google-cloud-sdk, its own install.sh
+# (no rc-file edits: the app puts the program on PATH by a link instead), link gcloud into $PREFIX/bin (Termux) or ~/bin.
+# An SDK folder that already runs is only linked, never fetched again.
+_dep_recipe_gcloud() {
+  local tmp sdk="$HOME/google-cloud-sdk" bin
+  _dep_gcloud_target || { echo "gcloud: $_DEP_GC_WHY"; return 1; }
+  if [[ "${PREFIX:-}" == *com.termux* ]]; then bin="$PREFIX/bin"; else bin="$HOME/bin"; fi
+  if [ "${BVK_DEPS_DRYRUN:-0}" = 1 ]; then _dep_say "   would: download $_DEP_GC_URL, unpack it into $HOME (google-cloud-sdk/), run its install.sh --quiet, link gcloud into $bin"; return 0; fi
+  if ! "$sdk/bin/gcloud" --version >/dev/null 2>&1; then
+    command -v curl >/dev/null 2>&1 || { echo "curl is required to download gcloud"; return 1; }
+    command -v tar >/dev/null 2>&1 || { echo "tar is required to unpack gcloud"; return 1; }
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/bvkgcloud.XXXXXX") || return 1
+    _dep_log "run: curl $_DEP_GC_URL"
+    if ! curl -fL --retry 3 --connect-timeout 20 -# -o "$tmp/gcloud.tar.gz" "$_DEP_GC_URL"; then rm -rf "$tmp"; echo "could not download $_DEP_GC_URL (no internet, or a proxy / firewall in the way)"; return 1; fi
+    tar -xf "$tmp/gcloud.tar.gz" -C "$HOME" || { rm -rf "$tmp"; echo "could not unpack gcloud into $HOME"; return 1; }
+    rm -rf "$tmp"
+    [ -x "$sdk/install.sh" ] || { echo "the gcloud download has no install.sh"; return 1; }
+    _dep_log "run: $sdk/install.sh --quiet"
+    "$sdk/install.sh" --quiet --path-update=false --command-completion=false --usage-reporting=false || { echo "gcloud's own installer failed"; return 1; }
+  fi
+  mkdir -p "$bin" && ln -sf "$sdk/bin/gcloud" "$bin/gcloud" || { echo "could not link gcloud into $bin"; return 1; }
+  "$bin/gcloud" --version >/dev/null 2>&1 || { echo "the installed gcloud does not run on this machine"; return 1; }
+  [ "$bin" = "$HOME/bin" ] && _dep_bin_on_path "$bin"
   hash -r 2>/dev/null
   return 0
 }
@@ -512,6 +564,7 @@ _dep_lane_sys() {          # system packages, then recipes (foreground: sudo may
       gh-apt) _dep_recipe_gh_apt ;;
       gh-dnf) _dep_recipe_gh_dnf ;;
       rclone) _dep_recipe_rclone ;;
+      gcloud) _dep_recipe_gcloud ;;
     esac
   done
   return 0
@@ -681,7 +734,7 @@ _dep_need() {
   for id in "${miss[@]}"; do
     local isna=0 p
     for p in "${_PL_NA[@]}"; do [ "$p" = "$id" ] && isna=1; done
-    if [ $isna = 1 ]; then [ "${_DEP_REQ[$id]:-1}" = 1 ] && na_req+=("$id"); continue; fi
+    if [ "$isna" = 1 ]; then [ "${_DEP_REQ[$id]:-1}" = 1 ] && na_req+=("$id"); continue; fi
     todo+=("$id")
   done
 
@@ -730,11 +783,11 @@ _dep_install() {
   [ $bg_npm = 1 ] && { _dep_say "   ▶ npm packages (in the background): ${_PL_NPM[*]}"; ( _dep_lane_npm ) > "$tmp/npm.log" 2>&1 & pids+=($!); }
   _dep_lane_sys
   hash -r 2>/dev/null; _dep_path_fix
-  if [ $late_pip = 1 ]; then
+  if [ "$late_pip" = 1 ]; then
     if command -v python3 >/dev/null 2>&1; then _dep_say "   ▶ Python packages (in the background): ${_PL_PIP[*]}"; ( _dep_lane_pip ) > "$tmp/pip.log" 2>&1 & pids+=($!)
     else echo "python3 is not available, so the Python packages were skipped" > "$tmp/pip.log"; fi
   fi
-  if [ $late_npm = 1 ]; then
+  if [ "$late_npm" = 1 ]; then
     if command -v npm >/dev/null 2>&1; then _dep_say "   ▶ npm packages (in the background): ${_PL_NPM[*]}"; ( _dep_lane_npm ) > "$tmp/npm.log" 2>&1 & pids+=($!)
     else echo "npm is not available, so the npm packages were skipped" > "$tmp/npm.log"; fi
   fi

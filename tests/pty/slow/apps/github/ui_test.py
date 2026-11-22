@@ -62,7 +62,11 @@ def run_screens():
         a.send("\x1b[C"); a.wait(lambda: "[🔖 Tags]" in a.text()); a.settle()
         t = a.text()
         check("repo: the right arrow switches to the Tags tab (5 tags, newest version first, stable ones marked)", "5 out of 5 here" in t and "✓ stable" in t and t.index("v1.11-beta") < t.index("v1.10") < t.index("v1.9"), a)
-        a.send("\x1b[D"); a.wait(lambda: "[📦 Stable]" in a.text()); a.settle()
+        a.send("\x1b[C"); a.wait(lambda: "[🌿 Branches]" in a.text()); a.settle()
+        check("repo: a third tab, Branches, lists main (default)", "1) 🌿 main" in a.text() and "default" in a.text(), a)
+        L(a, "e-1")
+        check("repo: a branch is not edited here (download or info only)", "not edited here" in a.text().split("Select: e-1")[-1], a)
+        a.send("\x1b[D"); a.settle(); a.send("\x1b[D"); a.wait(lambda: "[📦 Stable]" in a.text()); a.settle()
         L(a, "i-1", until=lambda: "first release" in a.text())
         check("info: release notes of row 1", "stable release" in a.text() and "first release" in a.text(), a)
         a.send(" "); a.settle()       # info mode waits for any key (_bvk_info_wait); without it the next command loses its first letter
@@ -120,21 +124,47 @@ def run_screens():
         check("u twice goes back out of the repo and the repo list", a.alive and "Select" in a.text(), a)
     finally: a.close(); E.close()
 
+def two_lines(a, own, std="u) Back"):
+    """the screen's own keys and the standard keys (u q h cc) are on two different footer lines"""
+    ls = a.text().split("\n")
+    i = next((k for k, l in enumerate(ls) if own in l), None)
+    return i is not None and std not in ls[i] and any(std in l for l in ls[i + 1:i + 3])
+
 def run_others():
-    """open.github.others: no names yet -> c asks, typed names (one unknown) -> the public repos of the known user, READ ONLY
-    (no e / r / d, info works), x removes, the names are saved on this machine."""
+    """open.github.others: users (level 1, nothing fetched) -> one user's projects (level 2) -> a repo, READ ONLY.
+    A repo with no tags / releases opens on its Branches tab; write keys are refused; info works; x removes; names are saved."""
     E = gt.Env(); R, c1, c2 = gt.seed(E); E.state.add("o/second", private=True)
+    B = E.state.add("p/bare"); cb = B.commit("only"); B.branches["main"] = cb; B.branches["dev"] = cb
     a = start(E)
     try:
         to_github(a, "Add GitHub user names", "2")
         check("others: nothing saved yet -> it asks for user names (type or choose file(s))", "Type user names" in a.text() and "Choose file(s)" in a.text(), a)
-        L(a, "1", until=lambda: "comma separated" in a.text()); L(a, "o,nobody", t=4, until=lambda: "GitHub others" in a.text())
+        L(a, "1", until=lambda: "comma separated" in a.text()); L(a, "o,p,nobody", t=4, until=lambda: "GitHub others" in a.text())
         t = a.text()
-        check("others: the user's public repo is listed, the private one is not, an unknown name is a warning", "o/r" in t and "o/second" not in t and "nobody" in t and "no such user" in t and "read only" in t, a)
+        check("others: level 1 lists the USERS (no project of anyone is fetched or shown)", "3 user(s)" in t and "1) 👤 o" in t and "2) 👤 p" in t and "3) 👤 nobody" in t and "o/r" not in t and "bare" not in t and "read only" in t, a)
+        check("others: footer on two lines: 'c) Add users   x) Remove users' / 'u) Back ...'", two_lines(a, "c) Add users") and "x) Remove users" in a.text(), a)
         saved = [os.path.join(d, f) for d, _, fs in os.walk(a.tmp) for f in fs if f == "others.txt"]
-        check("others: the names are saved on this machine, one per line", bool(saved) and open(saved[0]).read().split() == ["o", "nobody"], a)
+        check("others: the names are saved on this machine, one per line", bool(saved) and open(saved[0]).read().split() == ["o", "p", "nobody"], a)
+        L(a, "3", t=4, until=lambda: "no such user" in a.text())
+        check("others: an unknown user says so and stays on the user list", "no such user" in a.text() and "3 user(s)" in a.text(), a)
+        L(a, "2", t=4, until=lambda: "project(s)" in a.text())
+        check("others: level 2 shows only that user's projects, owner prefix dropped", "1 project(s)" in a.text() and "1) 📂 bare" in a.text() and "o/r" not in a.text(), a)
+        check("others: project list footer on two lines too", two_lines(a, "rf) Refresh"), a)
+        L(a, "1", t=4, until=lambda: "[🌿 Branches]" in a.text())
+        t = a.text()
+        check("others: a repo with no tags / releases opens on its Branches tab: default first, marked", "(read only)" in t and t.index("main") < t.index("dev") and "default" in t, a)
+        L(a, "i-1", until=lambda: "newest commit" in a.text())
+        check("others: info on a branch shows its newest commit", "newest commit" in a.text(), a)
+        a.send(" "); a.settle()
+        L(a, "r-1")
+        check("others: a branch cannot be renamed (r-1 is not a key of this read-only screen)", "Invalid selection" in a.text().split("Select: r-1")[-1], a)
+        L(a, "1", until=lambda: "Download (clone the branch)" in a.text())
+        check("others: the branch actions are download and info only", "Info" in a.text() and "Rename" not in a.text().split("Download (clone the branch)")[-1] and "Delete" not in a.text().split("Download (clone the branch)")[-1], a)
+        L(a, "u"); L(a, "u"); L(a, "u"); a.settle()
+        L(a, "1", t=4, until=lambda: "project(s)" in a.text())
+        check("others: the other user's project list: public only", "1 project(s)" in a.text() and "second" not in a.text(), a)
         L(a, "1", t=4, until=lambda: "[📦 Stable]" in a.text())
-        check("others: a repo opens with Stable / Tags and says read only", "(read only)" in a.text() and "v1.0" in a.text(), a)
+        check("others: a repo with releases opens with Stable / Tags / Branches and says read only", "(read only)" in a.text() and "v1.0" in a.text() and "Branches" in a.text(), a)
         for k in ("e-1", "r-1", "d-1", "c"):
             L(a, k); t = a.text().split("Select: " + k)[-1]
             check("others: '%s' (a write key) is refused, no menu opens" % k, "What do you want to change" not in t and "release AND its git tag" not in t and "Tag name" not in t and "Rename" not in t.replace("Select", ""), a)
@@ -143,7 +173,7 @@ def run_others():
         a.send(" "); a.settle()
         L(a, "cc", until=lambda: "Download" in a.text()); t = a.text().split("Cheat codes · this screen")[-1]
         check("others: cc lists download, info and reload but no write command", "Download" in t and "Reload" in t and "Rename" not in t and "Delete" not in t and "Edit" not in t and "Create" not in t, a)
-        L(a, "u"); L(a, "u"); a.settle()
+        L(a, "u"); L(a, "u"); L(a, "u"); a.settle()
         L(a, "x", until=lambda: "Which user names" in a.text())
         check("others: x lists the saved names to remove", "1) [ ] o" in a.text() and "nobody" in a.text(), a)
     finally: a.close(); E.close()

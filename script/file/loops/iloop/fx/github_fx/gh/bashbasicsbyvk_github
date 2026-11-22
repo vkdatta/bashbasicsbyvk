@@ -12,6 +12,8 @@ Key (token) discovery - nothing is ever asked for, nothing is ever stored, nothi
 
     bashbasicsbyvk_github auth                          one line  OK<US>login<US>source<US>index | NONE<US>searched places
     bashbasicsbyvk_github repos                         every repo you can reach
+    bashbasicsbyvk_github branches REPO                 the branches of a repo (default first): name, short sha, "default", "protected"
+    bashbasicsbyvk_github branch-info REPO BRANCH       the newest commit of a branch (for repos that keep no tags / releases)
     bashbasicsbyvk_github user-repos USER [USER..]      the public repos of other GitHub users / orgs (read only use; a name GitHub does not know = a "!" row)
     bashbasicsbyvk_github releases REPO [--all]         stable releases (newest first); --all adds drafts and pre-releases
     bashbasicsbyvk_github tags REPO                     every tag, newest version first, with its release (if any)
@@ -634,6 +636,36 @@ def cmd_tags(args):
     return 0
 
 
+def cmd_branches(args):
+    repo = args[0]
+    default = (http("GET", "/repos/%s" % repo) or {}).get("default_branch") or ""
+    rows = []
+    for b in paginate("/repos/%s/branches" % repo):
+        rows.append((b["name"] != default, b["name"].lower(),
+                     US.join([b["name"], ((b.get("commit") or {}).get("sha") or "")[:7], "default" if b["name"] == default else "", "protected" if b.get("protected") else ""])))
+    rows.sort()
+    print("\n".join(r[2] for r in rows))
+    return 0
+
+
+def cmd_branch_info(args):
+    repo, br = args[0], args[1]
+    try:
+        b = http("GET", "/repos/%s/branches/%s" % (repo, urllib.parse.quote(br, safe="/")))
+    except GhError as e:
+        if e.status == 404:
+            bad("'%s' is not a branch of %s" % (br, repo)); return 3
+        raise
+    c = b.get("commit") or {}; cm = c.get("commit") or {}; au = cm.get("author") or {}
+    print("🌿 %s   (%s)" % (br, repo))
+    print("   protected : %s" % ("yes" if b.get("protected") else "no"))
+    print("   newest commit: %s  %s  by %s" % ((c.get("sha") or "")[:10], (au.get("date") or "")[:10], au.get("name", "?")))
+    print("   commit message:")
+    print("\n".join("      " + l for l in (cm.get("message") or "(empty)").rstrip("\n").split("\n")[:20]))
+    print("   page      : %s/%s/tree/%s" % (WEB, repo, br))
+    return 0
+
+
 def cmd_info(args):
     repo, tag = args[0], args[1]
     st = tag_state(repo, tag)
@@ -1021,11 +1053,12 @@ def _fetch_release(repo, rel, base):
 def cmd_clone(args):
     job = _job(args); repo = job.repo
     tags = job.lines("tags")
+    branches = job.lines("branches")                     # a repo with no tags / releases is downloaded by branch
     dest = job.get("dest").strip() or "."
     depth = job.get("depth").strip()
     depth = int(depth) if depth.isdigit() and int(depth) > 0 else 0
     with_rel = job.flag("with_release")
-    if not tags:
+    if not tags and not branches:
         bad("nothing to download"); return 3
     if shutil.which("git") is None:
         try:
@@ -1041,6 +1074,17 @@ def cmd_clone(args):
     url = "%s/%s.git" % (GIT_BASE, repo)
     fails = 0
     try:
+        for b in branches:
+            target = unique_dir(dest, "%s-%s" % (repo.split("/")[1], safe_name(b)))
+            try:
+                cmd = ["git", "clone"] + (["--depth", str(depth)] if depth else []) + ["--branch=" + b, "--", url, target]
+                r = subprocess.run(cmd, env=env, stdout=subprocess.DEVNULL)
+                if r.returncode:
+                    shutil.rmtree(target, ignore_errors=True)
+                    raise GhError("git failed (exit %d) - see git's message above" % r.returncode)
+                ok("branch %s -> %s  [%s]" % (b, target, "depth %d" % depth if depth else "full history"))
+            except GhError as e:
+                fails += 1; bad("%s: %s" % (b, e))
         for t in tags:
             target = unique_dir(dest, "%s-%s" % (repo.split("/")[1], safe_name(t)))
             try:
@@ -1102,7 +1146,7 @@ def _job(args):
     return Job(args[args.index("--job") + 1])
 
 
-COMMANDS = {"auth": cmd_auth, "repos": cmd_repos, "user-repos": cmd_user_repos, "releases": cmd_releases, "tags": cmd_tags, "info": cmd_info, "get": cmd_get,
+COMMANDS = {"auth": cmd_auth, "repos": cmd_repos, "user-repos": cmd_user_repos, "releases": cmd_releases, "tags": cmd_tags, "branches": cmd_branches, "branch-info": cmd_branch_info, "info": cmd_info, "get": cmd_get,
             "create-release": cmd_create_release, "create-tag": cmd_create_tag, "edit": cmd_edit, "rename": cmd_rename,
             "delete": cmd_delete, "clone": cmd_clone, "parse-releases": cmd_parse_releases, "parse-commit": cmd_parse_commit}
 

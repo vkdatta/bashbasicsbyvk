@@ -108,6 +108,14 @@ def make_handler(state):
         def _repo(self, method, R, rest, qs):
             if rest == "" and method == "GET":
                 return self._send(200, {"default_branch": R.default_branch, "full_name": R.full})
+            if rest == "/branches" and method == "GET":
+                return self._page([{"name": n, "commit": {"sha": c}, "protected": n == R.default_branch} for n, c in R.branches.items()], qs)
+            mm = re.match(r"^/branches/(.+)$", rest)
+            if mm and method == "GET":
+                c = R.branches.get(mm.group(1))
+                if not c:
+                    return self._send(404, {"message": "Branch not found"})
+                return self._send(200, {"name": mm.group(1), "protected": False, "commit": {"sha": c, "commit": R.commits.get(c, {})}})
             # releases
             if rest == "/releases" and method == "GET":
                 return self._page([self._rel(R, r) for r in R.releases], qs)

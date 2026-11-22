@@ -1,0 +1,8 @@
+# bashbasicsbyvk_xui_ghu.map — wiring for the projects of ONE other GitHub user (level 2 of open.github.others)
+# Chosen by _cm_ctx_find when _XUI_PFX=ghu (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_ghu
+@kind   menu
+@back   u
+@parent xui
+
+rf         .mapto()  rf         from bashbasicsbyvk_xui_ghumenucommands.sh

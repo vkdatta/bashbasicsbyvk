@@ -7,7 +7,9 @@
 #  fx → github → open.github.others    other people's projects, READ ONLY (info + download, the same screens and actions as below):
 #       c   add GitHub user names: type them comma separated, or choose file(s) that hold them comma separated  (saved on this machine)
 #       x   remove saved user names
-#       the list shows every public repo of every saved user; pick one → Stable / Tags tabs with  g (download)  i-N (info)  rf  u  only.
+#       the list is the saved USERS (nothing is fetched yet); pick a user → only THAT user's public repos load; pick a repo →
+#       Stable / Tags / Branches tabs with  g (download)  i-N (info)  rf  u  only.
+#  Every repo screen has a Branches tab: a repo that keeps no tags or releases is downloaded by branch (clone --branch).
 #
 #  fx → github → open.github.self      YOUR repos (everything below)
 #    1. finds your GitHub key on this machine (environment, ~/.bashrc and the secrets files it sources, gh CLI, git-credentials,
@@ -33,7 +35,9 @@ declare -gA _GHX_S_HAS=()
 declare -ga _GHX_PICK=()
 _GHX_BUSY=""
 _GHX_RO=0                                                  # 1 = other people's repos: no create / edit / rename / delete anywhere
-declare -ga _GHX_USERS=() _GHX_U_ERR=()
+declare -ga _GHX_USERS=()
+_GHX_USER=""                                               # the saved user whose repos are open
+declare -ga _GHX_B_NAME=() _GHX_B_SHA=() _GHX_B_FLAG=(); _GHX_B_FOR=""; _GHX_B_ERR=""   # branches of _GHX_REPO (loaded when the tab is first drawn)
 
 # ── key
 _ghx_no_key_help() {
@@ -83,7 +87,7 @@ _ghx_load_repo() {               # releases (stable) + tags of $_GHX_REPO
   rel="$(_gh_run releases "$_GHX_REPO" 2>/dev/null)" || { _GHX_MSG="could not read the releases of $_GHX_REPO (offline, no access, or API rate limit)"; return 1; }
   tags="$(_gh_run tags "$_GHX_REPO" 2>/dev/null)"    || { _GHX_MSG="could not read the tags of $_GHX_REPO"; return 1; }
   _GHX_S_TAG=(); _GHX_S_NAME=(); _GHX_S_DATE=(); _GHX_S_FLAGS=(); _GHX_S_HAS=()
-  _GHX_T_TAG=(); _GHX_T_TYPE=(); _GHX_T_SHA=(); _GHX_T_STATE=()
+  _GHX_T_TAG=(); _GHX_T_TYPE=(); _GHX_T_SHA=(); _GHX_T_STATE=(); _GHX_B_FOR=""; _GHX_B_ERR=""
   while IFS="$_GH_US" read -r t n d id fl b; do
     [ -n "$t" ] || continue
     _GHX_S_TAG+=("$t"); _GHX_S_NAME+=("$n"); _GHX_S_DATE+=("$d"); _GHX_S_FLAGS+=("$fl"); _GHX_S_HAS["$t"]=1
@@ -92,6 +96,17 @@ _ghx_load_repo() {               # releases (stable) + tags of $_GHX_REPO
     [ -n "$t" ] || continue
     _GHX_T_TAG+=("$t"); _GHX_T_TYPE+=("$ty"); _GHX_T_SHA+=("$sha"); _GHX_T_STATE+=("$st")
   done <<<"$tags"
+  return 0
+}
+
+_ghx_load_branches() {           # the Branches tab: read once per repo, on first draw (the other tabs never wait for it)
+  local out n sha df pr
+  _GHX_B_NAME=(); _GHX_B_SHA=(); _GHX_B_FLAG=(); _GHX_B_ERR=""; _GHX_B_FOR="$_GHX_REPO"
+  out="$(_gh_run branches "$_GHX_REPO" 2>/dev/null)" || { _GHX_B_ERR="could not read the branches of $_GHX_REPO (rf tries again)"; return 1; }
+  while IFS="$_GH_US" read -r n sha df pr; do
+    [ -n "$n" ] || continue
+    _GHX_B_NAME+=("$n"); _GHX_B_SHA+=("$sha"); _GHX_B_FLAG+=("$df${pr:+ $pr}")
+  done <<<"$out"
   return 0
 }
 
@@ -118,7 +133,7 @@ ghp_header() {                                     # template 7P68NA
   _tpl_list_header "🐙 GitHub   ${#_GHX_R_NAME[@]} repo(s) · signed in as ${_GHX_LOGIN}" "🔑 key: $_GHX_SRC"$'\n'"📂 downloads go to: $_GHX_NAV"
 }
 
-ghp_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that repo" "=:filter" "rf" "${_MC_STD[@]}"; }
+ghp_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that repo" "=:filter" "rf" "|" "${_MC_STD[@]}"; }   # "|" = the standard keys on their own line
 
 _ghp_cmd() {
   case "$1" in
@@ -139,17 +154,21 @@ _ghx_pick_repo() {
   _xui_row "$1" || { _bvk_invalid; return 1; }
   _GHX_REPO="${_GHX_R_NAME[$_XUI_SLOT]}"; _GHX_TAB="stable"
   if ! _ghx_load_repo; then echo "❌ $_GHX_MSG"; return 1; fi
+  [ "${#_GHX_S_TAG[@]}" -eq 0 ] && [ "${#_GHX_T_TAG[@]}" -eq 0 ] && _GHX_TAB="branches"    # no releases, no tags: the branches are all there is
   return 0
 }
 
 # ── repo screen: Stable / Tags
 # Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh); the title is the repo's name, so the header passes it
-_tm_define ghr _GHX_TAB "🐙 repo" "GitHub" stable:"📦 Stable" tags:"🔖 Tags"
+_tm_define ghr _GHX_TAB "🐙 repo" "GitHub" stable:"📦 Stable" tags:"🔖 Tags" branches:"🌿 Branches"
 
 ghr_build() {
   local i rows=()
   if [ "$_GHX_TAB" = stable ]; then
     for i in "${!_GHX_S_TAG[@]}"; do rows+=("${_GHX_S_TAG[$i]} ${_GHX_S_NAME[$i]}"); done
+  elif [ "$_GHX_TAB" = branches ]; then
+    [ "$_GHX_B_FOR" = "$_GHX_REPO" ] || _ghx_load_branches
+    for i in "${!_GHX_B_NAME[@]}"; do rows+=("${_GHX_B_NAME[$i]} ${_GHX_B_FLAG[$i]}"); done
   else
     for i in "${!_GHX_T_TAG[@]}"; do rows+=("${_GHX_T_TAG[$i]} ${_GHX_T_TYPE[$i]} ${_GHX_T_STATE[$i]}"); done
   fi
@@ -163,6 +182,9 @@ ghr_row() {
     [ -n "${_GHX_S_DATE[$s]}" ] && line+="  ${_GHX_S_DATE[$s]}"
     [ -n "${_GHX_S_NAME[$s]}" ] && [ "${_GHX_S_NAME[$s]}" != "${_GHX_S_TAG[$s]}" ] && line+="  — $(_xui_trunc "${_GHX_S_NAME[$s]}" 22)"
     [ "$s" -eq 0 ] && line+="  (latest)"
+  elif [ "$_GHX_TAB" = branches ]; then
+    printf -v line ' %2d) 🌿 %-26s %s' "$1" "$(_xui_trunc "${_GHX_B_NAME[$s]}" 26)" "${_GHX_B_SHA[$s]}"
+    [ -n "${_GHX_B_FLAG[$s]}" ] && line+="  ${_GHX_B_FLAG[$s]}"
   else
     printf -v line ' %2d) 🔖 %-18s %-11s' "$1" "$(_xui_trunc "${_GHX_T_TAG[$s]}" 18)" "${_GHX_T_TYPE[$s]}"
     case "${_GHX_T_STATE[$s]}" in stable) line+=" ✓ stable" ;; pre) line+=" pre-release" ;; draft) line+=" draft" ;; esac
@@ -174,7 +196,11 @@ ghr_row() {
 ghr_header() {                                     # template V3PX4Y: the title is the repo (GitHub|stable · tags)
   local _n=""
   if [ "${#items[@]}" -eq 0 ]; then
-    if [ "$_GHX_TAB" = stable ]; then _n="No stable releases yet — c creates one, or open the Tags tab."; else _n="No tags yet — c creates one."; fi
+    case "$_GHX_TAB" in
+      stable)   _n="No stable releases yet — c creates one, or open the Tags / Branches tab." ;;
+      tags)     _n="No tags yet — c creates one, or download a branch (Branches tab)." ;;
+      branches) _n="${_GHX_B_ERR:-No branches (an empty repo).}" ;;
+    esac
   fi
   _tm_head -t "🐙 $_GHX_REPO" -n "$_n" ghr
 }
@@ -186,7 +212,11 @@ _ghx_pick_names() {
   _GHX_PICK=(); local r
   for r in "${_XUI_SEL[@]}"; do
     _xui_slot "$r"
-    if [ "$_GHX_TAB" = stable ]; then _GHX_PICK+=("${_GHX_S_TAG[$_XUI_SLOT]}"); else _GHX_PICK+=("${_GHX_T_TAG[$_XUI_SLOT]}"); fi
+    case "$_GHX_TAB" in
+      stable)   _GHX_PICK+=("${_GHX_S_TAG[$_XUI_SLOT]}") ;;
+      branches) _GHX_PICK+=("${_GHX_B_NAME[$_XUI_SLOT]}") ;;
+      *)        _GHX_PICK+=("${_GHX_T_TAG[$_XUI_SLOT]}") ;;
+    esac
   done
 }
 
@@ -203,7 +233,10 @@ _ghx_job_new() {
   _GHX_JOB="$(mktemp -d 2>/dev/null)" || { echo "❌ no temp folder"; return 1; }
   printf '%s' "$_GHX_REPO" > "$_GHX_JOB/repo"
 }
-_ghx_job_tags() { local t; : > "$_GHX_JOB/tags"; for t in "${_GHX_PICK[@]}"; do printf '%s\n' "$t" >> "$_GHX_JOB/tags"; done; }
+_ghx_job_tags() {                # the picked names → the job: tags, or (Branches tab) branches
+  local t f=tags; [ "$_GHX_TAB" = branches ] && f=branches
+  : > "$_GHX_JOB/$f"; for t in "${_GHX_PICK[@]}"; do printf '%s\n' "$t" >> "$_GHX_JOB/$f"; done
+}
 _ghx_job_run() {                 # _ghx_job_run <engine command> [extra]
   local cmd="$1"; shift
   echo
@@ -415,7 +448,7 @@ _ghx_delete() {
 
 # ── download
 _ghx_s_dl_how() {
-  _bvk_menu how -t "Download ${#_GHX_PICK[@]} item(s) — clone at the tag" -i "⬇️" \
+  _bvk_menu how -t "Download ${#_GHX_PICK[@]} item(s) — clone at the $([ "$_GHX_TAB" = branches ] && echo branch || echo tag)" -i "⬇️" \
     "d:With depth — only the last N commits (fast, small)" "f:Without depth — the full history" || { _bvk_back && return 1; return 3; }
   return 0
 }
@@ -428,6 +461,7 @@ _ghx_s_dl_depth() {
   return 0
 }
 _ghx_s_dl_rel() {
+  [ "$_GHX_TAB" = branches ] && return 5                     # a branch has no release notes / files
   local rc
   _bvk_ask withrel "Also download the release notes and files (assets) of tags that have a release?"; rc=$?
   (( rc == 0 )) && return 0
@@ -524,7 +558,9 @@ _ghx_create_release_for() {      # a tag that was just made → its stable relea
 _ghx_actions() {                 # rows picked (_XUI_SEL) → what to do with them
   local act
   _ghx_pick_names
-  if [ "$_GHX_RO" = 1 ]; then                                # other people's repo: read only = download and info
+  if [ "$_GHX_TAB" = branches ]; then                        # branches: download and info (nobody edits them here)
+    _bvk_menu act -t "${#_GHX_PICK[@]} branch(es) in $_GHX_REPO" -i "🌿" "g:Download (clone the branch)" "i:Info" || return 1
+  elif [ "$_GHX_RO" = 1 ]; then                              # other people's repo: read only = download and info
     _bvk_menu act -t "${#_GHX_PICK[@]} selected in $_GHX_REPO (read only)" -i "🐙" "g:Download (clone at the tag)" "i:Info" || return 1
   else
     _bvk_menu act -t "${#_GHX_PICK[@]} selected in $_GHX_REPO" -i "🐙" \
@@ -534,13 +570,15 @@ _ghx_actions() {                 # rows picked (_XUI_SEL) → what to do with th
 }
 
 _ghx_run_action() {
-  case "$1" in e|r|d) [ "$_GHX_RO" = 1 ] && { echo "🔒 Read only: $_GHX_REPO is not yours."; return 1; } ;; esac
+  case "$1" in e|r|d) [ "$_GHX_RO" = 1 ] && { echo "🔒 Read only: $_GHX_REPO is not yours."; return 1; }
+    [ "$_GHX_TAB" = branches ] && { echo "🌿 Branches can be downloaded (g) or inspected (i), not edited here."; return 1; } ;; esac
   case "$1" in
     e) _ghx_edit ;;
     r) _ghx_rename ;;
     d) _ghx_delete ;;
     g) _ghx_download ;;
-    i) local t; for t in "${_GHX_PICK[@]}"; do _gh_run info "$_GHX_REPO" "$t"; echo; done ;;
+    i) local t cmd=info; [ "$_GHX_TAB" = branches ] && cmd=branch-info
+       for t in "${_GHX_PICK[@]}"; do _gh_run "$cmd" "$_GHX_REPO" "$t"; echo; done ;;
   esac
 }
 
@@ -550,7 +588,7 @@ _ghr_cmd() {
       _tm_key ghr "$1"
       return 3 ;;
     rf) _ghx_reload; return 0 ;;
-    c)  _ghx_create; return 0 ;;
+    c)  [ "$_GHX_TAB" = branches ] && { echo "🌿 Create a tag or a release on the Tags / Stable tab."; return 1; }; _ghx_create; return 0 ;;
     i-*)
       _xui_parse_sel "${1#*-}" || return 1
       _ghx_pick_names; _ghx_run_action i; _bvk_info_wait; return 0 ;;      # info mode: any key, then the list is drawn again
@@ -641,34 +679,56 @@ _ghx_users_x() {
   _ghx_users_save
 }
 
-_ghx_fetch_others() {            # every saved user's public repos → the same _GHX_R_* lists the repo screen draws
+_ghx_fetch_user() {              # ONE saved user's public repos → the _GHX_R_* lists the repo list draws (only this user: that is the load time saved)
   local out n v fl p d
-  _GHX_R_NAME=(); _GHX_R_VIS=(); _GHX_R_FLAGS=(); _GHX_R_PUSHED=(); _GHX_R_DESC=(); _GHX_U_ERR=()
-  [ "${#_GHX_USERS[@]}" -gt 0 ] || return 0
-  out="$(_gh_run user-repos "${_GHX_USERS[@]}" 2>/dev/null)" || return 1
+  _GHX_R_NAME=(); _GHX_R_VIS=(); _GHX_R_FLAGS=(); _GHX_R_PUSHED=(); _GHX_R_DESC=(); _GHX_MSG=""
+  out="$(_gh_run user-repos "$_GHX_USER" 2>/dev/null)" || { _GHX_MSG="could not read the repos of $_GHX_USER (offline, or API rate limit)"; return 1; }
   while IFS="$_GH_US" read -r n v fl p d; do
     [ -n "$n" ] || continue
-    if [ "$n" = "!" ]; then _GHX_U_ERR+=("$v: $fl"); continue; fi
+    if [ "$n" = "!" ]; then _GHX_MSG="$v: $fl"; return 1; fi
     _GHX_R_NAME+=("$n"); _GHX_R_VIS+=("$v"); _GHX_R_FLAGS+=("$fl"); _GHX_R_PUSHED+=("$p"); _GHX_R_DESC+=("$d")
   done <<<"$out"
   return 0
 }
 
-# the list screen of other people's repos: the repo list (ghp) fed with other data
-gho_build()  { ghp_build; }
-gho_row()    { ghp_row "$@"; }
-gho_header() {
-  local e="" x
-  for x in "${_GHX_U_ERR[@]}"; do e+=$'\n'"⚠️  $x"; done
-  _tpl_list_header "🐙 GitHub others   ${#_GHX_R_NAME[@]} repo(s) of ${#_GHX_USERS[@]} user(s) · read only" "👥 ${_GHX_USERS[*]:-no user names yet: c adds some}${e}"$'\n'"📂 downloads go to: $_GHX_NAV"
-}
-gho_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that repo" "c:Add users" "x:Remove users" "=:filter" "rf" "${_MC_STD[@]}"; }
+# level 1 (gho): the saved users, nothing fetched
+gho_build()  { _xui_begin_items "${_GHX_USERS[@]}"; }
+gho_row()    { _xui_slot "$1"; printf -v _vp_line ' %2d) 👤 %s' "$1" "${_GHX_USERS[$_XUI_SLOT]}"; }
+gho_header() { _tpl_list_header "🐙 GitHub others   ${#_GHX_USERS[@]} user(s) · read only" "📂 downloads go to: $_GHX_NAV"; }
+gho_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that user's projects" "c:Add users" "x:Remove users" "|" "${_MC_STD[@]}"; }
 
 _gho_cmd() {
   case "$1" in
-    c)  _ghx_users_c && { _ghx_fetch_others || echo "❌ Could not read the repos (offline, or API rate limit)."; }; return 0 ;;
-    x)  _ghx_users_x && { _ghx_fetch_others || echo "❌ Could not read the repos (offline, or API rate limit)."; }; return 0 ;;
-    rf) _ghx_fetch_others || echo "❌ Reload failed."; return 0 ;;
+    c)  _ghx_users_c; return 0 ;;
+    x)  _ghx_users_x; return 0 ;;
+    [0-9]*)
+      _xui_row "$1" || { _bvk_invalid; return 1; }
+      _GHX_USER="${_GHX_USERS[$_XUI_SLOT]}"
+      _ghx_fetch_user || { echo "❌ $_GHX_MSG"; return 1; }
+      _xui_enter
+      _xui_screen ghu
+      _xui_loop _ghu_cmd
+      _xui_leave
+      return 0 ;;
+    fx|sw|api|.r|-u) echo "↩️  Go back with  u  first."; return 1 ;;
+    *) return 9 ;;
+  esac
+}
+
+# level 2 (ghu): the projects of the one chosen user (the repo list ghp draws, without the owner in front)
+ghu_build()  { ghp_build; }
+ghu_row() {
+  _xui_slot "$1"; local s="$_XUI_SLOT" tag=""
+  case "${_GHX_R_FLAGS[$s]}" in *F*) tag+="  fork" ;; esac
+  case "${_GHX_R_FLAGS[$s]}" in *A*) tag+="  archived" ;; esac
+  printf -v _vp_line ' %2d) 📂 %-34s %s%s' "$1" "$(_xui_trunc "${_GHX_R_NAME[$s]#*/}" 34)" "${_GHX_R_PUSHED[$s]:-—}" "$tag"
+}
+ghu_header() { _tpl_list_header "🐙 $_GHX_USER   ${#_GHX_R_NAME[@]} project(s) · read only" "📂 downloads go to: $_GHX_NAV"; }
+ghu_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that project" "=:filter" "rf" "|" "${_MC_STD[@]}"; }
+
+_ghu_cmd() {
+  case "$1" in
+    rf) _ghx_fetch_user || echo "❌ $_GHX_MSG"; return 0 ;;
     [0-9]*) _ghx_pick_repo "$1" || return 1
       _xui_enter
       _xui_screen ghq
@@ -681,13 +741,17 @@ _gho_cmd() {
 }
 
 # one repo of someone else: the Stable / Tags screen (ghr) with read-only keys only: g download · i-N info · rf
-_tm_define ghq _GHX_TAB "🐙 repo" "GitHub" stable:"📦 Stable" tags:"🔖 Tags"
+_tm_define ghq _GHX_TAB "🐙 repo" "GitHub" stable:"📦 Stable" tags:"🔖 Tags" branches:"🌿 Branches"
 ghq_build()  { ghr_build; }
 ghq_row()    { ghr_row "$@"; }
 ghq_header() {
   local _n=""
   if [ "${#items[@]}" -eq 0 ]; then
-    if [ "$_GHX_TAB" = stable ]; then _n="No stable releases — open the Tags tab."; else _n="No tags."; fi
+    case "$_GHX_TAB" in
+      stable)   _n="No stable releases — open the Tags / Branches tab." ;;
+      tags)     _n="No tags — download a branch (Branches tab)." ;;
+      branches) _n="${_GHX_B_ERR:-No branches (an empty repo).}" ;;
+    esac
   fi
   _tm_head -t "🐙 $_GHX_REPO  (read only)" -n "$_n" ghq
 }
@@ -743,10 +807,9 @@ _fx_adf_github_others() {
   _ghx_users_load
   if [ "${#_GHX_USERS[@]}" -eq 0 ]; then                    # nothing saved yet: ask for names first (u = leave)
     echo "👥 No GitHub user names saved yet."
-    _ghx_users_c || { _GHX_RO=0; unset BVK_GH_PICK; return 1; }
+    _ghx_users_c
     [ "${#_GHX_USERS[@]}" -gt 0 ] || { _GHX_RO=0; unset BVK_GH_PICK; return 1; }
   fi
-  if ! _ghx_fetch_others; then echo "❌ Could not read the repos (offline, or API rate limit)."; _GHX_RO=0; unset BVK_GH_PICK; return 1; fi
   _xui_enter
   _xui_screen gho
   _xui_loop _gho_cmd

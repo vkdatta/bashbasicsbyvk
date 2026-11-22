@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+open.github.others listed the repos of ALL saved users in one flat list (slow: every user was fetched on entry), its footer put eight keys on one line, and a repo that keeps no tags or releases (only a main branch) could not be downloaded at all.
+
+HOW DID YOU DEBUG
+Read the screens in adf_github.sh, the footer template (a "|" item starts a new footer line), the engine clone and list commands, and the mock server; each change was checked by the pty tests (github_ui 49 checks, github_engine 146 checks) and the static suite.
+
+CAUSE
+The others screen was the self repo list fed with every user's repos (fetch on entry, owner/name rows). The footers passed one item list to _tpl_footer with no line break. The engine and the repo screen only knew tags and releases, so a repo without them offered nothing to download.
+
+FIX
+open.github.others is now two levels: gho = the saved users (nothing fetched), ghu = only the chosen user's public repos (fetched when that user is opened, rf reloads), then ghq = the repo. New map xui_ghu; xui_gho keeps c and x. Footers of gho, ghu and the self list use "|": own keys on line 1, u q h cc on line 2. Branches: engine commands branches and branch-info, clone takes a job file "branches" (git clone --branch=B, optional --depth, never detached); every repo screen (self and others) has a third tab, Branches (loaded on first draw, default first); a repo with no tags and no releases opens on it; g downloads, i shows the newest commit, e / r / d / c are refused on it. Lesson: a list that needs one fetch per item must fetch per item when it is opened, not all at once.

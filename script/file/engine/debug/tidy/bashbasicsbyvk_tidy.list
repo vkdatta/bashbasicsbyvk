@@ -30,10 +30,12 @@
 7P68NA | list menu     | map:xui                          | cmdmap/xui/bashbasicsbyvk_xui.map
 7P68NA | list menu     | map:xui_cfw                      | cmdmap/xui_cfw/bashbasicsbyvk_xui_cfw.map
 7P68NA | list menu     | map:xui_cs_pp                    | cmdmap/xui_cs_pp/bashbasicsbyvk_xui_cs_pp.map
+7P68NA | list menu     | map:xui_csh                      | cmdmap/xui_csh/bashbasicsbyvk_xui_csh.map
 7P68NA | list menu     | map:xui_ct                       | cmdmap/xui_ct/bashbasicsbyvk_xui_ct.map
 7P68NA | list menu     | map:xui_gdp                      | cmdmap/xui_gdp/bashbasicsbyvk_xui_gdp.map
 7P68NA | list menu     | map:xui_gho                      | cmdmap/xui_gho/bashbasicsbyvk_xui_gho.map
 7P68NA | list menu     | map:xui_ghp                      | cmdmap/xui_ghp/bashbasicsbyvk_xui_ghp.map
+7P68NA | list menu     | map:xui_ghu                      | cmdmap/xui_ghu/bashbasicsbyvk_xui_ghu.map
 7P68NA | list menu     | map:xui_nf                       | cmdmap/xui_nf/bashbasicsbyvk_xui_nf.map
 7P68NA | list menu     | map:xui_ru                       | cmdmap/xui_ru/bashbasicsbyvk_xui_ru.map
 JR9TZ5 | main list     | fn:_results_view                 | engine/ui/bashbasicsbyvk_results.sh

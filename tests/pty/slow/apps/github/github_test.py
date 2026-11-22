@@ -186,6 +186,24 @@ def test_lists_and_parsers():
         names = [x[0] for x in rows]
         check("repos: every repo, with visibility and flags", names == ["o/r", "o/priv"] and rows[1][1:3] == ["private", "FA"], r.stdout + r.stderr)
 
+        E.state.add("p/other")                                        # a repo of ANOTHER owner must not appear in the list of user o
+        r = E.run("user-repos", "o", "nobody", "bad name")
+        rows = [l.split(US) for l in lines(r)]
+        check("user-repos: the public repos of a user (the private one is not there)", [x[0] for x in rows if x[0] != "!"] == ["o/r"], r.stdout + r.stderr)
+        check("user-repos: an unknown name and an invalid name are '!' rows, the rest still prints",
+              [x[:2] for x in rows if x[0] == "!"] == [["!", "nobody"], ["!", "bad name"]] and "no such user" in r.stdout and "not a valid" in r.stdout, r.stdout)
+        r = E.run("user-repos")
+        check("user-repos: no user given = rc 3", r.returncode == 3, r.stdout + r.stderr)
+        E.state.repos["o/r"].branches["dev"] = c1
+        r = E.run("branches", "o/r")
+        rows = [l.split(US) for l in lines(r)]
+        check("branches: the default branch first, then by name, short sha", [x[0] for x in rows] == ["main", "dev"] and rows[0][2] == "default" and rows[1][2] == "" and len(rows[0][1]) == 7, r.stdout + r.stderr)
+        r = E.run("branch-info", "o/r", "dev")
+        check("branch-info: newest commit of the branch", r.returncode == 0 and "dev" in r.stdout and "newest commit" in r.stdout, r.stdout + r.stderr)
+        r = E.run("branch-info", "o/r", "nope")
+        check("branch-info: an unknown branch is rc 3", r.returncode == 3, r.stdout + r.stderr)
+        del E.state.repos["o/r"].branches["dev"]
+
         r = E.run("releases", "o/r")
         rows = [l.split(US) for l in lines(r)]
         check("releases: stable only (no draft, no pre-release)", [x[0] for x in rows] == ["v1.0", "v1.2"], r.stdout)
@@ -567,6 +585,13 @@ def test_clone():
         check("clone with release: notes + asset downloaded next to the clone", rd and os.path.isfile(os.path.join(dest, rd[0], "tool.tar.gz")) and open(os.path.join(dest, rd[0], "tool.tar.gz"), "rb").read() == b"BINARYDATA" and "Second" in open(os.path.join(dest, rd[0], "release.md")).read(), (r.stdout, os.listdir(dest)))
         check("clone with release: a tag without a release is cloned and says so", "no release for this tag" in r.stdout)
         check("clone: the key was NOT sent to the other host the download was redirected to", E.state.blob_seen and all(h is None for h in E.state.blob_seen), E.state.blob_seen)
+        j = E.job("o/r", branches=["main"], dest=dest, depth="1")
+        r = E.run("clone", "--job", j, env=env)
+        bd = os.path.join(dest, "r-main")
+        check("clone branch: a repo with no tags is downloaded by branch, checked out on it, depth 1", r.returncode == 0 and git("rev-parse", "--abbrev-ref", "HEAD", cwd=bd) == "main" and git("rev-list", "--count", "HEAD", cwd=bd) == "1", (r.stdout, r.stderr))
+        j = E.job("o/r", branches=["nope"], dest=dest, depth="1")
+        r = E.run("clone", "--job", j, env=env)
+        check("clone branch: an unknown branch fails cleanly and leaves no half folder", r.returncode == 1 and not os.path.exists(os.path.join(dest, "r-nope")), (r.stdout, r.stderr))
         j = E.job("o/r", tags=["nope"], dest=dest, depth="1")
         r = E.run("clone", "--job", j, env=env)
         check("clone: an unknown tag fails cleanly and leaves no half folder", r.returncode == 1 and not os.path.exists(os.path.join(dest, "r-nope")), (r.stdout, r.stderr))

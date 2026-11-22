@@ -449,6 +449,7 @@ Functions|adf:file	Work on files and folders: copy, move, zip, delete, upload.
 Functions|adf:github	Your GitHub repositories, releases and tags.
 Functions|adf:cloudflare	Cloudflare Workers and Pages: list and recover projects.
 Functions|adf:google_drive	Open a Google Drive here as a normal folder.
+Functions|adf:cloudshell	Google Cloud Shell with several Google accounts: pick a profile to open it, switch it off when it hangs.
 Functions|udf	Your own scripts from the execute folder. Pick one to run it here.
 Rule Book|rules	Saved rules for select (.s) and display (.d). Open a folder to use them.
 Rule Book|rules:select	Select rules: a number runs it, c creates one, d deletes, r renames.
