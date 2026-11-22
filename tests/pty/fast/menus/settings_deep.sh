@@ -104,7 +104,7 @@ t  "Home / Settings / Pending lists are not openable" "${_SD_FN[Home]:-none}${_S
 _sd_search "streams";  tm "streams finds Transfer speed" "${_SD_T[*]}" "Transfer speed"
 _sd_search "chunk";    tm "chunk finds Transfer speed"   "${_SD_T[*]}" "Transfer speed"
 _sd_search "nuke";     t  "a screen whose NAME matches ranks first" "${_SD_T[0]}" "Nuke time"
-_sd_search "pending";  tm "pending finds the Home row"   "${_SD_L[*]}" "Home › Pending"
+_sd_search "pending";  tm "pending finds the Home row"   "${_SD_L[*]}" "Home › File API Surf › Pending"
 _sd_search "SNAPSHOT"; t  "case does not matter" "$(( ${#_SD_T[@]} > 0 ))" 1
 _sd_search "zzqqxx";   t  "no match = no rows" "${#_SD_T[@]}" 0
 _sd_search "e";        t  "never more than the cap" "$(( ${#_SD_T[@]} <= _SD_MAX ))" 1

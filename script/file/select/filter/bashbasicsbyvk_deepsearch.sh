@@ -9,7 +9,8 @@
 #
 #  Where the answers come from (nothing is opened or run to find them, so a search is quick and has no side effects):
 #    • the description table  (_ST_DESC: "<screen>|<row tag>" -> text; "<parent>›<screen>|…" keys name their screen after the last ›)
-#    • the Home rows (their labels come from _home_build, caught with _st_add stubbed — nothing is drawn)
+#    • the Home rows and the rows of its two sub screens (File API Surf, Loops): their labels come from _home_build / _home_fapi_build /
+#      _home_loops_build, caught with _st_add stubbed — nothing is drawn
 #    • which function opens a screen: one scan of the script files for  _st_run "Title" … , once per session
 #  A result opens only a plain  <name>_settings  screen (it needs nothing from the screen above it).  Anything else — a screen that
 #  works on data its parent hands it, "Reset all settings" — is shown with its way in ("Open it from: …") and is never run from here.
@@ -53,10 +54,15 @@ _sd_scan() {
   return 0
 }
 
-# the Home rows:  tag -> label   (the builder is run with _st_reset / _st_add stubbed, in a subshell: nothing is drawn or changed)
+# the Home rows:  tag <TAB> label <TAB> parent screen ("" = Home itself, else the sub screen the row lives in)
+# (the builders are run with _st_reset / _st_add stubbed, in a subshell: nothing is drawn or changed)
 _sd_home_labels() {
   declare -F _home_build >/dev/null 2>&1 || return 0
-  ( _st_reset() { :; }; _st_add() { printf '%s\t%s\n' "${5:-}" "$2"; }; _home_build ) 2>/dev/null
+  ( _hp=""
+    _st_reset() { :; }; _st_add() { printf '%s\t%s\t%s\n' "${5:-}" "$2" "$_hp"; }
+    _home_build
+    _hp="File API Surf"; _home_fapi_build
+    _hp="Loops";         _home_loops_build ) 2>/dev/null
 }
 
 # _sd_search <text>  →  _SD_T / _SD_G / _SD_L / _SD_S   (best matches first: a screen whose NAME matches, then the most matching rows)
@@ -65,17 +71,18 @@ _sd_search() {
   _SD_Q="$1"; _SD_T=(); _SD_G=(); _SD_L=(); _SD_S=()
   [ -n "$q" ] || return 0
   declare -F _st_desc_load >/dev/null 2>&1 && _st_desc_load
-  declare -A cnt=() snip=() tname=() hlab=() inorder=() texthit=()
-  while IFS=$'\t' read -r t l; do [ -n "$t" ] && hlab["$t"]="$l"; done < <(_sd_home_labels)
+  declare -A cnt=() snip=() tname=() hlab=() hpar=() inorder=() texthit=()
+  while IFS=$'\t' read -r t l s; do [ -n "$t" ] && { hlab["$t"]="$l"; hpar["$t"]="$s"; }; done < <(_sd_home_labels)
   local -a order=()
   while IFS= read -r key; do
     [ -n "$key" ] || continue
     _sd_split_key "$key"; title="$_SD_title"; tag="$_SD_tag"
     text="${_ST_DESC[$key]}"; tl="${text,,}"
-    if [ "$title" = "Home" ]; then                                  # Home: every row is its own way in
+    if [ "$title" = "Home" ] || [ "$title" = "File API Surf" ] || [ "$title" = "Loops" ]; then   # Home and its sub screens: every row is its own way in
       [ "$tag" = "*" ] || [ "$tag" = "local" ] && continue
       if [[ "${hlab[$tag],,}" == *"$q"* || "$tl" == *"$q"* ]]; then
         pre="${tl%%"$q"*}"; [[ "$tl" == *"$q"* ]] && pos=${#pre} || pos=0
+        [ -n "${hlab[$tag]+x}" ] || continue                           # a description without a row (stale): nothing to open
         order+=("Home|$tag"); cnt["Home|$tag"]=1; tname["Home|$tag"]="${hlab[$tag]:-$tag}"
         snip["Home|$tag"]="${text:$(( pos > 24 ? pos - 24 : 0 )):60}"
       fi
@@ -104,7 +111,7 @@ _sd_search() {
     [ -n "$key" ] || continue
     (( n >= _SD_MAX )) && break
     if [[ "$key" == Home\|* ]]; then
-      _SD_T+=("Home"); _SD_G+=("${key#Home|}"); _SD_L+=("Home › ${tname[$key]}")
+      _SD_T+=("Home"); _SD_G+=("${key#Home|}"); _SD_L+=("Home › ${hpar[${key#Home|}]:+${hpar[${key#Home|}]} › }${tname[$key]}")
     else
       _SD_T+=("$key"); _SD_G+=(""); _SD_L+=("$key")
     fi

@@ -31,7 +31,7 @@ class App(PtyApp):
         super().__init__(root, COLS, ROWS, populate)
 
 def on_main(a):  return a.alive and 'nav path:' in a.text().split('Select')[-2 if False else 0] or (a.alive and 'nav path:' in a.text())
-def on_home(a):  return a.alive and 'Home' in a.text() and 'Local Surf' in a.text() and 'Cloud Surf' in a.text()
+def on_home(a):  return a.alive and 'Home' in a.text() and 'Local Surf' in a.text() and 'File API Surf' in a.text()
 def last_screen(a):
     t = a.text(); i = max(t.rfind('nav path:'), t.rfind('Home\n'))
     return t
@@ -55,20 +55,25 @@ def last_header(a):
     best = ''
     for l in a.scr.lines():
         if 'nav path:' in l: best = 'MAIN'
+        elif '› File API Surf' in l: best = 'FAPI'
+        elif '› Loops' in l: best = 'LOOPS'
         elif l.strip().startswith('🏠 Home') or l.strip() == 'Home': best = 'HOME'
         elif 'LINKS' in l: best = 'LINKS'
     return best
 
 # --- u goes back to where you came from
 case('Local Surf > api > u  = Local Surf', ['api', 'u'], lambda a: a.alive and last_header(a) == 'MAIN', 'must return to the file list')
-case('Home > Links > u  = Home', ['h', '10', 'u'], lambda a: a.alive and last_header(a) == 'HOME', 'must return to Home')
-case('Home > Functions > u  = Home', ['h', '6', 'u'], lambda a: a.alive and last_header(a) == 'HOME', 'must return to Home')
+# Home is grouped like Settings: 2 = File API Surf (1 Shared, 2 Links, 3 RBAM, 4 Backup, 5 Saved Surf, 6 Snapshots, 7 Pending), 3 = Loops (1 Switch, 2 Functions, 3 Rules)
+case('Home > File API Surf > Links > u  = File API Surf', ['h', '2', '2', 'u'], lambda a: a.alive and last_header(a) == 'FAPI', 'must return to File API Surf')
+case('Home > File API Surf > Links > u > u  = Home', ['h', '2', '2', 'u', 'u'], lambda a: a.alive and last_header(a) == 'HOME', 'must return to Home')
+case('Home > Loops > Functions > u  = Loops', ['h', '3', '2', 'u'], lambda a: a.alive and last_header(a) == 'LOOPS', 'must return to Loops')
+case('Home > Loops > Functions > u > u  = Home', ['h', '3', '2', 'u', 'u'], lambda a: a.alive and last_header(a) == 'HOME', 'must return to Home')
 # --- q closes to the main loop, never leaves the app
 # (sn needs the server to open at all: offline it prints an error and returns, so it is not testable here)
 for cmd in ('fx', 'sw', '.r', 'api', 'pn', 'bk', 'sv', 'rbam', 'nf', 'cs', '-u'):
     case('main > %s > q  = main loop (app still running)' % cmd, [cmd, 'q'], lambda a: a.alive and last_header(a) == 'MAIN', 'app exited or stayed in the menu')
-for num, nm in (('6', 'Functions'), ('5', 'Switch'), ('7', 'Rules'), ('10', 'Links'), ('2', 'Cloud Surf')):
-    case('Home > %s > q  = main loop (app still running)' % nm, ['h', num, 'q'], lambda a: a.alive and last_header(a) == 'MAIN', 'app exited or stayed in Home')
+for path, nm in ((['3', '2'], 'Loops > Functions'), (['3', '1'], 'Loops > Switch'), (['3', '3'], 'Loops > Rules'), (['2', '2'], 'File API Surf > Links'), (['2', '1'], 'File API Surf > Shared')):
+    case('Home > %s > q  = main loop (app still running)' % nm, ['h'] + path + ['q'], lambda a: a.alive and last_header(a) == 'MAIN', 'app exited or stayed in Home')
 case('Home > q  = main loop', ['h', 'q'], lambda a: a.alive and last_header(a) == 'MAIN', 'must return to main loop')
 case('Settings > q  = main loop', ['s', 'q'], lambda a: a.alive and last_header(a) == 'MAIN', 'must return to main loop')
 case('main > q  exits the app', ['q'], lambda a: not a.alive, 'q on the main loop must exit')

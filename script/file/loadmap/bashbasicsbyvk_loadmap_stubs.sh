@@ -127,6 +127,11 @@ _bvk_destructive() { _lm_stub bashbasicsbyvk_choose.sh _bvk_destructive "$@"; }
 _bvk_yn() { _lm_stub bashbasicsbyvk_choose.sh _bvk_yn "$@"; }
 open_help() { _lm_stub bashbasicsbyvk_help.sh open_help "$@"; }
 _home_build() { _lm_stub bashbasicsbyvk_home.sh _home_build "$@"; }
+_home_fapi_build() { _lm_stub bashbasicsbyvk_home.sh _home_fapi_build "$@"; }
+_home_loops_build() { _lm_stub bashbasicsbyvk_home.sh _home_loops_build "$@"; }
+_home_sub_act() { _lm_stub bashbasicsbyvk_home.sh _home_sub_act "$@"; }
+_home_fapi_open() { _lm_stub bashbasicsbyvk_home.sh _home_fapi_open "$@"; }
+_home_loops_open() { _lm_stub bashbasicsbyvk_home.sh _home_loops_open "$@"; }
 _home_act() { _lm_stub bashbasicsbyvk_home.sh _home_act "$@"; }
 home_menu() { _lm_stub bashbasicsbyvk_home.sh home_menu "$@"; }
 handle_refresh() { _lm_stub bashbasicsbyvk_refresh.sh handle_refresh "$@"; }

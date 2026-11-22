@@ -212,9 +212,9 @@ case('Settings: double click -> opens the row', t_settings_dbl, nfiles=20)
 def t_home(a):
     open_screen(a, 'h')
     if 'Local Surf' not in a.text(): return False, 'home did not open'
-    r = st_row(a, 8); a.click(r, t=0.05); a.click(r, t=2.5)         # 8 = Help
+    r = st_row(a, 5); a.click(r, t=0.05); a.click(r, t=2.5)         # 5 = Help
     a.wait(lambda: b'bashbasicsbyvk_help.txt' in a.raw, 20)         # Help searches the disk for its file: wait for its answer, not for a guessed 2.5 s
-    return a.alive and (b'bashbasicsbyvk_help.txt' in a.raw), 'double click on row 8 (Help) must run Help (the sandbox has no help file, so it says so)'
+    return a.alive and (b'bashbasicsbyvk_help.txt' in a.raw), 'double click on row 5 (Help) must run Help (the sandbox has no help file, so it says so)'
 case('Home: double click -> opens the row', t_home, nfiles=20)
 
 def t_settings_scroll(a):
