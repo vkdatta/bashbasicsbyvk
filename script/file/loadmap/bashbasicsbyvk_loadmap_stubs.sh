@@ -77,6 +77,7 @@ force_open() { _lm_stub bashbasicsbyvk_run.sh force_open "$@"; }
 force_share() { _lm_stub bashbasicsbyvk_run.sh force_share "$@"; }
 _rf_go() { _lm_stub bashbasicsbyvk_run.sh _rf_go "$@"; }
 _rf_build_run() { _lm_stub bashbasicsbyvk_run.sh _rf_build_run "$@"; }
+_rf_image() { _lm_stub bashbasicsbyvk_run.sh _rf_image "$@"; }
 run_file() { _lm_stub bashbasicsbyvk_run.sh run_file "$@"; }
 _te_begin() { _lm_stub bashbasicsbyvk_textedit.sh _te_begin "$@"; }
 _te_ctx_push() { _lm_stub bashbasicsbyvk_textedit.sh _te_ctx_push "$@"; }

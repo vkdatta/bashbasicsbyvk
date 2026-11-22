@@ -242,6 +242,7 @@ bashbasicsbyvk_tidy.list|||data: the template ID of every menu (bashbasicsbyvk_t
 bashbasicsbyvk_open|||stand-alone command, run as its own process
 bashbasicsbyvk_organise.map|||command-map wiring, read as data
 bashbasicsbyvk_overwrite|||stand-alone command, run as its own process
+bashbasicsbyvk_imgview|||tool, run as its own process: Run on an image draws it in the terminal (half-blocks, Pillow)
 bashbasicsbyvk_pending.map|||command-map wiring, read as data
 bashbasicsbyvk_polyglot|||tool, run as its own process
 bashbasicsbyvk_polyglot.md|||data / text

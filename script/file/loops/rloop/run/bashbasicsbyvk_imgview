@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""bashbasicsbyvk_imgview - draws a picture in the terminal (Run on an image file).
+
+    bashbasicsbyvk_imgview FILE
+
+Half-block rendering: one character cell = two vertical pixels (upper half = foreground colour, lower half = background colour, 24-bit).
+The picture is shrunk to fit the terminal, never enlarged.  Pillow is the only dependency; it is asked for through the central
+installer (bashbasicsbyvk_deps, feature `run.image`), never installed here.  Exit: 0 drawn, 1 not drawn (message printed).
+"""
+import shutil
+import sys
+
+RESET = "\033[0m"
+
+
+def _pillow():
+    """Pillow's Image module, installing Pillow through the central installer when it is missing; None when the person declines."""
+    try:
+        from PIL import Image
+        return Image
+    except ImportError:
+        pass
+    try:
+        import bashbasicsbyvk_deps as deps
+    except ImportError:
+        print("❌ Pillow is missing and the installer was not found next to this tool - reinstall bashbasicsbyvk.", file=sys.stderr)
+        return None
+    if not deps.ensure("run.image", context="Viewing an image in the terminal"):
+        return None
+    deps.refresh_import_paths()
+    try:
+        from PIL import Image
+        return Image
+    except ImportError:
+        print("❌ Pillow was installed but cannot be imported here.", file=sys.stderr)
+        return None
+
+
+def render(Image, path):
+    img = Image.open(path).convert("RGB")
+
+    term = shutil.get_terminal_size()
+    tw = term.columns
+    th = max(1, term.lines - 2)
+
+    # Half-block rendering: one character = two vertical pixels.  Never enlarge; keep the original pixel resolution when it fits.
+    scale = min(tw / img.width, (th * 2) / img.height, 1.0)
+    new_w = max(1, int(img.width * scale))
+    new_h = max(1, int(img.height * scale))
+
+    if (new_w, new_h) != img.size:
+        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    pixels = img.load()
+    output = []
+    for y in range(0, new_h, 2):
+        line = []
+        for x in range(new_w):
+            r1, g1, b1 = pixels[x, y]
+            if y + 1 < new_h:
+                r2, g2, b2 = pixels[x, y + 1]
+            else:
+                r2, g2, b2 = r1, g1, b1
+            line.append(f"\033[38;2;{r1};{g1};{b1}m\033[48;2;{r2};{g2};{b2}m▀")
+        output.append("".join(line) + RESET)
+
+    sys.stdout.write("\n".join(output) + RESET + "\n")
+    sys.stdout.flush()
+
+
+def main():
+    if len(sys.argv) != 2:
+        print("usage: bashbasicsbyvk_imgview FILE", file=sys.stderr)
+        return 1
+    Image = _pillow()
+    if Image is None:
+        return 1
+    try:
+        render(Image, sys.argv[1])
+    except (OSError, ValueError, Image.DecompressionBombError) as e:
+        print(f"❌ Cannot show '{sys.argv[1].rsplit('/', 1)[-1]}' as a picture: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

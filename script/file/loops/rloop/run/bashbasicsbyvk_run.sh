@@ -234,6 +234,18 @@ _rf_build_run() {
     return $rc
 }
 
+# _rf_image <file>   Run on a picture: drawn in the terminal by bashbasicsbyvk_imgview (half-block colours, shrunk to fit, never enlarged), then one key
+# takes the person back.  The tool asks the central installer for Pillow itself (feature run.image).  When it cannot draw the file
+# (not a real picture, Pillow declined) the file opens in the phone's viewer as before.
+_rf_image() {
+    local _a
+    if _rf_go bashbasicsbyvk_imgview "$1"; then
+        _bvk_read _a "  Press any key to go back… " -1; echo
+    else
+        force_open "$1"
+    fi
+}
+
 run_file() {
     local file="$1" _RF_NAME="${1##*/}"          # _RF_NAME: the label of the start-up bar (_rf_go)
     local rc name ext classname out
@@ -376,8 +388,11 @@ run_file() {
         pdf|epub|mobi|azw3)
             force_open "$file"
             ;;
-        png|jpg|jpeg|gif|bmp|webp|svg)
-            force_open "$file"
+        png|jpg|jpeg|jpe|gif|bmp|webp|tif|tiff|ico|ppm|pgm)
+            _rf_image "$file"
+            ;;
+        svg)
+            force_open "$file"      # Pillow cannot read vector files
             ;;
         doc|docx|xls|xlsx|ppt|pptx)
             force_open "$file"

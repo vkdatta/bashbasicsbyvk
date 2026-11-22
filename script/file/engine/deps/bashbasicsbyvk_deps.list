@@ -84,6 +84,7 @@ D|rich|pip|rich|pip=rich|rich|coloured console tables and progress bars|pip||
 D|esprima|pip|esprima|pip=esprima|esprima|parses JavaScript for the JS audit (otherwise a rougher regex scan is used)|pip||
 D|watchdog|pip|watchdog|pip=watchdog|watchdog|watches folders so Recents stays up to date|pip|auto|
 D|pyright|pip|pyright|pip=pyright|pyright|type-checks Python for the Python audit|pip||
+D|pillow|pip|PIL|termux=sys:python-pillow;pip=pillow|Pillow|draws a picture in the terminal (Run on an image)|pip||
 D|requests|pip|requests|pip=requests|requests|downloads web pages for xtract|pip||
 D|bs4|pip|bs4|pip=beautifulsoup4|beautifulsoup4|reads web pages for xtract|pip||
 D|tree_sitter|pip|tree_sitter:tree-sitter:0.22|pip=tree-sitter>=0.23|tree-sitter|exact code parsing for polyglot (otherwise the regex parser is used)|pip||
@@ -98,6 +99,7 @@ F|timezone|Timezone picker (Settings)|tzdata|python3
 F|recents.daemon|Recents background watcher|python3|watchdog
 F|help|Help screens|python3|termux-tools
 F|run|Run files (r)|7z|termux-tools zsh php perl ruby
+F|run.image|Run on an image (drawn in the terminal)|pillow|
 F|debug.health|Health check|python3|git curl nodejs
 F|debug.loadtime|Load-time report|python3|curl git nodejs rclone sqlite3 pip
 # Archives (z-, uz-): one feature per format and direction

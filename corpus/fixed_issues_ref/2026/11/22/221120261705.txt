@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Run on an image file (png, jpg, gif, bmp, webp and similar) only handed the file to the phone's external viewer (force_open). Wanted: the picture drawn inside the terminal with half-block 24-bit colour, shrunk to fit and never enlarged, with Pillow fetched through the central installer when missing.
+
+HOW DID YOU DEBUG
+Read script/file/loops/rloop/run/bashbasicsbyvk_run.sh (run_file, image branch), AGENTS.md rules 1, 3, 12, 13, 16, deps.list format, and how python tools are started (by bare name, own process). Ran the new tool on a generated gradient PNG at COLUMNS=40 LINES=12 (scaled to the terminal) and on a text file named .png (exit 1 with a message). Ran loadmap_gen --write / --check and bash tests/run.sh once (12/12 passed). The Pillow install path through deps.ensure and the Termux package name python-pillow were NOT run here: verified by reading only. The pty look of the screen inside the app was not run.
+
+CAUSE
+No terminal image renderer existed; the image extensions shared the force_open branch with documents.
+
+FIX
+New tool bashbasicsbyvk_imgview (next to bashbasicsbyvk_run.sh; python, Pillow only, own process, loadmap [no]). It calls deps.ensure("run.image") when PIL is missing. deps.list: D pillow (termux=sys:python-pillow, pip=pillow) and F run.image. run_file: png jpg jpeg jpe gif bmp webp tif tiff ico ppm pgm go to new _rf_image (tool, then one key via _bvk_read -1; on failure force_open as before); svg stays force_open. Lesson: the key wait is in bash (rule 16), the installer ask is in the tool (rule 12).
