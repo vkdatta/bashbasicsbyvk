@@ -26,6 +26,7 @@ menu_templates|fast|40|bash tests/pty/fast/menus/menu_templates.sh|
 pick_drift|fast|40|bash tests/pty/fast/menus/pick_drift.sh|python3
 rename_screen|fast|240|bash tests/pty/fast/menus/rename_screen.sh|python3
 results_screen|fast|240|bash tests/pty/fast/menus/results_screen.sh|python3
+chmod_screen|fast|240|bash tests/pty/fast/menus/chmod_screen.sh|python3
 settings_deep|fast|30|bash tests/pty/fast/menus/settings_deep.sh|python3
 settings_desc|fast|40|bash tests/pty/fast/menus/settings_desc.sh|python3
 settings_keys|fast|30|bash tests/pty/fast/menus/settings_keys.sh|

@@ -29,6 +29,7 @@
 7P68NA | list menu     | map:snapshot                     | cmdmap/snapshot/bashbasicsbyvk_snapshot.map
 7P68NA | list menu     | map:xui                          | cmdmap/xui/bashbasicsbyvk_xui.map
 7P68NA | list menu     | map:xui_cfw                      | cmdmap/xui_cfw/bashbasicsbyvk_xui_cfw.map
+7P68NA | list menu     | map:xui_chm                      | cmdmap/xui_chm/bashbasicsbyvk_xui_chm.map
 7P68NA | list menu     | map:xui_cs_pp                    | cmdmap/xui_cs_pp/bashbasicsbyvk_xui_cs_pp.map
 7P68NA | list menu     | map:xui_csh                      | cmdmap/xui_csh/bashbasicsbyvk_xui_csh.map
 7P68NA | list menu     | map:xui_ct                       | cmdmap/xui_ct/bashbasicsbyvk_xui_ct.map
@@ -51,6 +52,7 @@ MG2374 | pick screen   | fn:local_navigator               | functions/transfer/b
 373QS6 | settings list | fn:animation_settings            | settings/core/bashbasicsbyvk_settings.sh
 373QS6 | settings list | fn:backup_group_settings         | settings/core/bashbasicsbyvk_settings_groups.sh
 373QS6 | settings list | fn:buffers_group_settings        | settings/core/bashbasicsbyvk_settings_groups.sh
+373QS6 | settings list | fn:chmod_group_settings          | settings/screens/bashbasicsbyvk_chmodsettings.sh
 373QS6 | settings list | fn:colors_group_settings         | settings/core/bashbasicsbyvk_settings_groups.sh
 373QS6 | settings list | fn:compress_format_settings      | settings/screens/bashbasicsbyvk_compress.sh
 373QS6 | settings list | fn:display_filter_settings       | select/filter/bashbasicsbyvk_display_filter.sh
@@ -146,6 +148,7 @@ YWW6WZ | step menu     | map:prompt                       | cmdmap/prompt/bashba
 YWW6WZ | step menu     | map:transfer                     | cmdmap/transfer/bashbasicsbyvk_transfer.map
 V3PX4Y | tabbed menu   | fn:csurf_menu                    | loops/iloop/rbam/bashbasicsbyvk_csurf.sh
 V3PX4Y | tabbed menu   | fn:functions_menu                | loops/iloop/fx/bashbasicsbyvk_functions.sh
+V3PX4Y | tabbed menu   | fn:handle_chmod                  | functions/file_ops/bashbasicsbyvk_chmod.sh
 V3PX4Y | tabbed menu   | fn:rbam_menu                     | loops/iloop/rbam/bashbasicsbyvk_rbam.sh
 V3PX4Y | tabbed menu   | fn:rules_menu                    | select/bashbasicsbyvk_rules.sh
 V3PX4Y | tabbed menu   | fn:switch_menu                   | loops/iloop/switch/bashbasicsbyvk_switch.sh

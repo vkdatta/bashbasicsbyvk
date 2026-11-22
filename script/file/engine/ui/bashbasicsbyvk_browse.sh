@@ -1028,8 +1028,11 @@ _rc_click() {      # called by _bvk_edit_run for a press that is not on the type
   local rc=0
   case "$_MS_KIND" in
     item)
-      _bvk_mouse_dbl "i:$_MS_ITEM" && rc=2
-      _nav_jump_to "$_MS_ITEM" ;;                            # highlight + type its number in the prompt (exactly what the arrow keys do)
+      if [ -n "${_vp_click_fn:-}" ] && "$_vp_click_fn"; then rc=3     # a screen that owns part of the row (chmod-N: its R / W / X cells) took the tap and set the line: accept it
+      else
+        _bvk_mouse_dbl "i:$_MS_ITEM" && rc=2
+        _nav_jump_to "$_MS_ITEM"                             # highlight + type its number in the prompt (exactly what the arrow keys do)
+      fi ;;
     pgup) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-1} - _vp_page_step )) ;;
     pgdn) _BVK_LAST_ITEM=""; _nav_jump_to $(( ${_hl_index:-0} + _vp_page_step )) ;;
     *)
@@ -1084,6 +1087,8 @@ _rc_tick() {
 }
 _rc_nav() {         # rc 1 = leave the prompt (a tab switch)
   local old
+  # a screen with a cell cursor (chmod-N) moves it first: _vp_nav_fn KEY returns 0 when it took the key (up down left right)
+  [ -n "${_vp_nav_fn:-}" ] && "$_vp_nav_fn" "$1" && return 0
   case "$1" in
     up)
       if $_can_nav; then

@@ -52,6 +52,7 @@ bashbasicsbyvk_archive_formats.sh|||tool, run as its own process
 bashbasicsbyvk_ghlib.sh|||tool, run as its own process
 bashbasicsbyvk_cslib.sh|||Cloud Shell helpers (accounts, gcloud switch / login, connect bar, kill): loaded on the first call of fx > cloudshell
 bashbasicsbyvk_exactbytes.sh|||eb- command (exact bytes of items); only loaded when eb- is typed, its stub loads it
+bashbasicsbyvk_chmod.sh|||chmod-N command (interactive Change Mode screen); only loaded when chmod- is typed, its stub loads it
 bashbasicsbyvk_fileinfo.sh|||i- command (info of files); only loaded when i- is typed, its stub loads it
 bashbasicsbyvk_extract.sh|||xtr- command (extract lines / words / characters / bytes); only loaded when xtr- is typed, its stub loads it
 bashbasicsbyvk_staging_helpers.sh|||tool, run as its own process
@@ -76,6 +77,7 @@ bashbasicsbyvk_deepsearch.sh|||tool, run as its own process (== deep search of e
 bashbasicsbyvk_timezone.sh|||tool, run as its own process
 bashbasicsbyvk_findsettings.sh|||tool, run as its own process
 bashbasicsbyvk_renamesettings.sh|||tool, run as its own process (Settings > Rename)
+bashbasicsbyvk_chmodsettings.sh|||tool, run as its own process (Settings > Change mode)
 bashbasicsbyvk_deps.sh|||the central dependency installer (asked only when a program is missing)
 bashbasicsbyvk_health.sh|||the health check command
 bashbasicsbyvk_tidy.sh|||the `tidy` command: the template ID of the menu you are on (lazy: only when tidy is typed)
@@ -118,6 +120,7 @@ bashbasicsbyvk_authmenucommands.sh|||command-map commands of one menu (loaded by
 bashbasicsbyvk_auth_submenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_auth_usermenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_rbmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_xui_chmmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_csmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_nfmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
 bashbasicsbyvk_xui_ghpmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
@@ -305,4 +308,5 @@ bashbasicsbyvk_xui_ct.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_ru.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_nf.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_rb.map|||command-map wiring, read as data
+bashbasicsbyvk_xui_chm.map|||command-map wiring, read as data
 

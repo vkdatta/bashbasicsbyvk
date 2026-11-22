@@ -53,6 +53,7 @@ cmd_def z-       prefix -              act    "Zip items"                "z-1,3"
 cmd_def uz-      prefix -              act    "Unzip items"              "uz-2"
 cmd_def p-       prefix -              act    "Project map of a path"    "p-1"
 cmd_def eb-      prefix -              act    "Exact bytes of items (binary + data units) — copy or save to Excel"  "eb-1-5"
+cmd_def chmod-   prefix -              act    "Change mode — switch read, write, execute of items for owner, group, others (interactive chmod)"  "chmod-1,3"
 cmd_def xtr-     prefix -              act    "Extract lines / words / characters / bytes from files (files only)"  "xtr-1,3"
 cmd_def i-       prefix -              act    "Info of files (size, words, lines, dates…) — files only, copy or save to Excel"  "i-1,3"
 # ── staging

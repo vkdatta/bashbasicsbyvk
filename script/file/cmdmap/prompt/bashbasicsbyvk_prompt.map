@@ -74,6 +74,7 @@ pn         .mapto()  block()
 lang       .mapto()  lang       from bashbasicsbyvk_maincommands.sh
 goto       .mapto()  block()
 eb-        .mapto()  block()
+chmod-     .mapto()  block()
 xtr-       .mapto()  block()
 i-         .mapto()  block()
 sys        .mapto()  block()

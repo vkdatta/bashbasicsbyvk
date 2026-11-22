@@ -7,6 +7,7 @@
 #      4) Files & archives
 #      (Find & replace — see bashbasicsbyvk_findsettings.sh)
 #      (Rename — see bashbasicsbyvk_renamesettings.sh)
+#      (Change mode — see bashbasicsbyvk_chmodsettings.sh)
 #      5) File API          
 #      6) Menu specific       (sort order of Links, Backup, Saved Surf, Cloud Surf, Snapshots, Pending)
 #      7) System
@@ -320,6 +321,7 @@ _st_top_build() {
   _st_add a "Buffers (c- m- k- b- s-)" 0 "" buffers
   _st_add a "Find & replace"      0 "" findrep
   _st_add a "Rename"              0 "" rename
+  _st_add a "Change mode (chmod-)" 0 "" chmod
   _st_add a "File API"            0 "" fileapi
   _st_add a "Menu specific"       0 "" menuspec
   _st_add a "System"              0 "" system
@@ -335,6 +337,7 @@ _st_top_act() {
     buffers) buffers_group_settings ;;
     findrep) find_group_settings ;;
     rename)  rename_group_settings ;;
+    chmod)   chmod_group_settings ;;
     fileapi) fileapi_group_settings ;;
     menuspec) menu_specific_settings ;;
     system)  system_group_settings ;;

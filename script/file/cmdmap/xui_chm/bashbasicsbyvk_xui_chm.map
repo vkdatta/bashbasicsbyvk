@@ -1,0 +1,8 @@
+# bashbasicsbyvk_xui_chm.map — wiring for the Change Mode screen (chmod-N)
+# Chosen by _cm_ctx_find when _XUI_PFX=chm (see the xui hook there); everything not listed is inherited from xui.
+@menu   xui_chm
+@kind   menu
+@back   u
+@parent xui
+
+rf         .mapto()  rf         from bashbasicsbyvk_xui_chmmenucommands.sh

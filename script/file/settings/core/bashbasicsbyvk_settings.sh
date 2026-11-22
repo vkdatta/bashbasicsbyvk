@@ -6,6 +6,7 @@ DEFAULT_SHOW_HIDDEN_FILES=false
 DEFAULT_INDEX_MODE_THRESHOLD=200
 DEFAULT_RENAME_CSV_ABOVE=5          # r: more selected items than this are handed to the CSV rename (rename.select.items.csv); 0 = never
 DEFAULT_RENAME_NOEXT_MODE="ask"      # r: a new name typed WITHOUT an extension: old (keep the old one) · none (create without) · ask
+DEFAULT_CHMOD_RECURSIVE_MODE="off"  # chmod-N: a folder's permission change reaches only the folder (off) · everything inside it too (on) · ask each time (ask)
 DEFAULT_NANO_WRAP="nowrap"         # nano long lines:  wrap (soft-wrap on screen, at blanks) | nowrap (one line, scroll sideways); written to nanorc by bvk_nano_wrap_apply
 DEFAULT_TERMINAL_BG_COLOR="000000"
 DEFAULT_TERMINAL_TEXT_COLOR_NORMAL="FFFFFF"
@@ -116,6 +117,7 @@ unset xfer_chunk_mb
 unset xfer_streams
 unset rename_csv_above
 unset rename_noext_mode
+unset chmod_recursive_mode
 
 # Reads a settings file written by save_settings (key=value or key="value", one per line).
 # It is DATA, not code: nothing in the file is ever executed, and only lower-case keys are assigned.
@@ -277,6 +279,8 @@ _apply_timezone
 [[ "$rename_csv_above" =~ ^[0-9]{1,6}$ ]] || rename_csv_above=$DEFAULT_RENAME_CSV_ABOVE
 : "${rename_noext_mode:=$DEFAULT_RENAME_NOEXT_MODE}"
 [[ "$rename_noext_mode" =~ ^(old|none|ask)$ ]] || rename_noext_mode=$DEFAULT_RENAME_NOEXT_MODE
+: "${chmod_recursive_mode:=$DEFAULT_CHMOD_RECURSIVE_MODE}"
+[[ "$chmod_recursive_mode" =~ ^(off|on|ask)$ ]] || chmod_recursive_mode=$DEFAULT_CHMOD_RECURSIVE_MODE
 : "${find_case_mode:=$DEFAULT_FIND_CASE_MODE}"
 [[ "$find_case_mode" =~ ^(ask|exact|any)$ ]] || find_case_mode=$DEFAULT_FIND_CASE_MODE
 : "${find_regex_mode:=$DEFAULT_FIND_REGEX_MODE}"
@@ -371,6 +375,7 @@ save_settings() {
     echo "xfer_streams=$xfer_streams"
     echo "rename_csv_above=$rename_csv_above"
     echo "rename_noext_mode=$rename_noext_mode"
+    echo "chmod_recursive_mode=$chmod_recursive_mode"
   } > "$SETTINGS_FILE"
 }
 
@@ -658,6 +663,7 @@ _st_reset_act() {
   xfer_chunk_mb=$DEFAULT_XFER_CHUNK_MB; xfer_streams=$DEFAULT_XFER_STREAMS
   rename_csv_above=$DEFAULT_RENAME_CSV_ABOVE
   rename_noext_mode=$DEFAULT_RENAME_NOEXT_MODE
+  chmod_recursive_mode=$DEFAULT_CHMOD_RECURSIVE_MODE
   _items_presorted=false
   _apply_bg_color "$DEFAULT_TERMINAL_BG_COLOR"
   case "${_st_tag[$1]}" in

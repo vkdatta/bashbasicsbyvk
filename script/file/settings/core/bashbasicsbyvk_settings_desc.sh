@@ -193,6 +193,12 @@ Rename|*	Two choices that make renaming quicker. The first decides when a long s
 Rename|limit	Type the number of selected items that are still renamed one by one on the rename screen. Choose more than that and the job goes straight to the CSV table, which is faster for long lists. Type 0 to always rename one by one. The usual value is 5.
 Rename|noext	Decides what happens when you type a new name with no ending, for example print instead of print.gz. You can keep the old ending, create the file without any ending, or be asked each time. A name that already has an ending is used exactly as typed. The usual choice is to ask every time.
 Rename|reset	Put both choices back to the usual values: five items before the CSV table, and asking every time about a missing ending.
+Change mode|*	One choice for chmod-N, the screen that switches read, write and execute for the owner, the group and everybody else. It decides what a switch on a folder does: only the folder, or everything inside it as well.
+Change mode|rec	Off changes only the folder itself, exactly like a plain chmod. On changes the folder and every file and folder inside it, but never the target of a link. Ask puts a yes or no question each time you switch something on a folder. The usual choice is off.
+Change mode|reset	Put the choice back to the usual value: only the folder itself.
+CHMOD|owner	The owner is you, the person who owns the file. Switch R (read), W (write) and X (execute) for the owner. Type a row number, press the right arrow to reach R, W and X, and Enter to switch.
+CHMOD|group	The group is the set of people who share the file with its owner. Switch R (read), W (write) and X (execute) for the group.
+CHMOD|others	Others is everybody else on this machine. Switch R (read), W (write) and X (execute) for them.
 No extension|*	Pick what happens when you rename a file and type a new name without an ending such as .txt. A name that does have an ending is always used as typed.
 No extension|v:ask	Every time you type a name without an ending, the program asks whether to keep the old ending or leave it off.
 No extension|v:old	A name without an ending automatically gets the ending of the old file, so base.tar.gz renamed to print becomes print.tar.gz.

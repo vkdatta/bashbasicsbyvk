@@ -5,6 +5,7 @@
 declare -gA _LM_NEEDS=() _LM_WITH=()
 _LM_NEEDS[bashbasicsbyvk_home.sh]="bashbasicsbyvk_settings_ui.sh"
 _LM_NEEDS[bashbasicsbyvk_findrun.sh]="bashbasicsbyvk_results.sh"
+_LM_NEEDS[bashbasicsbyvk_chmod.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_settings_groups.sh]="bashbasicsbyvk_archive_formats.sh"
 _LM_NEEDS[bashbasicsbyvk_settings_desc.sh]="bashbasicsbyvk_settings_ui.sh bashbasicsbyvk_menu_sort.sh"
 _LM_NEEDS[bashbasicsbyvk_hidefiles.sh]="bashbasicsbyvk_settings_ui.sh"
@@ -12,6 +13,7 @@ _LM_NEEDS[bashbasicsbyvk_indexmode.sh]="bashbasicsbyvk_settings_ui.sh"
 _LM_NEEDS[bashbasicsbyvk_compress.sh]="bashbasicsbyvk_archive_formats.sh bashbasicsbyvk_settings_ui.sh"
 _LM_NEEDS[bashbasicsbyvk_findsettings.sh]="bashbasicsbyvk_settings_ui.sh"
 _LM_NEEDS[bashbasicsbyvk_renamesettings.sh]="bashbasicsbyvk_settings_ui.sh"
+_LM_NEEDS[bashbasicsbyvk_chmodsettings.sh]="bashbasicsbyvk_settings_ui.sh"
 _LM_NEEDS[bashbasicsbyvk_deps.sh]="bashbasicsbyvk_choose.sh"
 _LM_NEEDS[bashbasicsbyvk_rules.sh]="bashbasicsbyvk_tabmenu.sh"
 _LM_NEEDS[bashbasicsbyvk_switch.sh]="bashbasicsbyvk_tabmenu.sh"
@@ -302,6 +304,22 @@ _eb_table() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_table "$@"; }
 _eb_save_sheet() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_save_sheet "$@"; }
 _eb_finish() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_finish "$@"; }
 handle_eb() { _lm_stub bashbasicsbyvk_exactbytes.sh handle_eb "$@"; }
+_chm_stat_one() { _lm_stub bashbasicsbyvk_chmod.sh _chm_stat_one "$@"; }
+_chm_stat_all() { _lm_stub bashbasicsbyvk_chmod.sh _chm_stat_all "$@"; }
+_chm_on() { _lm_stub bashbasicsbyvk_chmod.sh _chm_on "$@"; }
+_chm_st() { _lm_stub bashbasicsbyvk_chmod.sh _chm_st "$@"; }
+_chm_geometry() { _lm_stub bashbasicsbyvk_chmod.sh _chm_geometry "$@"; }
+_chm_cell() { _lm_stub bashbasicsbyvk_chmod.sh _chm_cell "$@"; }
+chm_build() { _lm_stub bashbasicsbyvk_chmod.sh chm_build "$@"; }
+chm_row() { _lm_stub bashbasicsbyvk_chmod.sh chm_row "$@"; }
+chm_header() { _lm_stub bashbasicsbyvk_chmod.sh chm_header "$@"; }
+chm_footer() { _lm_stub bashbasicsbyvk_chmod.sh chm_footer "$@"; }
+_chm_cell_set() { _lm_stub bashbasicsbyvk_chmod.sh _chm_cell_set "$@"; }
+_chm_nav() { _lm_stub bashbasicsbyvk_chmod.sh _chm_nav "$@"; }
+_chm_click() { _lm_stub bashbasicsbyvk_chmod.sh _chm_click "$@"; }
+_chm_toggle() { _lm_stub bashbasicsbyvk_chmod.sh _chm_toggle "$@"; }
+_chm_cmd() { _lm_stub bashbasicsbyvk_chmod.sh _chm_cmd "$@"; }
+handle_chmod() { _lm_stub bashbasicsbyvk_chmod.sh handle_chmod "$@"; }
 _fi_scan() { _lm_stub bashbasicsbyvk_fileinfo.sh _fi_scan "$@"; }
 _fi_build() { _lm_stub bashbasicsbyvk_fileinfo.sh _fi_build "$@"; }
 _fi_show() { _lm_stub bashbasicsbyvk_fileinfo.sh _fi_show "$@"; }
@@ -550,6 +568,9 @@ find_group_settings() { _lm_stub bashbasicsbyvk_findsettings.sh find_group_setti
 _st_rn_build() { _lm_stub bashbasicsbyvk_renamesettings.sh _st_rn_build "$@"; }
 _st_rn_act() { _lm_stub bashbasicsbyvk_renamesettings.sh _st_rn_act "$@"; }
 rename_group_settings() { _lm_stub bashbasicsbyvk_renamesettings.sh rename_group_settings "$@"; }
+_st_cm_build() { _lm_stub bashbasicsbyvk_chmodsettings.sh _st_cm_build "$@"; }
+_st_cm_act() { _lm_stub bashbasicsbyvk_chmodsettings.sh _st_cm_act "$@"; }
+chmod_group_settings() { _lm_stub bashbasicsbyvk_chmodsettings.sh chmod_group_settings "$@"; }
 _dep_say() { _lm_stub bashbasicsbyvk_deps.sh _dep_say "$@"; }
 _dep_log() { _lm_stub bashbasicsbyvk_deps.sh _dep_log "$@"; }
 _dep_path_fix() { _lm_stub bashbasicsbyvk_deps.sh _dep_path_fix "$@"; }

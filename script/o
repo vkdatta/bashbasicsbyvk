@@ -203,6 +203,7 @@ while true; do
     c2c-*)       handle_c2c_upload "$choice" ;;
     up-*)        handle_up_upload "$choice" ;;
     eb-*)        handle_eb "$choice" ;;
+    chmod-*)     handle_chmod "$choice" ;;
     xtr-*)       handle_xtr "$choice" ;;
     i-*)         handle_info "$choice" ;;
     ux-*)        handle_ux_upload "$choice" ;;

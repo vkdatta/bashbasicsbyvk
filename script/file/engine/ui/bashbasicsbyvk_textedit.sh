@@ -368,7 +368,7 @@ _te_apply() {
     case "$base" in
       up|down) return 0 ;;                                                   # the list's (or the prompt's own) keys
       home|end) (( ct )) || { [ "$mode" = list ] && return 0; } ;;
-      left|right) (( ct )) || { [ "$mode" = list ] && [ -z "$_te_b" ] && return 0; } ;;   # an empty line: the list's tab keys
+      left|right) (( ct )) || { [ "$mode" = list ] && { [ -z "$_te_b" ] || { [ -n "${_TE_LR_PASS:-}" ] && [[ "$_te_b" =~ $_TE_LR_PASS ]]; }; } && return 0; } ;;   # an empty line: the list's tab keys; a screen that moves a cell cursor with ←/→ (chmod-N) names the typed text that is also the list's (_TE_LR_PASS, an ERE)
     esac
   fi
   if (( ! sh && sel && ! ct )) && [[ "$base" == left || "$base" == right ]]; then

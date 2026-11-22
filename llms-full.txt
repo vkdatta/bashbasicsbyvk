@@ -210,6 +210,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `c2c-` | act | Cloud-to-cloud upload | `c2c-1` |
 | `cc` | tool | Cheat codes — pick a command, it lands in the prompt |  |
 | `cd` | act | Open a shell in this folder |  |
+| `chmod-` | act | Change mode — switch read, write, execute of items for owner, group, others (interactive chmod) | `chmod-1,3` |
 | `clear` | util | Forget the command cache (hash -r) |  |
 | `cs` | act | Cloud surf |  |
 | `d` | act | Delete items |  |

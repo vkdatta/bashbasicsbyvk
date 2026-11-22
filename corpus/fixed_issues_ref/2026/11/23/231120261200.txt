@@ -1,0 +1,11 @@
+ISSUE AS DEFINED BY USER
+New command chmod-N: an interactive chmod. Screen "Change Mode" with tabs owner / group / others, a description line, and one row per item with [R] [W] [X] handled like checkboxes (on = letter, off = blank). Excel-like navigation, touch allowed. Plain → on an empty line switches tab; with 1 typed, → makes 1-RA (read on) or 1-RD (read off); Enter on 1-RA makes 1-RD. Colours: read green, write blue, execute red. Recursive or not decided in Settings. Reuse the app's existing layout structures.
+
+HOW DID YOU DEBUG
+Not a bug: a feature. Traced every touchpoint of a recent N-command (eb-): maincommands cmd_def, all menu maps, the o dispatcher, loadmap, tidy list, docs. Found the tab template (tabmenu), the xui screen framework (_xui_loop) and the item resolver (_sp_guard_and_resolve) and built on them. Drove the screen in the pty harness (tests/pty/fast/menus/chmod).
+
+CAUSE
+Not applicable. Two shared limits had to be lifted for a cell cursor: with text in the prompt ← → were always caret keys (textedit _te_apply), and a row tap could only select the row (browse _rc_click).
+
+FIX
+New bashbasicsbyvk_chmod.sh (handle_chmod, chm_* screen, _chm_nav/_chm_click cell cursor, _chm_toggle = real chmod then stat again), Settings > Change mode > Folders (chmod_recursive_mode off|on|ask, default off), cmdmap/xui_chm. Three hooks empty everywhere else: _vp_nav_fn, _vp_click_fn (browse.sh), _TE_LR_PASS (textedit.sh), saved and cleared by _xui_enter. Recursive switch runs find -depth ! -type l so children go first and links are never followed.

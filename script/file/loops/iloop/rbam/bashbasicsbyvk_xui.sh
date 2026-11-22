@@ -29,12 +29,14 @@ _XUI_PICK_TITLE=""
 _XUI_ARRS=(items _all_items _filter_src _filter_map)
 _XUI_VARS=(_hl_index _vp_mode _vp_header_fn _vp_footer_fn _vp_rowtext_fn _vp_input_fn _vp_hl_fn _fx_in_mode
            imaginary_mode _filter_query _filter_map_active _sw_in_mode group_prefix force_show _XUI_PFX
-           _vp_hint_row _vp_hint_n _vp_hint_cap _vp_hint_max _vp_hint_gapb _vp_hint_trk)     # the suggestion-area flag: _vp_geometry turns it on, and it must not stay on in the screen that opened this one
+           _vp_hint_row _vp_hint_n _vp_hint_cap _vp_hint_max _vp_hint_gapb _vp_hint_trk
+           _vp_nav_fn _vp_click_fn _TE_LR_PASS)     # the suggestion-area flag: _vp_geometry turns it on, and it must not stay on in the screen that opened this one
 
 _xui_enter() {
   local d=$(( ++_XUI_DEPTH )) v
   for v in "${_XUI_ARRS[@]}"; do eval "_XUI_K${d}_${v}=(\"\${${v}[@]}\")"; done
   for v in "${_XUI_VARS[@]}"; do eval "_XUI_K${d}_${v}=\"\${${v}-}\""; done
+  _vp_nav_fn=""; _vp_click_fn=""; _TE_LR_PASS=""     # a screen's cell-cursor hooks belong to that screen only (chmod-N sets them after _xui_enter)
   _fx_in_mode=1            # virtual list: never re-scan the folder for hidden files; inner-loop animation
   _sw_in_mode=1            # lets the ←/→ tab sentinels through (and keeps them from leaking out as text)
   imaginary_mode=false     # a big folder in grouped view must not hijack the = filter
