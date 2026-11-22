@@ -111,8 +111,7 @@ _csh_open() {
   echo "☁️  Opening Cloud Shell as $acct …"
   _bvk_mouse_off
   _cs_launch; rc=$?
-  _bvk_mouse_on
-  printf '\033[?25h'
+  _bvk_mouse_on                                           # _cs_launch already cleaned the terminal (a killed remote leaves its modes behind)
   if [ "$rc" -ne 0 ]; then echo "☁️  Cloud Shell closed (exit $rc)."; _bvk_info_wait; fi
   return 0
 }

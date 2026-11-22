@@ -285,6 +285,7 @@ _cs_is_authed() { _lm_stub bashbasicsbyvk_cslib.sh _cs_is_authed "$@"; }
 _cs_use() { _lm_stub bashbasicsbyvk_cslib.sh _cs_use "$@"; }
 _cs_login() { _lm_stub bashbasicsbyvk_cslib.sh _cs_login "$@"; }
 _cs_bar() { _lm_stub bashbasicsbyvk_cslib.sh _cs_bar "$@"; }
+_cs_term_reset() { _lm_stub bashbasicsbyvk_cslib.sh _cs_term_reset "$@"; }
 _cs_launch() { _lm_stub bashbasicsbyvk_cslib.sh _cs_launch "$@"; }
 _cs_kill() { _lm_stub bashbasicsbyvk_cslib.sh _cs_kill "$@"; }
 _eb_commas() { _lm_stub bashbasicsbyvk_exactbytes.sh _eb_commas "$@"; }

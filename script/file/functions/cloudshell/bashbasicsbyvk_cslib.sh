@@ -11,7 +11,7 @@
 #    _cs_is_authed ACCOUNT     does gcloud hold a login for it
 #    _cs_use ACCOUNT           gcloud config set account ACCOUNT           (done on EVERY switch of profile)
 #    _cs_login ACCOUNT b|l     gcloud auth login ACCOUNT   b = browser on this device, l = a link to open anywhere + paste the code back
-#    _cs_launch                opens Cloud Shell for the active account with the connect bar; returns ssh's exit code
+#    _cs_launch                opens Cloud Shell for the active account with the connect bar; returns ssh's exit code; always leaves the terminal clean (_cs_term_reset)
 #    _cs_kill                  switches Cloud Shell off for the active account (tmux kill-server, else every process of the user): the cure for a hung session
 #
 #  The connect bar is the app's own progress-bar shape  [███░░] 45%  (a wait of known length, so smartload stays out of the way:
@@ -137,6 +137,21 @@ _cs_bar() {
   done
 }
 
+# ── the terminal after the session.  Cloud Shell runs this same app (and often tmux) on the far side; when the session ends the hard way
+# (kl there = kill -9 -1, a dropped link) NOTHING over there cleans up, and the phone's terminal keeps the remote's modes: the next key
+# is then repainted in the wrong row.  So the LOCAL side always cleans up when ssh returns.  Targeted, not the full reset (ESC c):
+# that would also wipe the colours the app applied (Settings → colours).
+#   soft reset (DECSTR) · scroll region off · alternate screen off · mouse / bracketed paste / synchronized output off · normal cursor
+#   keys and keypad · autowrap on · cursor shown · colours and charset plain · screen cleared · the size is read again
+_cs_term_reset() {
+  [ -t 1 ] || return 0
+  builtin printf '\033[!p\033[r\033[?1049l\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?1015l\033[?2004l\033[?2026l'
+  builtin printf '\033[?1l\033>\033[?69l\033[?7h\033[?25h\033[0m\033(B\033[2J\033[H'
+  [ "${_BVK_PASTE_ON:-0}" = 1 ] && _bvk_paste_on        # the app's own bracketed-paste mode comes back
+  _vp_on_resize                                           # the keyboard may have changed the size meanwhile: the next paint probes it live
+  return 0
+}
+
 # ── the session
 _cs_launch() {
   local d ok pidf bar_pid="" bar=1 rc=0 keyfile="$HOME/.ssh/google_compute_engine"
@@ -164,6 +179,7 @@ _cs_launch() {
   _bb_progress_end
   command -v termux-wake-unlock >/dev/null 2>&1 && termux-wake-unlock 2>/dev/null
   rm -rf "$d"
+  _cs_term_reset                                           # however the session ended
   return $rc
 }
 
