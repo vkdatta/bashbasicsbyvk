@@ -234,8 +234,7 @@ _sw_menu_header() {
   case "$_sw_tab" in
     recents) _loc="(folders you entered with cd · files you edited)" ;;
     favourites) _loc="⭐ favourites of: $_sw_outer_path" ;;
-    *)       _bvk_src_tag_v
-             _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}$_bst_out" ;;
+    *)       _loc="$path${group_prefix:+ [group: ${group_prefix^^}*]}" ;;
   esac
   _tm_head -n "📂 $_loc" sw
 }

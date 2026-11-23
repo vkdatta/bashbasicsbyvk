@@ -318,23 +318,11 @@ _pn_local_ids() {
 }
 _pn_count_local() { local n=0 i; while read -r i; do [ -n "$i" ] && n=$((n + 1)); done < <(_pn_local_ids); printf '%s' "$n"; }
 
-# the number for the header row (📣 N): same 20 s cache as the hint line below
+# the number of the [🐌 Pending N] button of the main screen: cached 20 s (a directory listing only)
 _PN_CNT_AT=0; _PN_CNT=0
 _pn_count_cached() {
   local now=${EPOCHSECONDS:-$(date +%s)}
   if [ $((now - _PN_CNT_AT)) -ge 20 ]; then _PN_CNT_AT=$now; _PN_CNT=$(_pn_count_local); fi
-  return 0
-}
-
-# one line for the main screen when something is waiting (cheap: directory listing only, cached 20 s)
-_PN_HINT_AT=0; _PN_HINT=""
-_pn_hint() {
-  local now=${EPOCHSECONDS:-$(date +%s)} n
-  if [ $((now - _PN_HINT_AT)) -ge 20 ]; then
-    _PN_HINT_AT=$now; n=$(_pn_count_local)
-    if [ "$n" -gt 0 ]; then _PN_HINT="⏸  $n unfinished upload(s) — nothing is lost: type  pn  to continue, pause or stop them."; else _PN_HINT=""; fi
-  fi
-  [ -n "$_PN_HINT" ] && echo "$_PN_HINT"
   return 0
 }
 

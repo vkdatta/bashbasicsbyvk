@@ -1,6 +1,6 @@
 """Suggestion-row guard (real app in a pty + tests/pty/lib/vt.py).  python3 tests/pty/fast/menus/hints/hint_test.py
 Every screen with a typed "Select:" prompt must show the live suggestion on the row DIRECTLY ABOVE "Select:":
-  main list · Home · Settings · a loop menu (fx).  And the main header is   lang | ⏰ n | 📣 n  /  cd path  /  nav path.
+  main list · Home · Settings · a loop menu (fx).  And the main header is   💫 greeting  /  [🔔 Notifications n]  [🐌 Pending n]  /  cd path  /  nav path.
 A new menu that draws its own screen (like _st_run does) must call _st_hint_text / _cm_hint, or this test fails."""
 import os, sys
 here = os.path.dirname(os.path.abspath(__file__)); root = os.path.abspath(os.path.join(here, '..', '..', '..', '..', '..'))
@@ -31,10 +31,13 @@ def row_above_select(a, typed):
 
 a = App(user=True)
 try:
-    def top3(): return [l for l in a.text().split('\n') if l.strip()][:3]
-    check('main header row 1 = lang | ⏰ n | 📣 n', lambda: len(top3()) >= 3 and '| ⏰' in top3()[0] and '| 📣' in top3()[0], a)
-    check('main header has cd path then nav path', lambda: 'cd path:' in top3()[1] and 'nav path:' in top3()[2], a)
-    cdp = top3()[1].split('cd path:')[1].strip()
+    def hdr(): return [l for l in a.text().split('\n') if l.strip()][:5]   # blank rows are skipped: greeting, 🧠 meter (signed in), buttons, cd path, nav path
+    check('main header row 1 = 💫 greeting', lambda: len(hdr()) >= 4 and hdr()[0].startswith('💫'), a)
+    check('main header has the buttons [🔔 Notifications n]  [🐌 Pending n]', lambda: any('[🔔 Notifications' in l and '[🐌 Pending' in l for l in hdr()), a)
+    check('main header has no [loaded by ..] tag and no unfinished-upload line', lambda: 'loaded by' not in a.text() and 'unfinished upload' not in a.text(), a)
+    def cdn(): return next(i for i, l in enumerate(hdr()) if 'cd path:' in l)
+    check('main header has cd path then nav path', lambda: 'cd path:' in hdr()[cdn()] and 'nav path:' in hdr()[cdn() + 1], a)
+    cdp = hdr()[cdn()].split('cd path:')[1].strip()
     a.line('u')
     def after_up():
         L2 = [l for l in a.text().split('\n') if l.strip()]

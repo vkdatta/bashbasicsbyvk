@@ -530,7 +530,7 @@ _hl_report() {
   else _hl_ok "_BVK_GO_BIN = $_BVK_GO_BIN"; fi
   [ -n "${_BVK_GO_WHY:-}" ] && _hl_info "recorded reason : $_BVK_GO_WHY"
   _hl_info "header tag now  : load=${_BVK_LOAD_SRC:-(none yet)}  meta=${_BVK_META_SRC:-(none yet)}   (c = native, py = fallback)"
-  _hl_info "BVK_NO_GO=${BVK_NO_GO:-0}   BVK_SHOW_SRC=${BVK_SHOW_SRC:-1}"
+  _hl_info "BVK_NO_GO=${BVK_NO_GO:-0}"
   if [ "${BVK_NO_GO:-0}" = "1" ]; then
     _hl_bad "BVK_NO_GO=1 — the C engine is disabled by an environment variable"
     _hl_find "BVK_NO_GO=1 is set in the environment" "unset BVK_NO_GO (check ~/.bashrc / ~/.profile)"

@@ -18,7 +18,7 @@ bashbasicsbyvk_browse.sh|||the main-loop input reader and header / footer
 bashbasicsbyvk_maincommands.sh|||the MAIN commands of the command map: the hint row of the first paint reads them
 bashbasicsbyvk_lock.sh|||lock marks drawn in the list
 bashbasicsbyvk_fileapi_lib.sh|||FileAPI config reader used by the pending hint (split candidate: only _bb_cfg_val is needed before the first paint)
-bashbasicsbyvk_staging_pending.sh|||the "unfinished uploads" hint of the main screen (split candidate: only the count / hint are needed)
+bashbasicsbyvk_staging_pending.sh|||the pending-uploads count of the main screen button (split candidate: only the count is needed)
 bashbasicsbyvk_select.sh|||selection (.s) state: the header counts it
 bashbasicsbyvk_display_filter.sh|||the .d display filter: it narrows the first list
 bashbasicsbyvk_favourites.sh|||favourites mode: decides which list is drawn
@@ -26,7 +26,8 @@ bashbasicsbyvk_settings.sh|||settings file reader, timezone, defaults: every scr
 bashbasicsbyvk_colors.sh|||colour settings applied at start
 bashbasicsbyvk_filter.sh|||the filter (=) input reader the main prompt uses
 bashbasicsbyvk_notify.sh|||notification count in the header
-bashbasicsbyvk_insanity.sh|||insanity meter row above the status row: part of the first paint (reads a cache file only; the network refresh runs in the background)
+bashbasicsbyvk_insanity.sh|||insanity meter row of the main screen: part of the first paint (reads a cache file only; the network refresh runs in the background)
+bashbasicsbyvk_greeting.sh|||the 💫 greeting row, first row of the main screen: part of the first paint (builds its text once a minute, reads two tiny files, no fork)
 
 [bg]
 bashbasicsbyvk_loadmap_stubs.sh|||GENERATED lazy-load stubs and needs table (bashbasicsbyvk_loadmap_gen --write); sourced by the loader at the end of [fg], before the first paint (an [fg] function may call a [bg] / [no] one)

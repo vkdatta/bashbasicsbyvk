@@ -160,20 +160,19 @@ def t_group(a):                                  # Group by view: the rows are g
 case('Group by view: click selects the group, double click opens it', t_group, settings='group_view_levels_str="ext year"\n')
 
 
-# ── header: status row, nav path
+# ── header: the two buttons ([🔔 Notifications n]  [🐌 Pending n]), nav path
 def hdr_tap(col, typed, extra=None):
     def t(a):
-        r = a.row_of(r'\| ⏰'); a.click(r, col=col, t=3.0)
+        r = a.row_of(r'🔔 Notifications'); a.click(r, col=col, t=3.0)
         a.wait(lambda: (typed in a.raw) and (extra is None or extra in a.raw.lower() or extra in a.text().lower()), 8)
         ok = (typed in a.raw) and (extra is None or extra in a.raw.lower() or extra in a.text().lower())
-        return ok and a.alive, 'tap on the status row at column %d must type and run %r' % (col, typed)
+        return ok and a.alive, 'tap on the buttons row at column %d must type and run %r' % (col, typed)
     return t
-case('status row: tap 1st field -> lang runs', hdr_tap(1, b'Select: lang', b'drill'), nfiles=20)
-case('status row: tap 2nd field -> nf runs', hdr_tap(7, b'Select: nf', b'notif'), nfiles=20)
+case('buttons row: tap [🔔 Notifications] -> nf runs', hdr_tap(3, b'Select: nf', b'notif'), nfiles=20)
 def t_pn(a):
-    r = a.row_of(r'\| ⏰'); a.click(r, col=14, t=3.0)
-    return 'Pending' in a.text() and a.alive, 'tap on the 3rd field must open pn (Pending)'
-case('status row: tap 3rd field -> pn opens', t_pn, nfiles=20)
+    r = a.row_of(r'🔔 Notifications'); a.click(r, col=26, t=3.0)
+    return 'Pending' in a.text() and a.alive, 'tap on [🐌 Pending] must open pn (Pending)'
+case('buttons row: tap [🐌 Pending] -> pn opens', t_pn, nfiles=20)
 
 def t_nav(a):
     r = a.row_of(r'nav path'); L = a.lines()[r - 1]
@@ -267,9 +266,9 @@ case('Item numbers picker: click toggles items (ranges are compacted)', t_picker
 
 def t_picker_header(a):
     if not picker(a): return False, 'the picker did not open'
-    r = a.row_of(r'\| ⏰'); a.click(r, col=1, t=1.0)
-    return 'Drill' not in a.text() and b'Select: lang' not in a.raw and a.alive, 'inside a flow the status row must NOT run commands'
-case('Item numbers picker: status-row taps are ignored inside a flow', t_picker_header)
+    r = a.row_of(r'🔔 Notifications'); a.click(r, col=3, t=1.0)
+    return b'Select: nf' not in a.raw and a.alive, 'inside a flow the buttons row must NOT run commands'
+case('Item numbers picker: button taps are ignored inside a flow', t_picker_header)
 
 
 # ── tabs (sw, fx, -u, .r ...)

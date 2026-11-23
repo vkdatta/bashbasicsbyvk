@@ -76,26 +76,12 @@ _bvk_go_bin() {
   [ -n "$_BVK_GO_BIN" ]
 }
 
-# ── Load-source tracking (debug tag in the menu header)
+# ── Load-source tracking (kept for the lang command; no longer printed in any header)
 # _BVK_LOAD_SRC : who listed / searched the current menu   (c | py | "")
 # _BVK_META_SRC : who produced the visible rows' metadata  (c | py | "")
-# Header shows " [loaded by c]" only when the native binary did all of it,
-# " [loaded by py]" as soon as the Python backup was used for any part.
-# Set BVK_SHOW_SRC=0 to hide the tag.
 declare -g _BVK_LOAD_SRC=""
 declare -g _BVK_META_SRC=""
 declare -g _BVK_GROUP_SRC=""         # who grouped the rows (Group by): c | py | "" (not grouped)
-
-_bvk_src_tag_v() {
-  _bst_out=""
-  [ "${BVK_SHOW_SRC:-1}" = "1" ] || return 0
-  [ -n "$_BVK_LOAD_SRC" ] || return 0
-  if [ "$_BVK_LOAD_SRC" = c ] && [ "${_BVK_META_SRC:-c}" = c ] && [ "${_BVK_GROUP_SRC:-c}" = c ]; then
-    _bst_out=" [loaded by c]"
-  else
-    _bst_out=" [loaded by py]"
-  fi
-}
 
 # Scratch file for listings. Results are read back with `mapfile < file`:
 # bash reads a pipe/process-substitution ONE BYTE at a time, which made

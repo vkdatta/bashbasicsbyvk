@@ -170,8 +170,7 @@ _fx_menu_header() {                                # template V3PX4Y (folder-spe
   local _p
   case "$_fx_tab" in
     adf) _p="📂 ADF path: $(_fx_adf_breadcrumb)" ;;
-    *)   _bvk_src_tag_v
-         _p="📂 UDF path: $path${group_prefix:+ [group: ${group_prefix^^}*]}$_bst_out" ;;
+    *)   _p="📂 UDF path: $path${group_prefix:+ [group: ${group_prefix^^}*]}" ;;
   esac
   _tm_head -f "$_fx_adf_cur_staging" -c "$(_fx_count_total)" -n "$_p" fx
 }

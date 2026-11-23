@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# insanity — the insanity meter: one row above the status row (lang | notifications | pending) of the main screen.
+# insanity — the insanity meter: one row of the main screen, under the greeting and above the [Notifications] [Pending] buttons.
 # ════════════════════════════════════════════════════════════════════════════
 #  What it shows      🧠 ███████████░░░░░░░░░  63  unhinged
 #  Scale              0-100 (it may pass 100: "severely insane"). Colour is a GRADIENT of the level:

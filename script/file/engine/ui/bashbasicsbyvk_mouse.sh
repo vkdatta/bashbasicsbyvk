@@ -4,7 +4,7 @@
 #   double click / tap    → the same, and Enter is pressed for you.
 #   click / tap ▲ / ▼     → page up / page down.
 #   wheel / swipe         → scroll the list (3 items per step).
-#   click / tap the status row  (py | ⏰ 0 | 📣 0)  → runs  lang / nf / pn  (first / second / third field)
+#   click / tap a button of the main screen  ([🔔 Notifications 0]  [🐌 Pending 1])  → runs  nf / pn
 #   click / tap a tab name (sw, fx, -u, .r, cs, rbam ...)  → that tab (a tab bar is found by the labels its screen registered)
 #   click / tap a folder name in the  nav path:  → browse that folder (the shell's  cd path  is never touched)
 #   DOUBLE click / tap a footer key  (u) Up   q) Quit   h) Home ...)  → that key is typed and Enter pressed for you.  A single tap does
@@ -281,7 +281,7 @@ _bvk_mouse_other() {
 
 # Header rows.  The block's top row is (prompt row - _blk_h + 1) and the header lines are its first rows (_vp_hdr_out).
 #   _bvk_mouse_hdr_hit CLICKED_ROW PROMPT_ROW   -> returns 0 and sets
-#     _MS_HKIND = cmd   _MS_CMD = lang | nf | pn     the status row:  "py | ⏰ 0 | 📣 0"  (first / second / third field)
+#     _MS_HKIND = cmd   _MS_CMD = nf | pn            the buttons row:  "[🔔 Notifications 0]  [🐌 Pending 1]"  (first / second button)
 #     _MS_HKIND = nav   _MS_NAV = /a/b               a folder name of "☁️ nav path: /a/b/c" was touched (c itself = where you are: ignored)
 #   returns 1 when the click is on no such field.
 _bvk_mouse_hdr_hit() {
@@ -292,15 +292,12 @@ _bvk_mouse_hdr_hit() {
 
   if _bvk_mouse_tab_hit "$line"; then _MS_HKIND=tab; return 0; fi
 
-  if [[ "$line" == *' | ⏰ '*' | 📣 '* ]]; then
-    local f1="${line%% | ⏰ *}" rest="${line#* | ⏰ }" f2 f3 a w2 w3 s2 s3
-    f2="⏰ ${rest%% | 📣 *}"; f3="📣 ${rest#* | 📣 }"
-    _bvk_dispw "$f1"; a=$_BVK_W; _bvk_dispw "$f2"; w2=$_BVK_W; _bvk_dispw "$f3"; w3=$_BVK_W
-    s2=$(( a + 3 )); s3=$(( s2 + w2 + 3 ))
-    # each field owns its text plus the first half of the " | " that follows it (a fingertip is wider than one cell)
-    if   (( c <= a ));          then _MS_HKIND=cmd; _MS_CMD=lang
-    elif (( c <= s2 + w2 ));    then _MS_HKIND=cmd; _MS_CMD=nf
-    elif (( c <= s3 + w3 ));    then _MS_HKIND=cmd; _MS_CMD=pn
+  if [[ "$line" == '[🔔 Notifications '*']  [🐌 Pending '*']' ]]; then     # the two buttons:  [🔔 Notifications 0]  [🐌 Pending 1]
+    local b1="${line%%]*}]" b2="${line#*]  }" w1 w2
+    _bvk_dispw "$b1"; w1=$_BVK_W; _bvk_dispw "$b2"; w2=$_BVK_W
+    # each button owns its text; the first one also owns the first cell of the gap that follows it (a fingertip is wider than one cell)
+    if   (( c <= w1 ));           then _MS_HKIND=cmd; _MS_CMD=nf
+    elif (( c <= w1 + 2 + w2 ));  then _MS_HKIND=cmd; _MS_CMD=pn
     fi
     [ "$_MS_HKIND" = cmd ]; return
   fi
@@ -330,7 +327,7 @@ _bvk_mouse_hdr_hit() {
 }
 
 # the file list itself (not a flow, not an inner screen) is the only place where a header tap may act:
-#   0 = a status-row tap may run lang / nf / pn here · nothing else is waiting for an answer
+#   0 = a button tap may run nf / pn here · nothing else is waiting for an answer
 _bvk_mouse_hdr_ok() {
   declare -F _cm_ctx_find >/dev/null 2>&1 && _cm_ctx_find
   [ "${_CM_FLOW:-0}" = 0 ]

@@ -554,29 +554,34 @@ handle_selection() {
   fi
 }
 
-# ── the status row:   c | ⏰ <notifications> | 📣 <unfinished uploads>   (the insanity meter row sits above it)
-# The first field is the engine that listed this folder: c (native binary) or py (Python fallback) - the old
-# "[loaded by c]" tag, moved here (BVK_SHOW_SRC=0 or nothing loaded yet shows –).  The two numbers come from tiny caches
-# (_nf_cnt_get / _pn_count_cached), so drawing the header never waits for the network or scans folders.
-_bvk_hdr_lang() {
-  _bvk_src_tag_v
-  case "$_bst_out" in *"by py]"*) _HDR_LANG=py ;; *"by c]"*) _HDR_LANG=c ;; *) _HDR_LANG="–" ;; esac
-}
-# the insanity meter: ONE row above the status row (bashbasicsbyvk_insanity.sh, [fg] because it is part of the first paint).
+# ── the top of the main screen (template JR9TZ5, {status_row}), in this order:
+#   💫 <greeting>                                  (bashbasicsbyvk_greeting.sh: name, hour / weekday, fixed-date holidays)
+#   🧠 <insanity meter>                            (only while an -auth user is active)
+#   [🔔 Notifications 0]  [🐌 Pending 1]           (two buttons: a tap runs  nf  /  pn, see _bvk_mouse_hdr_hit)
+# A blank row sits between the parts.  The two numbers come from tiny caches (_nf_cnt_get / _pn_count_cached), so drawing the
+# header never waits for the network or scans folders.
+_bvk_hdr_greeting() { _gr_row; echo; }
+# the insanity meter: ONE row (bashbasicsbyvk_insanity.sh, [fg] because it is part of the first paint) + its blank row.
 # It reads a cache only (a stale cache starts a silent background refresh); no -auth user = nothing is printed.
-_bvk_hdr_insanity() { declare -F _in_row >/dev/null 2>&1 && _in_row; return 0; }
+_bvk_hdr_insanity() {
+  [ -s "${XDG_CONFIG_HOME:-$HOME/.config}/bashbasicsbyvk/auth/active" ] || return 0
+  _in_row; echo
+}
 _bvk_hdr_status() {
   local nf="–" pn=0
   if declare -F _nf_cnt_get >/dev/null 2>&1; then _nf_cnt_get; nf="$_NF_CNT"; fi
   if declare -F _pn_count_cached >/dev/null 2>&1; then _pn_count_cached; pn="$_PN_CNT"; fi
-  _bvk_hdr_lang
-  printf '%s | ⏰ %s | 📣 %s' "$_HDR_LANG" "$nf" "$pn"
+  printf '[🔔 Notifications %s]  [🐌 Pending %s]\n' "$nf" "$pn"
 }
 
-#   c | ⏰ 0 | 📣 0
+#   💫 Hey night owl, Geecko 🦉
+#
+#   🧠 █░░░░░░░░░░░░░░░░░░░  5  calm
+#
+#   [🔔 Notifications 0]  [🐌 Pending 1]
 #
 #   📂 cd path: /data/data/com.termux/files/home          <- where the CURRENT SHELL is cd'ed ($PWD: it does not move while you browse)
-#   ☁️ nav path: /data/data/com.termux/files/home         <- where you are browsing (Drive / group / filter marks go here; the loaded-by tag is now the first field of the status row)
+#   ☁️ nav path: /data/data/com.termux/files/home         <- where you are browsing (Drive / group / filter marks go here)
 # The layout is the template JR9TZ5 (templates/bashbasicsbyvk_JR9TZ5.sh.tpl); $1 = the function that prints the notice rows under the location rows.
 _menu_header() {
   _tpl_clear; _tpl_set header_notes "${1:-}"
@@ -813,7 +818,6 @@ _bvk_cd_shell() {
 # the notice rows under the location rows: the flat view, then the grouped (imaginary) view
 _mh_notes_flat() {
   [ -s "${_SNAP_NOTICE:-}" ] && cat "$_SNAP_NOTICE"        # Snapshots paused: not enough credits
-  declare -F _pn_hint >/dev/null 2>&1 && _pn_hint           # unfinished uploads are waiting: pn
   [ -n "${_sel_banner:-}" ] && echo "$_sel_banner"
   [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"
   [ -n "${_disp_banner:-}" ] && echo "$_disp_banner"
