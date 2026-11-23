@@ -1128,6 +1128,7 @@ bvk_localhost() { _lm_stub bashbasicsbyvk_localhost.sh bvk_localhost "$@"; }
 _lh_body() { _lm_stub bashbasicsbyvk_localhost.sh _lh_body "$@"; }
 bvk_py_audit() { _lm_stub bashbasicsbyvk_py_audit.sh bvk_py_audit "$@"; }
 _pa_body() { _lm_stub bashbasicsbyvk_py_audit.sh _pa_body "$@"; }
+_bvk_plan_def() { _lm_stub bashbasicsbyvk_auth.sh _bvk_plan_def "$@"; }
 _bvk_share_spec() { _lm_stub bashbasicsbyvk_auth.sh _bvk_share_spec "$@"; }
 _bvk_auth_init() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_init "$@"; }
 _bvk_auth_parse() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_parse "$@"; }
@@ -1164,9 +1165,13 @@ _bvk_rate_per() { _lm_stub bashbasicsbyvk_auth.sh _bvk_rate_per "$@"; }
 _bvk_money_sym() { _lm_stub bashbasicsbyvk_auth.sh _bvk_money_sym "$@"; }
 _bvk_money_fmt() { _lm_stub bashbasicsbyvk_auth.sh _bvk_money_fmt "$@"; }
 _bvk_grp() { _lm_stub bashbasicsbyvk_auth.sh _bvk_grp "$@"; }
-_bvk_credits_for() { _lm_stub bashbasicsbyvk_auth.sh _bvk_credits_for "$@"; }
 _bvk_rate_text() { _lm_stub bashbasicsbyvk_auth.sh _bvk_rate_text "$@"; }
 _bvk_rate_min() { _lm_stub bashbasicsbyvk_auth.sh _bvk_rate_min "$@"; }
+_bvk_plan_amount() { _lm_stub bashbasicsbyvk_auth.sh _bvk_plan_amount "$@"; }
+_bvk_plan_credits() { _lm_stub bashbasicsbyvk_auth.sh _bvk_plan_credits "$@"; }
+_bvk_plan_monthly() { _lm_stub bashbasicsbyvk_auth.sh _bvk_plan_monthly "$@"; }
+_bvk_plan_line() { _lm_stub bashbasicsbyvk_auth.sh _bvk_plan_line "$@"; }
+_bvk_realm_label() { _lm_stub bashbasicsbyvk_auth.sh _bvk_realm_label "$@"; }
 _au_pause() { _lm_stub bashbasicsbyvk_auth.sh _au_pause "$@"; }
 _au_trunc() { _lm_stub bashbasicsbyvk_auth.sh _au_trunc "$@"; }
 _au_sub_header() { _lm_stub bashbasicsbyvk_auth.sh _au_sub_header "$@"; }
@@ -1175,7 +1180,13 @@ _au_billing_build() { _lm_stub bashbasicsbyvk_auth.sh _au_billing_build "$@"; }
 _au_billing_action() { _lm_stub bashbasicsbyvk_auth.sh _au_billing_action "$@"; }
 _au_recharge_build() { _lm_stub bashbasicsbyvk_auth.sh _au_recharge_build "$@"; }
 _au_recharge_action() { _lm_stub bashbasicsbyvk_auth.sh _au_recharge_action "$@"; }
+_au_plan_fetch() { _lm_stub bashbasicsbyvk_auth.sh _au_plan_fetch "$@"; }
+_au_plan_headline() { _lm_stub bashbasicsbyvk_auth.sh _au_plan_headline "$@"; }
+_au_plan_build() { _lm_stub bashbasicsbyvk_auth.sh _au_plan_build "$@"; }
+_au_plan_action() { _lm_stub bashbasicsbyvk_auth.sh _au_plan_action "$@"; }
 _bvk_pay_amount() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_amount "$@"; }
+_bvk_pay_plan() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_plan "$@"; }
+_pay_s_plan() { _lm_stub bashbasicsbyvk_auth.sh _pay_s_plan "$@"; }
 _pay_s_cur() { _lm_stub bashbasicsbyvk_auth.sh _pay_s_cur "$@"; }
 _pay_s_amt() { _lm_stub bashbasicsbyvk_auth.sh _pay_s_amt "$@"; }
 _bvk_pay_accounts_json() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_accounts_json "$@"; }
@@ -1183,6 +1194,7 @@ _bvk_pay_build() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_build "$@"; }
 _bvk_pay_open() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_open "$@"; }
 _bvk_pay_create() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_create "$@"; }
 _bvk_pay_recharge() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_recharge "$@"; }
+_bvk_pay_recharge_plan() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_recharge_plan "$@"; }
 _bvk_pay_sponsorship() { _lm_stub bashbasicsbyvk_auth.sh _bvk_pay_sponsorship "$@"; }
 _bvk_auth_sub_menu() { _lm_stub bashbasicsbyvk_auth.sh _bvk_auth_sub_menu "$@"; }
 _au_user_rowtext() { _lm_stub bashbasicsbyvk_auth.sh _au_user_rowtext "$@"; }

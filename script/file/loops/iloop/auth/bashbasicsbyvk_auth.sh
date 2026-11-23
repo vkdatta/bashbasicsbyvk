@@ -22,6 +22,22 @@ _BVK_PAY_URL="${BVK_PAY_URL:-https://payments.bashbasics.workers.dev}"
 # Money <-> credits: THE one place on the terminal side (backend twin: payments/src/pricing.js — keep them equal).
 #        1 US$  =  100 ₹  =  1,000 credits          <- change ONLY these three numbers
 _BVK_RATE_USD=1; _BVK_RATE_INR=100; _BVK_RATE_CREDITS=1000
+# Insanity plans: THE one table on the terminal side (backend twin: PLANS in payments/src/pricing.js — keep them equal).
+#   Free (animal realm) = never recharged.  Sane / Mad / Crazy / Nuts (human realm) = the plan of the latest paid recharge.
+#   US$ price (INR = US$ x _BVK_RATE_INR: 1/5/10/25 US$ = 100/500/1000/2500 INR) · credit multiplier (credits per recharge) ·
+#   subscription multiplier (the monthly charge is _BVK_SUB_BASE x it).  Accounts that existed before plans are Sane.
+_BVK_PLAN_KEYS=(sane mad crazy nuts)
+_BVK_SUB_BASE=1000
+_bvk_plan_def() {  # $1=key -> _PL_NAME _PL_REALM _PL_USD _PL_CM _PL_SM ; 1 = unknown
+  case "$1" in
+    free)  _PL_NAME=Free;  _PL_REALM=animal; _PL_USD=0;  _PL_CM=1;   _PL_SM=1 ;;
+    sane)  _PL_NAME=Sane;  _PL_REALM=human;  _PL_USD=1;  _PL_CM=1;   _PL_SM=1 ;;
+    mad)   _PL_NAME=Mad;   _PL_REALM=human;  _PL_USD=5;  _PL_CM=1.5; _PL_SM=1.5 ;;
+    crazy) _PL_NAME=Crazy; _PL_REALM=human;  _PL_USD=10; _PL_CM=2;   _PL_SM=4 ;;
+    nuts)  _PL_NAME=Nuts;  _PL_REALM=human;  _PL_USD=25; _PL_CM=3;   _PL_SM=15 ;;
+    *) return 1 ;;
+  esac
+}
 _BVK_SUPPORT_MAIL="vkd.codes@gmail.com"
 # Identity sizes: THE one place on the terminal side (server twin: DISEPS_N / SHARE_N / APIKEY_LEN in fileapi/src/users.js).
 _BVK_DISEPS_N=270; _BVK_DINONS_N=290; _BVK_CODE_LEN=16; _BVK_APIKEY_LEN=512
@@ -426,9 +442,19 @@ _bvk_rate_per() { case "$1" in INR) echo "$_BVK_RATE_INR" ;; *) echo "$_BVK_RATE
 _bvk_money_sym() { case "$1" in INR) printf '₹' ;; *) printf 'US$' ;; esac; }
 _bvk_money_fmt() { printf '%s%s' "$(_bvk_money_sym "$1")" "$2"; }                                  # $1=cur $2=amount
 _bvk_grp() { printf '%s' "$1" | sed -e :a -e 's/\([0-9]\)\([0-9]\{3\}\)\($\|,\)/\1,\2\3/;ta'; }
-_bvk_credits_for() { awk -v a="$2" -v p="$(_bvk_rate_per "$1")" -v c="$_BVK_RATE_CREDITS" 'BEGIN{printf "%d", a/p*c+0.5}'; }  # $1=cur $2=amount
 _bvk_rate_text() { printf 'US$%s = ₹%s = %s credits' "$_BVK_RATE_USD" "$_BVK_RATE_INR" "$(_bvk_grp "$_BVK_RATE_CREDITS")"; }
 _bvk_rate_min() { awk -v p="$(_bvk_rate_per "$1")" 'BEGIN{printf "%g", p}'; }                        # minimum = US$1 worth
+_bvk_plan_amount() { _bvk_plan_def "$1" && _PL_AMOUNT=$(( _PL_USD * $(_bvk_rate_per "${2:-USD}") )); }   # $1=key $2=cur -> _PL_AMOUNT (the recharge price in that currency)
+_bvk_plan_credits() { _bvk_plan_def "$1" || return 1; _bvk_plan_amount "$1" "${2:-USD}"; awk -v a="$_PL_AMOUNT" -v p="$(_bvk_rate_per "${2:-USD}")" -v c="$_BVK_RATE_CREDITS" -v m="$_PL_CM" 'BEGIN{printf "%d", a/p*c*m+0.5}'; }
+_bvk_plan_monthly() { _bvk_plan_def "$1" || return 1; awk -v b="$_BVK_SUB_BASE" -v m="$_PL_SM" 'BEGIN{printf "%d", b*m+0.5}'; }
+# one line about a plan:  "Mad  US$5 / ₹500 → 7,500 credits (×1.5) · monthly charge 1,500"
+_bvk_plan_line() {  # $1=key
+  _bvk_plan_def "$1" || return 1
+  local nm="$_PL_NAME" cm="$_PL_CM"
+  _bvk_plan_amount "$1" USD; local u="$_PL_AMOUNT"; _bvk_plan_amount "$1" INR
+  printf '%s  US$%s / ₹%s → %s credits (×%s) · monthly charge %s' "$nm" "$u" "$(_bvk_grp "$_PL_AMOUNT")" "$(_bvk_grp "$(_bvk_plan_credits "$1" USD)")" "$cm" "$(_bvk_grp "$(_bvk_plan_monthly "$1")")"
+}
+_bvk_realm_label() { case "$1" in animal) printf '🐾 Animal realm' ;; *) printf '🧠 Human realm' ;; esac; }
 _au_pause() { :; }   # no stranded "press any key": the message stays on screen and the menu redraws below it
 _au_trunc() { local s="$1" n="$2"; [ "${#s}" -gt "$n" ] && s="${s:0:$((n-1))}…"; printf '%s' "$s"; }
 
@@ -436,7 +462,8 @@ _au_sub_header() {                                 # template 7P68NA
   local _n=""
   case "$_AU_SCREEN" in
     billing)  _n="🧾 Billing details — printed on your invoice (stored on this device)" ;;
-    recharge) _n="💳 Recharge — $(_bvk_rate_text) · minimum $(_bvk_money_fmt USD "$(_bvk_rate_min USD)") / $(_bvk_money_fmt INR "$(_bvk_rate_min INR)") per account" ;;
+    recharge) _n="💳 Recharge — pick a plan: Sane · Mad · Crazy · Nuts (US\$1 / 5 / 10 / 25 = ₹100 / 500 / 1,000 / 2,500) · $(_bvk_rate_text)" ;;
+    plan)     _n="🧬 Plan — $(_au_plan_headline)" ;;
   esac
   _tpl_list_header "👤 Acting as: $_AU_MAIL" "$_n"
 }
@@ -466,7 +493,7 @@ _au_billing_action() {  # $1 = 0-based slot
 _au_recharge_build() {
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
   _AU_MAIL="$P_MAIL"; _filter_reset_state
-  items=("Recharge your account" "Recharge others' accounts"); _hl_index=0
+  items=("Recharge your account (choose a plan)" "Recharge others' accounts (choose a plan)"); _hl_index=0
 }
 _au_recharge_action() {  # $1 = 0-based slot
   case "$1" in
@@ -475,10 +502,69 @@ _au_recharge_action() {  # $1 = 0-based slot
   esac
 }
 
+# ---- Plan: which realm and plan is the current user in?   🐾 Animal realm = Free · 🧠 Human realm = Sane / Mad / Crazy / Nuts
+_AU_PLAN_OK=0; _AU_PLAN_KEY=""; _AU_PLAN_LEVEL=""
+_au_plan_fetch() {   # asks the server (GET /plan) for THIS profile; sets _AU_PLAN_* (empty key = could not tell)
+  _AU_PLAN_OK=1; _AU_PLAN_KEY=""; _AU_PLAN_LEVEL=""
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
+  _bvk_auth_call GET /plan "" creds && _in_parse "$_AUTH_BODY" || return 1
+  _AU_PLAN_KEY="$_IN_P_KEY"; _AU_PLAN_LEVEL="$_IN_P_LEVEL"
+  [ "$_AU_UID" = "$_BVK_AUTH_ACTIVE" ] && _in_store "$_IN_P_KEY" "$_IN_P_LEVEL"     # the meter on the main screen learns it too
+  return 0
+}
+_au_plan_headline() {   # the dim lines under the title: where you are + your insanity meter
+  if ! _bvk_plan_def "$_AU_PLAN_KEY"; then printf 'could not read the plan (offline, or the server is older). Try again later.'; return 0; fi
+  if [ "$_PL_REALM" = animal ]; then
+    printf '%s · Free user — recharge any plan to enter the human realm.\n   Insanity meter: locked (upgrade to see your insanity levels)' "$(_bvk_realm_label animal)"
+  else
+    printf '%s · %s plan — credits ×%s · monthly charge %s credits.\n   Insanity: ' "$(_bvk_realm_label human)" "$_PL_NAME" "$_PL_CM" "$(_bvk_grp "$(_bvk_plan_monthly "$_AU_PLAN_KEY")")"
+    if [[ "$_AU_PLAN_LEVEL" =~ ^[0-9]+$ ]]; then _in_bar "$_AU_PLAN_LEVEL" 12; _in_label "$_AU_PLAN_LEVEL"; printf '%s %s (%s)' "$_IN_BAR" "$_AU_PLAN_LEVEL" "$_IN_LABEL"; else printf 'not known yet'; fi
+  fi
+}
+_au_plan_build() {
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
+  _AU_MAIL="$P_MAIL"; _filter_reset_state
+  [ "$_AU_PLAN_OK" = 1 ] || _au_plan_fetch
+  items=(); local k here=""
+  [ "$_AU_PLAN_KEY" = free ] && here="  ★ you are here"
+  items+=("$(_bvk_realm_label animal) · Free user$here")
+  for k in "${_BVK_PLAN_KEYS[@]}"; do
+    here=""; [ "$_AU_PLAN_KEY" = "$k" ] && here="  ★ you are here"
+    items+=("$(_bvk_realm_label human) · $(_bvk_plan_line "$k")$here")
+  done
+  _hl_index=0
+}
+_au_plan_action() {  # $1 = 0-based slot: 0 = Free (animal realm), 1.. = the plans
+  if [ "$1" -eq 0 ]; then
+    echo; echo "   🐾 Free users have not recharged yet. Recharge any plan (Recharge menu) to enter the human realm."; return 0
+  fi
+  local _au_ans k="${_BVK_PLAN_KEYS[$(( $1 - 1 ))]}"
+  echo; echo "   $(_bvk_plan_line "$k")"
+  _bvk_yn _au_ans "Recharge for the $(_bvk_plan_def "$k"; printf '%s' "$_PL_NAME") plan now?" </dev/tty || return 0
+  [[ "${_au_ans,,}" == y* ]] || return 0
+  _bvk_pay_recharge_plan "$k"
+}
+
 # ---- talking to the payments worker
 _bvk_pay_amount() {  # asks currency, then amount; sets _PAY_CUR (USD|INR) and _PAY_AMOUNT (>= US$1 worth) ; returns 1 on cancel (u at the currency menu / q)
   local min=""
+  _PAY_PLAN=""                                   # a sponsorship is not a plan
   _mc_steps _pay_s_cur _pay_s_amt
+}
+_bvk_pay_plan() {  # a recharge is a PLAN: asks currency, then Sane / Mad / Crazy / Nuts; sets _PAY_CUR _PAY_PLAN and _PAY_AMOUNT (the plan's price) ; same returns as _bvk_pay_amount
+  local min=""
+  _mc_steps _pay_s_cur _pay_s_plan
+}
+_pay_s_plan() {                                 # step of _bvk_pay_plan (u = back to the currency menu)
+  local k opts=()
+  for k in "${_BVK_PLAN_KEYS[@]}"; do
+    _bvk_plan_amount "$k" "$_PAY_CUR"
+    opts+=("$k:$_PL_NAME — $(_bvk_money_fmt "$_PAY_CUR" "$(_bvk_grp "$_PL_AMOUNT")") → $(_bvk_grp "$(_bvk_plan_credits "$k" "$_PAY_CUR")") credits (×$_PL_CM)")
+  done
+  _bvk_menu _PAY_PLAN -t "Plan" -i "🧠" -q "Which insanity plan?" "${opts[@]}" || { _bvk_back && return 1; return 3; }
+  _bvk_plan_amount "$_PAY_PLAN" "$_PAY_CUR" || return 1
+  _PAY_AMOUNT="$_PL_AMOUNT"
+  return 0
 }
 _pay_s_cur() {                                  # steps of _bvk_pay_amount (u = ONE QUESTION BACK): 0 answered · 1 u · 3 cancelled
   _bvk_menu _PAY_CUR -t "Pay in" -i "💳" -q "Which currency?" "USD:US dollars (US\$)" "INR:Indian rupees (₹, UPI via Razorpay)" || { _bvk_back && return 1; return 3; }
@@ -510,11 +596,12 @@ _bvk_pay_accounts_json() {  # $1=file -> JSON array on stdout ; reasons on stder
     process.stdout.write(JSON.stringify(out));' "$1"
 }
 _bvk_pay_build() {  # $1=kind $2=amount $3=accounts-json-or-empty -> JSON body
-  B_CUR="${_PAY_CUR:-USD}" B_NAME="$(_bvk_bill_get name)" B_ADDRESS="$(_bvk_bill_get address)" B_MOBILE="$(_bvk_bill_get mobile)" \
+  B_CUR="${_PAY_CUR:-USD}" B_PLAN="${_PAY_PLAN:-}" B_NAME="$(_bvk_bill_get name)" B_ADDRESS="$(_bvk_bill_get address)" B_MOBILE="$(_bvk_bill_get mobile)" \
   B_EMAIL="$(_bvk_bill_get email)" B_TAXID="$(_bvk_bill_get tax_id)" \
   node -e '
     const e = process.env, o = { kind: process.argv[1], amount: process.argv[2], currency: e.B_CUR,
       bill_to: { name: e.B_NAME, address: e.B_ADDRESS, mobile: e.B_MOBILE, email: e.B_EMAIL, tax_id: e.B_TAXID } };
+    if (e.B_PLAN) o.plan = e.B_PLAN;               // the server prices a plan itself; the amount is only the plan price shown here
     if (process.argv[3]) o.accounts = JSON.parse(process.argv[3]);
     process.stdout.write(JSON.stringify(o));' "$1" "$2" "${3:-}"
 }
@@ -553,8 +640,8 @@ _bvk_pay_recharge() {  # $1=self|others
   if [ "$1" = self ]; then
     echo "   Recharging: $P_MAIL"
     while :; do                                    # u at "Create the payment link?" = the amount again
-      _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
-      _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "$(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") → $(_bvk_grp "$(_bvk_credits_for "$_PAY_CUR" "$_PAY_AMOUNT")") credits to $P_MAIL"
+      _bvk_pay_plan || { echo "   Cancelled."; _au_pause; return 0; }
+      _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "$_PL_NAME plan: $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") → $(_bvk_grp "$(_bvk_plan_credits "$_PAY_PLAN" "$_PAY_CUR")") credits (×$_PL_CM) to $P_MAIL, who moves to the $_PL_NAME plan"
       [ $? = 6 ] || break
     done
   else
@@ -565,14 +652,26 @@ _bvk_pay_recharge() {  # $1=self|others
     [ "$(wc -c < "$f")" -le 1048576 ] || { echo "   ❌ File is larger than 1 MB."; _au_pause; return 0; }
     accts=$(_bvk_pay_accounts_json "$f") || { echo "   ❌ $f"; _au_pause; return 0; }
     n=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).length))' "$accts")
-    echo "   Found $n account(s). The SAME amount is credited to each."
-    while :; do                                    # u at "Create the payment link?" = the amount again
-      _bvk_pay_amount || { echo "   Cancelled."; _au_pause; return 0; }
+    echo "   Found $n account(s). The SAME plan is bought for each: they all move to it."
+    while :; do                                    # u at "Create the payment link?" = the plan again
+      _bvk_pay_plan || { echo "   Cancelled."; _au_pause; return 0; }
       n_ct=$(awk "BEGIN{printf \"%.2f\", $_PAY_AMOUNT*$n}")
-      _bvk_pay_create recharge_others "$_PAY_AMOUNT" "$accts" "$n account(s) × $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") = $(_bvk_money_fmt "$_PAY_CUR" "$n_ct") total ($(_bvk_grp "$(_bvk_credits_for "$_PAY_CUR" "$_PAY_AMOUNT")") credits each)"
+      _bvk_pay_create recharge_others "$_PAY_AMOUNT" "$accts" "$n account(s) × $_PL_NAME plan $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") = $(_bvk_money_fmt "$_PAY_CUR" "$n_ct") total ($(_bvk_grp "$(_bvk_plan_credits "$_PAY_PLAN" "$_PAY_CUR")") credits each, ×$_PL_CM)"
       [ $? = 6 ] || break
     done
   fi
+  _au_pause
+}
+_bvk_pay_recharge_plan() {  # $1=plan key: recharge THIS account for a plan chosen on the Plan screen (currency is still asked)
+  _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 0
+  local min=""
+  echo; echo "   Recharging: $P_MAIL"
+  while :; do
+    _pay_s_cur; case $? in 0) ;; 1) echo "   Cancelled."; return 0 ;; *) return 0 ;; esac
+    _PAY_PLAN="$1"; _bvk_plan_amount "$_PAY_PLAN" "$_PAY_CUR"; _PAY_AMOUNT="$_PL_AMOUNT"
+    _bvk_pay_create recharge_self "$_PAY_AMOUNT" "" "$_PL_NAME plan: $(_bvk_money_fmt "$_PAY_CUR" "$_PAY_AMOUNT") → $(_bvk_grp "$(_bvk_plan_credits "$_PAY_PLAN" "$_PAY_CUR")") credits (×$_PL_CM) to $P_MAIL, who moves to the $_PL_NAME plan"
+    [ $? = 6 ] || break
+  done
   _au_pause
 }
 _bvk_pay_sponsorship() {
@@ -586,8 +685,9 @@ _bvk_pay_sponsorship() {
   _au_pause
 }
 
-_bvk_auth_sub_menu() {  # $1 = billing | recharge
+_bvk_auth_sub_menu() {  # $1 = billing | recharge | plan
   local prev="$_AU_SCREEN"; _AU_SCREEN="$1"
+  [ "$1" = plan ] && _AU_PLAN_OK=0               # the Plan screen asks the server again each time it is opened
   _au_fresh || { _AU_SCREEN="$prev"; return 0; }
   while :; do
     _read_choice_filtered
@@ -597,7 +697,7 @@ _bvk_auth_sub_menu() {  # $1 = billing | recharge
       "") ;;
       *[!0-9]*) _bvk_invalid ;;
       *) if _au_row "$choice"; then
-           case "$1" in billing) _au_billing_action "$_AU_SLOT" ;; recharge) _au_recharge_action "$_AU_SLOT" ;; esac
+           case "$1" in billing) _au_billing_action "$_AU_SLOT" ;; recharge) _au_recharge_action "$_AU_SLOT" ;; plan) _au_plan_action "$_AU_SLOT" ;; esac
          else _bvk_invalid; fi ;;
     esac
     _au_fresh || break
@@ -606,11 +706,11 @@ _bvk_auth_sub_menu() {  # $1 = billing | recharge
 }
 
 # ---- user screen
-_AU_ACTIONS=("Change Mail ID" "Regenerate diseps" "Regenerate apikey" "Regenerate dinons" "Report Issue" "Billing details" "Recharge" "Sponsorship" "Set as active user" "View balance" "Download ledger")
+_AU_ACTIONS=("Change Mail ID" "Regenerate diseps" "Regenerate apikey" "Regenerate dinons" "Report Issue" "Plan" "Billing details" "Recharge" "Sponsorship" "Set as active user" "View balance" "Download ledger")
 _au_user_rowtext() {
   _au_slot "$1"
   local mark=""
-  [ "$_AU_SLOT" -eq 8 ] && [ "$_AU_UID" = "$_BVK_AUTH_ACTIVE" ] && mark="  ★ active"
+  [ "$_AU_SLOT" -eq 9 ] && [ "$_AU_UID" = "$_BVK_AUTH_ACTIVE" ] && mark="  ★ active"
   printf -v _vp_line ' %2d) %s%s' "$1" "${items[$(( $1 - 1 ))]}" "$mark"
 }
 _au_plain_rowtext() { printf -v _vp_line ' %2d) %s' "$1" "${items[$(( $1 - 1 ))]}"; }
@@ -637,7 +737,7 @@ _au_set_viewport() {
   case "$_AU_SCREEN" in
     user)   _vp_rowtext_fn=_au_user_rowtext; _vp_header_fn=_au_user_header; _vp_footer_fn=_au_user_footer ;;
     fields) _vp_rowtext_fn=_au_plain_rowtext; _vp_header_fn=_au_user_header; _vp_footer_fn=_au_user_footer ;;
-    billing|recharge) _vp_rowtext_fn=_au_plain_rowtext; _vp_header_fn=_au_sub_header; _vp_footer_fn=_au_sub_footer ;;
+    billing|recharge|plan) _vp_rowtext_fn=_au_plain_rowtext; _vp_header_fn=_au_sub_header; _vp_footer_fn=_au_sub_footer ;;
     *)    _vp_rowtext_fn=_au_list_rowtext; _vp_header_fn=_au_list_header; _vp_footer_fn=_au_list_footer ;;
   esac
   _vp_cache_reset
@@ -651,6 +751,7 @@ _au_fresh() {
     user) _au_user_build || return 1 ;;
     billing)  _au_billing_build || return 1 ;;
     recharge) _au_recharge_build || return 1 ;;
+    plan)     _au_plan_build || return 1 ;;
     *)    _au_list_build ;;
   esac
   _au_set_viewport
@@ -724,12 +825,13 @@ _au_user_action() {  # $1 = 0-based action slot
     2) _bvk_auth_regen apikey "$file" ;;
     3) _bvk_auth_regen dinons "$file" ;;
     4) _bvk_auth_mailto "bashbasicsbyvk: support" "mail: $P_MAIL" ;;
-    5) _bvk_auth_sub_menu billing ;;
-    6) _bvk_auth_sub_menu recharge ;;
-    7) _bvk_pay_sponsorship ;;
-    8) printf '%s' "$_AU_UID" > "$_BVK_AUTH_DIR/active"; echo "★ Active user set." ;;
-    9) _bvk_auth_balance ;;
-    10) _bvk_auth_ledger_download ;;
+    5) _bvk_auth_sub_menu plan ;;
+    6) _bvk_auth_sub_menu billing ;;
+    7) _bvk_auth_sub_menu recharge ;;
+    8) _bvk_pay_sponsorship ;;
+    9) printf '%s' "$_AU_UID" > "$_BVK_AUTH_DIR/active"; echo "★ Active user set." ;;
+    10) _bvk_auth_balance ;;
+    11) _bvk_auth_ledger_download ;;
   esac
 }
 

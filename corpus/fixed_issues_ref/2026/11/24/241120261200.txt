@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+FileAPI got insanity plans (Free in the animal realm; Sane, Mad, Crazy, Nuts in the human realm) with a credit multiplier and a monthly-charge multiplier, plan-based recharge, a Plan section in -auth > user, and an insanity meter row above the main status row (blurred for Free users, gradient colour, may pass 100).
+
+HOW DID YOU DEBUG
+Read auth.sh (recharge, user menu), browse.sh / tpl_defs.sh (status row), notify.sh (the cached header count pattern) and the loadmap rules. Ran the plan helpers and the gradient in plain bash (values for 0..400 and bar fill counts), then python3 loadmap_gen --write / --check and bash tests/run.sh once (12/12 passed after removing the now-dead _bvk_credits_for). The header row, the Plan screen and the live /plan call were NOT run in a real terminal or against a server: verified by reading and by the static replay only.
+
+CAUSE
+Not a bug: new feature. Recharge took any amount at one rate; there was no per-account plan, no credit multiplier, and no usage meter in the header.
+
+FIX
+New script/file/loops/iloop/auth/bashbasicsbyvk_insanity.sh ([fg] in the loadmap: the row is part of the first paint; it reads a cache file only and starts a silent background GET /plan refresh like the notification count). browse.sh gets _bvk_hdr_insanity and tpl_defs.sh prints it before the status row. auth.sh: plan table (_BVK_PLAN_KEYS, _bvk_plan_def; twin of PLANS in payments/src/pricing.js), plan picker for Recharge (_bvk_pay_plan, plan sent in the order body), new Plan screen (_bvk_auth_sub_menu plan) at user row 6, row numbers after it shifted by one, dead _bvk_credits_for removed. llms.txt / llms-full.txt updated. Lesson: a header row must not fork (no seq, no $( ) per redraw).

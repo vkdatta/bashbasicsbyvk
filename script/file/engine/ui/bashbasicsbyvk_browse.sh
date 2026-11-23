@@ -554,7 +554,7 @@ handle_selection() {
   fi
 }
 
-# ── the status row:   c | ⏰ <notifications> | 📣 <unfinished uploads>
+# ── the status row:   c | ⏰ <notifications> | 📣 <unfinished uploads>   (the insanity meter row sits above it)
 # The first field is the engine that listed this folder: c (native binary) or py (Python fallback) - the old
 # "[loaded by c]" tag, moved here (BVK_SHOW_SRC=0 or nothing loaded yet shows –).  The two numbers come from tiny caches
 # (_nf_cnt_get / _pn_count_cached), so drawing the header never waits for the network or scans folders.
@@ -562,6 +562,9 @@ _bvk_hdr_lang() {
   _bvk_src_tag_v
   case "$_bst_out" in *"by py]"*) _HDR_LANG=py ;; *"by c]"*) _HDR_LANG=c ;; *) _HDR_LANG="–" ;; esac
 }
+# the insanity meter: ONE row above the status row (bashbasicsbyvk_insanity.sh, [fg] because it is part of the first paint).
+# It reads a cache only (a stale cache starts a silent background refresh); no -auth user = nothing is printed.
+_bvk_hdr_insanity() { declare -F _in_row >/dev/null 2>&1 && _in_row; return 0; }
 _bvk_hdr_status() {
   local nf="–" pn=0
   if declare -F _nf_cnt_get >/dev/null 2>&1; then _nf_cnt_get; nf="$_NF_CNT"; fi

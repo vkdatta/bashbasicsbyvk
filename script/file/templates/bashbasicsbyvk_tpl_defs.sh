@@ -56,7 +56,7 @@ _tpl_def cd_path          fn   _tpl_p_cd_path          "the row  📂 cd path: <
 _tpl_def nav_path         fn   _tpl_p_nav_path         "the row  ☁️ nav path: <where the list is>  (+ group / filter text; a picker sets nav_path_text)"
 _tpl_def imaginary_banner fn   _tpl_p_imaginary_banner "the banner of an imaginary (grouped) list, when there is one"
 _tpl_def pick_note        fn   _tpl_p_pick_note        "the dim line under a picker's title: the s-N suggestion, or the Settings description"
-_tpl_def status_row       fn   _tpl_p_status_row       "the status row of the folder view:  c | ⏰ notifications | 📣 pending uploads"
+_tpl_def status_row       fn   _tpl_p_status_row       "the top of the folder view: the insanity meter row, then the status row  c | ⏰ notifications | 📣 pending uploads"
 _tpl_def header_notes     slot ""                      "the notice rows under the location rows (a screen supplies the function that prints them: banners, hints)"
 _tpl_def filter_line      fn   _tpl_p_filter_line      "the row  🔍 filter: ABC*  (n/total)  while a filter is set (prints nothing otherwise)"
 _tpl_def tab_bar          fn   _tpl_p_tab_bar          "the tab bar of a tabbed menu: [Tab1]  Tab2 ...  (data key tab_name = the name the tabbed screen was defined with)"
@@ -86,8 +86,8 @@ _tpl_p_nav_path() {
   if [ -n "${_TPL_VAL[nav_path_text]-}" ]; then echo "☁️ nav path: ${_TPL_VAL[nav_path_text]}"; else _loc_nav_row; fi
 }
 _tpl_p_imaginary_banner() { [ "${_vp_mode:-}" == "imaginary" ] && [ -n "${_imag_banner:-}" ] && echo "$_imag_banner"; return 0; }
-# the status row (the first line of the folder view; _bvk_hdr_status holds the cached counts: it never waits for the network)
-_tpl_p_status_row() { _bvk_hdr_status; echo; }
+# the status row (the first lines of the folder view: the insanity meter row, then the status row; both read caches only: they never wait for the network)
+_tpl_p_status_row() { _bvk_hdr_insanity; _bvk_hdr_status; echo; }
 # a filter that is set shows its row under the header of every list screen
 _tpl_p_filter_line() { _vp_filter_header_line; }
 # the tabbed menu's rows: the tab bar, the description of the tab and the count (the builders live in tabmenu.sh)

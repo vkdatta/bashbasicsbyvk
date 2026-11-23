@@ -109,12 +109,22 @@ Command-aware help inside the tool, part of the paid tier.
 ### 3.8 Pricing mechanics (at time of writing; Drive "Pricing" is authoritative)
 
 - US$1 = ₹100 = 1,000 credits (pay in US$ via Razorpay or PayPal, or in ₹ via Razorpay UPI). Whole credits only. Rates may change.
+- Insanity plans: a recharge is a plan. Free (animal realm) is a new account that has not recharged; Sane, Mad, Crazy and Nuts (human realm) are the plan of your latest paid recharge. Accounts that existed before plans are Sane.
+
+  | Plan | Recharge (US$ / ₹) | Credit multiplier | Credits per recharge | Monthly subscription charge |
+  |---|---|---|---|---|
+  | Sane | 1 / 100 | ×1 | 1,000 | 1,000 credits (×1) |
+  | Mad | 5 / 500 | ×1.5 | 7,500 | 1,500 credits (×1.5) |
+  | Crazy | 10 / 1,000 | ×2 | 20,000 | 4,000 credits (×4) |
+  | Nuts | 25 / 2,500 | ×3 | 75,000 | 15,000 credits (×15) |
+
+- Insanity meter (paying plans only; Free users see it blurred): level = yesterday's level ÷ 2 + today's credits consumed ÷ 50 × 100. It runs 0-100 and can pass 100 ("severely insane"). Colour is a gradient: green to 40, light orange to 60, yellow to 80, red to 100, violet above 100. See it above the status row of the main screen; see your plan in `-auth` → user → Plan.
 - Base rate: 1 credit = 1 GB kept for 1 hour. Cost = size in MB ÷ 1,024 × hours kept, rounded up, with a minimum per size bucket: up to 5 MB, 1 credit per 30 days; over 5 MB to 50 MB, 1 credit per week; over 50 MB to 500 MB, 1 credit per day; over 500 MB, 1 credit per hour.
 - Minimum 1 credit per operation. Expiry shorter than 1 hour is billed as 1 hour. Full cost is checked before upload; if the balance is short, nothing is stored or charged.
 - Examples: any text paste or file up to 1 MB costs 1 credit for 1 hour, 1 day, 7 days or 30 days. A 1 GB file costs 24 credits for a day, 720 for 30 days.
 - Receiving, viewing and downloading are free.
 - Early deletion or shortening refunds unused whole days as credits (not cash).
-- A monthly subscription charge is taken on credits you did not use, capped so that charge never exceeds 1,000 credits in a month; once you use 1,000 or more, there is no charge. Credits are not redeemable for cash and are generally non-refundable, subject to statutory rights.
+- A monthly subscription charge is taken on credits you did not use, capped so that charge never exceeds your plan's amount in a month (1,000 credits × the plan's multiplier: Sane 1,000 · Mad 1,500 · Crazy 4,000 · Nuts 15,000); once you use that much or more, there is no charge. Credits are not redeemable for cash and are generally non-refundable, subject to statutory rights.
 - Large uploads have per-upload and per-file limits and a premium rate above 10 GB; see Pricing.
 
 Plain-language summary for users: a few credits cover days of normal developer sharing; expensive cases are large files kept for long periods.
