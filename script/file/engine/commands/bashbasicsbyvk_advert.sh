@@ -37,6 +37,7 @@ _AD_GENERAL_KEYS=" rf = clr "          # general commands every menu takes: list
 declare -g  _AD_MENU=""
 declare -ga _AD_KEY=() _AD_DESC=() _AD_PRIO=() _AD_SHOWN=() _AD_ISFREE=() _AD_SHORT=()
 declare -gA _AD_AT=()                   # key -> index in the arrays (a key is declared once)
+declare -gA _AD_GEN=()                  # key -> 1 when the map says it is a GENERAL command (a main command every screen can run: q h s i disk print ...)
 
 # ── THE DISPATCHER'S ACCEPTOR ─────────────────────────────────
 # A menu tells the dispatcher, once, what it accepts — the dispatcher notes it, cc lists it, the footer is told what to show:
@@ -75,7 +76,16 @@ _ad_from_dispatcher() {
 
 _ad_open() {
   _AD_MENU="${1:-}"
-  _AD_KEY=(); _AD_DESC=(); _AD_PRIO=(); _AD_SHOWN=(); _AD_ISFREE=(); _AD_SHORT=(); _AD_AT=()
+  _AD_KEY=(); _AD_DESC=(); _AD_PRIO=(); _AD_SHOWN=(); _AD_ISFREE=(); _AD_SHORT=(); _AD_AT=(); _AD_GEN=()
+}
+
+# cc's two tabs: is KEY a GENERAL command (works on every screen) or MENU SPECIFIC (only this menu handles it)?
+#   general = the free keys (u q h cc), rf = clr, print / loadtime, and every key the map wires to a main command run by bvk_main_exec
+_ad_is_general() {
+  local k="${1,,}"
+  [ -n "${_AD_GEN[$k]+x}" ] && return 0
+  case "$_AD_FREE_KEYS$_AD_GENERAL_KEYS print loadtime " in *" $k "*) return 0 ;; esac
+  return 1
 }
 
 # _ad_accept KEY DESC [PRIO] [SHOWN] [FREE] [SHORT]   SHORT = the few words the footer prints (default: DESC up to its first "  (")
@@ -118,7 +128,7 @@ declare -gA _AD_MAPMEMO=()
 # _ad_map_memo works the list out and keeps it in _AD_MAPMEMO.  The footer runs inside $( ) / mapfile < <( ), where a kept list is lost the moment the
 #   subshell ends — so the drawing code calls _ad_map_warm in the PARENT shell first and every footer draw after that only reads the list.
 _ad_map_memo() {
-  local m="${1:-main}" st="${2:-}" mode="${3:-menu}" lite="${4:-}" i key tgt p rec k d memo_key="$1|${2:-}|${3:-menu}|${4:-}|${#_CM_DEF[@]}"   # the number of loaded command definitions is part of the key: a list worked out before they were all loaded is never reused
+  local m="${1:-main}" st="${2:-}" mode="${3:-menu}" lite="${4:-}" i key tgt p s rec k d memo_key="$1|${2:-}|${3:-menu}|${4:-}|${#_CM_DEF[@]}"   # the number of loaded command definitions is part of the key: a list worked out before they were all loaded is never reused
   _AD_MEMOKEY="$memo_key"
   [ -n "$lite" ] && [ "$m" = main ] && { _AD_MAPMEMO[$memo_key]=""; return 0; }
   if [ -z "${_AD_MAPMEMO[$memo_key]+x}" ]; then
@@ -138,7 +148,8 @@ _ad_map_memo() {
         *) continue ;;
       esac
       p=0; [ "${tm[i]}" != main ] && [ "$_CM_ACT" = local ] && p=40      # a command of the menu itself outranks the inherited main words
-      memo+="${key}"$'\x1f'"${p}"$'\x1f'"${_CM_DESC}${_CM_EX:+  (e.g. $_CM_EX)}"$'\n'
+      s=m; [ "$_CM_HANDLER" = bvk_main_exec ] && [[ "$tgt" == bashbasicsbyvk_maincommands.sh:* ]] && s=g      # g = general (every screen can run it), m = menu specific
+      memo+="${key}"$'\x1f'"${p}"$'\x1f'"${s}"$'\x1f'"${_CM_DESC}${_CM_EX:+  (e.g. $_CM_EX)}"$'\n'
     done
     _CM_MAP="$sv_map"; _CM_TBL_MAP=""
     [ -n "$sv_tbl" ] && _cm_table_build "$sv_tbl"
@@ -150,12 +161,13 @@ _ad_map_warm() {                      # the PARENT shell, before a footer is dra
   local sv="$_AD_MENU"; _ad_menu_now; _ad_map_memo "${_AD_MENU:-main}" "" menu lite; _AD_MENU="$sv"
 }
 _ad_from_map() {
-  local k p d memo_key
+  local k p s d memo_key
   _ad_map_memo "$@"; memo_key="$_AD_MEMOKEY"
-  while IFS=$'\x1f' read -r k p d; do
+  while IFS=$'\x1f' read -r k p s d; do
     [ -n "$k" ] || continue
     [ -n "${_AD_AT[$k]+x}" ] && continue
     _ad_accept "$k" "$d" "$p"
+    [ "$s" = g ] && [ -n "${_AD_AT[${k,,}]+x}" ] && _AD_GEN[${k,,}]=1
   done <<< "${_AD_MAPMEMO[$memo_key]}"
   return 0
 }

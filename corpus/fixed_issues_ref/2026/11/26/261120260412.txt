@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+The cheat-code (cc) list showed every command of a screen in one flat list, so general commands (q, h, s, disk, print ...) were mixed with the commands only that menu handles. Wanted: two tabs inside cc, Menu Specific and General, with each command in the right one.
+
+HOW DID YOU DEBUG
+Read cheatcode.sh, advert.sh, settings_ui.sh (the engine cc runs on), tabmenu.sh and mouse.sh (tab bar and tap hit-test). Printed the split for main, fx and switch through the static loader. Ran bash tests/run.sh once (12/12 green). Opened cc in a real pty (100x40): the bar renders, left/right switch tabs, =ram on one tab shows the "on the other tab" note. Taps were not tested.
+
+CAUSE
+Not a bug: cc had one list, and the Settings list engine had no tab support (tabs existed only for the viewport screens).
+
+FIX
+advert.sh: the map memo carries a scope (g = key wired to a bvk_main_exec main command, else m); _AD_GEN, _ad_is_general (also u q h cc rf = clr print loadtime). settings_ui.sh: optional _st_tab_labels / _st_tab_cur: tab bar in the description block (counted in _ST_DESC_N), left/right and tap switch tabs. cheatcode.sh: _CC_SCOPE, opens on Menu Specific (General when empty), _cc_build lists the current tab only, a note when the filter matches only the other tab. _CC_KEY stays the full list, so the static tests are unchanged.

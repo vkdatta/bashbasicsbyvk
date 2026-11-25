@@ -38,6 +38,9 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #     _st_start_num                   number of the row the highlight starts on (default: none)
 #     _st_radio_follow=1              the [o] of a radio row follows the highlight instead of the stored state
 #     _st_choice=1                    a choice menu: no =) Filter hint, Enter says "choose" (not "switch")
+#     _st_tab_labels=("A" "B")  +  _st_tab_cur=0     TABS (cc uses them): a tab bar "[A] B" under the title, ← → (empty line) or a tap switches the
+#                                     tab by moving _st_tab_cur; the build function fills only the rows of the current tab. The caller
+#                                     registers the labels once with _bvk_tabs_register so the bar is tappable.
 
 declare -ga _st_lbl=() _st_kind=() _st_on=() _st_val=() _st_tag=()
 declare -ga _st_num=() _st_nrow=()
@@ -59,6 +62,21 @@ _st_reset()  { _st_lbl=(); _st_kind=(); _st_on=(); _st_val=(); _st_tag=(); }
 # _st_add KIND LABEL [ON 0|1] [VALUE] [TAG]
 _st_add()    { _st_kind+=("$1"); _st_lbl+=("$2"); _st_on+=("${3:-0}"); _st_val+=("${4:-}"); _st_tag+=("${5:-}"); }
 _st_eq()     { [ "$1" = "$2" ] && _o=1 || _o=0; }   # sets _o (no subshell)
+
+# tabs (see the header): _st_tab_step DELTA moves the current tab (wraps round)
+_st_tab_step() {
+  local n=${#_st_tab_labels[@]}
+  (( n > 1 )) || return 1
+  _st_tab_cur=$(( ( ( _st_tab_cur + $1 ) % n + n ) % n ))
+}
+# _st_tab_bar_v VAR  the bar as the tabbed menus print it:  "[A] B"
+_st_tab_bar_v() {
+  local _tb="" _ti
+  for (( _ti = 0; _ti < ${#_st_tab_labels[@]}; _ti++ )); do
+    if (( _ti == _st_tab_cur )); then _tb+="${_tb:+ }[${_st_tab_labels[_ti]}]"; else _tb+="${_tb:+ }${_st_tab_labels[_ti]}"; fi
+  done
+  printf -v "$1" '%s' "$_tb"
+}
 
 _st_selectable() { [ "${_st_kind[$1]:-h}" != "h" ]; }
 
@@ -184,6 +202,11 @@ _st_draw() {
   else rows=$(_term_rows); cols=$(_term_cols); fi
   if declare -F _st_desc_prepare >/dev/null 2>&1; then _st_desc_prepare   # the plain-words text of the highlighted row (0 lines when there is none)
   else _ST_DESC_N=0; _ST_DESC_TRUNC=0; _ST_DESC_LN=(); fi                  # settings_desc.sh not loaded (a stand-alone caller): no description, nothing breaks
+  _ST_TABBAR=""
+  if (( ${#_st_tab_labels[@]} > 1 )); then      # tabs: the bar and a blank row come first in the description block (the geometry counts them in _ST_DESC_N)
+    _st_tab_bar_v _ST_TABBAR
+    _ST_DESC_LN=("$_ST_TABBAR" "" "${_ST_DESC_LN[@]}"); _ST_DESC_N=${#_ST_DESC_LN[@]}
+  fi
   _st_hint_text "$buf" "$cols"
   [ -n "$_st_msg" ] && _ST_HINT="$_st_msg"                  # a notice (too large, not available here) takes the suggestion row, as _bvk_notice does on every menu
   # the suggestion first: a long one expands onto more rows (_bvk_hint_wrap) and the list gives them up
@@ -230,7 +253,12 @@ _st_draw() {
   # template is BUILT (_tpl_build, every row starts with $nl) from the data below; the geometry (_ST_DESC_N, _ST_TAIL, prev) is unchanged.
   local hd="$path_title" _dl _lst="" _desc="" _sug="" hl _th _tb _tf
   [ -n "${fq:-}" ] && hd="$hd   [filter: =$fq]"
-  for _dl in "${_ST_DESC_LN[@]}"; do _desc+=$'\033[2m'"$_dl"$'\033[0m\n'; done              # what this screen is, in plain words (between the header and the rule)
+  local _di=0
+  for _dl in "${_ST_DESC_LN[@]}"; do
+    if [ -n "$_ST_TABBAR" ] && (( _di == 0 )); then _desc+="$_dl"$'\n'      # the tab bar is not dimmed
+    else _desc+=$'\033[2m'"$_dl"$'\033[0m\n'; fi
+    _di=$(( _di + 1 ))
+  done              # what this screen is, in plain words (between the header and the rule)
   _desc="${_desc%$'\n'}"
   if (( top > 0 )); then _lst+="   ▲ $top more above"$'\n'; else _lst+="$_ST_RULE"$'\n'; fi
   for (( i=top; i<top+vis; i++ )); do
@@ -330,7 +358,10 @@ _st_click() {
   local vis=$(( prev - 9 - _ST_DESC_N - _ST_TAIL )) rel i d=$(( _BVK_CROW - _MS_Y )) t=$_ST_TAIL
   rel=$(( _MS_Y - ( _BVK_CROW - vis - 4 - t ) ))     # 0 = the first list row on screen
   # a tap on the typed text (the Select: row) never gets here: _bvk_edit_press takes it (cursor to the tap / the touch handed back)
-  if (( d == prev - 2 )); then _BVK_LAST_ITEM=""; _st_crumb_tap                    # the title row: a part of the path
+  if [ -n "${_ST_TABBAR:-}" ] && (( d == prev - 4 )); then                         # the tab bar (row 3 of the block): a tap on another tab switches to it
+    _BVK_LAST_ITEM=""
+    if declare -F _bvk_mouse_tab_hit >/dev/null 2>&1 && _bvk_mouse_tab_hit "$_ST_TABBAR"; then _st_tab_step "$_MS_TABDELTA"; cur=-1; top=0; buf=""; navbuf=0; _ST_CLICK_ACT=1; fi
+  elif (( d == prev - 2 )); then _BVK_LAST_ITEM=""; _st_crumb_tap                    # the title row: a part of the path
   elif (( d == 1 + t || d == 2 + t )); then                    # footer 2 / footer 1: a key there needs a DOUBLE tap (it is typed and Enter pressed)
     if _bvk_mouse_cell_key "$( (( d == 2 + t )) && builtin printf '%s' "$_ST_FTR1" || builtin printf '%s' "$_ST_FTR2" )"; then
       _bvk_mouse_ftr_tap "$_MS_FKEY"
@@ -548,7 +579,10 @@ _st_nav() {           # a named key that is not an editing key
     pgdn)  need=0; _st_move 1 "$page";  _st_navbuf ;;
     home)  need=0; cur=-1; _st_move 1;  _st_navbuf ;;
     end)   need=0; cur=-1; _st_move -1; _st_navbuf ;;
-    left|right)           # ← → change the value of the highlighted row (while nothing is typed)
+    left|right)           # ← → change the value of the highlighted row (while nothing is typed); on a screen with tabs they switch the tab
+      if (( ${#_st_tab_labels[@]} > 1 )); then
+        _st_tab_step "$([ "$1" = right ] && echo 1 || echo -1)"; cur=-1; top=0; buf=""; navbuf=0; need=1; return 0
+      fi
       (( cur >= 0 )) && _st_selectable "$cur" && { _lt_enter "$1" "${_st_lbl[$cur]}"; "$act" "$cur" "$1"; } ;;
   esac
   return 0
