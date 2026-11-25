@@ -91,7 +91,7 @@ nf_header() {                                      # template 7P68NA
   local _n=""; [ "${#items[@]}" -eq 0 ] && _n="   Nothing new."
   _tpl_list_header "🔔 Notifications" "$_n"
 }
-nf_footer() { _mc_footer_std -T 7P68NA -b "N:open / answer" "r-N:dismiss" "rf"; }
+nf_footer() { _mc_footer_std -T 7P68NA "N:open / answer" "r-N:dismiss"; }
 
 # ── answers
 _nf_rbam_respond() {                         # rid true|false   (also used by the rbam list)

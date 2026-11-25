@@ -300,8 +300,8 @@ _dfs_act() {
     set)
       if _st_ask "Expression (e.g. .d.ext csv & .d.size <3mb)"; then handle_display_cmd "$_st_in"; fi ;;
     clear) handle_display_cmd ".d.clr" ;;
-    run)   _dfs_pick_mode=run;    _st_run "Apply a preset"  _dfs_pre_build _dfs_pre_act "↑↓ move · enter apply · u back · q close" ;;
-    del)   _dfs_pick_mode=delete; _st_run "Delete a preset" _dfs_pre_build _dfs_pre_act "↑↓ move · enter delete · u back · q close" ;;
+    run)   _dfs_pick_mode=run;    _st_run "Apply a preset"  _dfs_pre_build _dfs_pre_act ;;
+    del)   _dfs_pick_mode=delete; _st_run "Delete a preset" _dfs_pre_build _dfs_pre_act ;;
     save)
       if _st_ask "Preset name (letters, digits, _ -)"; then handle_display_cmd ".d.save $_st_in"; fi ;;
     persist)

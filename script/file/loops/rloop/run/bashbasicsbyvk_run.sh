@@ -18,7 +18,7 @@ handle_file() {
                       "Erase Content" "Replace With Clipboard Content" \
                       "Rename File" "Share" "$lab_lock" "Copy Name" \
                       "Copy File Path" "Go To Parent Folder" "Info"
-        _tpl_footer YWW6WZ @file_menu
+        _tpl_footer YWW6WZ @std_nav
 
         VK_MENU_MODE=single _bvk_read action "${_TPL_ACCEPTOR} " || return 1     # single = declared here, never guessed from the text; EOF (the terminal closed): leave, never spin on "invalid"
 

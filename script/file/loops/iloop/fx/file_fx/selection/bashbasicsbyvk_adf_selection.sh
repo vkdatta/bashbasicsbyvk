@@ -107,7 +107,7 @@ _fx_sel_browse() {
     _mc_header "🎯 $title (${#its[@]}):"
     echo; _pick_suggest; echo
     if [ ${#its[@]} -eq 0 ]; then echo "  (empty)"; else _mc_options 1 "${rows[@]}"; fi
-    _mc_footer_std -T 7UH852 -l "v:Review chosen" "c:Take chosen"
+    _mc_footer_std -T 7UH852 "v:Review chosen" "c:Take chosen"
     _mc_read ch "${_TPL_ACCEPTOR} " || { _mc_unwind; return 1; }          # rc != 0: the flow was cancelled → leave at once
     case "$ch" in
       u|U|"") return 0 ;;
@@ -155,7 +155,7 @@ _fx_sel_pick() {
     _mc_header "🎯 Selected items — pick what this action works on:"
     echo; _pick_suggest "sets"; echo
     _mc_options 1 "${rows[@]}"
-    _mc_footer_std -T 7UH852 -b -l "v:Review chosen" "c:Take chosen"
+    _mc_footer_std -T 7UH852 "v:Review chosen" "c:Take chosen"
     _mc_read ch "${_TPL_ACCEPTOR} " || { _mc_unwind; return 1; }
     case "$ch" in
       u|U|"") echo "🚫 Cancelled"; return 1 ;;

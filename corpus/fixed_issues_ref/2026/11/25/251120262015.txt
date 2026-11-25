@@ -1,0 +1,22 @@
+ISSUE IN BRIEF
+Footers had drifted: some screens printed "u) Up   q) Close", some "u) Back   ↑↓) Move", some "u) Back   q) Quit   h) Home   cc) Cheat codes", and several also printed rf, = or clr, which are general commands. cc listed its commands in whatever order each menu declared them.
+
+HOW DID YOU DEBUG
+Read every footer call site (menuchrome.sh, tabmenu.sh, tpl_defs.sh, settings_ui.sh, advert.sh, choose.sh, cheatcode.sh, browse.sh and about 45 screen files) and rendered before / after for each from the code into footer_before_after.xlsx (a code-derived table, not screenshots). Static: bash tests/run.sh once: 10 of 12 passed; footer and intent time out at their 25 s cap in this sandbox on the ORIGINAL archive too, so each was run directly: footer 20 checks, intent 17,475 checks, 0 new. pty: none run. Two old pty/fast shell tests (cmd_drift.sh, menu_templates.sh "standard footer") already failed on the original archive (they source the footer code on its own and miss _ad_footer_allow); cmd_drift.sh's expected text was updated, the failure is the same one as before.
+
+CAUSE
+Four drawers (_mc_footer, the row-style template footer, the Settings engine footer, cc's own footer) each decided their own wording, and 7 footer profiles plus the -b / -l flags let a screen pick another one. rf was a "free" key, so it was printed everywhere.
+
+FIX
+One common footer, u) Up   q) Quit   h) Home   cc) Cheat codes, first line of every screen except the main menu, from ONE registration (_MC_FOOTERS[std_nav]; _AD_STD_LINE is rendered from it). Menu-specific keys on their own lines below it, budget 50 (5 commands). rf, = and clr (_AD_GENERAL_KEYS) are never printed in a footer; cc still lists them. cc rows are sorted alphabetically (_ad_cc_rows, pure bash, no fork).
+
+DEDUPE / REMOVED (audit)
+Functions removed: 1 (_mc_std_items; its variable _MC_STD went with it). Net function count 3420 -> 3419; script lines 39,860 -> about 39,850.
+Footer profiles removed: 7 (std_nav_back, back_quit, back_only, file_menu, infinity, tabmenu, tabmenu_back). Footer registrations 12 -> 5.
+Overrides removed: _st_f1_custom, _st_f2_custom, the q.close label variant.
+Call-site edits: 37 uses of the -b / -l flags removed, 9 hand-assembled "std keys pasted last" footers and 3 api tab footers moved onto the shared _mc_footer_std, 14 rf / = / clr items taken out of footer calls (63 edits in all).
+Duplicate I introduced and removed in the same task: the standard line typed a second time in advert.sh.
+browse_gd (Google Drive folder view) no longer lists rf either (rf is a general command; cc still lists it).
+Tests moved to the new text: rename, choose, chain, mouse, github ui_test (two_lines now expects the common line first, own keys below; rf is asserted NOT advertised), rows_probe comment. Not run: the pty tests (sandbox). stresstest/input.txt is a captured screen fixture and was left as captured.
+Only 1 function is gone because the footer code was already shared; the duplication was in profiles, flags and call sites.
+Also: the API tabs' bk / sv / api "Close" key is the 6th command there, so the 50 budget drops it (it was dropped before too).

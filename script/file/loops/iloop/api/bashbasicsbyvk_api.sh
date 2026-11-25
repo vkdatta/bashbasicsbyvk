@@ -475,13 +475,12 @@ _api_menu_header() {                               # template 7P68NA
 
 _api_menu_footer() {
   case "$_API_SVC" in
-    backup) _tpl_footer 7P68NA "#[Backup]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
-      "N:Open" "r-N:Restore here" "c-N:Copy link" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf" "u" "bk:Close" ;;
-    saved)  _tpl_footer 7P68NA "#[Saved]  ${#items[@]} saved   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
-      "N:Open" "r-N:Restore here" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" "rf" "u" "sv:Close" ;;
-    *)      _tpl_footer 7P68NA "#[Links]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
-      "N:Open" "c-N:Copy link (c-1,3-5)" "g-N:New address" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "|" \
-      "rf" "u" "api:Close" ;;
+    backup) _mc_footer_std -T 7P68NA "#[Backup]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+      "N:Open" "r-N:Restore here" "c-N:Copy link" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "bk:Close" ;;
+    saved)  _mc_footer_std -T 7P68NA "#[Saved]  ${#items[@]} saved   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+      "N:Open" "r-N:Restore here" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "sv:Close" ;;
+    *)      _mc_footer_std -T 7P68NA "#[Links]  ${#items[@]} active   🕐 times in $(_tz_label 2>/dev/null || date +%Z)  (change: s → Timezone)" \
+      "N:Open" "c-N:Copy link (c-1,3-5)" "g-N:New address" "a-N:Alias" "e-N:Expiry" "x-N:Nuke" "api:Close" ;;
   esac
 }
 

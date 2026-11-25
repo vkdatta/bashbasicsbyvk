@@ -52,7 +52,6 @@ t=a; hdr="$(_tm_header demo)"
 eq "header: blank · title · blank · bar · blank · description" "$(printf '%s' "$hdr" | tr '\n' '~')" "~🎨 Demo~~[🪄 A] 🎃 B ⭐ C~~Tab A text for the demo screen."
 eq "header with another title (a repo name)" "$(_tm_header demo '🐙 repo' | sed -n 2p)" "🐙 repo"
 eq "footer" "$(_tm_footer | grep -v '^$')" "u) Up   q) Quit   h) Home   cc) Cheat codes"
-eq "footer, a screen with no folders" "$(_tm_footer -b | grep -v '^$')" "u) Back   q) Quit   h) Home   cc) Cheat codes"
 eq "footer with extras (the group prefix note)" "$(_tm_footer '|' u.prefix '#Group prefix now: A*' | grep -v '^$' | tr '\n' '~')" "u) Up   q) Quit   h) Home   cc) Cheat codes~u) Remove last prefix~Group prefix now: A*~"
 
 # (5) no tabbed screen keeps a private copy of what the template does

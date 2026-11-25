@@ -90,8 +90,7 @@ cfw_header() {
 }
 
 cfw_footer() {
-  _mc_std_items -b
-  _tpl_footer 7P68NA "#Select:  N · 1,3-5 · a (all) · a-2 (all except 2)" "r:live picker" "rf" "${_MC_STD[@]}" \
+  _mc_footer_std -T 7P68NA "r:live picker" "#Select:  N · 1,3-5 · a (all) · a-2 (all except 2)" \
     "#Recover  → $_CFW_NAV/<name>-recovered  (worker) · <name>-pages-recovered  (pages)" \
     "#Export   → e (all shown) · e-1,3-5 (picked)  as csv / json / both into the same folder"
 }

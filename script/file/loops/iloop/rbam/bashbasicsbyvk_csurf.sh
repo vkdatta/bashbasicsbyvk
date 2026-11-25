@@ -99,7 +99,7 @@ cs_header() {                                      # template V3PX4Y (Cloud Surf
   fi
   _tm_head -n "$_n" cs
 }
-cs_footer() { _tm_footer -b; }                     # u q h cc: every other key (N x-N e-N r-N rf …) is listed by cc
+cs_footer() { _tm_footer; }                     # u q h cc: every other key (N x-N e-N r-N rf …) is listed by cc
 
 _cs_nuke() {                                 # x-LIST
   _xui_select_rows "NUKE" "💥 Nuke which shares — for EVERYONE?" "$1" || return 1
@@ -203,7 +203,7 @@ cs_pp_header() {                                   # template 7P68NA
   local _n=""; [ "${#items[@]}" -eq 0 ] && _n="   Nobody (everyone was revoked)."
   _tpl_list_header "📦 “${_PP_ALIAS:-$_PP_ID}” — who can see it" "$_n"
 }
-cs_pp_footer() { _mc_footer_std -T 7P68NA -b "N:their files" "r-N:revoke person" "g:offer to more people" "t:all my files"; }
+cs_pp_footer() { _mc_footer_std -T 7P68NA "N:their files" "r-N:revoke person" "g:offer to more people" "t:all my files"; }
 
 _pp_revoke() {
   _xui_select_rows "REVOKE" "🚫 Revoke which people from this share?" "$1" || return 1

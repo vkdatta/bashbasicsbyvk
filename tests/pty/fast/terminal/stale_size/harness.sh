@@ -9,7 +9,7 @@ source "$R/file/settings/core/bashbasicsbyvk_settings_ui.sh"
 _vp_rows_now=$STALE; _vp_cols_now=80
 b(){ _st_reset; local i; for i in $(seq 1 40); do _st_add a "cmd$i" 0 "Description $i" "cmd$i"; done; }
 a(){ _st_back=1; }
-_st_icon="🎮" _st_crumb="" _st_f1_custom="u) Back   ↑↓) Move"
+_st_icon="🎮" _st_crumb=""
 printf 'Action: cc\n'
 _st_depth=1
 _st_run "Cheat codes · find" b a

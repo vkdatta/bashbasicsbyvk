@@ -35,7 +35,7 @@ try:
     a.wait_text('Keep these?', 8)
     s = screen(a)
     check('yes/no: header, rules, rows', '1) [o] No' not in s and '2) [o] No' in s and '1) [ ] Yes' in s, s[-300:])
-    check('yes/no: footer lists u/q and the answer keys', 'u) Back   q) Close' in s and 'y) Yes   n) No' in s, s[-300:])
+    check('yes/no: footer lists u/q and the answer keys', 'u) Up   q) Quit' in s and 'y) Yes   n) No' in s, s[-300:])
     a.send('\r', until=lambda: 'R1 [' in a.text())
     check('Enter takes the default (n)', 'R1 [n] rc=0' in a.text(), a.text()[-200:])
     # a question that names a destructive action has NO default whatever -d says: nothing is highlighted, a bare Enter does not answer it

@@ -24,7 +24,7 @@
 #  Footer items: "key:Label" · "#plain note line" · "|" (new line).
 #
 #  A whole simple menu in one call:
-#    _mc_menu "Title"  "Sub line"  --  Run View Edit  --  @file_menu
+#    _mc_menu "Title"  "Sub line"  --  Run View Edit  --  @std_nav
 #  (sections are separated by "--": header lines · option labels · footer)
 #  and for a free-standing prompt that returns the answer in $REPLY:
 #    _mc_ask "Choice: "   (wraps `read -e -p`, so the viewport takes it over)
@@ -39,7 +39,7 @@
 #                  OUTVAR gets the row's value (its number when the row has none).  Two rows = the two-option setting.
 #    MC-04     _mc_review ARRAY [-t Title] [-f FORMATTER]     review the chosen items: c) Confirm  x) Remove
 #    MC-07     _mc_text OUTVAR "Prompt: " ["hint line"...]    a free-text prompt with the standard footer (not a selection)
-#    FOOTER-01 _mc_footer_std [-b] [extra items...]            screen actions, then the standard  u) q) h) cc)   (profiles std_nav / std_nav_back)
+#    FOOTER-01 _mc_footer_std [-T ID] [extra items...]            screen actions, then the standard  u) q) h) cc)   (profile std_nav)
 #    CONTROL-01 return contract of every template:  0 answered · 1 back (u) · 2 quit (q: _BVK_TO_MAIN is raised, UNWIND, never redraw) · 3 cancelled / EOF
 #               _mc_unwind is true once q was pressed anywhere below: every loop checks it before it draws again.
 #    h and cc are handled by the template itself (_mc_std_key): a key printed in a footer is the menu's own key and reaches it as typed.
@@ -60,7 +60,7 @@ _MC_RULE="   ──────────────────────�
 # the wording cannot drift between menus. A generic key that really means something else gets a NAMED variant in this table
 # ("u.up" = u) Up, go up a folder); the part after the dot is only a name, the key shown is the part before it.
 # A generic key is NEVER written "key:Label" (tests/pty/fast/menus/cmd_drift.sh fails on it, whatever the spelling): add a variant here instead.
-declare -gA _MC_KEYLABEL=([u]=Back [u.up]=Up [u.prefix]="Remove last prefix" [q]=Quit [q.close]=Close [rf]=Refresh)
+declare -gA _MC_KEYLABEL=([u]=Up [u.up]=Up [u.prefix]="Remove last prefix" [q]=Quit [rf]=Refresh)
 
 # ── CONTROL-01: the return contract of every template below, and the one unwind test
 _MC_OK=0; _MC_BACK=1; _MC_QUIT=2; _MC_EOF=3
@@ -194,27 +194,21 @@ _mc_menu0() { _mc_menu_n 0 "$@"; }
 _mc_ask() { _bvk_read REPLY "${1:-${_TPL_ACCEPTOR:-Select:} }"; }
 
 # ── FOOTER-01: the standard footer with a screen's own actions in front
-#   _mc_footer_std [-b] [-l] [-T ID] [item...]     -b = no folders on this screen: u reads "Back", not "Up" · -T = the template of the screen the footer
+#   _mc_footer_std [-T ID] [item...]     -T = the template of the screen the footer
 #                                     belongs to (default YWW6WZ, the step menu; a list screen says 7P68NA, a picker MG2374 / 7UH852); it is drawn by _tpl_footer
 #   Own actions first, then the standard  u q h cc.  Items from the first "|" or "#note" on stay AFTER the standard keys.
-_mc_std_items() {                      # -> _MC_STD = the standard keys as footer items (for a footer that needs its own line layout)
-  local p=std_nav it
-  [ "${1:-}" = -b ] && p=std_nav_back
-  _MC_STD=(); for it in ${_MC_FOOTERS[$p]}; do _MC_STD+=("${it//_/ }"); done
-}
 _mc_footer_std() {
-  local prof=std_nav it intail=0 own=0 tid=YWW6WZ
-  while [ "${1:-}" = -b ] || [ "${1:-}" = -l ] || [ "${1:-}" = -T ]; do   # -b back profile · -l the screen's own actions on a row of their own, the standard keys under it · -T template ID
-    case "$1" in -b) prof=std_nav_back ;; -l) own=1 ;; -T) tid="$2"; shift ;; esac; shift
-  done
+  local it intail=0 tid=YWW6WZ
+  while [ "${1:-}" = -T ]; do tid="$2"; shift 2; done          # -T = the template ID; there is ONE footer, so no other flag exists
   local -a head=() tail=() nav=()
   for it in "$@"; do
     [[ "$it" == "|" || "$it" == "#"* ]] && intail=1
     if (( intail )); then tail+=("$it"); else head+=("$it"); fi
   done
-  for it in ${_MC_FOOTERS[$prof]}; do nav+=("${it//_/ }"); done
-  if (( own && ${#head[@]} )); then _tpl_footer "$tid" "${head[@]}" "|" "${nav[@]}" "${tail[@]}"
-  else _tpl_footer "$tid" "${head[@]}" "${nav[@]}" "${tail[@]}"; fi
+  for it in ${_MC_FOOTERS[std_nav]}; do nav+=("${it//_/ }"); done
+  # ONE common footer on top, the screen's own keys (budget 50) on the line(s) below it
+  if (( ${#head[@]} )); then _tpl_footer "$tid" "${nav[@]}" "|" "${head[@]}" "${tail[@]}"
+  else _tpl_footer "$tid" "${nav[@]}" "${tail[@]}"; fi
 }
 
 # _mc_std_key TYPED   the two standard keys that open a screen: h (Home) and cc (Cheat codes).
@@ -328,7 +322,7 @@ _mc_select() {
   while true; do
     [ -n "$_ms_title" ] && _mc_header "$_ms_title" "${_ms_sub[@]}"
     if (( _ms_keyed )); then _mc_keyed "${_ms_kshow[@]}"; else _mc_options 1 "${_ms_show[@]}"; fi
-    _mc_footer_std $_ms_b "${_ms_x[@]}"
+    _mc_footer_std "${_ms_x[@]}"
     _mc_read _ms_a "${_TPL_ACCEPTOR:-Select:} " || { local _mc_rc=$?; _mc_unwind && return 2; return "$_mc_rc"; }
     _ms_a="${_ms_a,,}"; _ms_a="${_ms_a//[[:space:]]/}"
     _mc_nav "$_ms_a"; _ms_rc=$?
@@ -361,7 +355,7 @@ _mc_text() {
   local _mt_o="$1" _mt_p="$2" _mt_a _mt_rc; shift 2
   while true; do
     (( $# )) && _mc_header "$@"
-    _mc_footer_std -b "${_mt_x[@]}"
+    _mc_footer_std "${_mt_x[@]}"
     _mc_read _mt_a "$_mt_p" || { local _mc_rc=$?; _mc_unwind && return 2; return "$_mc_rc"; }
     _mc_nav "$_mt_a"; _mt_rc=$?
     case "$_mt_rc" in 1) return 1 ;; 2) return 2 ;; 4) continue ;; esac
@@ -391,7 +385,7 @@ _mc_review() {
       _mc_header "${_mrv_title:-📋 Current selections (${#_mrv_ref[@]}):}"
       _mc_options 1 "${_mrv_lab[@]}"
     fi
-    _mc_footer_std -b "c:Confirm" "x:Remove"
+    _mc_footer_std "c:Confirm" "x:Remove"
     _mc_read _mrv_a "${_TPL_ACCEPTOR:-Select:} " || { local _mc_rc=$?; _mc_unwind && return 2; return "$_mc_rc"; }
     _mrv_a="${_mrv_a,,}"; _mrv_a="${_mrv_a//[[:space:]]/}"
     _mc_nav "$_mrv_a"; _mrv_rc=$?
@@ -457,10 +451,10 @@ _bvk_info_wait() {
 # ── registered footers
 # FOOTER-01: THE standard navigation footer.  Every ordinary selection menu and every tabbed screen shows exactly this
 # (tabmenu.sh registers its two footers from these, so one edit here changes all of them).
-_mc_footer_register std_nav      u.up q h:Home cc:Cheat_codes       # u) Up   q) Quit   h) Home   cc) Cheat codes
-_mc_footer_register std_nav_back u    q h:Home cc:Cheat_codes       # a screen with no folders: u) Back
-_mc_footer_register file_menu    u.up q h:Home
-_mc_footer_register browse_main  u.up cd:Change_directory q '|' h:Home s:Settings -h:Help -u:Upgrade
-_mc_footer_register back_quit    u.up q h:Home cc:Cheat_codes       # = std_nav: the numbered option menus (create, organise, find ...)
-_mc_footer_register back_only    u
-_mc_footer_register infinity     u.up q
+_mc_footer_register std_nav      u.up q h:Home cc:Cheat_codes       # u) Up   q) Quit   h) Home   cc) Cheat codes   (the ONE common footer of every menu but main)
+_mc_footer_register browse_main  u.up cd:Change_directory q '|' h:Home s:Settings -h:Help -u:Upgrade   # the MAIN menu only
+# the common footer as ONE printed line (the Settings engine paints its own rows): rendered from the registration above, never typed twice
+_AD_STD_LINE=""; for _mc_i in ${_MC_FOOTERS[std_nav]}; do
+  if [[ "$_mc_i" == *:* ]]; then _mc_c="${_mc_i%%:*}) ${_mc_i#*:}"; else _mc_c="${_mc_i%%.*}) ${_MC_KEYLABEL[$_mc_i]}"; fi
+  _AD_STD_LINE+="${_AD_STD_LINE:+   }${_mc_c//_/ }"
+done; unset _mc_i _mc_c

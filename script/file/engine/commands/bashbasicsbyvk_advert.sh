@@ -30,7 +30,9 @@
 _AD_BUDGET=50
 _AD_COST_CC=0
 _AD_COST_FOOTER=10
-_AD_FREE_KEYS=" u q rf h cc "         # standard keys: printed on every menu, cost nothing
+_AD_FREE_KEYS=" u q h cc "           # the ONE common footer (u) Up   q) Quit   h) Home   cc) Cheat codes): printed on every menu but main, costs nothing
+_AD_GENERAL_KEYS=" rf = clr "          # general commands every menu takes: listed by cc, NEVER printed in a footer (they are not menu specific)
+# _AD_STD_LINE (the common footer as ONE printed line) is rendered from _MC_FOOTERS[std_nav] in menuchrome.sh: the words live in one place only
 
 declare -g  _AD_MENU=""
 declare -ga _AD_KEY=() _AD_DESC=() _AD_PRIO=() _AD_SHOWN=() _AD_ISFREE=() _AD_SHORT=()
@@ -197,8 +199,15 @@ _ad_from_footer_items() {
 # cc: every declared command.  → _AD_CC_KEY / _AD_CC_DESC  (nothing else: no lookup)
 _ad_cc_rows() {
   _AD_CC_KEY=(); _AD_CC_DESC=()
-  local i
-  for (( i=0; i<${#_AD_KEY[@]}; i++ )); do _AD_CC_KEY+=("${_AD_KEY[i]}"); _AD_CC_DESC+=("${_AD_DESC[i]}"); done
+  local i j n=${#_AD_KEY[@]} LC_COLLATE=C
+  local -a ord=()
+  # alphabetical by the typed key (a-, a-2 ... z): a plain insertion sort in bash (no fork: cc and the footers run this on every draw)
+  for (( i=0; i<n; i++ )); do
+    j=${#ord[@]}; ord+=("$i")
+    while (( j > 0 )) && [[ "${_AD_KEY[i]}" < "${_AD_KEY[${ord[j-1]}]}" ]]; do ord[j]="${ord[j-1]}"; (( j-- )); done
+    ord[j]="$i"
+  done
+  for i in "${ord[@]}"; do _AD_CC_KEY+=("${_AD_KEY[i]}"); _AD_CC_DESC+=("${_AD_DESC[i]}"); done
 }
 
 # footer: the free keys, then the paid commands the budget buys, highest priority first.  → _AD_FT_FREE / _AD_FT_PAID  (arrays of "shown) desc")
@@ -214,6 +223,7 @@ _ad_footer_cells() {
     best=-1; bp=0
     for (( j=0; j<${#_AD_KEY[@]}; j++ )); do
       [ "${_AD_ISFREE[j]}" = 1 ] && continue
+      case "$_AD_GENERAL_KEYS" in *" ${_AD_KEY[j]} "*) continue ;; esac      # rf = clr: cc only
       [[ " ${done_[*]} " == *" $j "* ]] && continue
       (( _AD_PRIO[j] > bp )) && { best=$j; bp=${_AD_PRIO[j]}; }
     done
@@ -234,6 +244,7 @@ _ad_footer_allow() {
   _ad_typed_of "$s"; k="$_AD_T"
   [ -n "$k" ] || return 0                                  # N · 1,3-5 · Enter: an instruction, not a command
   case "$_AD_FREE_KEYS" in *" ${k,,} "*) return 0 ;; esac  # standard keys cost nothing
+  case "$_AD_GENERAL_KEYS" in *" ${k,,} "*) return 1 ;; esac  # rf = clr: general commands, never in a footer (cc lists them)
   (( _AD_FT_SPENT + _AD_COST_FOOTER > _AD_BUDGET )) && return 1
   _AD_FT_SPENT=$(( _AD_FT_SPENT + _AD_COST_FOOTER ))
   return 0

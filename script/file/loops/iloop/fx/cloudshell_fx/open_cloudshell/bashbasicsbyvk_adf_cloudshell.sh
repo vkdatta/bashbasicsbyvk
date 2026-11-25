@@ -149,7 +149,7 @@ csh_row() {
 
 csh_header() { _tpl_list_header "☁️  Cloud Shell   ${#_CS_ACCOUNTS[@]} profile(s)" "💫 active: ${_CS_ACTIVE:-none}"$'\n'"🔌 a profile runs  gcloud config set account  then opens Cloud Shell"; }
 
-csh_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open Cloud Shell as that profile" "c:Create profile" "x:Remove profiles" "k:Switch off Cloud Shell" "rf" "|" "${_MC_STD[@]}"; }
+csh_footer() { _mc_footer_std -T 7P68NA "#Select a number to open Cloud Shell as that profile" "c:Create profile" "x:Remove profiles" "k:Switch off Cloud Shell"; }
 
 _csh_cmd() {
   case "$1" in

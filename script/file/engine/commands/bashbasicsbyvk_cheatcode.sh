@@ -117,7 +117,7 @@ bvk_cc_cmd() {
   [ "$_CC_CTX" = st ] && where="this screen"
 
   # look: header 🎮, no "Settings ›" crumb, our own footer; all of it is undone when we return
-  local _st_icon="🎮" _st_crumb="" _st_verb="put it in the prompt" _st_f1_custom="u) Back   ↑↓) Move"
+  local _st_icon="🎮" _st_crumb="" _st_verb="put it in the prompt"
   local _fw_keep="${_st_filter_wide:-0}" _d0="${_st_depth:-0}"
   # a sub-screen: it erases itself when it closes, so the menu you came from redraws in place
   (( _st_depth < 1 )) && _st_depth=1

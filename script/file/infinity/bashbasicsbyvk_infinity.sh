@@ -29,7 +29,7 @@ infinity_stones_menu() {
   while true; do
     _mc_menu "💎 Infinity Stones" -- \
       "Extract Tables and Links from Web" "JavaScript Audit" "Python Audit" \
-      "Git Push" "Generate SQL" "LocalHost" "Polyglot Clone Finder" -- @infinity
+      "Git Push" "Generate SQL" "LocalHost" "Polyglot Clone Finder" -- @std_nav
 
     _bvk_read is_choice "${_TPL_ACCEPTOR} "
 

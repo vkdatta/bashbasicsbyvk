@@ -10,7 +10,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #      1) Hidden files        hide ›
 #      2) Sort order          A → Z ›
 #        ─────────────────────────────
-#     u) Back   q) Close settings
+#     u) Up   q) Quit   h) Home   cc) Cheat codes
 #
 #     Select:
 #
@@ -35,7 +35,6 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  Row kinds   t checkbox [x]/[ ] (many can be on)   r radio [o]/[ ] (one is on)   a action ›   h heading
 #  (headings are not numbered)
 #  Optional, set by the caller as locals/globals before _st_run (bashbasicsbyvk_choose.sh uses all of them):
-#     _st_f1_custom / _st_f2_custom   the two footer lines
 #     _st_start_num                   number of the row the highlight starts on (default: none)
 #     _st_radio_follow=1              the [o] of a radio row follows the highlight instead of the stored state
 #     _st_choice=1                    a choice menu: no =) Filter hint, Enter says "choose" (not "switch")
@@ -204,24 +203,22 @@ _st_draw() {
 
   # footer = ADVERT (bashbasicsbyvk_advert.sh).  The screen DECLARES what it accepts; the footer prints the free keys and what the budget
   # buys (a command costs 10, a screen has 50); cc lists every declared command.  Nothing here looks anything up.
-  local _fu="Back" _fq="Close settings"; (( _st_depth > 1 )) || { _fu="Up"; _fq="Close"; }
   _ad_open "${_CM_MAP:-}"
-  _ad_free u "Back" u "$_fu"
-  _ad_free q "Close Settings, back to the main menu" q "$_fq"
+  _ad_free u "Up, one screen back" u "Up"
+  _ad_free q "Quit, back to the main menu" q "Quit"
+  _ad_free h "Home" h "Home"
+  _ad_free cc "Cheat codes — every command this screen takes" cc "Cheat codes"
   _ad_from_cmdfn "${_ST_CMDFN:-}"                                                           # the screen's own typed commands (clr, a-2, d ...)
   _ad_accept '?' "Read the whole explanation of the highlighted row" $(( _ST_DESC_TRUNC ? 20 : 0 )) '?' 0 "Full text"   # in the footer only when the text was cut
   _ad_accept '='      "Filter the rows  (=text · Enter keeps it · = + Enter clears it)" 0
   _ad_accept print    "Print what is on screen — copy it or save as txt" 0
   _ad_accept loadtime "Load time: what each screen change cost  (loadtime 2 · loadtime all)" 0
-  _ad_accept cc       "Cheat codes — every command this screen takes" 0
   _ad_from_dispatcher "${_CM_MAP:-main}"
   _ad_from_map "${_CM_MAP:-main}" st                                                        # the main words this screen's map runs (h s i -h -auth disk ram ...)
   _ad_footer_cells
-  f1="${_AD_FT_FREE[0]:-}"; (( ${#_AD_FT_FREE[@]} > 1 )) && printf -v f1 '%s   ' "${_AD_FT_FREE[@]}" && f1="${f1%   }"
+  f1="$_AD_STD_LINE"                                          # the ONE common footer; the screen's own commands are line 2
   f2=""; (( ${#_AD_FT_PAID[@]} )) && { printf -v f2 '%s   ' "${_AD_FT_PAID[@]}"; f2="${f2%   }"; }
-  [ -n "${_st_f1_custom:-}" ] && f1="$_st_f1_custom"          # cc: its own footer
   if (( _st_cnt == 0 )); then if [ -n "${fq:-}" ]; then f2="No match for =$fq   (= + enter clears)"; else f2="Nothing to choose here"; fi; fi
-  [ -n "${_st_f2_custom:-}" ] && f2="$_st_f2_custom"           # an explicit second line (the Cheat codes list has none)
 
   _ST_FTR1="$f1"; _ST_FTR2="$f2"                           # what _st_click needs to find the footer key that was touched
 

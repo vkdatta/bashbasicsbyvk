@@ -116,9 +116,9 @@ done < <(grep -rhoE '(^|[ "])(u|q|rf)\.[a-z]+([ "]|$)' --include='*.sh' "$F" | g
 ( declare -F _lt_b >/dev/null || { _lt_b(){ :; }; _lt_e(){ :; }; }
   _vp_usable() { _vp_usable_w=80; }; _vp_cells() { _vp_w=${#1}; }; _sm_on=0
   source "$F/engine/ui/bashbasicsbyvk_menuchrome.sh"
-  out="$(_mc_footer u u.up q rf "x:Nuke")"
-  [[ "$out" == *"u) Back   u) Up   q) Quit   rf) Refresh   x) Nuke"* ]] ) \
-  && ok "bare footer keys render their canonical label next to a custom one" || bad "bare footer keys do not render u) Back q) Quit rf) Refresh"
+  out="$(_mc_footer u q rf "x:Nuke")"
+  [[ "$out" == *"u) Up   q) Quit   x) Nuke"* && "$out" != *"rf)"* ]] ) \
+  && ok "bare footer keys render their canonical label next to a custom one, and rf (a general command) is never printed" || bad "bare footer keys do not render u) Up q) Quit, or rf is printed"
 
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"
 exit "$fail"

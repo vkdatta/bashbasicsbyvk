@@ -357,7 +357,7 @@ _bvk_build_path_items() {
 # A caller passes only its title ("🗑️ Delete"); the action in the sentence is the title without the icon, in lower case.
 # The layout is the template 7UH852 (templates/bashbasicsbyvk_7UH852.sh.tpl); this file only hands it the data.
 _pk_header() {
-  _tpl_clear; _tpl_set menu_name "$_PK_TITLE" what "$_PK_WHAT" action "$_PK_ACTION" nav_path_text "" footer_style row footer_items "u.up q.close"
+  _tpl_clear; _tpl_set menu_name "$_PK_TITLE" what "$_PK_WHAT" action "$_PK_ACTION" nav_path_text "" footer_style row footer_items "u.up q h:Home cc:Cheat_codes"
   _tpl_section 7UH852 menu_header
 }
 _pk_footer() { _tpl_section 7UH852 menu_footer; }
@@ -663,7 +663,7 @@ _pick_header() {
       *) break ;;
     esac
   done
-  _tpl_clear; _tpl_set action "" footer_style row footer_items "u.up q.close" icon "$icon" job_word "$word" what "$1" job "$2" nav_path_text "$3${4:+ [group: ${4^^}*]}" pick_suggest "$sugg" pick_suggest_noun "$noun" pick_desc "${5:-}"
+  _tpl_clear; _tpl_set action "" footer_style row footer_items "u.up q h:Home cc:Cheat_codes" icon "$icon" job_word "$word" what "$1" job "$2" nav_path_text "$3${4:+ [group: ${4^^}*]}" pick_suggest "$sugg" pick_suggest_noun "$noun" pick_desc "${5:-}"
   _tpl_section MG2374 menu_header
 }
 _pick_rows() {                # the rows of a picker WITH their rules (see _pick_rule_open); _pick_rows_raw = the bare rows, for a caller that frames them itself
@@ -762,7 +762,7 @@ _pick_groups() {
       _pg_n=${#_pg_in[@]}
     fi
     [ -n "$_pg_msg" ] && { echo "$_pg_msg"; _pg_msg=""; }
-    _mc_footer_std -T MG2374 -l "c:Confirm"
+    _mc_footer_std -T MG2374 "c:Confirm"
     _mc_read _pg_ch "${_TPL_ACCEPTOR} " || { _pg_rc=$?; _mc_unwind && return 2; return "$_pg_rc"; }
     _pg_ch="${_pg_ch#"${_pg_ch%%[![:space:]]*}"}"; _pg_ch="${_pg_ch%"${_pg_ch##*[![:space:]]}"}"
     case "$_pg_ch" in

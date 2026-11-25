@@ -394,7 +394,7 @@ _au_list_header() {                                # template 7P68NA
   _tpl_list_header "🔐 -auth — select user" "$_n"
 }
 _au_list_footer() {
-  _mc_std_items -b; _tpl_footer 7P68NA "c:Create user" "r:Remove user" "|" "ux:Export users" "ui:Import users" "=:Filter" "|" "${_MC_STD[@]}"
+  _mc_footer_std -T 7P68NA "c:Create user" "r:Remove user" "|" "ux:Export users" "ui:Import users"
 }
 _au_list_build() {
   _bvk_auth_list
@@ -467,7 +467,7 @@ _au_sub_header() {                                 # template 7P68NA
   esac
   _tpl_list_header "👤 Acting as: $_AU_MAIL" "$_n"
 }
-_au_sub_footer() { _mc_std_items -b; _tpl_footer 7P68NA "=:Filter" "|" "${_MC_STD[@]}"; }
+_au_sub_footer() { _mc_footer_std -T 7P68NA; }
 
 _au_billing_build() {
   _bvk_auth_parse "$_BVK_AUTH_DIR/profiles/$_AU_UID" || return 1
@@ -716,7 +716,7 @@ _au_user_rowtext() {
 _au_plain_rowtext() { printf -v _vp_line ' %2d) %s' "$1" "${items[$(( $1 - 1 ))]}"; }
 _au_user_header() { _tpl_list_header "👤 Acting as: $_AU_MAIL"; }          # template 7P68NA
 _au_user_footer() {
-  _mc_std_items -b; _tpl_footer 7P68NA "ux:Export" "ui:Import" "=:Filter" "|" "${_MC_STD[@]}"
+  _mc_footer_std -T 7P68NA "ux:Export" "ui:Import"
 }
 _au_user_build() {                       # returns 1 if the profile vanished
   _bvk_auth_list

@@ -47,7 +47,7 @@ gdp_header() {                                     # template 7P68NA
 }
 
 gdp_footer() {
-  _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that Google Drive" "n:New profile (rclone config)" "rf" "${_MC_STD[@]}"
+  _mc_footer_std -T 7P68NA "#Select a number to open that Google Drive" "n:New profile (rclone config)"
 }
 
 _gdp_cmd() {

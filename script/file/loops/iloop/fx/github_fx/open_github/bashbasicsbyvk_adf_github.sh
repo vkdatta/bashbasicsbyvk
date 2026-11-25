@@ -133,7 +133,7 @@ ghp_header() {                                     # template 7P68NA
   _tpl_list_header "🐙 GitHub   ${#_GHX_R_NAME[@]} repo(s) · signed in as ${_GHX_LOGIN}" "🔑 key: $_GHX_SRC"$'\n'"📂 downloads go to: $_GHX_NAV"
 }
 
-ghp_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that repo" "=:filter" "rf" "|" "${_MC_STD[@]}"; }   # "|" = the standard keys on their own line
+ghp_footer() { _mc_footer_std -T 7P68NA "#Select a number to open that repo"; }
 
 _ghp_cmd() {
   case "$1" in
@@ -205,7 +205,7 @@ ghr_header() {                                     # template V3PX4Y: the title 
   _tm_head -t "🐙 $_GHX_REPO" -n "$_n" ghr
 }
 
-ghr_footer() { _tm_footer -b; }                    # u q h cc: every other key (c e r d g i-N rf, N · 1,3-5 · a · a-2) is listed by cc
+ghr_footer() { _tm_footer; }                    # u q h cc: every other key (c e r d g i-N rf, N · 1,3-5 · a · a-2) is listed by cc
 
 # the picked display rows (_XUI_SEL) → tag names in _GHX_PICK
 _ghx_pick_names() {
@@ -695,7 +695,7 @@ _ghx_fetch_user() {              # ONE saved user's public repos → the _GHX_R_
 gho_build()  { _xui_begin_items "${_GHX_USERS[@]}"; }
 gho_row()    { _xui_slot "$1"; printf -v _vp_line ' %2d) 👤 %s' "$1" "${_GHX_USERS[$_XUI_SLOT]}"; }
 gho_header() { _tpl_list_header "🐙 GitHub others   ${#_GHX_USERS[@]} user(s) · read only" "📂 downloads go to: $_GHX_NAV"; }
-gho_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that user's projects" "c:Add users" "x:Remove users" "|" "${_MC_STD[@]}"; }
+gho_footer() { _mc_footer_std -T 7P68NA "#Select a number to open that user's projects" "c:Add users" "x:Remove users"; }
 
 _gho_cmd() {
   case "$1" in
@@ -724,7 +724,7 @@ ghu_row() {
   printf -v _vp_line ' %2d) 📂 %-34s %s%s' "$1" "$(_xui_trunc "${_GHX_R_NAME[$s]#*/}" 34)" "${_GHX_R_PUSHED[$s]:-—}" "$tag"
 }
 ghu_header() { _tpl_list_header "🐙 $_GHX_USER   ${#_GHX_R_NAME[@]} project(s) · read only" "📂 downloads go to: $_GHX_NAV"; }
-ghu_footer() { _mc_std_items -b; _tpl_footer 7P68NA "#Select a number to open that project" "=:filter" "rf" "|" "${_MC_STD[@]}"; }
+ghu_footer() { _mc_footer_std -T 7P68NA "#Select a number to open that project"; }
 
 _ghu_cmd() {
   case "$1" in
@@ -755,7 +755,7 @@ ghq_header() {
   fi
   _tm_head -t "🐙 $_GHX_REPO  (read only)" -n "$_n" ghq
 }
-ghq_footer() { _tm_footer -b; }
+ghq_footer() { _tm_footer; }
 
 _ghq_cmd() {
   case "$1" in

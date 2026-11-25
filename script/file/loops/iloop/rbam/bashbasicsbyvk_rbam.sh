@@ -71,7 +71,7 @@ rb_header() {                                      # template V3PX4Y (RBAM|0 · 
   local _n=""; [ "${#items[@]}" -eq 0 ] && _n="Nobody here yet — type  ui  to add someone."
   _tm_head -n "$_n" rb
 }
-rb_footer() { _tm_footer -b; }                     # u q h cc: every other key (ui ux r-N sd N …) is listed by cc
+rb_footer() { _tm_footer; }                     # u q h cc: every other key (ui ux r-N sd N …) is listed by cc
 
 # ── commands
 _rb_mail_ok() { [[ "$1" =~ ^[^[:space:]\"\\]+@[^[:space:]\"\\]+$ ]] && [ "${#1}" -le 256 ]; }
@@ -240,8 +240,8 @@ ru_header() {                                      # template 7P68NA
   _tpl_list_header "$_t" "$_n"
 }
 ru_footer() {
-  if [ "$_RB_TAB" = 0 ]; then _mc_footer_std -T 7P68NA -b "N:files" "r-N:revoke this person from a share"
-  else                        _mc_footer_std -T 7P68NA -b "N:files" "r-N:drop a share from my Cloud Surf"; fi
+  if [ "$_RB_TAB" = 0 ]; then _mc_footer_std -T 7P68NA "N:files" "r-N:revoke this person from a share"
+  else                        _mc_footer_std -T 7P68NA "N:files" "r-N:drop a share from my Cloud Surf"; fi
 }
 
 _ru_remove() {

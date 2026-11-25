@@ -98,7 +98,7 @@ py_case('creds: everything found, nothing asked', ('T', 'ACC', 'file', 'file'), 
 
 # ---- the door's secret read (-s) has the same two words as the typed line
 SK = ['bash', '-c', 'x=$(bash "%s" "Token: " -s -b); rc=$?; echo "RC=$rc LEN=${#x}"' % os.path.join(FLAT, 'bashbasicsbyvk_ask')]
-drive('secret: u with -b exits 4', SK, [('Token: ', 'u\r')], ['RC=4', 'u) Back   q) Quit'])
+drive('secret: u with -b exits 4', SK, [('Token: ', 'u\r')], ['RC=4', 'u) Up   q) Quit'])
 drive('secret: q exits 2', SK, [('Token: ', 'q\r')], ['RC=2'])
 drive('secret: a real secret is returned (exit 0), never echoed', SK, [('Token: ', 'abc123\r')], ['RC=0 LEN=6'], ['abc123'])
 

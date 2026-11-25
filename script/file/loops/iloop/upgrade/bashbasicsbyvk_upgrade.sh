@@ -145,7 +145,7 @@ _upg_menu_header() {                               # template V3PX4Y (Upgrade|st
 }
 
 # footer: the template's u q h cc (u = Back: this screen has no folders). Every other key (N i-N m rf -u …) is listed by cc.
-_upg_menu_footer() { _tm_footer -b; }
+_upg_menu_footer() { _tm_footer; }
 
 _upg_set_viewport() { _tm_viewport _upg_menu_header _upg_menu_footer _upg_rowtext; }
 

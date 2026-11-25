@@ -336,7 +336,7 @@ No repository was created."
     local _CE_SELECT=0                                  # the message typed before starts selected when u comes back here
     [ -n "$user_msg" ] && _CE_SELECT=1
     echo
-    _mc_footer_std -b                                   # the footer every typed-line prompt of the app prints (u q h cc)
+    _mc_footer_std                                   # the footer every typed-line prompt of the app prints (u q h cc)
     _CM_BACKED=0
     if ! _bvk_read user_msg "Enter commit message [Default: $DEFAULT_COMMIT_MESSAGE]: " -m -i "$user_msg"; then
         [ "${_CM_BACKED:-0}" = 1 ] && return 1

@@ -31,7 +31,7 @@
 #         Desc screen   the first half of the description keys:          "<Desc screen>|<tab key>"  or  "<Desc screen>|<tab key>:<folder>"
 #         key:Label     one per tab, left to right; the label is exactly what the bar prints and what a tap hits
 #    2. HEADER:  _tm_head [-t title] [-f folder] [-c total] [-n rows] [-G] NAME   draws the whole header from the template V3PX4Y (-n = the screen's own context rows)
-#    3. FOOTER:  _tm_footer [-b] [extra items…]     -b = the screen has no folders: u reads "Back", not "Up"
+#    3. FOOTER:  _tm_footer [extra items…]
 #    4. KEYS:    _tm_key NAME "$choice" [nowrap]    in the loop, for  __sw_tab_right__ | __sw_tab_left__  (moves the state variable)
 #    5. REDRAW:  _tm_tab_redraw BUILD_FN SET_FN     in-place repaint after a tab change;   _tm_viewport HDR FTR [ROWTEXT]  sets the viewport
 #
@@ -43,8 +43,6 @@ declare -g  _TM_I=0                         # _tm_idx result: the 0-based positi
 _TM_TAB_SEP=" "                             # what sits between two tab labels (the tap hit-test measures it, so it can be changed here)
 
 # the ONE footer every tabbed menu shows (generic keys take their label from _MC_KEYLABEL in menuchrome.sh)
-_mc_footer_register tabmenu      "${_MC_FOOTERS[std_nav]}"          # = the standard footer of menuchrome.sh (FOOTER-01): one copy
-_mc_footer_register tabmenu_back "${_MC_FOOTERS[std_nav_back]}"
 
 # _tm_define NAME STATEVAR TITLE DESC_SCREEN key:Label...      (see the header of this file)
 _tm_define() {
@@ -147,13 +145,12 @@ _tm_head() {
   _tpl_section V3PX4Y menu_header
 }
 
-# _tm_footer [-b] [extra footer items…]   u/q/h/cc, then whatever the screen adds (a "|" starts a new line)
+# _tm_footer [extra footer items…]   u/q/h/cc, then whatever the screen adds (a "|" starts a new line)
 _tm_footer() {
-  local _tm_u=tabmenu _tm_it
-  [ "${1:-}" = -b ] && { _tm_u=tabmenu_back; shift; }
-  (( $# )) || { _tpl_footer V3PX4Y "@$_tm_u"; return; }
+  local _tm_it
+  (( $# )) || { _tpl_footer V3PX4Y "@std_nav"; return; }
   local -a _f=()
-  for _tm_it in ${_MC_FOOTERS[$_tm_u]}; do _f+=("${_tm_it//_/ }"); done      # the registered items above are the ONE copy of the standard keys
+  for _tm_it in ${_MC_FOOTERS[std_nav]}; do _f+=("${_tm_it//_/ }"); done      # the registered items above are the ONE copy of the standard keys
   _tpl_footer V3PX4Y "${_f[@]}" "$@"
 }
 

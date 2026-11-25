@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/static/lib/rows_probe.sh — ONE process: every ROW PRINTER of the menu chrome, fed through the REAL smart-menu detector.
 # No terminal, no app start, no sleeps: the printers' own output is recorded with _sm_record and judged by _sm_detect.
-# Rows (TSV):   P producer mode N detect_rc rows_found rules_printed first_is_rule last_is_rule footer   (footer 0 = a line of key cells · 1 = ONE cell: u) Back)
+# Rows (TSV):   P producer mode N detect_rc rows_found rules_printed first_is_rule last_is_rule footer   (footer 0 = a line of key cells · 1 = ONE cell: u) Up)
 #   producer = the function that prints the rows · mode = managed (the viewport is on: it draws the rules) | plain (no viewport: the printer draws them)
 #   N = how many rows it was given (0 1 2 3) · detect_rc = _sm_detect's answer (0 = the viewport takes the list over) · rows_found = rows it took
 #   rules_printed = how many rule lines the PRINTER itself emitted
@@ -20,7 +20,7 @@ _item_line_text_v() { _ilt_out=" $1) 📄 ${items[$(( $1 - 1 ))]##*/}"; }
 _lk_load() { :; }
 _sel_mark_v() { return 1; }
 
-FOOTERS=($'\nu) Up   q) Quit   h) Home   cc) Cheat codes\n' $'\nu) Back\n')   # what _mc_footer prints under the rows: a blank row, one line of key cells (or ONE cell: back_only), a blank row
+FOOTERS=($'\nu) Up   q) Quit   h) Home   cc) Cheat codes\n')   # what _mc_footer prints under the rows: a blank row, one line of key cells, a blank row
 
 # the producers: each prints N rows (the picker helpers read the caller's arrays: dynamic scope, as in _pick_groups)
 p_mc_options()    { local -a l=(); local i; for ((i=1;i<=$1;i++)); do l+=("choice $i"); done; _mc_options 1 "${l[@]}"; }

@@ -61,7 +61,7 @@ _GD_SET_VARS=(show_hidden_files index_mode_threshold terminal_bg_color terminal_
 # state kept GLOBAL on purpose (not swapped per profile): upgrades, UDF scripts, the local daemon, logs
 _GD_GLOBAL_TOPS="gdrive upgrade execute recents.list recents.tsv track.lock daemons pointers.state recents_exclude.conf daemon.version daemon.status lastdir health.log index_roots.conf .watchdog_install_attempted"
 
-_mc_footer_register browse_gd u.up gd:Drive_menu gdx:Leave_Drive rf q '|' h:Home s:Settings -h:Help -u:Upgrade 2>/dev/null
+_mc_footer_register browse_gd u.up gd:Drive_menu gdx:Leave_Drive q '|' h:Home s:Settings -h:Help -u:Upgrade 2>/dev/null
 
 # ── small helpers
 _gd_safe_name() {

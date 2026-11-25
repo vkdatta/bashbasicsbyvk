@@ -116,11 +116,11 @@ _sp_view_set() {
     fi
 
     if [ -n "$name" ]; then
-      _mc_footer_std -b "x:Remove item(s)" "n:Rename set" "clr:Clear set $name"
+      _mc_footer_std "x:Remove item(s)" "n:Rename set"
     elif [ "$grouped" = 1 ]; then
-      _mc_footer_std -b "x:Remove item(s)" "n:Name these items" "clr:Clear the flat items"
+      _mc_footer_std "x:Remove item(s)" "n:Name these items"
     else
-      _mc_footer_std -b "x:Remove item(s)" "clr:Clear entire $label buffer"
+      _mc_footer_std "x:Remove item(s)"
     fi
     _mc_read bv_choice "$label buffer${where}: " || { _mc_unwind; return 0; }      # rc != 0: the flow was cancelled → leave at once
 
@@ -219,7 +219,7 @@ _sp_view_one_buffer() {
 
     _mc_header "📋 $label buffer ($(_sp_count "$file")):"
     _mc_options 1 "${rows[@]}"
-    _mc_footer_std -b "x:Remove item(s)" "n:Rename set" "clr:Clear entire $label buffer"
+    _mc_footer_std "x:Remove item(s)" "n:Rename set"
     _mc_read bv_choice "$label buffer: " || { _mc_unwind; return 0; }      # rc != 0: the flow was cancelled → leave at once
 
     case "$bv_choice" in
@@ -300,7 +300,7 @@ handle_staging_view() {
 
     _mc_header "🗂️  Shortpath buffers"
     _mc_options 1 "${rows[@]}"
-    _mc_footer_std -b "clr:Clear ALL buffers"
+    _mc_footer_std -b
     _mc_read v_choice "View buffer: " || { _mc_unwind; return 0; }      # rc != 0: the flow was cancelled → leave at once
 
     case "$v_choice" in

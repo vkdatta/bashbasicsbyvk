@@ -82,7 +82,7 @@ _inf_q_ask() {     # "Prompt: " [-i text] [-s] [-b] [-S] [-m]
   [ -n "$_i" ] && _f+=(-i "$_i")
   (( _s )) && _f+=(-s)
   (( _m )) && _f+=(-m)
-  (( _s )) || _cm_prompt_has_choices "$_p" || _mc_footer_std -b      # the footer every typed-line prompt prints (a prompt that lists its own answers gets none)
+  (( _s )) || _cm_prompt_has_choices "$_p" || _mc_footer_std      # the footer every typed-line prompt prints (a prompt that lists its own answers gets none)
   _CM_BACKED=0; _INF_OUT=""
   if _bvk_read _ans "$_p" "${_f[@]}"; then
     _INF_RC=0; _INF_OUT="$_ans"

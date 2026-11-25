@@ -40,8 +40,8 @@ d=$(grep -rnE '_mc_footer [^#]*"u(\.up)?" "q"' --include='*.sh' "$F" | grep -v '
 [ -z "$d" ] && ok "no hand-made u/q footer (use _mc_footer_std)" || bad "hand-made footer: $d"
 d=$(grep -rnE 'read -e -?r? ?-p "(Choice|Nav|GCloud Nav|Action|Pick|Selected items|Selection view): ' --include='*.sh' "$F" | head -3)
 [ -z "$d" ] && ok "no private Choice:/Nav:/Action:/Pick: prompt" || bad "private prompt: $d"
-d=$(grep -rn '@back_quit' --include='*.sh' "$F" | grep -v 'menuchrome.sh' | head -3)
-[ -z "$d" ] && ok "no menu is wired by hand to the back_quit footer" || bad "hand-wired: $d"
+d=$(grep -rnE 'std_nav_back|back_quit|back_only|tabmenu_back|_mc_std_items|_st_f[12]_custom' --include='*.sh' "$F" | head -3)
+[ -z "$d" ] && ok "no retired footer profile or footer override is left" || bad "retired footer code: $d"
 # rule 18: no hand-drawn menu anywhere under script/ (also files with NO extension: the tools).  engine/ and settings/ own the look.
 d=$(python3 - "$F" <<'PYEOF'
 import os, re, sys

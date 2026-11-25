@@ -124,11 +124,11 @@ def run_screens():
         check("u twice goes back out of the repo and the repo list", a.alive and "Select" in a.text(), a)
     finally: a.close(); E.close()
 
-def two_lines(a, own, std="u) Back"):
-    """the screen's own keys and the standard keys (u q h cc) are on two different footer lines"""
+def two_lines(a, own, std="u) Up"):
+    """the standard keys (u q h cc) are the first footer line, the screen's own keys the line below it"""
     ls = a.text().split("\n")
     i = next((k for k, l in enumerate(ls) if own in l), None)
-    return i is not None and std not in ls[i] and any(std in l for l in ls[i + 1:i + 3])
+    return i is not None and std not in ls[i] and any(std in l for l in ls[max(0, i - 2):i])
 
 def run_others():
     """open.github.others: users (level 1, nothing fetched) -> one user's projects (level 2) -> a repo, READ ONLY.
@@ -142,14 +142,14 @@ def run_others():
         L(a, "1", until=lambda: "comma separated" in a.text()); L(a, "o,p,nobody", t=4, until=lambda: "GitHub others" in a.text())
         t = a.text()
         check("others: level 1 lists the USERS (no project of anyone is fetched or shown)", "3 user(s)" in t and "1) 👤 o" in t and "2) 👤 p" in t and "3) 👤 nobody" in t and "o/r" not in t and "bare" not in t and "read only" in t, a)
-        check("others: footer on two lines: 'c) Add users   x) Remove users' / 'u) Back ...'", two_lines(a, "c) Add users") and "x) Remove users" in a.text(), a)
+        check("others: footer on two lines: 'u) Up   q) Quit ...' / 'c) Add users   x) Remove users'", two_lines(a, "c) Add users") and "x) Remove users" in a.text(), a)
         saved = [os.path.join(d, f) for d, _, fs in os.walk(a.tmp) for f in fs if f == "others.txt"]
         check("others: the names are saved on this machine, one per line", bool(saved) and open(saved[0]).read().split() == ["o", "p", "nobody"], a)
         L(a, "3", t=4, until=lambda: "no such user" in a.text())
         check("others: an unknown user says so and stays on the user list", "no such user" in a.text() and "3 user(s)" in a.text(), a)
         L(a, "2", t=4, until=lambda: "project(s)" in a.text())
         check("others: level 2 shows only that user's projects, owner prefix dropped", "1 project(s)" in a.text() and "1) 📂 bare" in a.text() and "o/r" not in a.text(), a)
-        check("others: project list footer on two lines too", two_lines(a, "rf) Refresh"), a)
+        check("others: project list footer is the common u q h cc line, and rf (a general command) is not advertised", "u) Up   q) Quit   h) Home   cc) Cheat codes" in a.text() and "rf) Refresh" not in a.text(), a)
         L(a, "1", t=4, until=lambda: "[🌿 Branches]" in a.text())
         t = a.text()
         check("others: a repo with no tags / releases opens on its Branches tab: default first, marked", "(read only)" in t and t.index("main") < t.index("dev") and "default" in t, a)

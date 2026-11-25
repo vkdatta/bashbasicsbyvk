@@ -68,11 +68,11 @@ _tpl_def menu_list        slot ""      "the rows of a menu (the screen supplies 
 _tpl_def file_list        slot ""      "the rows of a file / folder list (the screen supplies the function that prints them)"
 # footer
 # data keys a screen may set (not placeholders, no template names them):
-#   footer_items = the keys, space separated, bare keys or key:Label (default "u.up q.close"); a registered footer is  @name  (chrome style)
+#   footer_items = the keys, space separated, bare keys or key:Label (default "u.up q h:Home cc:Cheat_codes"); a registered footer is  @name  (chrome style)
 #   footer_style = row (one plain row, the default) | chrome (_mc_footer: advert registry, wrapping; items from _TPL_FOOTER_ARR)
 #   tab_name · tab_folder · count_total = the tabbed menu's data (_tm_head sets them)
 # A screen whose keys come from the chrome calls  _tpl_footer ID item...  (one call: style chrome + the items)
-_tpl_def footer_commands  fn   _tpl_p_footer_commands  "the keys row: u) Up   q) Close ... (bare keys take their label from _MC_KEYLABEL)"
+_tpl_def footer_commands  fn   _tpl_p_footer_commands  "the keys row: u) Up   q) Quit   h) Home   cc) Cheat codes (bare keys take their label from _MC_KEYLABEL)"
 _tpl_def footer_note      slot ""      "a note row under the keys (a screen supplies the function that prints it)"
 _tpl_def menu_suggestions slot ""      "the suggestion rows (what the typed text would do)"
 _tpl_def footer_acceptor  prompt "Select:" "the word at the prompt"
@@ -105,7 +105,7 @@ _tpl_p_pick_note() {
 }
 # the keys row. row: one line, the same words as _mc_footer prints (labels from _MC_KEYLABEL) · chrome: _mc_footer itself
 _tpl_p_footer_commands() {
-  local items="${_TPL_VAL[footer_items]:-u.up q.close}" style="${_TPL_VAL[footer_style]:-row}" it line="" cell
+  local items="${_TPL_VAL[footer_items]:-u.up q h:Home cc:Cheat_codes}" style="${_TPL_VAL[footer_style]:-row}" it line="" cell
   if [ "$style" = chrome ]; then
     local -a _tp_arr=(); [ -n "${_TPL_FOOTER_ARR[*]+x}" ] && _tp_arr=("${_TPL_FOOTER_ARR[@]}") || read -r -a _tp_arr <<< "$items"
     _mc_footer "${_tp_arr[@]}"; return 0

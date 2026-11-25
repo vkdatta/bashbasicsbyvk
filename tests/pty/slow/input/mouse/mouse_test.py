@@ -395,13 +395,13 @@ case('footer: a double tap on the label runs the key', t_ftr_gap)
 
 def t_ftr_settings(a):
     open_screen(a, 's')
-    r = a.row_of(r'^\s*u\) Back'); a.click(r, col=5, t=0.05); a.click(r, col=5, t=1.5)
-    return a.alive and 'Settings' not in a.text().split('Select:')[-1] and a.row_of(r'^\s*1\) Display') is None, 'double tap on u) Back in Settings must close it'
-case('Settings footer: double tap u) Back leaves Settings', t_ftr_settings, nfiles=20)
+    r = a.row_of(r'^\s*u\) Up'); a.click(r, col=5, t=0.05); a.click(r, col=5, t=1.5)
+    return a.alive and 'Settings' not in a.text().split('Select:')[-1] and a.row_of(r'^\s*1\) Display') is None, 'double tap on u) Up in Settings must close it'
+case('Settings footer: double tap u) Up leaves Settings', t_ftr_settings, nfiles=20)
 
 def t_ftr_settings_single(a):
     open_screen(a, 's')
-    r = a.row_of(r'^\s*u\) Back'); a.click(r, col=5, t=1.0)
+    r = a.row_of(r'^\s*u\) Up'); a.click(r, col=5, t=1.0)
     return a.alive and a.row_of(r'^\s*1\) Display') is not None, 'ONE tap on a Settings footer key must do nothing'
 case('Settings footer: a single tap does nothing', t_ftr_settings_single, nfiles=20)
 
@@ -483,7 +483,7 @@ def t_cell_scan(a):
     xs = [cell(L, 1) == 'key=u', cell(L, 5) == 'key=u', cell(L, 10) == 'key=cd', cell(L, 33) == 'key=q', cell(L, 70) == 'none',
           cell('x-N) nuke   rf) refresh', 4) == 'key=x-N', cell('N) open   u) back', 20) == 'key=u',
           cell('Type 1-8, then enter to choose   =) Filter', 5) == 'none', cell('Type 1-8, then enter to choose   =) Filter', 38) == 'key==',
-          cell('u) Back to main menu   q) Close   ↑↓) Move', 38) == 'key=q' or True]
+          cell('u) Up   q) Quit   h) Home   cc) Cheat codes', 38) == 'key=q' or True]
     return all(xs) and a.alive, 'footer cell hit-test: %s' % xs
 case('footer cell scanner finds the key under the touch', t_cell_scan)
 def t_ftr_tap_kinds(a):

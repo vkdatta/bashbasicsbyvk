@@ -2,7 +2,7 @@
 #   📄 Version selected: v0.0.149
 #   0) Install   1) Info        u) Up   q) Quit   h) Home
 # It reuses the upgrade loop's own pieces (_upg_do_install, _upg_info_one, _upg_fetch_commit), the menu chrome (_mc_*)
-# and the file menu's footer (@file_menu), so nothing is written twice.
+# and the file menu's footer (@std_nav), so nothing is written twice.
 # Install does not ask "Continue?": picking 0 here IS the confirmation. After a good install _upg_do_install ends the program (exit 0):
 # the running copy is the old version, so the next thing to do is start  o  again anyway.
 handle_version() {
@@ -11,7 +11,7 @@ handle_version() {
         _mc_header "📄 Version selected: $tag" \
                    "What would you like to do with the version?"
         _mc_options 0 "Install" "Info"
-        _tpl_footer YWW6WZ @file_menu
+        _tpl_footer YWW6WZ @std_nav
 
         _bvk_read action "${_TPL_ACCEPTOR} " || return 1          # EOF (the terminal closed): leave, never spin on "invalid"
 

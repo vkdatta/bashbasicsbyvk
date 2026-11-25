@@ -13,7 +13,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #      3) [ ] Cancel
 #        ─────────────────────────────
 #
-#     u) Back   q) Close
+#     u) Up   q) Quit   h) Home   cc) Cheat codes
 #     y) Yes   n) No   c/x) Cancel
 #     Select:
 #
@@ -280,7 +280,7 @@ _bvk_menu() {
   fi
 
   # the footer: u / q always; the answer keys are DECLARED by _bc_cmd --cc (advert.sh prints what the budget buys)
-  local _st_f1_custom="" _st_f2_custom="" _st_icon="$_bc_icon" _st_crumb="" _st_verb="choose"
+  local _st_icon="$_bc_icon" _st_crumb="" _st_verb="choose"
   local _st_choice=1 _st_radio_follow=0; (( _bc_multi )) || _st_radio_follow=1   # [o] follows the highlight in a one-of-many menu
 
   # the keys this box prints are ITS answers (the live hint row and the command layer must not read them as commands)

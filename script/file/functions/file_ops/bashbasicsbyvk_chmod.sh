@@ -115,7 +115,7 @@ chm_row() {
   printf -v _vp_line ' %*d) %s%s  %s %s %s' "$_CHM_DW" "$i" "$name" "$pad" "${cells[0]}" "${cells[1]}" "${cells[2]}"
 }
 chm_header() { _tm_head -n "$_CHM_MSG" chm; }            # template V3PX4Y (CHMOD|owner · CHMOD|group · CHMOD|others)
-chm_footer() { _tm_footer -b; }                          # u q h cc: every other key is listed by cc
+chm_footer() { _tm_footer; }                          # u q h cc: every other key is listed by cc
 
 # ── the cell cursor: ← → ↑ ↓ and the tap (hooks of the shared prompt, set for this screen only) ──────────────
 _chm_cell_set() {            # ROW COL ("" = the row alone): the highlight, the line and the underlined cell follow
