@@ -49,13 +49,6 @@ YN = os.path.join(flat, 'bashbasicsbyvk_yn')
 for keys, want, what in (([b'y', b'\r'], 0, 'Yes'), ([b'n', b'\r'], 1, 'No'), ([b'\r', b'n', b'\r'], 1, 'a bare Enter is not an answer (then No)'), ([b'q', b'\r'], 2, 'q = no answer')):
     rc, o = run([YN, 'Make repository private?', '-t', 'Git push', '-i', '🚀'], keys)
     check('bashbasicsbyvk_yn: ' + what, rc == want and 'Select:' in o and 'Yes' in o and 'No' in o, (rc, o[-200:]))
-f = os.path.join(work, 'f.txt')
-for ans, left in ((b'n', 'data'), (b'y', '')):
-    open(f, 'w').write('data'); rc, o = run([os.path.join(flat, 'bashbasicsbyvk_erase'), 'f.txt'], [ans, b'\r'])
-    check('erase answers ' + ans.decode() + ' through the native menu', open(f).read() == left and 'Select:' in o and '(yes/no)' not in o, (rc, o[-200:]))
-for ans, exists in ((b'n', True), (b'y', False)):
-    open(f, 'w').write('x'); rc, o = run([os.path.join(flat, 'bashbasicsbyvk_delete'), 'f.txt'], [ans, b'\r'])
-    check('delete answers ' + ans.decode() + ' through the native menu', os.path.exists(f) == exists and 'Select:' in o and "Type 'yes'" not in o, (rc, o[-200:]))
 src = open(os.path.join(SCRIPT, 'file/infinity/tools/bashbasicsbyvk_gitpush.sh')).read()
 check('git push asks yes/no with the app menu (_bvk_yn), not a door of its own', '_bvk_yn ans "$1"' in src and 'bashbasicsbyvk_yn' not in src)
 # 3. lint: a plain y/n prompt only next to the native menu

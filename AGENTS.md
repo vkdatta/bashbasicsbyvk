@@ -114,7 +114,7 @@ So before you create anything, work in this order:
    The only exception is `corpus/` (rule 5): it sits at the repo root, is not installed, and its
    notes are named by timestamp (inside year/month/day folders), not `bashbasicsbyvk_`.
 2. **`_3bvk_` is reserved for import files of stand-alone tools.** An import file is a `.sh` whose only job is to `source` other files,
-   named `_3bvk_import_<topic>.sh` (e.g. `_3bvk_import_cmd_delete.sh`). The app itself has none: `o` loads through the load mapper (rule 13). Nothing else may start with `_3bvk_`
+   named `_3bvk_import_<topic>.sh` (e.g. `_3bvk_import_cmd_copy.sh`). The app itself has none: `o` loads through the load mapper (rule 13). Nothing else may start with `_3bvk_`
    — no helpers, libs, python modules or tools. Use `bashbasicsbyvk_` for those.
 3. **`source` (and `.`) is allowed only in `o` (one line: the loader), in the loader `bashbasicsbyvk_loadmap.sh` (the one `source` that loads the app's files) and in the import files of stand-alone tools.** No other file may source anything:
    not libs, not other scripts, not config files. This keeps the dependency graph in one place and free of cycles.

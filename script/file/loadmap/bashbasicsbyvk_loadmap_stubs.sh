@@ -142,6 +142,13 @@ create_files() { _lm_stub bashbasicsbyvk_create.sh create_files "$@"; }
 create_dirs() { _lm_stub bashbasicsbyvk_create.sh create_dirs "$@"; }
 handle_create() { _lm_stub bashbasicsbyvk_create.sh handle_create "$@"; }
 delete_items() { _lm_stub bashbasicsbyvk_delete.sh delete_items "$@"; }
+_fa_delete() { _lm_stub bashbasicsbyvk_fileact.sh _fa_delete "$@"; }
+_fae_confirm() { _lm_stub bashbasicsbyvk_fileact.sh _fae_confirm "$@"; }
+_fae_backup() { _lm_stub bashbasicsbyvk_fileact.sh _fae_backup "$@"; }
+_fa_erase() { _lm_stub bashbasicsbyvk_fileact.sh _fa_erase "$@"; }
+_fa_clip_cmd() { _lm_stub bashbasicsbyvk_fileact.sh _fa_clip_cmd "$@"; }
+_fao_backup() { _lm_stub bashbasicsbyvk_fileact.sh _fao_backup "$@"; }
+_fa_overwrite() { _lm_stub bashbasicsbyvk_fileact.sh _fa_overwrite "$@"; }
 _sync_shortcuts_for_rename() { _lm_stub bashbasicsbyvk_rename.sh _sync_shortcuts_for_rename "$@"; }
 _rn_defer_begin() { _lm_stub bashbasicsbyvk_rename.sh _rn_defer_begin "$@"; }
 _rn_flush_deferred() { _lm_stub bashbasicsbyvk_rename.sh _rn_flush_deferred "$@"; }

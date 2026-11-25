@@ -40,6 +40,7 @@ bashbasicsbyvk_home.sh|||tool, run as its own process
 bashbasicsbyvk_refresh.sh|||stand-alone command, run as its own process
 bashbasicsbyvk_create.sh|||tool, run as its own process
 bashbasicsbyvk_delete.sh|||tool, run as its own process
+bashbasicsbyvk_fileact.sh|||the file menu's Delete File / Erase Content / Replace With Clipboard Content, native to the app
 bashbasicsbyvk_rename.sh|||tool, run as its own process
 bashbasicsbyvk_find.sh|||tool, run as its own process
 bashbasicsbyvk_findrun.sh|||tool, run as its own process
@@ -184,9 +185,6 @@ bashbasicsbyvk_csurf.sh|||cs: cloud surf
 bashbasicsbyvk_ai.sh|||.ai commands
 bashbasicsbyvk_gdrive.sh|bashbasicsbyvk_run.sh,bashbasicsbyvk_transfer.sh,bashbasicsbyvk_staging_archive.sh,bashbasicsbyvk_staging_helpers.sh,bashbasicsbyvk_staging_upload.sh,bashbasicsbyvk_staging_ux.sh,bashbasicsbyvk_staging_buffer.sh,bashbasicsbyvk_carry.sh||Google Drive session layer: wraps native functions, only inert until gd is used
 _3bvk_import_cmd_copy.sh|||import file of a stand-alone tool (its own process, never loaded by o)
-_3bvk_import_cmd_delete.sh|||import file of a stand-alone tool (its own process, never loaded by o)
-_3bvk_import_cmd_erase.sh|||import file of a stand-alone tool (its own process, never loaded by o)
-_3bvk_import_cmd_overwrite.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_deps.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_ask.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_yn.sh|||import file of a stand-alone tool (its own process, never loaded by o)
@@ -201,10 +199,8 @@ bashbasicsbyvk_cfwp_pages.py|||python helper, run as a process
 bashbasicsbyvk_cmdmap_guide.txt|||data / text
 bashbasicsbyvk_copy|||stand-alone command, run as its own process
 bashbasicsbyvk_create|||stand-alone command, run as its own process
-bashbasicsbyvk_delete|||stand-alone command, run as its own process
 bashbasicsbyvk_deps.list|||data
 bashbasicsbyvk_deps.py|||python helper, run as a process
-bashbasicsbyvk_erase|||stand-alone command, run as its own process
 bashbasicsbyvk_fav_lib.py|||python helper, run as a process
 bashbasicsbyvk_track_lib.py|||python helper of the local daemon, run as a process (the twin of bashbasicsbyvk_track.sh)
 bashbasicsbyvk_find.map|||command-map wiring, read as data
@@ -249,7 +245,6 @@ bashbasicsbyvk_menus.list|||data
 bashbasicsbyvk_tidy.list|||data: the template ID of every menu (bashbasicsbyvk_tidy_gen)
 bashbasicsbyvk_open|||stand-alone command, run as its own process
 bashbasicsbyvk_organise.map|||command-map wiring, read as data
-bashbasicsbyvk_overwrite|||stand-alone command, run as its own process
 bashbasicsbyvk_imgview|||tool, run as its own process: Run on an image draws it in the terminal (half-blocks, Pillow)
 bashbasicsbyvk_pending.map|||command-map wiring, read as data
 bashbasicsbyvk_polyglot|||tool, run as its own process

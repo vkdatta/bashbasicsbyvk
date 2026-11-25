@@ -3,7 +3,7 @@
 #
 #   _bk_guard <action> <item>...    call it right before the change.   return 0 = go ahead · 1 = do NOT go on · 6 = u at the first question (go back one step)
 #                                   <action> is a key of _ACT_DESTRUCTIVE (bashbasicsbyvk_recovery.sh): a non-destructive action returns 0 at once.
-#   _bk_before_delete <item>...     = _bk_guard delete   (the old name; the lock gate and the stand-alone delete command still call it)
+#   _bk_before_delete <item>...     = _bk_guard delete   (the old name; the lock gate still calls it)
 #
 # Settings → File API → Backup:
 #   Backup type            No Backup · Offline · Both Offline and FileAPI (default) · FileAPI.   A free user always gets Offline (except No Backup).
@@ -100,37 +100,22 @@ _bk_fileapi_backup() {
   esac
 }
 
-# ── the questions work INSIDE  o  (the app's own menus) and in a STAND-ALONE command (delete / erase / overwrite run as their own process:
-#    the yes/no and ask DOORS, whose -b makes u one question back).  Same answers either way.
+# ── the questions: the app's own menus (u = one question back inside _mc_steps)
 # _bkd_q VAR "question" [-c] [-t title] [-i icon] → 0 answered (VAR = y | n | c) · 1 u (back) · 3 cancelled
 _bkd_q() {
-  local _v="$1" _q="$2" _rc; shift 2
-  if declare -F _bvk_yn >/dev/null 2>&1; then
-    printf -v "$_v" ''
-    _bvk_yn "$_v" "$_q" -d none "$@" && { [ "${_CM_ABORT:-0}" = 1 ] && return 3; return 0; }
-    _bvk_back && return 1
-    return 3
-  fi
-  bashbasicsbyvk_yn "$_q" "$@" -b; _rc=$?
-  case "$_rc" in 0) printf -v "$_v" y; return 0 ;; 1) printf -v "$_v" n; return 0 ;; 4) return 1 ;; esac
+  local _v="$1" _q="$2"; shift 2
+  printf -v "$_v" ''
+  _bvk_yn "$_v" "$_q" -d none "$@" && { [ "${_CM_ABORT:-0}" = 1 ] && return 3; return 0; }
+  _bvk_back && return 1
   return 3
 }
 # _bkd_line VAR "prompt" → 0 answered · 1 u · 3 EOF / cancelled
 _bkd_line() {
-  local _v="$1" _p="$2" _t _rc
-  if declare -F _bvk_read >/dev/null 2>&1; then
-    _CM_BACKED=0
-    _bvk_read "$_v" "$_p" || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 1; }; return 3; }
-    [ "${_CM_ABORT:-0}" = 1 ] && return 3
-    return 0
-  fi
-  _t=$(bashbasicsbyvk_ask "$_p" -b); _rc=$?
-  case "$_rc" in
-    0) printf -v "$_v" '%s' "$_t"; return 0 ;;
-    4) return 1 ;;
-    3) read -e -r -p "$_p" _t || return 3; printf -v "$_v" '%s' "$_t"; return 0 ;;     # bvk-read-ok: fallback of a broken install (no bashbasicsbyvk_ask)
-  esac
-  return 3
+  local _v="$1" _p="$2"
+  _CM_BACKED=0
+  _bvk_read "$_v" "$_p" || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 1; }; return 3; }
+  [ "${_CM_ABORT:-0}" = 1 ] && return 3
+  return 0
 }
 
 # the steps of _bk_fileapi_backup (they share its locals action mode real a nm alias _bkd_skip): 0 answered · 1 u (back) · 3 cancelled · 5 not asked

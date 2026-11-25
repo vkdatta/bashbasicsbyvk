@@ -52,7 +52,7 @@ for typed, want in (('a-2', '1 3 4 5'), ('a', '1 2 3 4 5'), ('2-4', '2 3 4'), ('
 o = run('a=$(bashbasicsbyvk_choose "Pick" -d 1 "1:One" "2:Two"); echo "RC=$? ANS=[$a]"', ['cc\r', '2\r'])
 check('cc in a stand-alone door: no crash, still answers', 'command not found' not in o and 'RC=0 ANS=[2]' in o, o)
 # the force-push confirmation gate (action_confirm_key) in a tool with no _bvk_read: THE ask door types the number
-GATE = ('set -Eeuo pipefail; set +eu; source bashbasicsbyvk_menuchrome.sh 2>/dev/null; source _3bvk_import_cmd_delete.sh 2>/dev/null; set -eu; '
+GATE = ('set -Eeuo pipefail; set +eu; source bashbasicsbyvk_menuchrome.sh 2>/dev/null; source bashbasicsbyvk_action_confirm_key.sh 2>/dev/null; set -eu; '
         'rc=0; action_confirm_key "FINAL FORCE-PUSH CONFIRMATION" "destructive" || rc=$?; echo "GATE-RC=$rc"')
 for label, fn, want in (('right number', lambda k: k + '\r', 'GATE-RC=0'), ('wrong number', lambda k: '111111\r', 'GATE-RC=1'),
                         ('u is back', lambda k: 'u\r', 'GATE-RC=2'), ('q cancels', lambda k: 'q\r', 'GATE-RC=1')):

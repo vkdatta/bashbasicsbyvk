@@ -27,9 +27,9 @@ handle_file() {
             1) force_open "$file"; return 1 ;;
             2) _hf_tracked "$file" _hf_edit "$file"; return 1 ;;
             3) bashbasicsbyvk_copy "$file"; return 1 ;;
-            4) bashbasicsbyvk_delete "$file"; return 1 ;;
-            5) _hf_tracked "$file" bashbasicsbyvk_erase "$file"; return 1 ;;
-            6) _hf_tracked "$file" bashbasicsbyvk_overwrite "$file"; return 1 ;;
+            4) _fa_delete "$file"; return 1 ;;
+            5) _hf_tracked "$file" _fa_erase "$file"; return 1 ;;
+            6) _hf_tracked "$file" _fa_overwrite "$file"; return 1 ;;
             7) _RN_NEW_PATH=""; rename_item "$file"; [ -n "$_RN_NEW_PATH" ] && _rc_record "$_RN_NEW_PATH"; return 1 ;;
             8) force_share "$file"; return 1 ;;
             9) _lk_file_toggle "$file"; return 1 ;;

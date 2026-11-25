@@ -133,7 +133,7 @@ F|fileapi.snapshot|Snapshots (sn)|nodejs|
 F|auth|Sign in / link manager|curl nodejs|termux-tools termux-api
 F|api|API links (api)|python3|termux-api
 F|cmd.copy|Copy to the cloud clipboard (bashbasicsbyvk_copy)|curl nodejs|termux-tools termux-api
-F|cmd.overwrite|Overwrite from the clipboard (bashbasicsbyvk_overwrite)||termux-api
+F|cmd.overwrite|Replace With Clipboard Content (file menu)||termux-api
 F|cmd.sast|Static code scan (bashbasicsbyvk_sast)|python3|
 F|cmd.sys|System information (sys)|python3|
 F|telemetry|Usage ping|curl|
