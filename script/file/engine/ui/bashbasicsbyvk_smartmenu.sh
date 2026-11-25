@@ -871,7 +871,7 @@ _cm_read_fallback() {
       return "$__cmf_rc"
     fi
   fi
-  builtin read "$@"; __cmf_rc=$?
+  IFS="${_SMR_IFS-$IFS}" builtin read "$@"; __cmf_rc=$?      # the CALLER's IFS (read shim: IFS= read keeps the spaces), not the shim's
   _lt_enter "${!__cmf_v:-}" "" "$__cmf_lab"
   return "$__cmf_rc"
 }
@@ -944,6 +944,10 @@ read() {
     *-p*) ;;
     *) builtin read "$@"; return $? ;;
   esac
+
+  # `IFS= read -p ...` (_bvk_read -I) calls THIS function, so IFS is empty for everything below: every unquoted split (the width tables, `local $_BVK_ED_HOOKS` ...)
+  # broke ("16#: invalid integer constant").  The body runs with the default IFS; the caller's IFS goes only to the builtin read of the fallback (_SMR_IFS).
+  local _SMR_IFS="$IFS" IFS=$' \t\n'
 
   # locals here also snapshot the outer values, which makes
   # nested menus (a submenu opened from a menu) re-entrant

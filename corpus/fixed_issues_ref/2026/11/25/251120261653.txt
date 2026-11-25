@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Choosing "Remove rule" in the Recents exclude list (and any prompt asked with _bvk_read -I) printed "viewport.sh: line 75: 16#: invalid integer constant" and then "smartmenu.sh: line 817: local: ... not a valid identifier", and the prompt did not work properly.
+
+HOW DID YOU DEBUG
+Drove the real app in a pty (tests/pty/lib/ptyapp.py: sw, xe, then 2 with two rules in recents_exclude.conf) on the ORIGINAL archive and on the patched one: the error appears in both, so it is not from the choose.sh change (BB-251120261625-1). Reproduced the message in plain bash by calling _vp_cpw with IFS empty. Read _bvk_read: with -I it runs `IFS= read ...`, and `read` is a shell function (the read shim), so the temporary IFS= applies to the whole function body. After the fix: no error, the prompt shows, typing 1 removed rule 1 from the file. bash tests/run.sh once: 12/12 passed. Termux itself was not run.
+
+CAUSE
+`IFS= read` calls the read shim FUNCTION, so IFS is empty for everything the shim does: the unquoted splits in _vp_in_set (width table) and `local $_BVK_ED_HOOKS` (smartmenu.sh) gave one giant word instead of many.
+
+FIX
+smartmenu.sh read(): after the fast path, `local _SMR_IFS="$IFS" IFS=$' \t\n'` so the body runs with the default IFS; _cm_read_fallback's builtin read uses `IFS="${_SMR_IFS-$IFS}"` so a plain `IFS= read` still keeps its spaces. viewport.sh _vp_in_set: `local IFS=$' \t\n'` (belt and braces; it is called from many places). Lesson: `IFS= read` on a function leaks IFS into the function; never rely on a caller's IFS in a function that splits an unquoted list.

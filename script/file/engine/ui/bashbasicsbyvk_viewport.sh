@@ -70,7 +70,7 @@ _bvk_is_ascii() { local LC_ALL=C; [[ "$1" != *[!\ -~]* ]]; }
 _VP_TEXT_EMOJI=" 1F321 1F324-1F32C 1F336 1F37D 1F396-1F397 1F399-1F39B 1F39E-1F39F 1F3CB-1F3CE 1F3D4-1F3DF 1F3F3 1F3F5 1F3F7 1F43F 1F441 1F4FD 1F549-1F54A 1F56F-1F570 1F573-1F579 1F587 1F58A-1F58D 1F590 1F5A5 1F5A8 1F5B1-1F5B2 1F5BC 1F5C2-1F5C4 1F5D1-1F5D3 1F5DC-1F5DE 1F5E1 1F5E3 1F5E8 1F5EF 1F5F3 1F5FA 1F6CB 1F6CD-1F6CF 1F6E0-1F6E5 1F6E9 1F6F0 1F6F3 "
 _VP_WIDE_BMP=" 231A-231B 23E9-23EC 23F0 23F3 25FD-25FE 2614-2615 2648-2653 267F 2693 26A1 26AA-26AB 26BD-26BE 26C4-26C5 26CE 26D4 26EA 26F2-26F3 26F5 26FA 26FD 2705 270A-270B 2728 274C 274E 2753-2755 2757 2795-2797 27B0 27BF 2B1B-2B1C 2B50 2B55 "
 _vp_in_set() {   # $1 codepoint (decimal)  $2 space list of HEX or HEX-HEX  -> 0 when inside
-  local cp=$1 r lo hi
+  local cp=$1 r lo hi IFS=$' \t\n'          # the table is split on blanks whatever the caller's IFS is: `IFS= read` runs the read SHIM (a function), so IFS was empty here and  16#  was an invalid integer
   for r in $2; do
     lo=$(( 16#${r%-*} )); hi=$(( 16#${r#*-} ))
     (( cp >= lo && cp <= hi )) && return 0
