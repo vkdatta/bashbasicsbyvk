@@ -30,11 +30,17 @@ _sw_excl_ensure() {
     cat > "$_RC_EXCLUDE_FILE" << 'EXCL_TEMPLATE'
 # recents_exclude.conf — files/folders to hide from recents
 #
-# Syntax:  <type>  <value>
-#   filename   NAME      — hides NAME everywhere (any directory)
-#   foldername NAME      — hides everything inside any folder named NAME
-#   filepath   /abs/path — hides this exact file only
-#   dirpath    /abs/path — hides everything under this directory
+# Syntax:  <type>  <value>        (the xe screen writes these for you)
+#   filename             NAME      — file named exactly NAME, in any directory
+#   filename-contains    TEXT      — file whose name contains TEXT
+#   filename-starts      TEXT      — file whose name starts with TEXT
+#   filename-ends        TEXT      — file whose name ends with TEXT
+#   filepath             /abs/path — this exact file only
+#   foldername           NAME      — everything inside any folder named exactly NAME
+#   foldername-contains  TEXT      — ... any folder whose name contains TEXT
+#   foldername-starts    TEXT      — ... any folder whose name starts with TEXT
+#   foldername-ends      TEXT      — ... any folder whose name ends with TEXT
+#   dirpath              /abs/path — everything under this directory
 #
 # Examples:
 #   filename   .env
@@ -47,96 +53,82 @@ EXCL_TEMPLATE
   fi
 }
 
-# Print a numbered, human-readable view of active (non-comment) exclude rules
-_sw_excl_list() {
+# Read the active (non-comment) rules into three parallel arrays: kind, value, line number in the file.
+# _sw_excl_rows then turns them into the display rows the screens show (_SW_XROW), so no screen prints its own list.
+declare -ga _SW_XK=() _SW_XV=() _SW_XLN=() _SW_XROW=()
+_sw_excl_load() {
   _sw_excl_ensure
-  local idx=0 line kind value
-  echo "━━━ Exclude rules ($( grep -cv '^\s*#\|^\s*$' "$_RC_EXCLUDE_FILE" 2>/dev/null || echo 0 ) active) ━━━"
-  while IFS= read -r line; do
+  _SW_XK=(); _SW_XV=(); _SW_XLN=(); _SW_XROW=()
+  local line kind value lineno=0 lab
+  while IFS= read -r line || [ -n "$line" ]; do
+    lineno=$(( lineno + 1 ))
     [[ "$line" =~ ^[[:space:]]*# || -z "${line// }" ]] && continue
-    idx=$(( idx + 1 ))
     read -r kind value <<< "$line"
-    case "$kind" in
-      filename)   printf '  %2d)  📄 filename   %s\n'  "$idx" "$value" ;;
-      foldername) printf '  %2d)  📁 foldername %s\n'  "$idx" "$value" ;;
-      filepath)   printf '  %2d)  🔒 filepath   %s\n'  "$idx" "$value" ;;
-      dirpath)    printf '  %2d)  🚫 dirpath    %s\n'  "$idx" "$value" ;;
-      *)          printf '  %2d)  ❓ %-10s %s\n' "$idx" "$kind" "$value" ;;
-    esac
+    _SW_XK+=("$kind"); _SW_XV+=("$value"); _SW_XLN+=("$lineno")
+    lab="$(_rc_excl_label "$kind")" || lab="❓ $kind"
+    _SW_XROW+=("$lab $value")
   done < "$_RC_EXCLUDE_FILE"
-  [ "$idx" -eq 0 ] && echo "  (no rules yet)"
 }
 
-# Add one rule interactively
+# Add one rule: question 1 = Exclude What? (kind of rule), question 2 = the text for that kind.
 _sw_excl_add() {
   _sw_excl_ensure
-  local t_choice kind
-  _bvk_menu t_choice -t "Add exclude rule" -i "🚫" \
-    "1:filename — hide a filename everywhere" \
-    "2:foldername — hide a folder name everywhere (universal)" \
-    "3:filepath — hide one exact file" \
-    "4:dirpath — hide an entire directory tree" || { echo "↩️  Back"; return 0; }      # u / q = back out (AGENTS rule 6: a fixed-answer question is a _bvk_menu)
-  case "$t_choice" in
-    1) kind="filename"   ;;
-    2) kind="foldername" ;;
-    3) kind="filepath"   ;;
-    4) kind="dirpath"    ;;
+  local pick kind lab value what
+  _bvk_menu pick -t "Exclude What?" -i "🚫" -n \
+    "@h:For files" \
+    "1:filename contains" "2:filename equals" "3:filename from path" "4:filename starts with" "5:filename ends with" \
+    "@h:For folders (everything inside is hidden too)" \
+    "6:foldername contains" "7:foldername equals" "8:foldername from path" "9:foldername starts with" "10:foldername ends with" \
+    || { echo "↩️  Back"; return 0; }      # u / q = back out (AGENTS rule 6: a fixed-answer question is a _bvk_menu)
+  case "$pick" in
+    1) kind="filename-contains"   ; what="Name contains" ;;
+    2) kind="filename"            ; what="Exact name" ;;
+    3) kind="filepath"            ; what="Full path of the file" ;;
+    4) kind="filename-starts"     ; what="Name starts with" ;;
+    5) kind="filename-ends"       ; what="Name ends with" ;;
+    6) kind="foldername-contains" ; what="Name contains" ;;
+    7) kind="foldername"          ; what="Exact name" ;;
+    8) kind="dirpath"             ; what="Full path of the folder" ;;
+    9) kind="foldername-starts"   ; what="Name starts with" ;;
+    10) kind="foldername-ends"    ; what="Name ends with" ;;
     *) echo "Cancelled."; return 0 ;;
   esac
-  local value
-  _bvk_read value "Value: " -I
-  value="${value// /}"          # strip leading/trailing spaces
+  lab="$(_rc_excl_label "$kind")"
+  echo
+  echo "🚫 Exclude What? › ${lab#* }"
+  _bvk_read value "$what: " -I || return 0
+  value="${value#"${value%%[![:space:]]*}"}"; value="${value%"${value##*[![:space:]]}"}"      # trim the ends, keep spaces inside a name
   [ -z "$value" ] && { echo "Cancelled — empty value."; return 0; }
-  # For filepath/dirpath: resolve ~ and make absolute if path-like
-  if [[ "$kind" == filepath || "$kind" == dirpath ]]; then
-    value="${value/#\~/$HOME}"  # expand leading ~
-  fi
-  # Duplicate check
-  if grep -qE "^\s*${kind}\s+${value}\s*$" "$_RC_EXCLUDE_FILE" 2>/dev/null; then
-    echo "📜  Rule already exists: $kind  $value"
+  case "$kind" in
+    filepath|dirpath)
+      value="${value/#\~/$HOME}"                                                              # ~ → home; a relative path is taken from here
+      [[ "$value" == /* ]] || value="$PWD/$value" ;;
+    *) [[ "$value" == */* ]] && { echo "🔴  A name has no / in it. Use \"from path\" for a place."; return 0; } ;;
+  esac
+  if grep -qxF -- "$kind  $value" "$_RC_EXCLUDE_FILE" 2>/dev/null; then
+    echo "📜  Rule already exists: ${lab#* } $value"
     return 0
   fi
   printf '%s  %s\n' "$kind" "$value" >> "$_RC_EXCLUDE_FILE"
-  echo "💫 Added: $kind  $value"
+  echo "💫 Added: ${lab#* } $value"
   echo "   (applies at once)"
 }
 
-# Remove rule(s) by number (shown via _sw_excl_list)
+# Remove rules, one at a time: the list stays open until it is empty or the person goes back with u.
 _sw_excl_remove() {
-  _sw_excl_ensure
-  _sw_excl_list
-  local total
-  total=$( grep -cv '^\s*#\|^\s*$' "$_RC_EXCLUDE_FILE" 2>/dev/null || echo 0 )
-  [ "$total" -eq 0 ] && return 0
-  local nums
-  _bvk_read nums "Remove rule number(s) (e.g. 1 or 1 3 5), or Enter to cancel: " -I
-  [ -z "$nums" ] && { echo "Cancelled."; return 0; }
-  # Build list of 1-based indices to delete (sorted descending so sed line
-  # numbers stay stable as we delete)
-  local sorted_nums
-  sorted_nums=$(echo "$nums" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -rn)
-  if [ -z "$sorted_nums" ]; then echo "🔴  No valid numbers."; return 0; fi
-  # Map rule numbers → actual file line numbers
-  local line_nums=()
-  local idx=0 lineno=0 line
-  while IFS= read -r line; do
-    lineno=$(( lineno + 1 ))
-    [[ "$line" =~ ^[[:space:]]*# || -z "${line// }" ]] && continue
-    idx=$(( idx + 1 ))
-    for n in $sorted_nums; do
-      [ "$n" -eq "$idx" ] && line_nums+=( "$lineno" )
-    done
-  done < "$_RC_EXCLUDE_FILE"
-  if [ "${#line_nums[@]}" -eq 0 ]; then echo "🔴  No matching rules."; return 0; fi
-  # Delete lines from file (descending order keeps line numbers valid)
-  local tmp
-  tmp=$(mktemp)
-  cp "$_RC_EXCLUDE_FILE" "$tmp"
-  for ln in $(echo "${line_nums[@]}" | tr ' ' '\n' | sort -rn); do
-    sed -i "${ln}d" "$_RC_EXCLUDE_FILE"
+  local pick i
+  while true; do
+    _sw_excl_load
+    if [ "${#_SW_XK[@]}" -eq 0 ]; then echo "No rules to remove."; return 0; fi
+    local -a items=()
+    for i in "${!_SW_XROW[@]}"; do items+=("$(( i + 1 )):${_SW_XROW[$i]}"); done
+    _bvk_menu pick -t "Remove from exclude list" -i "🚫" -n ${items[@]+"${items[@]}"} || return 0       # u = back to the exclude list, q = quit (the caller reads _bvk_back)
+    [[ "$pick" =~ ^[0-9]+$ ]] || return 0
+    i=$(( pick - 1 ))
+    [ -n "${_SW_XLN[$i]:-}" ] || return 0
+    sed -i "${_SW_XLN[$i]}d" "$_RC_EXCLUDE_FILE"
+    echo "🗑️  Removed: ${_SW_XROW[$i]}"
   done
-  rm -f "$tmp"
-  echo "🗑️  Removed ${#line_nums[@]} rule(s)."
 }
 
 # Open the config file in $EDITOR / nano / vi
@@ -151,21 +143,22 @@ _sw_excl_edit() {
   echo "   (applies at once)"
 }
 
-# Main exclude manager — called by 'xe' inside recents tab
+# Main exclude manager — called by 'xe' inside recents tab.  ONE screen: the rules, then the three actions (a add · r remove · e edit).
 _sw_excl_menu() {
   local xc
+  local -a rows
   while true; do
-    echo
-    echo "🚫 RECENTS EXCLUDE LIST"
-    _sw_excl_list
+    _sw_excl_load
+    rows=(); local i; for i in "${!_SW_XROW[@]}"; do rows+=(-r "${_SW_XROW[$i]}"); done
     # THE native choice menu (rule 18): u = back to recents, q = quit
-    if ! _bvk_menu xc -t "Recents exclude list" -i "🚫" -q "What now?" -n "a:Add rule" "x:Remove rule" "e:Edit file"; then
+    if ! _bvk_menu xc -t "Exclude List for Recents" -i "🚫" -k -n -e "(no rules yet)" ${rows[@]+"${rows[@]}"} \
+         "a|add:Add rule" "r|remove:Remove rule" "e|edit:Edit file"; then
       _bvk_back && { echo "↩️  Back to recents"; return 0; }
       _bvk_quit; return 0
     fi
     case "$xc" in
       a)  _sw_excl_add    ;;
-      x)  _sw_excl_remove ;;
+      r)  _sw_excl_remove ;;
       e)  _sw_excl_edit   ;;
     esac
   done

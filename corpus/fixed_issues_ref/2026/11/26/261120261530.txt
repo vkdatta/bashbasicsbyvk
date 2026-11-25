@@ -1,0 +1,18 @@
+1. ISSUE IN BRIEF
+The Recents exclude screen (xe in the Switch tab) printed an old-style header, a separate rules list and a generic "What now?" menu; Add rule offered only four rule kinds in one question, and Remove rule printed the rules twice (a list plus a numbered pick) with a typed-numbers prompt.
+The wanted look is one screen: title, description, the rules, the three actions with a second footer line (a) add r) remove e) edit); Add rule becomes a question chain (Exclude What? with ten file/folder choices, then the text); Remove is a plain numbered pick list.
+
+HOW DID YOU DEBUG
+Read switch.sh (_sw_excl_*), choose.sh (_bvk_menu), settings_ui.sh (_st_draw, row kinds) and the template files (YWW6WZ step menu / 373QS6 settings list). Reused the existing template: _bvk_menu already draws through 373QS6; no new template was needed.
+Ran bash tests/run.sh once (static): 12/12 OK. pty: needed to see the rendered layout; drove xe, Add (kinds 7, 2, 1 with a "/" value), Remove (twice, u) with a throw-away pty script and read the screens. Unit-checked the new matcher kinds with a small shell script (hidden / shown cases). Not run: pty slow, the full pty fast tier.
+
+CAUSE
+_bvk_menu could only show choices; it had no way to show a display-only list above them, no headings, and typed answer keys only for yes/no boxes, so the screen printed its list by hand (_sw_excl_list) before the menu. Remove had its own typed-number prompt. Rule kinds were limited to equals / path.
+
+FIX
+settings_ui.sh: new display-only row kinds i (info row, own number) and s (rule line); _st_selectable, the filter and the draw loop know them.
+choose.sh: _bvk_menu takes -r ROW (info rows + rule), -e NOTE (empty note), "@h:Heading" items, and -k on a numbered menu now also takes the typed keys and prints them in the second footer line as key) first-word (a) add).
+settings_desc.sh: texts for "Exclude List for Recents", "Exclude What?", "Remove from exclude list" (rule 8).
+track.sh: _rc_excl_label (ONE table of rule kinds) and matcher support for filename-contains/-starts/-ends and foldername-contains/-starts/-ends; old kinds (filename, foldername, filepath, dirpath) unchanged, so existing rule files keep working.
+switch.sh: _sw_excl_load/_sw_excl_rows replace _sw_excl_list; _sw_excl_menu is one _bvk_menu screen; _sw_excl_add asks Exclude What? then the text (trims ends only, rejects "/" in a name, makes paths absolute, exact duplicate check); _sw_excl_remove is a pick-one list that stays open until empty or u. Lesson: a list shown next to a menu is data for the menu (-r), never a separate print.
+Also: loadmap stubs regenerated, tidy.list got _sw_excl_remove (YWW6WZ).

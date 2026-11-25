@@ -255,6 +255,8 @@ _swlink_retarget() { _lm_stub bashbasicsbyvk_track.sh _swlink_retarget "$@"; }
 _swlink_heal() { _lm_stub bashbasicsbyvk_track.sh _swlink_heal "$@"; }
 _rc_load() { _lm_stub bashbasicsbyvk_track.sh _rc_load "$@"; }
 _rc_save() { _lm_stub bashbasicsbyvk_track.sh _rc_save "$@"; }
+_rc_excl_label() { _lm_stub bashbasicsbyvk_track.sh _rc_excl_label "$@"; }
+_rc_excl_dirpart() { _lm_stub bashbasicsbyvk_track.sh _rc_excl_dirpart "$@"; }
 _rc_excluded() { _lm_stub bashbasicsbyvk_track.sh _rc_excluded "$@"; }
 _rc_record() { _lm_stub bashbasicsbyvk_track.sh _rc_record "$@"; }
 _rc_dedupe() { _lm_stub bashbasicsbyvk_track.sh _rc_dedupe "$@"; }
@@ -411,6 +413,8 @@ handle_staging_view() { _lm_stub bashbasicsbyvk_staging_buffer.sh handle_staging
 _st_reset() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_reset "$@"; }
 _st_add() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_add "$@"; }
 _st_eq() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_eq "$@"; }
+_st_tab_step() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_tab_step "$@"; }
+_st_tab_bar_v() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_tab_bar_v "$@"; }
 _st_selectable() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_selectable "$@"; }
 _st_filter_rows() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_filter_rows "$@"; }
 _st_number() { _lm_stub bashbasicsbyvk_settings_ui.sh _st_number "$@"; }
@@ -743,7 +747,7 @@ _bvk_telemetry_ping() { _lm_stub bashbasicsbyvk_telemetry.sh _bvk_telemetry_ping
 _bvk_telemetry_start() { _lm_stub bashbasicsbyvk_telemetry.sh _bvk_telemetry_start "$@"; }
 _sw_ensure_store() { _lm_stub bashbasicsbyvk_switch.sh _sw_ensure_store "$@"; }
 _sw_excl_ensure() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_ensure "$@"; }
-_sw_excl_list() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_list "$@"; }
+_sw_excl_load() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_load "$@"; }
 _sw_excl_add() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_add "$@"; }
 _sw_excl_remove() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_remove "$@"; }
 _sw_excl_edit() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_edit "$@"; }

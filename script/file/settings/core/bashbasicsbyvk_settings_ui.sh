@@ -33,7 +33,8 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #         Settings → Search filter.
 #
 #  Row kinds   t checkbox [x]/[ ] (many can be on)   r radio [o]/[ ] (one is on)   a action ›   h heading
-#  (headings are not numbered)
+#              i info row (display only; VALUE = the number shown in front, "" = none)   s rule line (display only)
+#  (headings, info rows and rule lines are not numbered, never highlighted, never chosen)
 #  Optional, set by the caller as locals/globals before _st_run (bashbasicsbyvk_choose.sh uses all of them):
 #     _st_start_num                   number of the row the highlight starts on (default: none)
 #     _st_radio_follow=1              the [o] of a radio row follows the highlight instead of the stored state
@@ -78,7 +79,7 @@ _st_tab_bar_v() {
   printf -v "$1" '%s' "$_tb"
 }
 
-_st_selectable() { [ "${_st_kind[$1]:-h}" != "h" ]; }
+_st_selectable() { case "${_st_kind[$1]:-h}" in h|i|s) return 1 ;; esac; return 0; }   # h heading · i info row · s rule: shown, never numbered or chosen
 
 # "=" filter: keep only the rows whose label matches $fq (a local of _st_run).
 # Same rule as the file filter: partial = anywhere in the label, exact = label
@@ -92,6 +93,7 @@ _st_filter_rows() {
   if [ "$wide" = 1 ]; then xm=partial; q="${q//_/ }"; fi
   local -a k=() L=() V=() O=() T=()
   for (( i=0; i<n; i++ )); do
+    case "${_st_kind[$i]}" in i|s) k+=("${_st_kind[$i]}"); L+=("${_st_lbl[$i]}"); O+=(0); V+=("${_st_val[$i]}"); T+=(""); continue ;; esac    # display-only rows are not filtered
     if [ "${_st_kind[$i]}" = h ]; then
       hi=$i; hshown=0; hmatch=0
       l="${_st_lbl[$i]}"; l="${l,,}"
@@ -267,6 +269,13 @@ _st_draw() {
       line="    ── ${_st_lbl[$i]}"
       line="${line:0:cols-1}"
       _lst+=$'\033[2m'"$line"$'\033[0m\n'
+      continue
+    fi
+    if [ "${_st_kind[$i]}" = s ]; then _lst+="$_ST_RULE"$'\n'; continue; fi      # a rule between two blocks of rows
+    if [ "${_st_kind[$i]}" = i ]; then                                         # an info row: the number sits in the same column as the numbered rows below it
+      if [ -n "$val" ]; then printf -v line ' %2s) %s' "$val" "${_st_lbl[$i]}"
+      else printf -v line '     %s' "${_st_lbl[$i]}"; fi
+      _lst+="${line:0:cols-1}"$'\n'
       continue
     fi
     mark=""

@@ -127,7 +127,41 @@ _rc_save() {
     && mv -f -- "$tmp" "$_RC_FILE" || rm -f -- "$tmp"
 }
 
-# the recents_exclude.conf rules (xe in the Recents tab): filename · foldername · filepath · dirpath
+# the recents_exclude.conf rules (xe in the Recents tab).  ONE table of kinds: the matcher below, the xe screens and the rules file all read it.
+#   file rules    filename (equals) · filename-contains · filename-starts · filename-ends · filepath (from path)
+#   folder rules  foldername (equals) · foldername-contains · foldername-starts · foldername-ends · dirpath (from path)
+_rc_excl_label() {                     # KIND -> the words and icon a screen shows  (empty + rc 1 = not a kind)
+  case "${1,,}" in
+    filename)            echo "📄 filename equals" ;;
+    filename-contains)   echo "📄 filename contains" ;;
+    filename-starts)     echo "📄 filename starts with" ;;
+    filename-ends)       echo "📄 filename ends with" ;;
+    filepath)            echo "📄 filename from path" ;;
+    foldername)          echo "📁 foldername equals" ;;
+    foldername-contains) echo "📁 foldername contains" ;;
+    foldername-starts)   echo "📁 foldername starts with" ;;
+    foldername-ends)     echo "📁 foldername ends with" ;;
+    dirpath)             echo "📁 foldername from path" ;;
+    *) return 1 ;;
+  esac
+}
+
+_rc_excl_dirpart() {                   # KIND PATH VALUE: does the VALUE rule match a folder name above PATH (or PATH itself when it is a folder)?
+  local d part
+  if [ -d "$2" ]; then d="$2"; else d="${2%/*}"; fi
+  local -a parts=()
+  IFS=/ read -ra parts <<< "$d"
+  for part in "${parts[@]}"; do
+    [ -n "$part" ] || continue
+    case "$1" in
+      foldername-contains) [[ "$part" == *"$3"* ]] && return 0 ;;
+      foldername-starts)   [[ "$part" == "$3"* ]] && return 0 ;;
+      foldername-ends)     [[ "$part" == *"$3" ]] && return 0 ;;
+    esac
+  done
+  return 1
+}
+
 _rc_excluded() {                       # <abs path> → 0 when a rule hides it
   [ -r "$_RC_EXCLUDE_FILE" ] || return 1
   local p="$1" line kind val
@@ -139,6 +173,10 @@ _rc_excluded() {                       # <abs path> → 0 when a rule hides it
     [ -n "$val" ] || continue
     case "${kind,,}" in
       filename)   [ "${p##*/}" = "$val" ] && return 0 ;;
+      filename-contains) [[ "${p##*/}" == *"$val"* ]] && return 0 ;;
+      filename-starts)   [[ "${p##*/}" == "$val"* ]] && return 0 ;;
+      filename-ends)     [[ "${p##*/}" == *"$val" ]] && return 0 ;;
+      foldername-contains|foldername-starts|foldername-ends) _rc_excl_dirpart "${kind,,}" "$p" "$val" && return 0 ;;
       foldername) [[ "$p/" == *"/$val/"* ]] && return 0 ;;
       filepath)   [ "$p" = "${val/#\~/$HOME}" ] && return 0 ;;
       dirpath)    val="${val/#\~/$HOME}"; [[ "$p/" == "${val%/}/"* ]] && return 0 ;;
