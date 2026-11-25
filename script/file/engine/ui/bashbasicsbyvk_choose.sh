@@ -17,8 +17,9 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #     y) Yes   n) No   c/x) Cancel
 #     Select:
 #
-#  Answer by: a row number · a tap or click on a row (double tap = choose) · the arrows + Enter ·
-#  or the key printed in the second footer line (y n c x ...) + Enter.  u = back out, q = close up to the main loop.
+#  Answer by: a row number · a tap or click on a row (double tap = choose) · the arrows + Enter.  A yes/no box also takes the
+#  key printed in the second footer line (y n c x) + Enter; a pick-one / many-of-many box takes NO typed key words: its item
+#  keys (usd, sane, c, r ...) are only the value handed back to the caller, never typed or printed.  u = back out, q = close up to the main loop.
 #
 #  Marks (never mix them up):   [o] radio    = exactly ONE can be on   (the mark follows the highlight)
 #                               [x] checkbox = ANY number can be on    (Enter / Space / tap toggles)
@@ -32,9 +33,9 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #                      question that deletes or removes something uses  -d none  (a stray Enter never answers it either way).
 #                      -c  add the Cancel row (c or x)
 #     _bvk_menu VAR [-t Title] [-i Icon] [-q Question] [-d key] [-k] [-m] [-n] item...
-#                  item = key:Label  or  key|alt|alt:Label     (the first key is the answer; Label is shown)
+#                  item = key:Label  or  key|alt|alt:Label     (the first key is the answer handed back; Label is shown; keys are not typed by the person except in --yn boxes)
 #                  VAR = the key (-m: the keys, space separated, in row order)     rc 0 chosen · 1 backed out
-#                  -k  print the keys in a second footer line     -m  checkboxes (a Done row is added; d = done)
+#                  -k  (yes/no boxes only: the keys in a second footer line)     -m  checkboxes (a Done row is added; d = done)
 #                  -n  no receipt line after the choice
 #
 #  Where it cannot draw (no terminal, VK_SMART_MENUS=0, the Settings engine not loaded, a stand-alone tool) it asks the
@@ -83,6 +84,7 @@ _bc_wordrow() {
   local _bc_w="$1" _bc_j
   _ST_WORDNUM=-1
   (( _bc_multi )) && { _ST_WORDNUM=0; return 0; }
+  (( _bc_yn )) || return 0                  # a pick-one menu is answered by its row NUMBER only: its keys are return values, never typed words
   if _bc_index "$_bc_w"; then _ST_WORDNUM=$(( _bc_ix + 1 )); return 0; fi
   for _bc_j in "${!_bc_key[@]}"; do
     case " ${_bc_alt[$_bc_j]}" in *" $_bc_w"*) _ST_WORDNUM=0; return 0 ;; esac
@@ -158,6 +160,7 @@ _bc_cmd() {
   if [ "$_bc_t" = --cc ]; then          # the typed answers of this box, declared (the footer buys the first ones, cc lists all)
     local _bc_i _bc_k _bc_ks _bc_pr=90
     for _bc_i in "${!_bc_key[@]}"; do
+      (( _bc_yn )) || break                 # only yes/no declares typed answers (y n c x); every other box is answered by row number
       _bc_ks=""; for _bc_k in ${_bc_alt[$_bc_i]}; do (( ${#_bc_k} == 1 )) && { _bc_ks="$_bc_k"; break; }; done
       for _bc_k in ${_bc_alt[$_bc_i]}; do echo "$_bc_k|${_bc_lbl[$_bc_i]}|$([ "$_bc_k" = "${_bc_ks:-$_bc_k}" ] && echo $_bc_pr || echo 0)|$_bc_k|${_bc_lbl[$_bc_i]}"; done
       _bc_pr=$(( _bc_pr - 5 ))
@@ -171,7 +174,7 @@ _bc_cmd() {
     return 0                                         # nothing highlighted, no default: stay on the box
   fi
   [[ "$_bc_t" =~ ^[0-9]+$ ]] && return 1             # a row number: the engine
-  if _bc_index "$_bc_t"; then _bc_hit "$_bc_ix"; return 0; fi
+  if (( _bc_yn )) && _bc_index "$_bc_t"; then _bc_hit "$_bc_ix"; return 0; fi
   (( _bc_multi )) && _bc_typed_sel "$_bc_t" && return 0
   case "$_bc_t" in
     d|done) (( _bc_multi )) && { _bc_done=1; _st_back=1; } ;;
@@ -201,7 +204,7 @@ _bc_plain() {
     _bc_h="y/n"; [ "$_bc_def" = y ] && _bc_h="Y/n"; [ "$_bc_def" = n ] && _bc_h="y/N"
     (( _bc_cancel )) && _bc_h+=", c = cancel"
   else
-    _bc_h=""; for _bc_j in "${!_bc_key[@]}"; do _bc_k="${_bc_key[$_bc_j]}"; _bc_h+="${_bc_h:+/}$_bc_k"; done
+    _bc_h="1-${#_bc_key[@]}"; (( ${#_bc_key[@]} == 1 )) && _bc_h=1
   fi
   _bc_p="${_bc_question:-$_bc_title} [$_bc_h]: "
   while :; do
@@ -212,7 +215,8 @@ _bc_plain() {
     break
   done
   [ -z "$_bc_a" ] && _bc_a="$_bc_def"
-  if _bc_index "$_bc_a"; then _bc_pick="${_bc_key[$_bc_ix]}"; return 0; fi
+  if (( ! _bc_yn )) && [[ "$_bc_a" =~ ^[0-9]+$ ]] && (( 10#$_bc_a >= 1 && 10#$_bc_a <= ${#_bc_key[@]} )); then _bc_pick="${_bc_key[$(( 10#$_bc_a - 1 ))]}"; return 0; fi
+  if _bc_index "$_bc_a"; then _bc_pick="${_bc_key[$_bc_ix]}"; return 0; fi   # a key typed into a piped script still works; it is just not advertised
   # not one of the answers: a yes/no question takes the safe answer (u / back = cancel when there is a Cancel), a menu backs out
   if (( _bc_yn )); then
     _bc_pick="n"
@@ -281,7 +285,7 @@ _bvk_menu() {
 
   # the keys this box prints are ITS answers (the live hint row and the command layer must not read them as commands)
   local -A _CM_LOCAL=()
-  for _bc_i in "${!_bc_key[@]}"; do for _bc_k in ${_bc_alt[$_bc_i]}; do _CM_LOCAL["$_bc_k"]="${_bc_lbl[$_bc_i]}"; done; done
+  (( _bc_yn )) && for _bc_i in "${!_bc_key[@]}"; do for _bc_k in ${_bc_alt[$_bc_i]}; do _CM_LOCAL["$_bc_k"]="${_bc_lbl[$_bc_i]}"; done; done
 
   # run it as a sub screen: it wipes itself when it ends; the terminal goes back to normal only if we switched it on
   local _bc_outer=$_st_depth

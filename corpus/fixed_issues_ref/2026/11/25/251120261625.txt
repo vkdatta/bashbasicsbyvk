@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+Every pick-one choice menu (_bvk_menu) also accepted and printed its item keys as typed words in a second footer line (usd / inr in "Pay in", sane / mad / crazy / nuts in "Plan", c / r / s / a ... elsewhere), although the row number already answers the same question. The line duplicated the numbers and filled the footer.
+
+HOW DID YOU DEBUG
+Read bashbasicsbyvk_choose.sh: _bvk_menu builds _bc_alt from every key, _bc_cmd --cc declares each alias to the advertiser (that is what prints the second line), _bc_cmd / _bc_wordrow accept them typed, _CM_LOCAL marks them as the box's own words. Listed the 53 _bvk_menu callers (all use key:Label, none passes -k except _bvk_yn). Also read _mc_select / _mc_options / _mc_select -k in menuchrome.sh. Ran bash tests/run.sh once: 12/12 passed. Smoke-tested the plain (no terminal) path in bash with a here-string. The drawn box was NOT run in a real pty: verified by reading and the static suites only.
+
+CAUSE
+The typed-answer machinery written for yes/no (y n c x) was applied to every menu, so any key:Label key became a typed answer and an advertised command.
+
+FIX
+bashbasicsbyvk_choose.sh: typed keys, the --cc declaration, the highlight-follow word function and _CM_LOCAL are now only for --yn boxes. Pick-one boxes are answered by row number / arrows / tap; the item key is only the value handed back to the caller, so no caller changed. Many-of-many keeps numbers, ranges, a and d. The plain fallback (no terminal) prints [1-N] and takes the number; a key piped in by a script is still accepted but not advertised. Lesson: a typed alias is worth declaring only where it is a different, faster answer than the row number (y / n); _mc_select aliases are not advertised and _mc_select -k shows keys INSTEAD of numbers, so neither repeats this.
