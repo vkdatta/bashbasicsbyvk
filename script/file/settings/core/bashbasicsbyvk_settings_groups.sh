@@ -95,11 +95,23 @@ credit_prompt_settings() {
 }
 
 # ── File API › Backup
+backup_type_settings() {
+  _st_choice_open "Backup type" backup_type "Where the copy goes before a destructive action (delete, erase, find & replace, replace with clipboard)" "" \
+    none    "No Backup  —  change things without a copy" \
+    offline "Offline  —  a copy in the recovery bin on this device" \
+    both    "Both Offline and FileAPI  (default)" \
+    fileapi "FileAPI  —  an encrypted copy in the cloud"
+}
 backup_mode_settings() {
-  _st_choice_open "Backup before delete" backup_mode "Copy to the cloud before anything is deleted (d, delete, fx delete functions)" "" \
-    yes "Yes  (default)  —  always back up first; you can name the backup" \
-    no  "No  —  delete without a backup" \
+  _st_choice_open "Ask before cloud backup" backup_mode "How the cloud copy of a backup is made" "" \
+    yes "No question  (default)  —  you only name the backup" \
     ask "Ask every time"
+}
+snapshot_type_settings() {
+  _st_choice_open "Snapshot type" snapshot_type "Where background snapshots go" "" \
+    offline "Offline  —  copies in ~/.bashbasicsbyvk/snapshots on this device" \
+    both    "Both Offline and FileAPI  (default)" \
+    fileapi "FileAPI  —  encrypted copies in the cloud"
 }
 backup_nuke_settings() {
   _st_duration_open "Backup keep time" backup_nuke_time_seconds "How long a backup is kept before it is nuked" 60 2592000 "new backups are kept this long (extend / shorten later in Backup)" \
@@ -107,10 +119,11 @@ backup_nuke_settings() {
 }
 _st_grp_backup_build() {
   _st_reset
-  _st_add a "Backup before delete" 0 "$backup_mode" mode
+  _st_add a "Backup type"          0 "$backup_type" type
+  _st_add a "Ask before cloud backup" 0 "$backup_mode" mode
   _st_add a "Default nuke time"    0 "$(_bb_fmt_duration "$backup_nuke_time_seconds")" keep
 }
-_st_grp_backup_act() { case "${_st_tag[$1]}" in mode) backup_mode_settings ;; keep) backup_nuke_settings ;; esac; }
+_st_grp_backup_act() { case "${_st_tag[$1]}" in type) backup_type_settings ;; mode) backup_mode_settings ;; keep) backup_nuke_settings ;; esac; }
 backup_group_settings() { _st_run "Backup" _st_grp_backup_build _st_grp_backup_act; }
 
 # ── File API › Saved Surf
@@ -137,10 +150,11 @@ snapshot_keep_settings() {
 _st_grp_snap_build() {
   _st_reset
   _st_add a "Snapshots"      0 "$snapshot_enabled"                                    on
+  _st_add a "Snapshot type"  0 "$snapshot_type"                                       stype
   _st_add a "Interval"       0 "$(_bb_fmt_duration "$snapshot_interval_seconds")"     interval
   _st_add a "Keep time"      0 "$(_bb_fmt_duration "$snapshot_keep_seconds")"         keep
 }
-_st_grp_snap_act() { case "${_st_tag[$1]}" in on) snapshot_enabled_settings ;; interval) snapshot_interval_settings ;; keep) snapshot_keep_settings ;; esac; }
+_st_grp_snap_act() { case "${_st_tag[$1]}" in stype) snapshot_type_settings ;; on) snapshot_enabled_settings ;; interval) snapshot_interval_settings ;; keep) snapshot_keep_settings ;; esac; }
 snapshot_group_settings() { _st_run "Snapshots" _st_grp_snap_build _st_grp_snap_act; }
 
 # ── File API › Links / Cloud Surf shares
@@ -167,7 +181,7 @@ _st_grp_api_build() {
   _st_add a "Credits (price check)"   0 "$cp"                                                                   credits
   _st_add a "Links (up- / c2c-)"      0 "$(_bb_fmt_duration "$nuke_time_seconds")"                               links
   _st_add a "Cloud Surf shares (ux-)" 0 "$(_bb_fmt_duration "$ux_nuke_time_seconds")"                            shares
-  _st_add a "Backup"                  0 "$backup_mode · $(_bb_fmt_duration "$backup_nuke_time_seconds")"          backup
+  _st_add a "Backup"                  0 "$backup_type · $(_bb_fmt_duration "$backup_nuke_time_seconds")"          backup
   _st_add a "Saved Surf (save-)"      0 "$(_bb_fmt_duration "$saved_nuke_time_seconds")"                          saved
   _st_add a "Snapshots"               0 "$snapshot_enabled · every $(_bb_fmt_duration "$snapshot_interval_seconds")" snapshots
   _st_add a "Transfer speed (up- / do-)" 0 "${xfer_chunk_mb} MB x ${xfer_streams} streams"                          xfer

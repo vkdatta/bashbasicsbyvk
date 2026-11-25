@@ -90,13 +90,13 @@ Both parties use bashbasicsbyvk. Handshake: A enters B's email and B's 30 sharea
 
 Use for: recurring transfers inside a trusted group, permissioned collaboration without link-pasting.
 
-### 3.4 Backup before delete
+### 3.4 Backup before destructive actions
 
-For paid users, the built-in delete takes an encrypted backup to the backend first, retained for a limited window (at time of writing 30 days) and then removed automatically. It addresses the common case where recovery software returns nameless fragments. It covers only deletions made with the built-in delete, not other commands, other applications or direct filesystem operations.
+Every action is marked destructive or not. Destructive ones (delete, erase a file's content, find and replace, replace with clipboard content) keep a copy first; move, copy and rename do not, unless a move would replace a file of the same name at the destination (`d-` of a move buffer, organise): the file that would be replaced counts as destroyed and is backed up first. Copy keeps both (it numbers the new name) and rename refuses. Settings, File API, Backup, "Backup type": No Backup, Offline, Both Offline and FileAPI (default), or FileAPI. A free user (or no signed-in user) always gets the Offline copy unless No Backup is chosen. FileAPI copies are encrypted, kept in the backend for a limited window (at time of writing 30 days) and removed automatically. Offline copies live in `~/.bashbasicsbyvk/recovery_bin` (Home, Recovery Bin) until you delete them. Something already inside the recovery bin gets no offline copy (a duplicate); its FileAPI backup is still made. Restoring never overwrites: an existing original makes the copy come back as `NAME.restored-<time>`. Deleting from Backup or from the recovery bin asks for the 6-digit action confirmation key. It covers only actions made with the built-in commands, not other applications or direct filesystem operations.
 
 ### 3.5 Snapshots
 
-Configure selected files to upload automatically at points in your routine, for example once daily when the tool starts. Useful for configuration files, scripts and project resources that change often.
+Configure selected files or folders to be copied automatically at an interval while the tool runs. Settings, File API, Snapshots, "Snapshot type": Offline, Both Offline and FileAPI (default), or FileAPI; a free user always gets Offline. Offline snapshots live in `~/.bashbasicsbyvk/snapshots` (Home, Offline Snapshots). A snapshot of a snapshot file is allowed. Deleting a snapshot asks for the action confirmation key. Useful for configuration files, scripts and project resources that change often.
 
 ### 3.6 Save
 

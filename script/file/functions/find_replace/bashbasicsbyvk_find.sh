@@ -198,7 +198,7 @@ _find_step_preview() {
     esac
   fi
   echo "⏳ Applying…"
-  _fr_exec apply || return 0
+  _fr_apply || return 0
   _fr_changes_log                      # locks + shortcuts follow the renamed items
   _fr_problems
   _find_apply_report
@@ -274,7 +274,7 @@ _find_replace_csv() {
   rc=$?
   [ "$rc" -eq 0 ] || { _find_flow_rc "$rc"; return $?; }
   echo "⏳ Applying…"
-  _fr_exec apply || return 0
+  _fr_apply || return 0
   _fr_changes_log
   _find_csv_rows done
   echo ""

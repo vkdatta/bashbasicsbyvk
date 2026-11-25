@@ -512,8 +512,16 @@ perform_move() {
   local total=${#src_items[@]} ok=0
   local -a failed=()
   local item err tgt
+  # mv replaces a file of the same name at the destination: that file is destroyed, so it is backed up first (a "replace" action)
+  local -A _mv_ok=()
+  _bk_clash_filter "$dest" "${src_items[@]}"
+  for item in "${_BK_PASS[@]}"; do _mv_ok["$item"]=1; done
   _carry_begin                              # locks + shortcuts: synced once after the loop
   for item in "${src_items[@]}"; do
+    if [ -z "${_mv_ok[$item]:-}" ]; then
+      failed+=("$(basename -- "$item") — not moved, it would replace a file and no backup was made")
+      continue
+    fi
     if [ ! -e "$item" ]; then
       failed+=("$(basename -- "$item") — not found")
       continue

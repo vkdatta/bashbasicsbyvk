@@ -20,13 +20,15 @@
 #
 #  Built on the same menu engine as Settings (type a number · ↑↓ · u back · q close), and grouped the way Settings is: a row with a ›
 #  opens a smaller screen ("Home › File API Surf").  u there comes back to Home; q closes everything to the main loop.
-#  Needs: _st_run/_st_add (settings_ui), _inner_run (o), open_help, auth_menu.
+#  Needs: _st_run/_st_add (settings_ui), _inner_run (o), open_help, auth_menu, recovery_bin_screen / offline_snapshots_screen (recovery.sh).
 # ════════════════════════════════════════════════════════════════════════════
 
 _home_build() {
   _st_reset
   _st_add a "Local Surf"    0 "" local
   _st_add a "File API Surf" 0 "" fileapi
+  _st_add a "Recovery Bin"  0 "" recoverybin
+  _st_add a "Offline Snapshots" 0 "" offlinesnaps
   _st_add a "Loops"         0 "" loops
   _st_add a "Notifications" 0 "" notify
   _st_add a "Help"          0 "" help
@@ -78,6 +80,8 @@ _home_act() {
   case "${_st_tag[$1]}" in
     local)   _st_back=1 ;;                                     # plain file surf = the main loop
     fileapi) _home_fapi_open ;;
+    recoverybin)   recovery_bin_screen ;;                      # offline copies made before destructive actions (bashbasicsbyvk_recovery.sh)
+    offlinesnaps)  offline_snapshots_screen ;;                 # offline snapshots
     loops)   _home_loops_open ;;
     notify)  _inner_run nf ;;
     help)    open_help ;;

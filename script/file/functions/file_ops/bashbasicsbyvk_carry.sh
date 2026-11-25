@@ -79,6 +79,7 @@ _carry_flatten_into() {
     fi
     move+=("$f")
   done
+  [ "${#move[@]}" -gt 0 ] && { _bk_clash_filter "$dest" "${move[@]}"; move=("${_BK_PASS[@]}"); }     # a file of the same name at the destination would be replaced: backed up first
   if [ "${#move[@]}" -gt 0 ]; then
     printf '%s\0' "${move[@]}" | xargs -0 mv -t "$dest/" --
     for f in "${move[@]}"; do

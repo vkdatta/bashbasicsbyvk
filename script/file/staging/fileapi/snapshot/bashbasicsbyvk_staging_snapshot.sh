@@ -5,6 +5,9 @@
 #   sn                  Home → Snapshots: every device's list, view / restore / nuke snapshots, stop watching a path
 #
 # How it behaves
+#   • Where the copies go is Settings → File API → Snapshots → Snapshot type:  Offline · Both Offline and FileAPI (default) · FileAPI.
+#     A free user always gets Offline.  Offline snapshots live in ~/.bashbasicsbyvk/snapshots (Home → Offline Snapshots; bashbasicsbyvk_recovery.sh);
+#     a snapshot of a snapshot file is allowed.  Deleting a snapshot (offline or FileAPI) needs the 6-digit action confirmation key.
 #   • While  o  is running, a background process (the alien daemon, bashbasicsbyvk_alien_daemon.sh) takes a snapshot of every watched path whose contents changed,
 #     every <interval> (Settings → File API → Snapshots; 1 minute … 30 days, default 1 hour).
 #   • It only runs while  o  is running. Close  o  (or the device) and nothing is taken. Reopen after 10 days with a
@@ -58,6 +61,7 @@ _snap_hostlabel() {
 
 # "<signature> <bytes> <files>" of a file or folder: names, sizes and modification times (symlinks inside are not part of an archive, so not of this)
 _snap_sig() {
+  command -v node >/dev/null 2>&1 || { _rb_sig_triple "$1"; return; }      # no node (a free user): the same three numbers from find
   node -e '
     const fs = require("fs"), path = require("path"), crypto = require("crypto");
     const h = crypto.createHash("sha256"); let bytes = 0, count = 0;
@@ -203,30 +207,44 @@ _snap_take() {
   esac
 }
 
-# one pass over everything on the list
+# one pass over everything on the list.   Snapshot type (Settings): offline copies go to ~/.bashbasicsbyvk/snapshots, FileAPI copies to the cloud.
+_SNAP_CLOUD_PENDING=0      # 1 = the cloud half is wanted but this computer has no signed id yet: the daemon asks again soon instead of after a whole interval
 _snap_cycle() {
-  _bb_get_credentials >/dev/null 2>&1 || return 0
-  _crypto_check >/dev/null 2>&1 || return 0
-  _snap_dev_hdrs || { _snap_log "device id not ready yet"; return 0; }
-  _pn_auto_snapshots 2>/dev/null      # first finish snapshots an earlier run left half-sent (auto-continue)
-  local lk; lk=$(_snap_labelkey 2>/dev/null) || { _snap_log "cannot open the key chain (server unreachable, or no dinons on this computer)"; return 0; }
-  _snap_reconcile "$lk" || { _snap_log "could not sync the list with the server"; return 0; }
+  local svc off=0 cloud=0; svc=$(_rb_service snapshot); _SNAP_CLOUD_PENDING=0
+  case "$svc" in offline|both) off=1 ;; esac
+  case "$svc" in fileapi|both) cloud=1 ;; esac
+  if [ "$cloud" = 1 ]; then
+    if ! _bb_get_credentials >/dev/null 2>&1 || ! _crypto_check >/dev/null 2>&1; then cloud=0
+    elif ! _snap_dev_hdrs; then cloud=0; _SNAP_CLOUD_PENDING=1; _snap_log "device id not ready yet"
+    fi
+  fi
+  local lk=""
+  if [ "$cloud" = 1 ]; then
+    _pn_auto_snapshots 2>/dev/null      # first finish snapshots an earlier run left half-sent (auto-continue)
+    lk=$(_snap_labelkey 2>/dev/null) || { _snap_log "cannot open the key chain (server unreachable, or no dinons on this computer)"; cloud=0; }
+  fi
+  if [ "$cloud" = 1 ]; then
+    _snap_reconcile "$lk" || { _snap_log "could not sync the list with the server"; cloud=0; }
+  fi
+  [ "$off" = 1 ] || [ "$cloud" = 1 ] || return 0
   [ -s "$_SNAP_TARGETS" ] || return 0
 
-  local tgt kind p pushed lsig lepoch rc paused=0
+  local tgt kind p pushed lsig lepoch rc paused=0 oid
   local -a lines=()
   mapfile -t lines < "$_SNAP_TARGETS"
   local ln
   for ln in "${lines[@]}"; do
     IFS=$'\t' read -r tgt kind p pushed lsig lepoch <<<"$ln"
-    [ -n "$tgt" ] && [ "$pushed" = 1 ] || continue
+    [ -n "$tgt" ] || continue
+    if [ "$off" = 1 ] && oid=$(_rb_snap_take "$tgt" "$p"); then _snap_log "offline snapshot taken: $p ($(_rb_title "$oid"))"; fi
+    [ "$cloud" = 1 ] && [ "$pushed" = 1 ] || continue
     _snap_dev_hdrs
     _snap_take "$tgt" "$kind" "$p" "$lsig"; rc=$?
     if [ $rc -eq 3 ]; then
       paused=1
       printf '🔴  Snapshots paused: %s. Add credits, or lower the keep time / raise the interval (Settings → File API → Snapshots).\n' "${_BB_GATE_MSG:-not enough credits}" > "$_SNAP_NOTICE"
       _snap_log "paused: ${_BB_GATE_MSG:-not enough credits}"
-      break
+      cloud=0      # the cloud half waits for credits; the offline copies carry on for the rest of this pass
     fi
   done
   [ "$paused" = 0 ] && rm -f "$_SNAP_NOTICE"
@@ -241,8 +259,13 @@ handle_snap_add() {
   _bb_split_alias "${raw#snap-}" || return 1
   [ -n "$_BB_LINK_ALIAS" ] && { echo "📜  Snapshots cannot be renamed — they are named AS ON <date> <time>."; _BB_LINK_ALIAS=""; }
   _sp_guard_and_resolve "$_BB_ITEMLIST" "snap-" || return 1
-  _crypto_check || return 1
-  _bb_get_credentials || return 1
+  # the cloud half needs node and an account; a free user (or "Offline") needs neither: the snapshots stay on this device
+  local svc cloud=0; svc=$(_rb_service snapshot)
+  case "$svc" in fileapi|both) cloud=1 ;; esac
+  if [ "$cloud" = 1 ]; then
+    if [ "$svc" = fileapi ]; then _crypto_check || return 1; _bb_get_credentials || return 1
+    elif ! { _crypto_check >/dev/null 2>&1 && _bb_get_credentials >/dev/null 2>&1; }; then cloud=0; echo "📜  Cloud snapshots need node and a signed-in user — this one stays offline until then."; fi
+  fi
   local it p tgt kind sig bytes count added=0 have
   for it in "${sp_resolved[@]}"; do
     p=$(readlink -f -- "$it" 2>/dev/null || realpath "$it" 2>/dev/null)
@@ -258,17 +281,19 @@ handle_snap_add() {
     _snap_target_set "$tgt" "$kind" "$p" 0 "" 0
     added=$((added + 1))
     echo "📸 On the snapshot list: $p   ($count file(s), $((bytes/1024/1024)) MB before compression)"
-    if [[ "$bytes" =~ ^[1-9][0-9]*$ ]] && _bb_estimate "$bytes" "$(_bb_svc_ttl snapshot)"; then
+    if [ "$cloud" = 1 ] && [[ "$bytes" =~ ^[1-9][0-9]*$ ]] && _bb_estimate "$bytes" "$(_bb_svc_ttl snapshot)"; then
       echo "   ≈ $_BB_E_CREDITS credit(s) per snapshot (kept $(_bb_fmt_duration "$(_bb_svc_ttl snapshot)")) — an upper bound; compression usually lowers it, and unchanged data is never re-uploaded."
     fi
   done
   [ "$added" -gt 0 ] || return 0
-  echo "   Taken every $(_bb_fmt_duration "$(_snap_interval)") while  o  is running  ·  see and manage them in Home → Snapshots (sn)."
+  echo "   Taken every $(_bb_fmt_duration "$(_snap_interval)") while  o  is running  ·  offline ones: Home → Offline Snapshots${cloud:+ · cloud ones: Home → Snapshots (sn)}."
   # register now (best effort) so other devices see it right away, then make sure the background process runs
-  if _snap_dev_hdrs; then
-    local lk; lk=$(_snap_labelkey) && _snap_reconcile "$lk" >/dev/null 2>&1
-  else
-    echo "📜  This computer's id is not registered with the server yet (needs internet once) — it will be on the next start."
+  if [ "$cloud" = 1 ]; then
+    if _snap_dev_hdrs; then
+      local lk; lk=$(_snap_labelkey) && _snap_reconcile "$lk" >/dev/null 2>&1
+    else
+      echo "📜  This computer's id is not registered with the server yet (needs internet once) — it will be on the next start."
+    fi
   fi
   rm -f "$_SNAP_LASTRUN"          # first snapshot soon, not after a whole interval
   _snap_daemon_start
@@ -383,7 +408,8 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
         if ! [[ "$n" =~ ^[0-9]+$ ]] || [ "$n" -lt 1 ] || [ "$n" -gt ${#S_ID[@]} ]; then echo "🔴  Pick a number from the list."; continue; fi
         i=$((n-1))
         if [ "$verb" = x ]; then
-          _bvk_yn a "Nuke $(_snap_name "${S_AT[$i]}") now?" -d none
+          # deleting a snapshot needs the 6-digit action confirmation key (u = back to the list, anything else = not nuked)
+          action_confirm_key "DELETE FROM SNAPSHOTS — confirmation required" "The snapshot is deleted immediately:" "  $(_snap_name "${S_AT[$i]}")" && a=yes || a=no
           case "${a,,}" in y|yes)
             _BB_CALL_HDRS=(); _bb_call DELETE "/links/${S_ID[$i]}" || true
             [ "$_BB_STATUS" = 200 ] && echo "💫 Nuked." || echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;;

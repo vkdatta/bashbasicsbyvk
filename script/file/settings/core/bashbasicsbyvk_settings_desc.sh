@@ -358,12 +358,22 @@ Snapshot interval|p:3600	Take a snapshot at most every one hour. The standard: o
 Snapshot interval|p:86400	Take a snapshot at most every one day. At most one copy a day. Cheap, but you can lose up to a day of changes.
 Snapshot interval|p:604800	Take a snapshot at most every one week. One copy a week. Very cheap, only suitable for files that rarely change.
 Backup|*	Settings for the safety copy made in the cloud before something is deleted. Choose whether a backup is made, and how long it is kept.
-Backup|mode	Decide whether the program first copies items to the cloud before you delete them, so you can restore them later. Choose yes for safety, no for speed, or let it ask every time.
+Backup|mode	Choose whether the cloud copy of a backup is made straight away (you only name it) or only after you say yes each time.
 Backup|keep	Choose how long a new backup stays in the cloud before it deletes itself. The maximum is thirty days.
-Backup before delete|*	Choose whether a safety copy goes to the cloud before something is deleted with d, delete or one of the delete functions. A backup costs a few credits and some time but lets you undo a deletion by mistake.
-Backup before delete|v:yes	Always make a backup first and let you name it. The safest choice and the standard: a deleted file can be restored from Backup within the keep time.
-Backup before delete|v:no	Delete straight away without any copy. Faster and free, but there is no way back, so only use it for things you can easily recreate.
-Backup before delete|v:ask	Ask each time whether to make a backup. Flexible, but one more question at every deletion.
+Backup|type	Choose where the safety copy goes before something destructive happens: deleting, erasing a file, find and replace, or replace with clipboard. Moving and copying never make one.
+Backup type|*	Choose where the copy goes before a destructive action. Offline keeps it on this device in the recovery bin (Home, Recovery Bin). FileAPI keeps an encrypted copy in the cloud. A free user always gets Offline, whatever is chosen here, unless No Backup is chosen.
+Backup type|v:none	No copy at all. Changes cannot be undone, so only use this when everything involved is easy to recreate.
+Backup type|v:offline	Keep the copy on this device in the recovery bin. Free and fast, but it stays only on this device and is not removed until you delete it.
+Backup type|v:both	Keep both an offline copy and a cloud copy. The safest choice and the standard. A free user gets only the offline copy.
+Backup type|v:fileapi	Keep an encrypted copy in the cloud only. A free user gets an offline copy instead.
+Ask before cloud backup|*	Choose whether the program asks each time before it makes the cloud copy, or just asks for a name and goes ahead.
+Ask before cloud backup|v:yes	Do not ask whether to back up; only ask for a name for the backup, then make it.
+Ask before cloud backup|v:ask	Ask every time whether to make the cloud copy.
+Snapshots|stype	Choose where background snapshots go: offline on this device, in the cloud, or both. A free user always gets offline snapshots.
+Snapshot type|*	Choose where snapshots are kept. Offline snapshots live in the snapshots folder on this device (Home, Offline Snapshots). A free user always gets Offline.
+Snapshot type|v:offline	Keep snapshots on this device only. Free, and they stay until you delete them.
+Snapshot type|v:both	Keep snapshots on this device and in the cloud. The standard. A free user gets only the offline ones.
+Snapshot type|v:fileapi	Keep snapshots in the cloud only. A free user gets offline snapshots instead.
 Snapshots›Snapshots|*	Switch the automatic background snapshots on or off. Snapshots are only taken while the program is open.
 File API›Snapshots|*	Snapshots are automatic copies of files or folders on your list. Choose whether they run, how often and how long they are kept.
 File API›Snapshots|on	Switch automatic snapshots on or off. When on, the files and folders you added to the list are copied to the cloud every interval, if they changed, while the program runs.
@@ -429,6 +439,10 @@ Timezone › Manual|*	No timezone database was found, so a short list of fixed o
 Home|*	This is the front door of the program. Each row opens one part of it: your own files, your online space, the loops that do work for you, your notifications, the help and your account. Type the number of a row, or move to it with the arrow keys and press Enter. A row with an arrow opens a smaller list. Press u to come back here from any of them. Nothing on this screen changes anything by itself.
 Home|local	Your own files on this device. This is the normal file list you see when the program starts: open folders, select files, copy, move, delete or compress them. Choose it when you simply want to work with files on this computer.
 Home|fileapi	Everything the program keeps for you online: what you share, your links, your backups, your saved files, your snapshots and any unfinished uploads. Choose it to open a smaller list with one row for each of them.
+Recovery Bin|*	The safety copies kept on this device before something was deleted, erased, replaced or changed by find and replace. Pick one to restore it (an existing original is never overwritten) or to delete it with the confirmation key.
+Offline Snapshots|*	The snapshots kept on this device. Pick one to restore it (an existing original is never overwritten) or to delete it with the confirmation key.
+Home|recoverybin	The safety copies kept on this device before something was deleted, erased, replaced or changed by find and replace. Open one to restore it, or delete it for good with the confirmation key.
+Home|offlinesnaps	The snapshots kept on this device (Settings, Snapshot type). Open one to restore it, or delete it for good with the confirmation key.
 Home|loops	The parts that do work for you: quick jumps between folders, ready-made helper actions and the rule book. Choose it to open a smaller list with one row for each of them.
 Home|notify	Messages from the online service, for example that a share was used or that something needs your attention. Choose it to see what is new without having to look anywhere else.
 Home|help	The built-in guide. It explains the commands and shows examples. Choose it whenever you are unsure what a key does. It only shows text and never changes anything.

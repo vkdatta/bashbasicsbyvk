@@ -140,6 +140,7 @@ bashbasicsbyvk_staging_svc.sh|||upload service layer
 bashbasicsbyvk_staging_upload.sh|||up- / c2c- upload
 bashbasicsbyvk_staging_ux.sh|||ux- RBAM share
 bashbasicsbyvk_staging_backup.sh|||bk backup
+bashbasicsbyvk_recovery.sh|||recovery bin + offline snapshots + the isDestructive table (Home → Recovery Bin / Offline Snapshots; Backup type, Snapshot type)
 bashbasicsbyvk_staging_saved.sh|||sv saved surf
 bashbasicsbyvk_staging_snapshot.sh|||sn snapshots (the process that takes them is the alien daemon, next line)
 bashbasicsbyvk_alien_daemon.sh|bashbasicsbyvk_staging_snapshot.sh,bashbasicsbyvk_planetary_resources.sh||the alien daemon: snapshots while o runs (@call _snap_daemon_start in [bg]); NEEDS the snapshot file for its variables
@@ -184,6 +185,8 @@ bashbasicsbyvk_ai.sh|||.ai commands
 bashbasicsbyvk_gdrive.sh|bashbasicsbyvk_run.sh,bashbasicsbyvk_transfer.sh,bashbasicsbyvk_staging_archive.sh,bashbasicsbyvk_staging_helpers.sh,bashbasicsbyvk_staging_upload.sh,bashbasicsbyvk_staging_ux.sh,bashbasicsbyvk_staging_buffer.sh,bashbasicsbyvk_carry.sh||Google Drive session layer: wraps native functions, only inert until gd is used
 _3bvk_import_cmd_copy.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_cmd_delete.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+_3bvk_import_cmd_erase.sh|||import file of a stand-alone tool (its own process, never loaded by o)
+_3bvk_import_cmd_overwrite.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_deps.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_ask.sh|||import file of a stand-alone tool (its own process, never loaded by o)
 _3bvk_import_yn.sh|||import file of a stand-alone tool (its own process, never loaded by o)

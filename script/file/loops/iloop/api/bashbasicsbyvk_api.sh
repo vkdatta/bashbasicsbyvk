@@ -677,8 +677,13 @@ _api_do_nuke() {         # _api_do_nuke <idx>...
     total=$((total + ${_API_RFND[$k]}))
   done
   echo "   Refund is in whole days only; time already used rounds up to a full day."
-  _bvk_yn ans "Nuke now and refund about $total credit(s)?" -d none
-  case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+  if [ "$_API_SVC" = backup ]; then
+    # deleting from Backup needs the 6-digit action confirmation key (the other lists keep the yes/no question)
+    action_confirm_key "DELETE FROM BACKUP — confirmation required" "${#ks[@]} backup(s) are deleted immediately; refund about $total credit(s)." || { echo "🚫 Cancelled"; return 1; }
+  else
+    _bvk_yn ans "Nuke now and refund about $total credit(s)?" -d none
+    case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "🚫 Cancelled"; return 1 ;; esac
+  fi
   local ok=0 bal="" rf rd
   for k in "${ks[@]}"; do
     _api_http DELETE "/links/${_API_ID[$k]}" || return 1

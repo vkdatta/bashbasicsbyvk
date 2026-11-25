@@ -101,6 +101,27 @@ _fr_exec() {
   return 0
 }
 
+# _fr_apply  — THE apply step of every find & replace flow: a backup of the files that are about to change, then _fr_exec apply.
+#   Find & replace in CONTENTS is destructive (bashbasicsbyvk_recovery.sh: findreplace=1); renaming only is not, so names-only runs take no backup.
+#   The files come from the last preview (_FR_LIST: set by _find_step_preview / the csv preview); when the person chose "apply without preview"
+#   (Settings → Find & replace → direct) a quiet preview runs first.  One file picked from the preview (_fr_only) = only that file.
+#   rc 0 ran · 1 did not run (the person stopped at the backup question, or the engine could not run; the reason is already printed)
+_fr_apply() {
+  local -a doomed=(); local p
+  if [ "$_fr_scope" != names ] && _act_is_destructive findreplace && [ "$(_rb_service backup)" != none ]; then
+    if [ -n "$_fr_only" ]; then [ -f "$_fr_only" ] && doomed=("$_fr_only")
+    else
+      if [ "${find_confirm_mode:-}" = direct ] || [ "${#_FR_LIST[@]}" -eq 0 ]; then _fr_exec preview >/dev/null || return 1; fi
+      for p in "${_FR_LIST[@]}"; do [ -f "$p" ] && doomed+=("$p"); done      # folders in the list are name hits: a rename keeps their content
+    fi
+    if [ "${#doomed[@]}" -gt 0 ]; then
+      echo "🗄️  Backing up ${#doomed[@]} file(s) before the replace…"
+      _bk_guard findreplace "${doomed[@]}" || { echo "🚫 Nothing was changed."; return 1; }
+    fi
+  fi
+  _fr_exec apply
+}
+
 # _fr_results_fill HEADER  — hands the hits of the last _fr_exec to the results screen (_results_view, which shows them the way the recursive "="
 # filter does).  It only supplies DATA: the paths, and what the engine writes after each name ("(2 matches)", "→  new name", the first "L12: …" line).
 # Nothing is drawn here.

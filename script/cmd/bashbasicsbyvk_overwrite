@@ -5,6 +5,12 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
+# "Replace With Clipboard Content" destroys what the file holds: a backup first (Settings → File API → Backup type).
+# The guard and the app's own yes/no menu come from the import file (flat pip install: it sits next to this script on PATH).
+# shellcheck disable=SC1090
+source "_3bvk_import_cmd_overwrite.sh" || { echo "❌ Error: cannot load _3bvk_import_cmd_overwrite.sh (reinstall bashbasicsbyvk)." >&2; exit 1; }
+_ow_guard() { [ -s "$1" ] || return 0; _bk_guard overwrite "$1" || { echo "Canceled — the file was not changed."; exit 0; }; }
+
 if [ -n "$DEVSHELL_PROJECT_ID" ]; then
     METHOD="manual"
 elif command -v pbpaste &> /dev/null \
@@ -33,6 +39,7 @@ if [ "$METHOD" == "auto" ]; then
         CMD="powershell.exe -Command Get-Clipboard"
     fi
 
+    _ow_guard "$1"
     $CMD > "$1"
     echo "💫 Success: Overwrote '$1' using $CMD."
 else
@@ -42,6 +49,7 @@ else
     echo "--------------------------------------------------"
 
     tmpfile=$(mktemp)
+    trap 'rm -f "$tmpfile"' EXIT      # a cancelled backup question leaves nothing behind (after the mv the file is gone, rm -f is then a no-op)
 
     while IFS= read -r line; do
         if [[ "$line" == "DONE" ]]; then
@@ -50,6 +58,7 @@ else
         echo "$line" >> "$tmpfile"
     done
 
+    _ow_guard "$1"
     mv "$tmpfile" "$1"
     echo "--------------------------------------------------"
     echo "💫 Success: Clipboard content saved to '$1'."

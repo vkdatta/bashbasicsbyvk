@@ -33,7 +33,9 @@ DEFAULT_UX_NUKE_TIME_SECONDS=2592000   # ux-: how long a new share lives (30 day
 DEFAULT_APP_TIMEZONE=""          # "" = follow the system clock; else an IANA name, e.g. Asia/Kolkata
 # ── fileapi services
 DEFAULT_CREDIT_PROMPTS="show"             # show = price check before every upload (cost 1 stays silent) · skip = never ask, just go
-DEFAULT_BACKUP_MODE="yes"                 # back up to the cloud before a delete:  yes | no | ask
+DEFAULT_BACKUP_MODE="yes"                 # the CLOUD half of a backup: yes (ask only for a name) | ask (ask every time).  Old value "no" = backup_type none
+DEFAULT_BACKUP_TYPE="both"                # where the copy before a destructive action goes:  none | offline | both | fileapi   (a free user always gets offline)
+DEFAULT_SNAPSHOT_TYPE="both"              # where snapshots go:  offline | both | fileapi   (a free user always gets offline)
 DEFAULT_BACKUP_NUKE_TIME_SECONDS=2592000  # how long a backup is kept (30 days). 60 s .. 30 days
 DEFAULT_SAVED_NUKE_TIME_SECONDS=2592000   # save-: how long a saved item is kept (30 days). 60 s .. 30 days
 DEFAULT_SNAPSHOT_ENABLED="on"             # background snapshots while o runs:  on | off
@@ -91,6 +93,8 @@ unset ux_nuke_time_seconds
 unset app_timezone
 unset credit_prompts
 unset backup_mode
+unset backup_type
+unset snapshot_type
 unset backup_nuke_time_seconds
 unset saved_nuke_time_seconds
 unset snapshot_enabled
@@ -134,6 +138,7 @@ _bvk_settings_read() {
 }
 
 [ -f "$SETTINGS_FILE" ] && _bvk_settings_read "$SETTINGS_FILE"
+[ "${backup_mode:-}" = no ] && [ -z "${backup_type:-}" ] && { backup_type=none; backup_mode=yes; }   # before backup_type existed, "no" meant no backup
 
 : "${show_hidden_files:=$DEFAULT_SHOW_HIDDEN_FILES}"
 : "${index_mode_threshold:=$DEFAULT_INDEX_MODE_THRESHOLD}"
@@ -176,6 +181,8 @@ unset _bc _bcv _bcd
 : "${app_timezone=$DEFAULT_APP_TIMEZONE}"
 : "${credit_prompts:=$DEFAULT_CREDIT_PROMPTS}"
 : "${backup_mode:=$DEFAULT_BACKUP_MODE}"
+: "${backup_type:=$DEFAULT_BACKUP_TYPE}"
+: "${snapshot_type:=$DEFAULT_SNAPSHOT_TYPE}"
 : "${backup_nuke_time_seconds:=$DEFAULT_BACKUP_NUKE_TIME_SECONDS}"
 : "${saved_nuke_time_seconds:=$DEFAULT_SAVED_NUKE_TIME_SECONDS}"
 : "${snapshot_enabled:=$DEFAULT_SNAPSHOT_ENABLED}"
@@ -183,6 +190,8 @@ unset _bc _bcv _bcd
 : "${snapshot_keep_seconds:=$DEFAULT_SNAPSHOT_KEEP_SECONDS}"
 [[ "$credit_prompts" =~ ^(show|skip)$ ]] || credit_prompts=$DEFAULT_CREDIT_PROMPTS
 [[ "$backup_mode" =~ ^(yes|no|ask)$ ]] || backup_mode=$DEFAULT_BACKUP_MODE
+[[ "$backup_type" =~ ^(none|offline|both|fileapi)$ ]] || backup_type=$DEFAULT_BACKUP_TYPE
+[[ "$snapshot_type" =~ ^(offline|both|fileapi)$ ]] || snapshot_type=$DEFAULT_SNAPSHOT_TYPE
 [[ "$snapshot_enabled" =~ ^(on|off)$ ]] || snapshot_enabled=$DEFAULT_SNAPSHOT_ENABLED
 for _sv in backup_nuke_time_seconds saved_nuke_time_seconds snapshot_keep_seconds; do
   if ! [[ "${!_sv}" =~ ^[0-9]{1,9}$ ]] || [ "${!_sv}" -lt 60 ] || [ "${!_sv}" -gt 2592000 ]; then
@@ -354,6 +363,8 @@ save_settings() {
     echo "app_timezone=\"$app_timezone\""
     echo "credit_prompts=$credit_prompts"
     echo "backup_mode=$backup_mode"
+    echo "backup_type=$backup_type"
+    echo "snapshot_type=$snapshot_type"
     echo "backup_nuke_time_seconds=$backup_nuke_time_seconds"
     echo "saved_nuke_time_seconds=$saved_nuke_time_seconds"
     echo "snapshot_enabled=$snapshot_enabled"
@@ -643,6 +654,8 @@ _st_reset_act() {
   app_timezone=$DEFAULT_APP_TIMEZONE; _apply_timezone
   credit_prompts=$DEFAULT_CREDIT_PROMPTS
   backup_mode=$DEFAULT_BACKUP_MODE
+  backup_type=$DEFAULT_BACKUP_TYPE
+  snapshot_type=$DEFAULT_SNAPSHOT_TYPE
   backup_nuke_time_seconds=$DEFAULT_BACKUP_NUKE_TIME_SECONDS
   saved_nuke_time_seconds=$DEFAULT_SAVED_NUKE_TIME_SECONDS
   snapshot_enabled=$DEFAULT_SNAPSHOT_ENABLED

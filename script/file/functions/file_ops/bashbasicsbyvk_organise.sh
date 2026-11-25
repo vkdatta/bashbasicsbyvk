@@ -31,7 +31,7 @@ local -a batch=()
 while IFS= read -r item; do
 [ -n "$item" ] && batch+=("$item")
 done <<< "${_bkts[$dest]}"
-if [ ${#batch[@]} -gt 0 ]; then
+if [ ${#batch[@]} -gt 0 ] && { _bk_clash_filter "$dest" "${batch[@]}"; batch=("${_BK_PASS[@]}"); [ ${#batch[@]} -gt 0 ]; }; then   # a same-named file already there would be replaced: backed up first
 _lk_load
 mv "${batch[@]}" "$dest/"
 _carry_move_batch "$dest" "${batch[@]}"     # locks move with the files
@@ -70,7 +70,7 @@ for f in "${files[@]}"; do
 [[ "${f##*.}" == "$ext" ]] && batch+=("$f")
 done
 fi
-if [ ${#batch[@]} -gt 0 ]; then
+if [ ${#batch[@]} -gt 0 ] && { _bk_clash_filter "$folder" "${batch[@]}"; batch=("${_BK_PASS[@]}"); [ ${#batch[@]} -gt 0 ]; }; then   # a same-named file already there would be replaced: backed up first
 mkdir -p "$folder"
 _lk_load
 mv "${batch[@]}" "$folder/"

@@ -37,13 +37,15 @@ _snap_daemon_main() {       # runs in the background; $1 = pid of the  o  proces
   _snap_log "background snapshots started (o pid $oppid, alien daemon v$(_pr_version alien))"
   while kill -0 "$oppid" 2>/dev/null; do
     if [ "$(_bb_cfg_val snapshot_enabled on)" = off ]; then sleep 20; continue; fi
-    # this computer's id is created and signed by the server on the first start with internet; until then there is nothing to do
-    if ! _snap_dev_hdrs; then sleep 15; continue; fi
+    # this computer's id is created and signed by the server on the first start with internet; with FileAPI as the only service
+    # there is nothing to do until then (Offline / Both go on: the offline copies need no id)
+    if [ "$(_rb_service snapshot)" = fileapi ] && ! _snap_dev_hdrs; then sleep 15; continue; fi
     now=$(date +%s); last=$(cat "$_SNAP_LASTRUN" 2>/dev/null); [[ "$last" =~ ^[0-9]+$ ]] || last=0
     due=$(( last + $(_snap_interval) ))
     if [ "$now" -ge "$due" ]; then
       _snap_cycle
-      date +%s > "$_SNAP_LASTRUN"
+      # cloud half wanted but no id yet: look again in a minute instead of after a whole interval
+      if [ "$_SNAP_CLOUD_PENDING" = 1 ]; then echo $(( now - $(_snap_interval) + 60 )) > "$_SNAP_LASTRUN"; else date +%s > "$_SNAP_LASTRUN"; fi
       _snap_log_trim
       sleep 5
     else
@@ -57,7 +59,7 @@ _snap_daemon_main() {       # runs in the background; $1 = pid of the  o  proces
 _snap_daemon_start() {
   [ "$(_bb_cfg_val snapshot_enabled on)" = off ] && return 0
   [ -s "$_SNAP_TARGETS" ] || return 0
-  command -v node >/dev/null 2>&1 || return 0
+  # no node check: the offline copies need none (the cloud half checks for itself in _snap_cycle)
   mkdir -p "$_SNAP_DIR" 2>/dev/null; chmod 700 "$_SNAP_DIR" 2>/dev/null
   _pr_svc_claim "$_SNAP_LOCK" || return 0           # a live alien daemon already runs: one per computer
   local oppid=$$
