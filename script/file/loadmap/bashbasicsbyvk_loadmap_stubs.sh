@@ -749,7 +749,9 @@ _sw_ensure_store() { _lm_stub bashbasicsbyvk_switch.sh _sw_ensure_store "$@"; }
 _sw_excl_ensure() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_ensure "$@"; }
 _sw_excl_load() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_load "$@"; }
 _sw_excl_add() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_add "$@"; }
+_sw_excl_drop() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_drop "$@"; }
 _sw_excl_remove() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_remove "$@"; }
+_sw_excl_rule() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_rule "$@"; }
 _sw_excl_edit() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_edit "$@"; }
 _sw_excl_menu() { _lm_stub bashbasicsbyvk_switch.sh _sw_excl_menu "$@"; }
 _sw_add_path() { _lm_stub bashbasicsbyvk_switch.sh _sw_add_path "$@"; }

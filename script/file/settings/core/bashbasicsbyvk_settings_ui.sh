@@ -33,6 +33,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #         Settings → Search filter.
 #
 #  Row kinds   t checkbox [x]/[ ] (many can be on)   r radio [o]/[ ] (one is on)   a action ›   h heading
+#              p plain choice row (numbered, no mark; like r in a choice menu)
 #              i info row (display only; VALUE = the number shown in front, "" = none)   s rule line (display only)
 #  (headings, info rows and rule lines are not numbered, never highlighted, never chosen)
 #  Optional, set by the caller as locals/globals before _st_run (bashbasicsbyvk_choose.sh uses all of them):
@@ -340,7 +341,7 @@ _st_hint_text() {   # $1 typed text  $2 columns
     _ST_HINT="=  →  filter this list live  (= + Enter clears it;  == searches every screen)"
   elif [[ "$b" =~ ^[0-9]+$ ]] && (( ${#b} < 9 )); then
     k=$(( 10#$b ))
-    if (( k >= 1 && k <= ${_st_cnt:-0} )) && [ -n "${_st_nrow[$k]+x}" ]; then case "${_st_kind[${_st_nrow[$k]}]}" in t|r) if [ "${_st_choice:-0}" = 1 ]; then _ST_HINT="Enter  →  choose  ${_st_lbl[${_st_nrow[$k]}]}"; else _ST_HINT="Enter  →  switch  ${_st_lbl[${_st_nrow[$k]}]}"; fi ;; *) _ST_HINT="Enter  →  open  ${_st_lbl[${_st_nrow[$k]}]}" ;; esac; else _ST_HINT="no row $k here  (1-${_st_cnt:-0})"; fi
+    if (( k >= 1 && k <= ${_st_cnt:-0} )) && [ -n "${_st_nrow[$k]+x}" ]; then case "${_st_kind[${_st_nrow[$k]}]}" in t|r|p) if [ "${_st_choice:-0}" = 1 ]; then _ST_HINT="Enter  →  choose  ${_st_lbl[${_st_nrow[$k]}]}"; else _ST_HINT="Enter  →  switch  ${_st_lbl[${_st_nrow[$k]}]}"; fi ;; *) _ST_HINT="Enter  →  open  ${_st_lbl[${_st_nrow[$k]}]}" ;; esac; else _ST_HINT="no row $k here  (1-${_st_cnt:-0})"; fi
   elif declare -F _cm_hint >/dev/null 2>&1; then
     declare -F _cm_ctx_find >/dev/null 2>&1 && _cm_ctx_find
     _cm_hint "$b" menu; _ST_HINT="$_hint_want"
@@ -421,7 +422,7 @@ _st_wheel() {
 # do what the highlighted row says (called from _st_run; shares its locals)
 _st_activate() {
   case "${_st_kind[$cur]}" in
-    t|r) "$act" "$cur" toggle ;;
+    t|r|p) "$act" "$cur" toggle ;;
     a)
       # actions may ask questions / open a sub-screen: wipe the block first
       _st_wipe

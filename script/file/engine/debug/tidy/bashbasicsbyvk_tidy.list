@@ -124,6 +124,7 @@ YWW6WZ | step menu     | fn:_sp_view_one_buffer           | staging/buffer/bashb
 YWW6WZ | step menu     | fn:_sp_view_set                  | staging/buffer/bashbasicsbyvk_staging_buffer.sh
 YWW6WZ | step menu     | fn:_sw_excl_add                  | loops/iloop/switch/bashbasicsbyvk_switch.sh
 YWW6WZ | step menu     | fn:_sw_excl_remove               | loops/iloop/switch/bashbasicsbyvk_switch.sh
+YWW6WZ | step menu     | fn:_sw_excl_rule                 | loops/iloop/switch/bashbasicsbyvk_switch.sh
 YWW6WZ | step menu     | fn:_sw_excl_menu                 | loops/iloop/switch/bashbasicsbyvk_switch.sh
 YWW6WZ | step menu     | fn:_t_s_action                   | functions/transfer/bashbasicsbyvk_transfer.sh
 YWW6WZ | step menu     | fn:_t_s_mode                     | functions/transfer/bashbasicsbyvk_transfer.sh

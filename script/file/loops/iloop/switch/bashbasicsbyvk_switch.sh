@@ -114,7 +114,15 @@ _sw_excl_add() {
   echo "   (applies at once)"
 }
 
-# Remove rules, one at a time: the list stays open until it is empty or the person goes back with u.
+# Remove rule number $1 (index into _SW_XK, from _sw_excl_load).
+_sw_excl_drop() {
+  local i="$1"
+  [ -n "${_SW_XLN[$i]:-}" ] || return 1
+  sed -i "${_SW_XLN[$i]}d" "$_RC_EXCLUDE_FILE"
+  echo "🗑️  Removed: ${_SW_XROW[$i]}"
+}
+
+# Remove from the typed key r: pick a rule, it goes; the list stays open until it is empty or u.
 _sw_excl_remove() {
   local pick i
   while true; do
@@ -122,13 +130,29 @@ _sw_excl_remove() {
     if [ "${#_SW_XK[@]}" -eq 0 ]; then echo "No rules to remove."; return 0; fi
     local -a items=()
     for i in "${!_SW_XROW[@]}"; do items+=("$(( i + 1 )):${_SW_XROW[$i]}"); done
-    _bvk_menu pick -t "Remove from exclude list" -i "🚫" -n ${items[@]+"${items[@]}"} || return 0       # u = back to the exclude list, q = quit (the caller reads _bvk_back)
+    _bvk_menu pick -t "Remove from exclude list" -i "🚫" -n -p "${items[@]}" || return 0       # u = back to the exclude list, q = quit (the caller reads _bvk_back)
     [[ "$pick" =~ ^[0-9]+$ ]] || return 0
-    i=$(( pick - 1 ))
-    [ -n "${_SW_XLN[$i]:-}" ] || return 0
-    sed -i "${_SW_XLN[$i]}d" "$_RC_EXCLUDE_FILE"
-    echo "🗑️  Removed: ${_SW_XROW[$i]}"
+    _sw_excl_drop $(( pick - 1 )) || return 0
   done
+}
+
+# A rule was picked in the list: Edit Rule (change its text) or Remove Rule.
+_sw_excl_rule() {
+  local i="$1" act value kind="${_SW_XK[$1]}"
+  _bvk_menu act -t "${_SW_XROW[$i]}" -i "🚫" -n -p "e:Edit Rule" "r:Remove Rule" || return 0
+  case "$act" in
+    r) _sw_excl_drop "$i" ;;
+    e) echo
+       _bvk_read value "New text: " -I || return 0
+       value="${value#"${value%%[![:space:]]*}"}"; value="${value%"${value##*[![:space:]]}"}"
+       [ -z "$value" ] && { echo "Cancelled — empty value."; return 0; }
+       case "$kind" in
+         filepath|dirpath) value="${value/#\~/$HOME}"; [[ "$value" == /* ]] || value="$PWD/$value" ;;
+         *) [[ "$value" == */* ]] && { echo "🔴  A name has no / in it. Use \"from path\" for a place."; return 0; } ;;
+       esac
+       sed -i "${_SW_XLN[$i]}s|.*|$(printf '%s  %s' "$kind" "$value" | sed 's/[|&\\]/\\&/g')|" "$_RC_EXCLUDE_FILE"
+       echo "💫 Changed: $(_rc_excl_label "$kind" | cut -d' ' -f2-) $value" ;;
+  esac
 }
 
 # Open the config file in $EDITOR / nano / vi
@@ -143,23 +167,29 @@ _sw_excl_edit() {
   echo "   (applies at once)"
 }
 
-# Main exclude manager — called by 'xe' inside recents tab.  ONE screen: the rules, then the three actions (a add · r remove · e edit).
+# Main exclude manager — called by 'xe' inside recents tab.  ONE screen: the rules are the numbered rows (pick one: Edit Rule / Remove Rule);
+# the actions are typed keys in the footer (a add · r remove · e edit file).
 _sw_excl_menu() {
-  local xc
-  local -a rows
+  local xc i
+  local -a rows acts
   while true; do
     _sw_excl_load
-    rows=(); local i; for i in "${!_SW_XROW[@]}"; do rows+=(-r "${_SW_XROW[$i]}"); done
+    rows=(); for i in "${!_SW_XROW[@]}"; do rows+=("$(( i + 1 )):${_SW_XROW[$i]}"); done
+    acts=("a|add:Add rule" "r|remove:Remove rule" "e|edit:Edit file")
     # THE native choice menu (rule 18): u = back to recents, q = quit
-    if ! _bvk_menu xc -t "Exclude List for Recents" -i "🚫" -k -n -e "(no rules yet)" ${rows[@]+"${rows[@]}"} \
-         "a|add:Add rule" "r|remove:Remove rule" "e|edit:Edit file"; then
+    if [ "${#rows[@]}" -gt 0 ]; then
+      _bvk_menu xc -t "Exclude List for Recents" -i "🚫" -k -n -p -a "${acts[0]}" -a "${acts[1]}" -a "${acts[2]}" "${rows[@]}"
+    else        # no rule to pick: the three actions are the rows
+      _bvk_menu xc -t "Exclude List for Recents" -i "🚫" -k -n -e "(no rules yet)" "${acts[@]}"
+    fi || {
       _bvk_back && { echo "↩️  Back to recents"; return 0; }
       _bvk_quit; return 0
-    fi
+    }
     case "$xc" in
       a)  _sw_excl_add    ;;
       r)  _sw_excl_remove ;;
       e)  _sw_excl_edit   ;;
+      [0-9]*) _sw_excl_rule $(( xc - 1 )) ;;
     esac
   done
 }
