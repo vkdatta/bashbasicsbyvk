@@ -59,6 +59,7 @@ case "${1:-}" in
   --map-gen)  _mg=$(_cm_find bashbasicsbyvk_mapgen) && exec python3 "$_mg" "${@:2}"; echo "mapgen not found"; exit 1 ;;
 esac
 
+[ -n "${BVK_WF_DIR:-}" ] && _wf_resume   # a recording goes on after  cd  then  o
 _lt_mark "startup finished — entering the main loop"
 if [ $# -eq 1 ]; then
   target="$1"
@@ -227,6 +228,7 @@ while true; do
     .dm|.dm.*)   handle_daemon_cmd "$choice" ;;
     .d|.d.*|.d\ *)  handle_display_cmd "$choice" ;;
     gd|gd.*|gdx) handle_gd_cmd "$choice" ;;
+    wf|wf\ *)    handle_wf_cmd "$choice" ;;
     sw)          _inner_run sw ;;
     fx)          _inner_run fx ;;
     api)         _inner_run api ;;

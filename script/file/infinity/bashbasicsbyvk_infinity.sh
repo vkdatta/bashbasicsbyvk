@@ -5,7 +5,7 @@
 _infinity_warning() {
   printf "\n"
   printf "🔴  DEVELOPMENT / EXTREME-RISK WARNING\n"
-  printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+  printf "\n"                                  # (was a private ━ rule line: the app rule is drawn only by the menu templates)
   printf "All Infinity Stones features below are currently in DEVELOPMENT STAGE and\n"
   printf "are subject to extreme stress, failure, data-loss, corruption, and incorrect\n"
   printf "result cases. HIGHLY ADVISED: DO NOT USE THESE FUNCTIONS.\n"
@@ -20,7 +20,7 @@ _infinity_warning() {
   printf "\n"
   printf "DO NOT USE THE FUNCTIONS BELOW, EVEN AT YOUR OWN RISK, until they have been\n"
   printf "fully tested and declared production-ready.\n"
-  printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+  printf "\n"
 }
 
 infinity_stones_menu() {

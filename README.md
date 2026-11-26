@@ -72,6 +72,7 @@ It has two parts:
 - **Organise:** Organise items by year, month, date, extension, or alphabetically — with the ability to undo changes.
 - **Compress:** Pack and unpack multiple items using ZIP, TAR, TAR.GZ, TAR.XZ, TAR.BZ2, 7Z, TAR.ZST, TAR.LZ4, and `.skill` formats.
 - **Cheat codes:** To list every app specific command accepted by the current prompt for quick reference.
+- **Workflows (xlr8):** Type `start_record`, do a task once, then `stop_record`. `wf NAME` repeats it; `wf` lists, edits and removes workflows. Rows and menu options are found by name, not number, and a run stops at the first thing it does not expect.
 - **Functions:** Use built-in operations, workflows or create your own reusable scripts. Functions can be exported and imported.
 - **Find & Replace:** Choose from six modes to find or find and replace text in filenames, file contents, or both.
 - **Native Speed:** Never compromise on speed. bashbasicsbyvk is as fast as you expect it to be 🚅. It uses language-specific compiled engines, such as C for file operations and Go for fileapi network transfers, making this multi-language project exceptionally well-equipped to address language-specific challenges and leverage their respective strengths. It also includes fallback engines, so even if an engine fails due to device-specific issues, a fallback engine, primarily written in shell, ensures the operation can still work.

@@ -445,7 +445,7 @@ _sp_stage_buffer() {
   fi
 
   _sp_ensure_store
-  _sp_guard_and_resolve "$itemlist" "$pfx" || return 0
+  _sp_guard_and_resolve "$itemlist" "$pfx" || { [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "nothing could be staged"; return 0; }
 
   if [ -n "$name" ]; then
     _sp_conflict_decide "$op" "$file" "$name" || return 0

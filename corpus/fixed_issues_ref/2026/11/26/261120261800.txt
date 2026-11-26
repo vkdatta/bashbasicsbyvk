@@ -1,0 +1,15 @@
+1. ISSUE IN BRIEF
+A menu-drift audit found screens that did not use the shared templates: three snapshot screens (device list, targets, snapshot list) printed their own header, numbered rows, a typed key legend and a private "   > " prompt; the shared file picker (_file_picker: csv/zip/unzip/... 13 callers), the shortcut-registry list and the .s.show list printed or framed their own numbered rows; the Infinity warning drew its own private ━ rule lines.
+
+HOW DID YOU DEBUG
+Read the snapshot screens, _bvk_menu (choose.sh), results.sh and the picker code. Static suite (bash tests/run.sh): 12/12 OK. pty: the file picker walked through the real app (fx > file > zip > zip.select.items.csv: open folder, u up, pick file); the snapshot targets / snapshot list / action menus run with a mocked server in a generated driver (outside script/). Not run: the snapshot DEVICES screen (same code shape, bash -n only), the shortcut-registry list and .s.show on screen, and nothing needing the live file API.
+
+CAUSE
+Each screen was written before the shared menu / results screen could show "rows + typed keys"; they kept their own print loops and prompts.
+
+FIX
+staging_snapshot.sh: all three screens are one _bvk_menu each (rows = numbered picks, -p; typed keys a / rf via -a / -k; the row count and device in -q). A pick opens a small menu: target = Open its snapshots / Stop snapshotting it; snapshot = Restore / Extend or shorten / Nuke. The old typed x-N / e-N forms are gone. settings_desc.sh: texts for the five new titles.
+csv.sh (_file_picker): the list is _results_view (_RES_LIST / _RES_ROOT / _RES_HDR); u = one folder up, q = quit; a number opens a folder or picks the file.
+shortcut_registry.sh and select.sh (.s.show): the printed numbered list is _results_view; the .s.show "all" word is no longer needed (every row scrolls).
+infinity.sh: the private ━ lines are blank lines (line numbers kept: the readloop baseline keys on them).
+NOT DONE: transfer.sh local_navigator (line ~203) and gcloud_navigator (~360) still use _pick_rows. They are full navigators (range select 1-3, v view / n new folder / c confirm keys, group prefixes, remote paths); _results_view has no such keys yet. They need _results_view extended first: a separate task.

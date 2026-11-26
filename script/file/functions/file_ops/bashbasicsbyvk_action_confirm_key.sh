@@ -45,6 +45,11 @@ action_confirm_key() {
   echo "  $key"
   echo
   _CM_BACKED=0
+  local _WF_MUTE="${_WF_MUTE:-0}"
+  if [ -n "${BVK_WF_DIR:-}" ] && declare -F _wf_confirm >/dev/null 2>&1 && _wf_confirm play; then
+    echo "OK: Confirmed by the workflow."; return 0
+  fi
+  _WF_MUTE=1                                                     # the number itself is never recorded
   if declare -F _bvk_read >/dev/null 2>&1; then                  # inside the app
     _bvk_read typed "Confirmation number: " || { [ "${_CM_BACKED:-0}" = 1 ] && { _CM_BACKED=0; return 2; }; return 1; }
   else                                                           # a tool that runs as its own process (gitpush): THE ask door, u = back (exit 4), q = no
@@ -60,6 +65,7 @@ action_confirm_key() {
 
   if [[ "$typed" == "$key" ]]; then
     echo "OK: Confirmation accepted."
+    _WF_MUTE=0; [ -n "${BVK_WF_DIR:-}" ] && declare -F _wf_confirm >/dev/null 2>&1 && _wf_confirm record
     return 0
   fi
   echo "🚫 Confirmation failed."

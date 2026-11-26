@@ -1,0 +1,62 @@
+XLR8 - the workflow language of bashbasicsbyvk
+==============================================
+
+  start_record   begin recording (from the main file list)
+  stop_record    finish and give it a name
+  wf NAME        run it
+  wf             list, view, edit, rename, delete
+
+A workflow is a text file, one step per line (or several joined with =>).
+Lines starting with # are notes.
+
+  start / end                  the edges
+  from "/folder"               start in this folder       (from here = wherever you are)
+  on main  /  on switch        the screen the next steps expect
+  cmd c-a                      type a command
+  cmd c- name="a.txt"          a command on rows, found by NAME
+  goto bookmarks               go to a tab   (also: goto "/folder", goto start)
+  where name="myproject"       open the row with this name
+  select all                   in a "pick items" screen
+  select name="a" name="b"     pick by name   (select all except name="a")
+  "Question?" where option="Yes"   answer a menu or yes/no by the option's words
+  input "Question" ask         stop and let you type
+  input "Question" default     just press Enter
+  input "Question" value="x"   always type x
+  confirm auto                 type the safety number for you
+
+Row numbers are never written: menus can be reordered and it still works.
+
+Safety
+------
+* An answer is only given to the question it was written for. Anything
+  unexpected stops the run and shows the step number and the reason.
+* A Yes must name its question.
+* A yes/no or confirm step is skipped (and said so) when the app does not ask.
+* Secrets (hidden typing) are never recorded or replayed.
+* confirm auto removes a safety stop. Delete that line to be asked yourself.
+
+Example
+-------
+  start
+  from here
+  on main
+  cmd c-a
+  cmd sw
+  on switch
+  goto bookmarks
+  where name="mysite"
+  on main
+  cmd d
+  select all
+  "delete" where option="Yes"
+  "back up" where option="No"
+  cmd d-
+  cmd i
+  where option="Git Push"
+  where option="Patch"
+  input "Enter commit message" ask
+  "Create this commit" where option="Yes"
+  "override the remote" where option="Yes"
+  confirm auto
+  goto start
+  end

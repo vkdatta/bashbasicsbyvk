@@ -701,6 +701,7 @@ _st_type_key() {      # a typed character
 
 _st_run() {
   local title="$1" build="$2" act="$3" hint="${4:-}" cmdfn="${5:-}"
+  [ -n "${BVK_WF_DIR:-}" ] && declare -F _wf_screen >/dev/null 2>&1 && _wf_screen "$title"
   local _ST_CMDFN="$cmdfn"      # the screen declares its typed commands with "$_ST_CMDFN --cc"  (key|description|prio|shown|short per line)
   local _ST_WORDFN="${6:-}" _ST_WORDNUM=-1   # optional: "$_ST_WORDFN word" sets _ST_WORDNUM = the row a typed answer word belongs to (_st_follow highlights it)
   local cur=-1 top=0 prev=0 n buf="" pos=0 posb="" _st_wasf=0 num path_title fq="" _sdq="" need=1 page="${_vp_page_step:-10}" navbuf=0 typed=0

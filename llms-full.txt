@@ -262,6 +262,8 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `scr-sync` | act | Sync the shortcut registry |  |
 | `sn` | act | Snapshots |  |
 | `snap-` | act | Add to snapshots | `snap-1` |
+| `start_record` | tool | Record what you do as a workflow |  |
+| `stop_record` | tool | Finish recording and name the workflow |  |
 | `sv` | act | Saved surf |  |
 | `sw` | act | Switch — recents & tabs |  |
 | `sys` | util | System information: OS, device, CPU, memory, disk, battery |  |
@@ -273,6 +275,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `ux-` | act | Share with a user | `ux-1` |
 | `uz-` | act | Unzip items | `uz-2` |
 | `v-` | act | View staged items and sets |  |
+| `wf` | act | Workflows — wf lists them, wf NAME runs one | `wf deploy` |
 | `xtr-` | act | Extract lines / words / characters / bytes from files (files only) | `xtr-1,3` |
 | `z` | act | Organise by year, month, extension… |  |
 | `z-` | act | Zip items | `z-1,3` |

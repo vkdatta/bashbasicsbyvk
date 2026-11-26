@@ -425,6 +425,7 @@ _mc_review() {
 _BVK_MSG_INVALID="🔴  Invalid selection"
 _bvk_invalid() {
   echo "$_BVK_MSG_INVALID"
+  [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "the app did not accept that here" drop
   [ -n "${1:-}" ] && printf -v "$1" '%s' true
   return 0
 }

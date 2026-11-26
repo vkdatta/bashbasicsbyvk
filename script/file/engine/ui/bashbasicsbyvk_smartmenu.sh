@@ -993,6 +993,18 @@ read() {
   [ -z "$_sm_var" ] && _sm_var="REPLY"
   _bvk_noemoji _sm_prompt          # no emoji on the line the caret sits on (see _bvk_noemoji)
 
+  # workflows (bashbasicsbyvk_wf.sh): answer this question, or note what the person answers.  Secrets (-s) are neither.
+  local _WF_WATCH=0 _WF_MENU=0
+  if [ -n "${BVK_WF_DIR:-}" ] && declare -F _wf_prompt >/dev/null 2>&1 && [[ "$_sm_var" != _wf_* ]]; then
+    case " $* " in
+      *" -s -n1 "*) _wf_mode && [ "$_WF_M" = play ] && { _sm_reset; return 0; } ;;     # "press any key"
+      *" -s "*) ;;
+      *) _WF_WATCH=1
+         _sm_detect && _WF_MENU=1
+         if _wf_prompt play "${_sm_partial}${_sm_prompt}"; then _sm_reset; builtin printf -v "$_sm_var" '%s' "$_WF_ANSWER"; return 0; fi ;;
+    esac
+  fi
+
   # A read consumes whatever was printed above it, so the capture
   # is reset on every path out of here. Without this, a menu printed
   # before an unrelated prompt would still be sitting in the buffer
@@ -1009,11 +1021,13 @@ read() {
      || ! declare -F _vp_render_fresh >/dev/null 2>&1; then
     $_sm_active && _cm_ok=0
     _cm_read_fallback "$_cm_ok" "${_sm_partial}${_sm_prompt}" "$_cm_init" "$_sm_var" "$_cm_edit" "$@"; _sm_rc=$?
+    (( _WF_WATCH && _sm_rc == 0 )) && _wf_prompt record "${_sm_partial}${_sm_prompt}" "${!_sm_var}"
     _sm_reset; return $_sm_rc
   fi
 
   if ! _sm_detect; then
     _cm_read_fallback "$_cm_ok" "${_sm_partial}${_sm_prompt}" "$_cm_init" "$_sm_var" "$_cm_edit" "$@"; _sm_rc=$?
+    (( _WF_WATCH && _sm_rc == 0 )) && _wf_prompt record "${_sm_partial}${_sm_prompt}" "${!_sm_var}"
     _sm_reset; return $_sm_rc
   fi
 
@@ -1021,6 +1035,7 @@ read() {
   __smr_rows=$(_term_rows)
   if [ "$__smr_rows" -lt 8 ]; then
     _cm_read_fallback "$_cm_ok" "${_sm_partial}${_sm_prompt}" "$_cm_init" "$_sm_var" "$_cm_edit" "$@"; _sm_rc=$?
+    (( _WF_WATCH && _sm_rc == 0 )) && _wf_prompt record "${_sm_partial}${_sm_prompt}" "${!_sm_var}"
     _sm_reset; return $_sm_rc
   fi
 
@@ -1042,6 +1057,7 @@ read() {
       *) break ;;
     esac
   done
+  (( _WF_WATCH && __smr_g != 2 )) && { _WF_MENU=1; _wf_prompt record "$_sm_prompt" "$_sm_result"; }
   _sm_reset
   declare -F _cm_local_clear >/dev/null 2>&1 && _cm_local_clear
 

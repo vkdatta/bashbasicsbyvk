@@ -338,35 +338,31 @@ _snap_menu_device_view() {   # one device: its watched paths, and its snapshots
     done <<<"$out"
     _ms_perm snap_targets "${#T_ID[@]}" name=T_PATH last=T_LAST       # Settings › Display › Sort order of this list
     _ms_reorder T_ID T_PATH T_KIND T_LAST
-    echo
-    echo "📸 $dlabel$( [ "$is_self" = 1 ] && echo '  (this computer)' )   —   files/folders on its snapshot list: ${#T_ID[@]}"
-    if [ ${#T_ID[@]} -eq 0 ]; then echo "   (none)  — add some with  snap-1-3"; fi
+    local -a _rows=(); local _q
     for i in "${!T_ID[@]}"; do
-      printf '  %2d) %s %s   — last snapshot: %s\n' "$((i+1))" "$( [ "${T_KIND[$i]}" = d ] && echo 📁 || echo 📄 )" "${T_PATH[$i]:-(path hidden: key unavailable)}" \
-        "$( [ "${T_LAST[$i]:-0}" -gt 0 ] 2>/dev/null && _snap_name "${T_LAST[$i]}" || echo none yet )"
+      _rows+=("$((i+1)):$( [ "${T_KIND[$i]}" = d ] && echo 📁 || echo 📄 ) ${T_PATH[$i]:-(path hidden: key unavailable)}   — last snapshot: $( [ "${T_LAST[$i]:-0}" -gt 0 ] 2>/dev/null && _snap_name "${T_LAST[$i]}" || echo none yet )")
     done
-    echo "   N: snapshots of that path · all: every snapshot of this device · x-N: stop snapshotting it (removes it from the list$( [ "$is_self" = 1 ] || echo ' — that device stops on its next sync' )) · u: back"
-    [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
-    _bvk_read a "   > " || return 0
-    a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
-    case "${a,,}" in
-      u|"") return 0 ;;
-      q) _bvk_quit; return 0 ;;
-      all) _snap_menu_snaps "$lk" "$dev" "" "all paths" ;;
-      x-*)
-        n="${a#*-}"
-        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le ${#T_ID[@]} ]; then
-          _bvk_yn a "Stop snapshotting '${T_PATH[$((n-1))]}'? Existing snapshots stay until they expire."
-          case "${a,,}" in y|yes)
-            _BB_CALL_HDRS=(); _bb_call DELETE "/snapshots/targets/$dev/${T_ID[$((n-1))]}" || true
-            if [ "$_BB_STATUS" = 200 ]; then echo "💫 Removed from the list."; [ "$is_self" = 1 ] && _snap_target_drop "${T_ID[$((n-1))]}"
-            else echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")"; fi ;;
-          esac
-        else echo "🔴  Usage: x-2"; fi ;;
-      *)
-        if [[ "$a" =~ ^[0-9]+$ ]] && [ "$a" -ge 1 ] && [ "$a" -le ${#T_ID[@]} ]; then
-          _snap_menu_snaps "$lk" "$dev" "${T_ID[$((a-1))]}" "${T_PATH[$((a-1))]}"
-        else echo "🔴  Not an option."; fi ;;
+    _q="$dlabel$( [ "$is_self" = 1 ] && echo '  (this computer)' ) — files/folders on its snapshot list: ${#T_ID[@]}"
+    # THE native choice menu (rule 18): the paths are the numbered rows; a = every snapshot of this device; u = back, q = quit
+    if [ ${#_rows[@]} -gt 0 ]; then
+      _bvk_menu a -t "Snapshot targets" -i "📸" -q "$_q" -k -n -p -a "a|all:All snapshots" "${_rows[@]}"
+    else
+      _bvk_menu a -t "Snapshot targets" -i "📸" -q "$_q" -k -n -e "(none — add some with snap-1-3)" "a|all:All snapshots"
+    fi || { _bvk_back && return 0; _bvk_quit; return 0; }
+    case "$a" in
+      a) _snap_menu_snaps "$lk" "$dev" "" "all paths" ;;
+      [0-9]*)
+        n="$a"; i=$((n-1))
+        _bvk_menu a -t "Snapshot target" -i "📸" -q "${T_PATH[$i]}" -n -p "o:Open its snapshots" "x:Stop snapshotting it" || continue
+        case "$a" in
+          o) _snap_menu_snaps "$lk" "$dev" "${T_ID[$i]}" "${T_PATH[$i]}" ;;
+          x) _bvk_yn a "Stop snapshotting '${T_PATH[$i]}'? Existing snapshots stay until they expire.$( [ "$is_self" = 1 ] || echo ' That device stops on its next sync.' )"
+             case "${a,,}" in y|yes)
+               _BB_CALL_HDRS=(); _bb_call DELETE "/snapshots/targets/$dev/${T_ID[$i]}" || true
+               if [ "$_BB_STATUS" = 200 ]; then echo "💫 Removed from the list."; [ "$is_self" = 1 ] && _snap_target_drop "${T_ID[$i]}"
+               else echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")"; fi ;;
+             esac ;;
+        esac ;;
     esac
   done
 }
@@ -387,41 +383,27 @@ _snap_menu_snaps() {         # snapshots of a device (optionally of one path)
     done <<<"$out"
     _ms_perm snapshots "${#S_ID[@]}" created=S_AT size=S_BYTES expiry=S_EXP      # Settings › Display › Sort order of this list
     _ms_reorder S_ID S_TGT S_AT S_BYTES S_EXP
-    echo
-    _ms_label snapshots; echo "🕘 SNAPSHOTS — $label   (${#S_ID[@]}, sorted: $_ms_l)   🕐 times in $(_tz_label 2>/dev/null || date +%Z)"
-    [ ${#S_ID[@]} -eq 0 ] && echo "   (none yet — they appear after the first sync while  o  is running)"
+    _ms_label snapshots
+    if [ ${#S_ID[@]} -eq 0 ]; then echo "📜  $label: no snapshots yet — they appear after the first sync while  o  is running."; return 0; fi
     local nowms; nowms=$(( $(date +%s) * 1000 ))
+    local -a _rows=()
     for i in "${!S_ID[@]}"; do
-      printf '  %2d) %s   %s   gone in %s\n' "$((i+1))" "$(_snap_name "${S_AT[$i]}")" "$(_api_hsize "${S_BYTES[$i]}" 2>/dev/null || echo "${S_BYTES[$i]} B")" \
-        "$(_bb_fmt_duration $(( (${S_EXP[$i]} - nowms) / 1000 )))"
+      _rows+=("$((i+1)):🕘 $(_snap_name "${S_AT[$i]}")   $(_api_hsize "${S_BYTES[$i]}" 2>/dev/null || echo "${S_BYTES[$i]} B")   gone in $(_bb_fmt_duration $(( (${S_EXP[$i]} - nowms) / 1000 )))")
     done
-    echo "   N: restore here (into a new folder named after it) · e-N: extend / shorten · x-N: nuke · u: back      (snapshots cannot be renamed)"
-    [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
-    _bvk_read a "   > " || return 0
-    a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
-    case "${a,,}" in
-      u|"") return 0 ;;
-      q) _bvk_quit; return 0 ;;
-      x-*|e-*)
-        local verb="${a:0:1}" spec=""; n="${a#*-}"
-        if [ "$verb" = e ]; then local nn="${n%%[[:space:]]*}"; [ "$nn" != "$n" ] && spec="${n#*[[:space:]]}"; n="$nn"; fi
-        if ! [[ "$n" =~ ^[0-9]+$ ]] || [ "$n" -lt 1 ] || [ "$n" -gt ${#S_ID[@]} ]; then echo "🔴  Pick a number from the list."; continue; fi
-        i=$((n-1))
-        if [ "$verb" = x ]; then
-          # deleting a snapshot needs the 6-digit action confirmation key (u = back to the list, anything else = not nuked)
-          action_confirm_key "DELETE FROM SNAPSHOTS — confirmation required" "The snapshot is deleted immediately:" "  $(_snap_name "${S_AT[$i]}")" && a=yes || a=no
-          case "${a,,}" in y|yes)
-            _BB_CALL_HDRS=(); _bb_call DELETE "/links/${S_ID[$i]}" || true
-            [ "$_BB_STATUS" = 200 ] && echo "💫 Nuked." || echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;;
-          esac
-        else
-          _snap_extend "${S_ID[$i]}" "${S_AT[$i]}" "${S_EXP[$i]}" "$spec"
-        fi ;;
-      *)
-        if [[ "$a" =~ ^[0-9]+$ ]] && [ "$a" -ge 1 ] && [ "$a" -le ${#S_ID[@]} ]; then
-          i=$((a-1)); local nm; nm=$(_snap_name "${S_AT[$i]}")
-          _svc_restore snapshot "${S_ID[$i]}" "$nm" "${path:-$PWD}/$nm"
-        else echo "🔴  Not an option."; fi ;;
+    # THE native choice menu (rule 18): the snapshots are the numbered rows; a pick opens Restore / Extend / Nuke; u = back, q = quit
+    _bvk_menu a -t "Snapshot list" -i "🕘" -q "$label — ${#S_ID[@]} snapshot(s), sorted: $_ms_l · times in $(_tz_label 2>/dev/null || date +%Z)" -n -p "${_rows[@]}" \
+      || { _bvk_back && return 0; _bvk_quit; return 0; }
+    i=$((a-1)); local nm; nm=$(_snap_name "${S_AT[$i]}")
+    _bvk_menu a -t "Snapshot" -i "🕘" -q "$nm" -n -p "r:Restore here (into a new folder named after it)" "e:Extend / shorten how long it is kept" "x:Nuke it" || continue
+    case "$a" in
+      r) _svc_restore snapshot "${S_ID[$i]}" "$nm" "${path:-$PWD}/$nm" ;;
+      e) _snap_extend "${S_ID[$i]}" "${S_AT[$i]}" "${S_EXP[$i]}" "" ;;
+      x) # deleting a snapshot needs the 6-digit action confirmation key (u = back to the list, anything else = not nuked)
+         action_confirm_key "DELETE FROM SNAPSHOTS — confirmation required" "The snapshot is deleted immediately:" "  $nm" && a=yes || a=no
+         case "${a,,}" in y|yes)
+           _BB_CALL_HDRS=(); _bb_call DELETE "/links/${S_ID[$i]}" || true
+           [ "$_BB_STATUS" = 200 ] && echo "💫 Nuked." || echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;;
+         esac ;;
     esac
   done
 }
@@ -483,28 +465,23 @@ snapshot_menu() {
   while :; do
     lk=$(_snap_labelkey) || { echo "❌ Could not reach the server."; return 1; }
     _snap_menu_devices "$lk" || return 1
-    echo
-    echo "📸 SNAPSHOTS (sn)   every $(_bb_fmt_duration "$(_snap_interval)") while o runs · kept $(_bb_fmt_duration "$(_bb_svc_ttl snapshot)") · $( [ "$(_bb_cfg_val snapshot_enabled on)" = off ] && echo 'PAUSED (Settings → File API → Snapshots)' || echo on )"
     [ -s "$_SNAP_NOTICE" ] && cat "$_SNAP_NOTICE"
-    echo "   Devices (told apart by their telemetry id):"
-    [ ${#SNAP_D_ID[@]} -eq 0 ] && echo "   (none yet — add files with  snap-1-3  and keep  o  open)"
+    local -a _rows=(); local _q
     for i in "${!SNAP_D_ID[@]}"; do
-      printf '  %2d) %s %s · %s  — %s path(s), %s snapshot(s), last seen %s\n' "$((i+1))" \
-        "$( [ "${SNAP_D_ID[$i]}" = "$SNAP_D_SELF" ] && echo '★' || echo ' ' )" "${SNAP_D_LABEL[$i]:-device}" "${SNAP_D_ID[$i]:0:8}" "${SNAP_D_TARGETS[$i]}" "${SNAP_D_SNAPS[$i]}" "$(_bb_fmt_when "${SNAP_D_SEEN[$i]}")"
+      _rows+=("$((i+1)):$( [ "${SNAP_D_ID[$i]}" = "$SNAP_D_SELF" ] && echo '★' || echo ' ' ) ${SNAP_D_LABEL[$i]:-device} · ${SNAP_D_ID[$i]:0:8}  — ${SNAP_D_TARGETS[$i]} path(s), ${SNAP_D_SNAPS[$i]} snapshot(s), last seen $(_bb_fmt_when "${SNAP_D_SEEN[$i]}")")
     done
-    echo "   N: open that device · rf: refresh · u: back       (★ = this computer)"
-    [ "${_BVK_TO_MAIN:-0}" = 1 ] && return 0      # q in a deeper screen: close to the main loop
-    _bvk_read a "   > " || return 0
-    a="${a#"${a%%[![:space:]]*}"}"; a="${a%"${a##*[![:space:]]}"}"
-    case "${a,,}" in
-      u|sn|"") return 0 ;;
-      q) _bvk_quit; return 0 ;;
+    _q="every $(_bb_fmt_duration "$(_snap_interval)") while o runs · kept $(_bb_fmt_duration "$(_bb_svc_ttl snapshot)") · $( [ "$(_bb_cfg_val snapshot_enabled on)" = off ] && echo 'PAUSED (Settings → File API → Snapshots)' || echo on ) · ★ = this computer"
+    # THE native choice menu (rule 18): the devices are the numbered rows; rf is a typed key; u = back, q = quit
+    if [ ${#_rows[@]} -gt 0 ]; then
+      _bvk_menu a -t "Snapshots" -i "📸" -q "$_q" -k -n -p -a "rf|refresh:Refresh" "${_rows[@]}"
+    else
+      _bvk_menu a -t "Snapshots" -i "📸" -q "$_q" -k -n -e "(no devices yet — add files with snap-1-3 and keep o open)" "rf|refresh:Refresh"
+    fi || { _bvk_back && return 0; _bvk_quit; return 0; }
+    case "$a" in
       rf) ;;
-      *)
-        if [[ "$a" =~ ^[0-9]+$ ]] && [ "$a" -ge 1 ] && [ "$a" -le ${#SNAP_D_ID[@]} ]; then
-          i=$((a-1))
-          _snap_menu_device_view "$lk" "${SNAP_D_ID[$i]}" "${SNAP_D_LABEL[$i]:-device} · ${SNAP_D_ID[$i]:0:8}" "$( [ "${SNAP_D_ID[$i]}" = "$SNAP_D_SELF" ] && echo 1 || echo 0 )"
-        else echo "🔴  Not an option."; fi ;;
+      [0-9]*)
+        i=$((a-1))
+        _snap_menu_device_view "$lk" "${SNAP_D_ID[$i]}" "${SNAP_D_LABEL[$i]:-device} · ${SNAP_D_ID[$i]:0:8}" "$( [ "${SNAP_D_ID[$i]}" = "$SNAP_D_SELF" ] && echo 1 || echo 0 )" ;;
     esac
   done
 }

@@ -293,9 +293,13 @@ _bvk_menu() {
     printf -v "$_bc_var" '%s' ""; return 1
   fi
 
+  if [ -n "${BVK_WF_DIR:-}" ] && declare -F _wf_box >/dev/null 2>&1 && _wf_box play; then
+    printf -v "$_bc_var" '%s' "$_WF_ANSWER"; [ -n "$_WF_ANSWER" ]; return
+  fi
   if ! _bc_can_draw; then
     _bc_plain || { printf -v "$_bc_var" '%s' ""; return 1; }
     printf -v "$_bc_var" '%s' "$_bc_pick"
+    [ -n "${BVK_WF_DIR:-}" ] && declare -F _wf_box >/dev/null 2>&1 && _wf_box record
     return 0
   fi
 
@@ -330,11 +334,13 @@ _bvk_menu() {
     _bc_out=""
     for _bc_i in "${!_bc_key[@]}"; do [ "${_bc_on[$_bc_i]}" = 1 ] && _bc_out+="${_bc_out:+ }${_bc_key[$_bc_i]}"; done
     printf -v "$_bc_var" '%s' "$_bc_out"
+    [ -n "${BVK_WF_DIR:-}" ] && declare -F _wf_box >/dev/null 2>&1 && _wf_box record
     (( _bc_receipt )) && echo "   → ${_bc_out:-none}"
     return 0
   fi
   if [ -z "$_bc_pick" ]; then printf -v "$_bc_var" '%s' ""; return 1; fi
   printf -v "$_bc_var" '%s' "$_bc_pick"
+  [ -n "${BVK_WF_DIR:-}" ] && declare -F _wf_box >/dev/null 2>&1 && _wf_box record
   (( _bc_receipt )) && echo "   → $_bc_text"
   return 0
 }

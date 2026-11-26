@@ -31,6 +31,7 @@ _inf_sub() {
     exit 0
   ) || _is_rc=$?
   if [ "$_is_rc" = 42 ]; then _bvk_quit; return 0; fi
+  [ "$_is_rc" != 0 ] && [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "the tool ended with an error (see the message above)"
   return "$_is_rc"
 }
 

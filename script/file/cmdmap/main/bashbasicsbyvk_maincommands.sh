@@ -80,6 +80,10 @@ cmd_def .r       word   -              act    "Rule book"
 cmd_def .d       word   -              act    "Display only what matches" ".d.ext py"
 cmd_def .dm      word   -              act    "Background daemon"
 cmd_def .ai      word   -              act    "Ask the AI for a command" ".ai delete all pyc"
+# ── workflows (xlr8)
+cmd_def wf       word   -              act    "Workflows — wf lists them, wf NAME runs one"  "wf deploy"
+cmd_def start_record exact bvk_main_exec tool "Record what you do as a workflow"
+cmd_def stop_record  exact bvk_main_exec tool "Finish recording and name the workflow"
 # ── tools
 cmd_def health   exact  bvk_main_exec  util   "What is active on this machine"
 cmd_def lang     exact  bvk_main_exec  util   "Which engines run: Drill (C or Python) · FileAPI (Go or Node) · Find & Replace (C or Python)"

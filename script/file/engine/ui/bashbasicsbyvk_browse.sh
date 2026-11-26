@@ -379,6 +379,7 @@ select_items_common() {
   [ "${2:-}" == "allow_a" ] && _multi_allow_a=true
   if [ ${#items[@]} -eq 0 ]; then
     echo "❌ No items available"
+    [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "there are no items to pick"
     return 1
   fi
   local _multi_header_hook=_pk_header _multi_footer_hook=_pk_footer _multi_label="Select" _multi_hdr_gap=1 _prompt="$1"
@@ -817,6 +818,7 @@ _bvk_cd_shell() {
 
 # the notice rows under the location rows: the flat view, then the grouped (imaginary) view
 _mh_notes_flat() {
+  [ -n "${BVK_WF_DIR:-}" ] && [ "$(cat "$BVK_WF_DIR/mode" 2>/dev/null)" = rec ] && echo "🔴 recording a workflow (stop_record to finish)"
   [ -s "${_SNAP_NOTICE:-}" ] && cat "$_SNAP_NOTICE"        # Snapshots paused: not enough credits
   [ -n "${_sel_banner:-}" ] && echo "$_sel_banner"
   [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"
@@ -827,6 +829,7 @@ _mh_notes_flat() {
   return 0
 }
 _mh_notes_imaginary() {
+  [ -n "${BVK_WF_DIR:-}" ] && [ "$(cat "$BVK_WF_DIR/mode" 2>/dev/null)" = rec ] && echo "🔴 recording a workflow (stop_record to finish)"
   [ -n "${_sel_banner:-}" ] && echo "$_sel_banner"
   [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"
   echo "$_imag_banner"
@@ -1138,8 +1141,9 @@ _rc_byte() {        # Ctrl-A / Ctrl-E on an empty line (with text they select al
 
 _read_choice_raw() {
   choice=""
+  [ -n "${BVK_WF_DIR:-}" ] && _wf_list play && { _buf=""; _pos=0; return 0; }   # a workflow answers (bashbasicsbyvk_wf.sh)
   # SCRIPTED INPUT (tests, pipes): stdin is not a terminal → ONE line per prompt, no key reader.  A closed stdin answers q, so no loop can spin on it.
-  if [ ! -t 0 ]; then IFS= builtin read -r choice || choice=q; choice="${choice%$'\r'}"; return 0; fi
+  if [ ! -t 0 ]; then IFS= builtin read -r choice || choice=q; choice="${choice%$'\r'}"; [ -n "${BVK_WF_DIR:-}" ] && _wf_list record; return 0; fi
   _can_nav=false
   _vp_count
   if [ "$_vp_n" -gt 0 ]; then
@@ -1167,6 +1171,7 @@ _read_choice_raw() {
   if [ -n "$_buf" ]; then choice="$_buf"
   elif $_can_nav && [ "$_hl_index" -ge 1 ]; then choice="$_hl_index"
   fi
+  [ -n "${BVK_WF_DIR:-}" ] && _wf_list record
   # loadtime: Enter was pressed — a screen change starts here (numbers get the item's name as a label)
   if [ "${_LT_ON:-0}" = 1 ] || [ -n "${_SL_ON:-}" ]; then
     local _ltl=""

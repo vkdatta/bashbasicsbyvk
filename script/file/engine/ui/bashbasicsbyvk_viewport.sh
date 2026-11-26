@@ -1689,7 +1689,9 @@ _multi_click() {      # called by _bvk_edit_run for a press that is not on the t
 _multi_prompt_loop() {
   declare -F _cm_ctx_find >/dev/null 2>&1 && _cm_ctx_find
   while :; do
+    [ -n "${BVK_WF_DIR:-}" ] && _wf_pick play && break
     _multi_prompt_loop_raw
+    [ -n "${BVK_WF_DIR:-}" ] && _wf_pick record
     declare -F _cm_gate_multi >/dev/null 2>&1 || break
     _cm_gate_multi && break
   done

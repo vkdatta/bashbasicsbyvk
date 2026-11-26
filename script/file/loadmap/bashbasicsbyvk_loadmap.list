@@ -310,3 +310,6 @@ bashbasicsbyvk_xui_nf.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_rb.map|||command-map wiring, read as data
 bashbasicsbyvk_xui_chm.map|||command-map wiring, read as data
 
+bashbasicsbyvk_xlr8.sh|||workflows: reads the xlr8 language; loaded by the first wf / start_record
+bashbasicsbyvk_wf.sh|bashbasicsbyvk_xlr8.sh||workflows: record, run, list; the prompt hooks call it only while BVK_WF_DIR is set
+bashbasicsbyvk_xlr8.txt|||data: the xlr8 language guide, shown by wf

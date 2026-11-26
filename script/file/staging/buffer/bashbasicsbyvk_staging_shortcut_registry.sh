@@ -252,17 +252,17 @@ handle_scr_sync() {
       if [ ${#entries[@]} -eq 0 ]; then
         echo "📜  Registry is empty."
       else
-        echo ""
-        echo "📋 ${#entries[@]} registered shortcut(s):"
-        local i=1 e sc_file target
+        # ONE results screen (results.sh): the shortcut files as rows, the target after each name; u = back, q = quit
+        local e sc_file target
+        _RES_LIST=(); _RES_NOTE=()
         for e in "${entries[@]}"; do
-          sc_file="${e%%${_SCR_SEP}*}"
-          target="${e#*${_SCR_SEP}}"
-          local exists_tag=""
-          [ ! -f "$sc_file" ] && exists_tag="  🔴 missing"
-          printf "  %3d) %s%s\n       → %s\n" "$i" "$(basename "$sc_file")" "$exists_tag" "$target"
-          i=$((i + 1))
+          sc_file="${e%%${_SCR_SEP}*}"; target="${e#*${_SCR_SEP}}"
+          _RES_LIST+=("$sc_file")
+          _RES_NOTE["$sc_file"]="→ $target$( [ -f "$sc_file" ] || echo '  🔴 missing' )"
         done
+        _RES_ROOT="/.."                                   # no folder prefix matches: every row shows its full path
+        _RES_HDR="🗂️  ${#entries[@]} registered shortcut(s)"
+        while _results_view; do :; done                   # a row number has nothing to open here: the list simply stays
       fi
       ;;
     2) _scr_validate ;;

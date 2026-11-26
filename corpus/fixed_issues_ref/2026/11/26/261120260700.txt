@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+A repeated task (stage, switch to a bookmark, delete, apply, git push) needs about twenty typed answers every time; the app had no way to record and replay it.
+
+HOW DID YOU DEBUG
+Read the input engine to find where every answer is taken. Ran record and replay of the whole flow in a real pty against a local bare repository with a stand-in gh, including a diverged remote, a moved bookmark row, a missing bookmark, a wrong option name and an empty source folder. Real GitHub, python tools run as their own process, touch input and a configured delete backup were not run.
+
+CAUSE
+Missing feature.
+
+FIX
+New script/file/workflow (xlr8 reader, recorder / runner, language guide) and commands start_record, stop_record, wf. One hook in each place that takes an answer: list reader, item picker, read shim, choice box, confirmation number. Failure points (staging, copy / move, bookmark target, tool exit) stop a running workflow. Lesson: answer by row / option name and match the question, never by number.

@@ -455,6 +455,8 @@ bvk_main_exec() {
     q)      # q on the main loop's own prompt leaves the app; q anywhere else (a menu, a prompt inside a flow) closes to the main loop
             if [ "${_CM_MAP:-main}" = main ] && [ "${_CM_FLOW:-0}" = 0 ]; then _bvk_exit; else _bvk_quit; fi ;;
     h)      home_menu ;;
+    start_record) _wf_start_record ;;
+    stop_record)  _wf_stop_record ;;
     s)      settings_menu ;;
     i)      infinity_stones_menu ;;
     -h)     open_help ;;
@@ -507,7 +509,7 @@ _cm_gate_choice() {
            fi
            return 1 ;;
     back)  choice="${_CM_MAP_BACK[$_CM_MAP]:-u}"; return 0 ;;
-    block) echo "❌ Invalid command: $choice — not available in ${_CM_MAP}"; return 1 ;;
+    block) echo "❌ Invalid command: $choice — not available in ${_CM_MAP}"; [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "'$choice' is not a command here" drop; return 1 ;;
   esac
   return 0
 }

@@ -503,6 +503,8 @@ perform_copy() {
     fi
   done
   _transfer_report "Copied" "$ok" "$total" "$dest" "${failed[@]}"
+  (( ${#failed[@]} )) && [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "some items were not copied (listed above)"
+  return 0
 }
 
 perform_move() {
@@ -541,6 +543,8 @@ perform_move() {
   done
   _carry_end
   _transfer_report "Moved" "$ok" "$total" "$dest" "${failed[@]}"
+  (( ${#failed[@]} )) && [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "some items were not moved (listed above)"
+  return 0
 }
 
 _shortcut_read_field() {

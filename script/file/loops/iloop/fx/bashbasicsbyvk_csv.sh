@@ -49,13 +49,10 @@ _file_picker() {
         done
         _fp_pats+=("$_fp_pat")
     done
-    local _fp_lbl="${_fp_EXT// /\/}"          # label shown to the user: ZIP/TXT
+    local _fp_lbl="${_fp_EXT// /\/}" _fp_rc          # label shown to the user: ZIP/TXT
 
-    local _fp_desc="Navigate to select your ${_fp_lbl} file (folders and .${_fp_ext// / .} files only). Type a number to open a folder or pick a file."
 
     while true; do
-        _pick_header "Items" "${_fp_lbl} file" "$_fp_nav_path" "" "$_fp_desc"
-
         # ── Build item list: dirs + matching files only
         # Pure-bash globbing: no find, no sort, no per-file loop, no forks.
         #   "*/"          -> directories only (one readdir)
@@ -76,47 +73,18 @@ _file_picker() {
         done
         eval "$_sg"
 
-        # ── Render list: _pick_rows frames it (the viewport draws the rules; with no viewport the helper prints them) ──
-        _pick_rows "${_fp_items[@]}"
-        _mc_footer_std -T MG2374
-        _mc_read _fp_choice "${_TPL_ACCEPTOR} " || { _mc_unwind; _fp_out=""; return 1; }       # rc != 0: the flow was cancelled
-
-        # strip surrounding whitespace
-        _fp_choice="${_fp_choice#"${_fp_choice%%[![:space:]]*}"}"
-        _fp_choice="${_fp_choice%"${_fp_choice##*[![:space:]]}"}"
-
-        case "$_fp_choice" in
-            q|Q) _bvk_quit; _fp_out=""; return 1 ;;
-            h|H|cc|CC) _mc_std_key "$_fp_choice"; _mc_unwind && { _fp_out=""; return 1; } ;;
-
-            u|U)
-                if [ "$_fp_nav_path" != "/" ]; then
-                    _fp_nav_path=$(dirname "$_fp_nav_path")
-                else
-                    _fp_out=""; return 1          # already at the top: u steps back out of the picker (z, the old cancel, is gone)
-                fi
-                ;;
-
-            "")
-                echo "  🔴  No input — enter a number, u, or q."
-                ;;
-
-            *)
-                if [[ "$_fp_choice" =~ ^[0-9]+$ ]] \
-                   && [ "$_fp_choice" -ge 1 ] \
-                   && [ "$_fp_choice" -le "${#_fp_items[@]}" ]; then
-                    local _sel="${_fp_items[$((_fp_choice - 1))]}"
-                    if [ -d "$_sel" ]; then
-                        _fp_nav_path="$_sel"
-                    else
-                        _fp_out="$_sel"
-                        echo "💫 Selected: $(basename "$_sel")"
-                        return 0
-                    fi
-                else
-                    echo "  🔴  Invalid — enter a number between 1 and ${#_fp_items[@]}."
-                fi
-                ;;
+        # ── ONE results screen (results.sh): the same list, header, footer and keys as Find's hits.
+        #    A number opens a folder or picks the file; u = one folder up (at the top: out of the picker); q = quit.
+        _RES_LIST=("${_fp_items[@]}"); _RES_NOTE=(); _RES_ROOT="${_dir:-/}"
+        _RES_HDR="📂 ${_fp_lbl} file · ${_fp_nav_path}"
+        _results_view; _fp_rc=$?
+        case "$_fp_rc" in
+            2) _fp_out=""; return 1 ;;                           # q: the unwind flag is up
+            1) if [ "$_fp_nav_path" != "/" ]; then _fp_nav_path=$(dirname "$_fp_nav_path")
+               else _fp_out=""; return 1; fi ;;                  # already at the top: u steps back out of the picker
+            *) local _sel="$_RES_PICK"
+               if [ -d "$_sel" ]; then _fp_nav_path="$_sel"
+               else _fp_out="$_sel"; echo "💫 Selected: $(basename "$_sel")"; return 0; fi ;;
         esac
     done
 }

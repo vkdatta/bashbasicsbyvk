@@ -49,6 +49,7 @@ handle_staging_dispatch() {
   done
 
   if [ "$total" -eq 0 ]; then
+    [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "d- had nothing staged to apply"
     if [ -n "$names" ]; then
       echo "🔴  No set named '$names' in the copy / move / shortcut / bookmark buffers.  v- shows the names in use."
     else
@@ -64,7 +65,7 @@ handle_staging_dispatch() {
     for op in "${_SP_APPLY_OPS[@]}"; do
       file=$(_sp_file_for "$op" "$persistent")
       [ "$(_sp_count "$file" "$names")" -gt 0 ] || continue
-      _sp_apply_op "$op" "$file" "$dest" "$names"
+      _sp_apply_op "$op" "$file" "$dest" "$names" || { [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "applying the staged items failed"; }
       [ "$persistent" = false ] && _sp_drop "$file" "$names"
     done
   done

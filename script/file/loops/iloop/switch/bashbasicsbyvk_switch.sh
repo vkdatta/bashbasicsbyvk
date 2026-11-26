@@ -387,9 +387,9 @@ _sw_bookmarks_handle_selection() {
     [ -d "$selected" ] && { path="$selected"; group_prefix=""; force_show=false; return 0; }
     if [[ "$bn" == *.swlink ]]; then
       # a bookmark is a POINTER: a folder opens (the list moves there), a file opens its run loop. The pointer's own file is never what you land on.
-      _swlink_read_target_v "$selected" || { echo "🔴  Bookmark has no target"; return 0; }
+      _swlink_read_target_v "$selected" || { echo "🔴  Bookmark has no target"; [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "the bookmark has no target"; return 0; }
       if [ ! -e "$_SWL_T" ]; then
-        _swlink_heal "$selected" && echo "📍 ${bn%.swlink} had moved — found it: $_SWL_T" || { echo "🔴  Target gone: $_SWL_T"; return 0; }
+        _swlink_heal "$selected" && echo "📍 ${bn%.swlink} had moved — found it: $_SWL_T" || { echo "🔴  Target gone: $_SWL_T"; [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "the bookmark target is gone: $_SWL_T"; return 0; }
       fi
       if [ -d "$_SWL_T" ]; then _sw_result_path="$_SWL_T"; return 1; fi
       handle_file "$_SWL_T"

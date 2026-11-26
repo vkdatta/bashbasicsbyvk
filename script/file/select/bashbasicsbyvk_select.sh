@@ -5,7 +5,7 @@
 #  .us <expression>      unselect matches
 #  .s.set <expression>   replace the whole selection
 #  .s.add / .s.sub       aliases of .s / .us
-#  .s.show [all]  .s.clr  .s.shown
+#  .s.show  .s.clr  .s.shown
 #  .r                    open the rule book (create / edit / delete / rename inside it)
 #
 #  Matching is done by bashbasicsbyvk_select_expr (python3).  This file only handles
@@ -393,20 +393,13 @@ _sel_cmd_rec() {
   [ ${#found[@]} -gt 0 ] && echo "▶️  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }
 
-_sel_cmd_show() {
-  local arg="${1# }" all=false
-  [ "$arg" = "all" ] && all=true
+_sel_cmd_show() {                # .s.show — the selection, on the ONE results screen (results.sh); the old "all" word is no longer needed: every row scrolls
   local -a sel=()
   _sel_load_live sel
   if [ ${#sel[@]} -eq 0 ]; then echo "📜  Selection is empty (use .s)"; return; fi
-  _sel_summary sel "🎯 Selection"
-  [ "$_SEL_VANISHED" -gt 0 ] && echo "🔴  $_SEL_VANISHED selected item(s) no longer exist (hidden here)"
-  local i lim=${#sel[@]}
-  $all || [ "$lim" -le 100 ] || lim=100
-  for (( i=0; i<lim; i++ )); do
-    printf '%4d) %s\n' $((i+1)) "$(_sel_short "${sel[$i]}")"
-  done
-  [ "$lim" -lt ${#sel[@]} ] && echo "   … and $(( ${#sel[@]} - lim )) more  (.s.show all)"
+  _RES_LIST=("${sel[@]}"); _RES_NOTE=(); _RES_ROOT="/.."       # no folder prefix matches: every row shows its full path
+  _RES_HDR="🎯 Selection · ${#sel[@]} item(s)$( [ "${_SEL_VANISHED:-0}" -gt 0 ] && echo "  🔴 ${_SEL_VANISHED} no longer exist (hidden)" )"
+  while _results_view; do :; done                              # a row number has nothing to open here: the list simply stays
 }
 
 _sel_cmd_shown() {
