@@ -958,6 +958,7 @@ _resolve_display_parts_core() {
     }
   fi
   _icon_for_path_v "$f" "${item_icon[$f]:-}"; _rdp_icon="$_ip_icon"
+  if declare -F _wfv_is >/dev/null && _wfv_is "$f"; then _rdp_icon="🔮"; _rdp_bn="${_rdp_bn%.xlr8}"; fi   # a saved workflow: its name, without .xlr8
   # favourites: alias ("Alias (name)") / ⭐ marker while favourite mode is paused
   [ -n "${_FAV_LABEL[$f]+x}" ] && _rdp_bn="${_FAV_LABEL[$f]}"
   # recursive "=" filter: show where the hit lives (sub/dir/name)

@@ -837,6 +837,18 @@ _mh_notes_imaginary() {
 _menu_header_flat() { _menu_header _mh_notes_flat; }
 _menu_header_imaginary() { _menu_header _mh_notes_imaginary; }
 
+# ── 🧞 Workflows (wf) is the MAIN LIST opened on the workflows folder: same rows, keys, commands and dispatcher as any folder.
+# Only the title, the footer, the row icon and what  u / q  return to differ.  _WF_RETURN = the folder wf was typed in.
+declare -g _WF_HOME="${BVK_WF_HOME:-$HOME/.bashbasicsbyvk/workflows}" _WF_RETURN=""
+_wfv_on()     { [ "$path" = "$_WF_HOME" ]; }
+_wfv_is()     { [[ "$1" == "$_WF_HOME"/*.xlr8 && "${1#"$_WF_HOME"/}" != */* ]]; }      # this file is a saved workflow
+_wfv_back()   { _wfv_on && [ -d "$_WF_RETURN" ] || return 1; path="$_WF_RETURN"; _WF_RETURN=""; group_prefix=""; force_show=false; }
+_menu_header_wf() {
+  _mc_header "🧞 Workflows"; _mh_notes_flat
+  [ "${#items[@]}" -gt 0 ] || echo "📜  No workflows yet: type start_record, do your task once, then stop_record"
+}
+_menu_footer_wf() { _tpl_footer JR9TZ5 @std_nav; }
+
 # the footer of the folder view (template JR9TZ5): the registered keys, then the group-view note
 _mf_note() {
   if [ "${total:-0}" -gt "${index_mode_threshold:-200}" ] && ! $force_show && [ "${#group_view_levels[@]}" -gt 0 ]; then

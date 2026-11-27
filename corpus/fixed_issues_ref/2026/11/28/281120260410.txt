@@ -1,0 +1,11 @@
+ISSUE IN BRIEF
+The wf list was a boxed [ ] choice menu with its own five-row action box and a 'How to write xlr8' row, so main-menu commands did not work on workflows and a workflow had no run loop like a file.
+
+HOW DID YOU DEBUG
+Read the main loop in o, handle_file, handle_version, _wf_menu, the template processor and tidy list. Ran the static suites before and after (structure labels:n and the footer / intent 25 s timeouts are the same on the untouched upload; footer and intent run directly: 0 new), xlr8_flow.sh, xlr8_guide.sh, loadmap and tidy checks, and a throwaway pty drive: wf, a row, u, Run, c-1, Info, u.
+
+CAUSE
+wf drew a private _bvk_menu list instead of reusing the folder view and the file run loop.
+
+FIX
+wf now opens the main list on the workflows folder (_wfv_on / _wfv_is / _wfv_back, _menu_header_wf, _menu_footer_wf in browse.sh; the row icon in displayer.sh; header, footer, u and q in o), so every main command works there. u / q go back to the folder wf was typed in, and Run / wf NAME start there (_wf_run_here). A workflow opens in handle_file with Workflow wording; Run runs it, Edit re-checks it. New run-loop template 4QLVME with one helper _mc_run_loop used by handle_file and handle_version. Removed the How to write xlr8 row and bashbasicsbyvk_xlr8.txt, with its loadmap line, guide mentions and test step. Not run: Drive mode, favourites mode, delete / create / rename inside the list on a device.

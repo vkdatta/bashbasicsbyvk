@@ -6,26 +6,25 @@ copy_to_clipboard() {
     printf "%s" "$content" | bashbasicsbyvk_copy
 }
 
+# the run loop of a file.  A saved workflow (wf) is a file too: same actions, only its name and what Run does differ.
 handle_file() {
-    local file="$1" lab_run lab_lock action
+    local file="$1" lab_run lab_lock action kind icon shown wf
 
     while true; do
-        lab_run="Run";       _arc_detect "$file" && lab_run="Extract"        # an archive is extracted, anything else is run
+        kind="File"; icon="📄"; shown="${file##*/}"; wf=false
+        if _wfv_is "$file"; then kind="Workflow"; icon="🔮"; shown="${shown%.xlr8}"; wf=true; fi
+        lab_run="Run";       $wf || { _arc_detect "$file" && lab_run="Extract"; }          # an archive is extracted, anything else is run
         lab_lock="Lock File"; _lk_file_locked "$file" && lab_lock="Unlock File"   # one row: it does whichever applies
-        _mc_header "📄 File selected: $(basename "$file")" \
-                   "What would you like to do with the file?"
-        _mc_options 0 "$lab_run" "View" "Edit" "Copy Content" "Delete File" \
-                      "Erase Content" "Replace With Clipboard Content" \
-                      "Rename File" "Share" "$lab_lock" "Copy Name" \
-                      "Copy File Path" "Go To Parent Folder" "Info"
-        _tpl_footer YWW6WZ @std_nav
-
-        VK_MENU_MODE=single _bvk_read action "${_TPL_ACCEPTOR} " || return 1     # single = declared here, never guessed from the text; EOF (the terminal closed): leave, never spin on "invalid"
+        _mc_run_loop action "$icon $kind selected: $shown" "What would you like to do with the ${kind,,}?" \
+                     "$lab_run" "View" "Edit" "Copy Content" "Delete File" \
+                     "Erase Content" "Replace With Clipboard Content" \
+                     "Rename File" "Share" "$lab_lock" "Copy Name" \
+                     "Copy File Path" "Go To Parent Folder" "Info" || return 1     # EOF (the terminal closed): leave, never spin on "invalid"
 
         case "$action" in
-            0) run_file "$file"; return 1 ;;
+            0) if $wf; then _wf_run_here "$shown"; else run_file "$file"; fi; return 1 ;;
             1) force_open "$file"; return 1 ;;
-            2) _hf_tracked "$file" _hf_edit "$file"; return 1 ;;
+            2) _hf_tracked "$file" _hf_edit "$file"; $wf && _wf_check "$file"; return 1 ;;
             3) bashbasicsbyvk_copy "$file"; return 1 ;;
             4) _fa_delete "$file"; return 1 ;;
             5) _hf_tracked "$file" _fa_erase "$file"; return 1 ;;

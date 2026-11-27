@@ -190,6 +190,19 @@ _mc_options_slot() { _mc_options "$_MC_OPT_START" "${_MC_OPT_ROWS[@]}"; }
 _mc_menu()  { _mc_menu_n 1 "$@"; }
 _mc_menu0() { _mc_menu_n 0 "$@"; }
 
+# ── RUN LOOP (template 4QLVME): "<thing> selected" + a question + actions numbered from 0 + the common footer.  ONE drawing and ONE read for
+# every run loop (a file, a workflow, a version); the caller keeps its own while / case.   rc 1 = no answer (EOF)
+#   _mc_run_loop OUTVAR TITLE QUESTION action...
+_mc_run_loop() {
+  local _mrl_var="$1"
+  _tpl_clear; _tpl_set menu_name "$2" menu_description "$3" menu_list _mc_options_slot
+  _MC_OPT_START=0; _MC_OPT_ROWS=("${@:4}")
+  _tpl_section 4QLVME menu_header
+  _tpl_section 4QLVME menu_body
+  _tpl_footer 4QLVME @std_nav
+  VK_MENU_MODE=single _bvk_read "$_mrl_var" "${_TPL_ACCEPTOR} "     # single = declared here, never guessed from the text
+}
+
 # prompt wrapper: answer lands in $REPLY
 _mc_ask() { _bvk_read REPLY "${1:-${_TPL_ACCEPTOR:-Select:} }"; }
 

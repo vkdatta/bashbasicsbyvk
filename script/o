@@ -96,6 +96,7 @@ while true; do
   _disp_begin   # .d display filter: sets _disp_on
   _sel_begin    # selection count for the header (marks are drawn by the viewport)
   _fav_begin    # favourites: sets _fav_on (mode priority: favourite > imaginary > normal)
+  _wfv_on && _fav_on=false      # the Workflows list is always the files themselves
   _lt_e
 
   _lt_b "build the item list ($total items)"
@@ -147,6 +148,7 @@ while true; do
     _vp_header_fn=_menu_header_flat
   fi
   _vp_footer_fn=_menu_footer_lines
+  _wfv_on && { _vp_header_fn=_menu_header_wf; _vp_footer_fn=_menu_footer_wf; }
   _vp_hl_fn=_vp_is_hl_single
   _msel_set=()
   _vp_input_fn=_print_input_line
@@ -167,7 +169,8 @@ while true; do
 
   shopt -s nocasematch
   case "$choice" in
-    q)           if ${_sw_did_switch:-false}; then [ "${_GD_ACTIVE:-0}" = 1 ] && _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi ;;   # q on the main loop = leave the app
+    q)           _wfv_back      # leaving from the Workflows list: the shell stays where the person was
+                 if ${_sw_did_switch:-false}; then [ "${_GD_ACTIVE:-0}" = 1 ] && _gd_before_exec; _lt_cleanup; cd "$path" && exec "$SHELL"; else exit 0; fi ;;   # q on the main loop = leave the app
     -h)          open_help ;;
     h)           home_menu ;;
     __navpath__) [ -d "${_BVK_NAV_TARGET:-}" ] && { path="$_BVK_NAV_TARGET"; group_prefix=""; force_show=false; }; _BVK_NAV_TARGET="" ;;   # a folder name of the nav path was touched (bashbasicsbyvk_mouse.sh)
@@ -176,6 +179,7 @@ while true; do
                    group_prefix="${group_prefix%?}"; force_show=false
                  elif [ "${#_gv_crumbs[@]}" -gt 0 ]; then
                    unset '_gv_crumbs[-1]'       # Group view: back up one crumb
+                 elif _wfv_back; then :         # Workflows: back to the folder wf was typed in
                  elif [ "$path" != "/" ]; then
                    path=$(dirname "$path"); group_prefix=""; force_show=false
                  fi ;;

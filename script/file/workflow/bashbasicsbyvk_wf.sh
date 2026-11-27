@@ -11,7 +11,7 @@
 #  {$name}: a value given when the run starts (wf NAME name=value, or asked then); the steps use it: input "Q" value="{$name}".
 # ════════════════════════════════════════════════════════════════════════════
 
-declare -g _WF_HOME="${BVK_WF_HOME:-$HOME/.bashbasicsbyvk/workflows}"
+declare -g _WF_HOME="${_WF_HOME:-${BVK_WF_HOME:-$HOME/.bashbasicsbyvk/workflows}}"    # the app sets it first (browse.sh); this covers the file sourced alone
 declare -g _WF_ANSWER="" _WF_MUTE=0
 declare -g _WF_NEVER=" cc print tidy loadtime start_record stop_record "   # tools about the app, not steps of a task
 declare -g _WF_CK="" _WF_CQ="" _WF_FLOW=0   # what the app asks NOW (list | menu | input | pick | confirm) and its text: the 'if' steps read it
@@ -764,41 +764,25 @@ _wf_screen() {   # TITLE
   return 0
 }
 
-# ── wf: the list of workflows ──────────────────────────────────────────────
+# ── wf: the list of workflows is the main list on the workflows folder (_wfv_* in bashbasicsbyvk_browse.sh); a number opens the run loop (handle_file)
 _wf_menu() {
   _wf_mode && { echo "🔴  Type stop_record first"; return 0; }
-  local pick="" act="" ans="" new="" f n doc i
-  local -a files=() rows=()
-  while :; do
-    files=(); rows=(); i=0
-    for f in "$_WF_HOME"/*.xlr8; do
-      [ -f "$f" ] || continue
-      files+=("$f"); i=$(( i + 1 )); n="${f##*/}"; rows+=("$i:${n%.xlr8}")
-    done
-    rows+=("help:How to write xlr8")
-    (( i )) || echo "📜  No workflows yet: type start_record, do your task once, then stop_record"
-    _bvk_menu pick -t "Workflows" -i "🔁" -n -- "${rows[@]}" || return 0
-    if [ "$pick" = help ]; then
-      doc="$(_wf_find_doc bashbasicsbyvk_xlr8.txt 2>/dev/null)"
-      [ -r "$doc" ] && cat "$doc" || echo "The language guide is not installed"
-      continue
-    fi
-    f="${files[$((pick-1))]}"; n="${f##*/}"; n="${n%.xlr8}"
-    _bvk_menu act -t "$n" -i "🔁" -n -- "run:Run" "view:View steps" "edit:Edit steps" "ren:Rename" "d:Delete" || continue
-    case "$act" in
-      run) _wf_run "$n"; return 0 ;;
-      view) echo; cat -- "$f"; echo ;;
-      edit)
-        if command -v nano >/dev/null 2>&1; then nano "$f"; else "${EDITOR:-vi}" "$f"; fi
-        _xl_load "$f" && echo "💫 '$n' reads fine (${#_XL_T[@]} steps)" || echo "🔴  '$n' will not run until this is fixed. $_XL_ERR" ;;
-      ren)
-        _bvk_read new "New name: " -i "$n" || continue
-        if [[ "$new" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] && [ ! -e "$_WF_HOME/$new.xlr8" ]; then
-          command mv -- "$f" "$_WF_HOME/$new.xlr8"
-        else echo "🔴  Not renamed (name taken or not allowed)"; fi ;;
-      d) _bvk_yn ans "Delete the workflow '$n'?" || continue; [ "$ans" = y ] && rm -f -- "$f" && echo "💫 Deleted '$n'" ;;
-    esac
-  done
+  [ "${_GD_ACTIVE:-0}" = 1 ] && { echo "☁️  Leave Google Drive first (gdx), then type wf"; return 0; }
+  mkdir -p -- "$_WF_HOME" || { echo "❌ Cannot create $_WF_HOME"; return 0; }
+  _wfv_on || _WF_RETURN="$path"
+  path="$_WF_HOME"; group_prefix=""; force_show=false; _gv_crumbs=()
+}
+# Run from the run loop: the workflow starts in the folder the person came from, never in the workflows folder
+_wf_run_here() {   # NAME [VALUES]
+  local was="$path"
+  _wfv_on && [ -d "$_WF_RETURN" ] && path="$_WF_RETURN"
+  _wf_run "$1" "${2:-}"
+  _wf_mode || path="$was"      # nothing started: stay on the list
+}
+# after Edit: say at once when the file will not run
+_wf_check() {   # FILE
+  local n="${1##*/}"; n="${n%.xlr8}"
+  _xl_load "$1" && echo "💫 '$n' reads fine (${#_XL_T[@]} steps)" || echo "🔴  '$n' will not run until this is fixed. $_XL_ERR"
 }
 _wf_find_doc() {   # an installed *.txt sits in the data dir, a source tree beside this file
   local d="${BASH_SOURCE[0]%/*}" c
@@ -809,5 +793,5 @@ handle_wf_cmd() {   # "wf" | "wf NAME" | "wf NAME value..." (the values of the w
   local name="${1#??}" args=""
   _xl_trim "$name"; name="$_XL_OUT"
   if [[ "$name" =~ ^([^[:space:]]+)[[:space:]]+(.*)$ ]]; then name="${BASH_REMATCH[1]}"; args="${BASH_REMATCH[2]}"; fi
-  if [ -n "$name" ]; then _wf_run "$name" "$args"; else _wf_menu; fi
+  if [ -n "$name" ]; then _wf_run_here "$name" "$args"; else _wf_menu; fi
 }

@@ -1,5 +1,5 @@
 # bashbasicsbyvk_xlr8.sh - XLR8, the workflow language of bashbasicsbyvk: reading and writing it. Recording / running it: bashbasicsbyvk_wf.sh.
-# The language, for the person, is bashbasicsbyvk_xlr8.txt (shown by  wf > How to write xlr8).
+# The language is documented in script/agents_guide/xlr8.txt.
 # One step per line (or several on a line with  =>  between them).  A parsed step is one index of these arrays:
 #   _XL_T type (from on goto cmd where select input confirm pause call if else endif)   call: Q = the workflow, V = the values given to it   _XL_Q question hint   _XL_A argument   _XL_K name|path|option
 #   _XL_V the values, one per line   _XL_S the step as written (for messages)

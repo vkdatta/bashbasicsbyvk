@@ -46,6 +46,9 @@ MG2374 | pick screen   | fn:_file_picker                  | loops/iloop/fx/bashb
 MG2374 | pick screen   | fn:_pick_groups                  | engine/ui/bashbasicsbyvk_browse.sh
 MG2374 | pick screen   | fn:gcloud_navigator              | functions/transfer/bashbasicsbyvk_transfer.sh
 MG2374 | pick screen   | fn:local_navigator               | functions/transfer/bashbasicsbyvk_transfer.sh
+4QLVME | run loop      | fn:_mc_run_loop                 | engine/ui/bashbasicsbyvk_menuchrome.sh
+4QLVME | run loop      | fn:handle_file                  | loops/rloop/run/bashbasicsbyvk_run.sh
+4QLVME | run loop      | fn:handle_version               | loops/rloop/version/bashbasicsbyvk_version.sh
 373QS6 | settings list | fn:_st_choice_open               | settings/core/bashbasicsbyvk_settings_groups.sh
 373QS6 | settings list | fn:_st_duration_open             | settings/core/bashbasicsbyvk_settings_groups.sh
 373QS6 | settings list | fn:_st_run                       | settings/core/bashbasicsbyvk_settings_ui.sh
@@ -91,9 +94,6 @@ MG2374 | pick screen   | fn:local_navigator               | functions/transfer/b
 373QS6 | settings list | map:home                         | cmdmap/home/bashbasicsbyvk_home.map
 373QS6 | settings list | map:pending                      | cmdmap/pending/bashbasicsbyvk_pending.map
 373QS6 | settings list | map:settings                     | cmdmap/settings/bashbasicsbyvk_settings.map
-YWW6WZ | step menu     | map:buffers                     | cmdmap/buffers/bashbasicsbyvk_buffers.map
-YWW6WZ | step menu     | map:bufone                      | cmdmap/bufone/bashbasicsbyvk_bufone.map
-YWW6WZ | step menu     | map:bufset                      | cmdmap/bufset/bashbasicsbyvk_bufset.map
 YWW6WZ | step menu     | fn:_api_cmd_open                 | loops/iloop/api/bashbasicsbyvk_api.sh
 YWW6WZ | step menu     | fn:_arc_s_fmt                    | staging/extras/bashbasicsbyvk_staging_archive.sh
 YWW6WZ | step menu     | fn:_bb_credit_gate               | staging/fileapi/lib/bashbasicsbyvk_fileapi_lib.sh
@@ -126,9 +126,9 @@ YWW6WZ | step menu     | fn:_sp_conflict_decide           | staging/buffer/bashb
 YWW6WZ | step menu     | fn:_sp_view_one_buffer           | staging/buffer/bashbasicsbyvk_staging_buffer.sh
 YWW6WZ | step menu     | fn:_sp_view_set                  | staging/buffer/bashbasicsbyvk_staging_buffer.sh
 YWW6WZ | step menu     | fn:_sw_excl_add                  | loops/iloop/switch/bashbasicsbyvk_switch.sh
+YWW6WZ | step menu     | fn:_sw_excl_menu                 | loops/iloop/switch/bashbasicsbyvk_switch.sh
 YWW6WZ | step menu     | fn:_sw_excl_remove               | loops/iloop/switch/bashbasicsbyvk_switch.sh
 YWW6WZ | step menu     | fn:_sw_excl_rule                 | loops/iloop/switch/bashbasicsbyvk_switch.sh
-YWW6WZ | step menu     | fn:_sw_excl_menu                 | loops/iloop/switch/bashbasicsbyvk_switch.sh
 YWW6WZ | step menu     | fn:_t_s_action                   | functions/transfer/bashbasicsbyvk_transfer.sh
 YWW6WZ | step menu     | fn:_t_s_mode                     | functions/transfer/bashbasicsbyvk_transfer.sh
 YWW6WZ | step menu     | fn:_view_selections_menu         | functions/transfer/bashbasicsbyvk_transfer.sh
@@ -146,6 +146,9 @@ YWW6WZ | step menu     | fn:organise_by_ext               | functions/file_ops/b
 YWW6WZ | step menu     | fn:organise_menu                 | functions/file_ops/bashbasicsbyvk_organise.sh
 YWW6WZ | step menu     | fn:transfer_menu                 | functions/transfer/bashbasicsbyvk_transfer.sh
 YWW6WZ | step menu     | fn:unorganise                    | functions/file_ops/bashbasicsbyvk_organise.sh
+YWW6WZ | step menu     | map:buffers                     | cmdmap/buffers/bashbasicsbyvk_buffers.map
+YWW6WZ | step menu     | map:bufone                      | cmdmap/bufone/bashbasicsbyvk_bufone.map
+YWW6WZ | step menu     | map:bufset                      | cmdmap/bufset/bashbasicsbyvk_bufset.map
 YWW6WZ | step menu     | map:find                         | cmdmap/find/bashbasicsbyvk_find.map
 YWW6WZ | step menu     | map:infinity                     | cmdmap/infinity/bashbasicsbyvk_infinity.map
 YWW6WZ | step menu     | map:organise                     | cmdmap/organise/bashbasicsbyvk_organise.map

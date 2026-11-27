@@ -22,8 +22,6 @@ sees, the registry script/file/workflow/bashbasicsbyvk_wf_when.txt, the recorder
 any file in script/file/workflow/.
 
   * Update the grammar (section 5), the rules (6 to 11), the examples (13), the errors (14) and the limits (15) here.
-  * Update script/file/workflow/bashbasicsbyvk_xlr8.txt too (the shorter guide that `wf` shows to the user) when something a
-    user types changes.
   * Every example in this file sits between "--- example: NAME ---" and "--- end example ---" and MUST parse.
     tests/pty/fast/engine/xlr8_guide.sh loads every example and fails when a word of the grammar is missing from this
     file, so a stale guide breaks the build.
@@ -51,9 +49,8 @@ Three properties matter when you write one:
   File:       NAME.xlr8      NAME = letters, digits, _ . -   (for example push.xlr8)
   Run:        wf NAME                     at the main file list of the app (start the app with:  o)
               wf NAME some text           with a value for a {$name} (section 8)
-              wf                          a menu: list, view, edit, rename, delete
+              wf                          the list of workflows: a file list like the main one; a number opens its actions
   Record:     start_record ... do the task once ... stop_record      (section 11)
-  Help:       the shorter guide script/file/workflow/bashbasicsbyvk_xlr8.txt is shown by wf.
 
 To create a workflow as an agent: write the file into the folder (create the folder if it is missing), run the check in
 section 12, then tell the person the full path and the command  wf NAME.

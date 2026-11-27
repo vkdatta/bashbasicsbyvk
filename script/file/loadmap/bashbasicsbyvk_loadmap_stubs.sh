@@ -1467,5 +1467,7 @@ _wf_prompt() { _lm_stub bashbasicsbyvk_wf.sh _wf_prompt "$@"; }
 _wf_confirm() { _lm_stub bashbasicsbyvk_wf.sh _wf_confirm "$@"; }
 _wf_screen() { _lm_stub bashbasicsbyvk_wf.sh _wf_screen "$@"; }
 _wf_menu() { _lm_stub bashbasicsbyvk_wf.sh _wf_menu "$@"; }
+_wf_run_here() { _lm_stub bashbasicsbyvk_wf.sh _wf_run_here "$@"; }
+_wf_check() { _lm_stub bashbasicsbyvk_wf.sh _wf_check "$@"; }
 _wf_find_doc() { _lm_stub bashbasicsbyvk_wf.sh _wf_find_doc "$@"; }
 handle_wf_cmd() { _lm_stub bashbasicsbyvk_wf.sh handle_wf_cmd "$@"; }

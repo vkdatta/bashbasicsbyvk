@@ -5,12 +5,11 @@
 #  (2) every word the parser knows (found in the parser source, plus the words a pattern hides) is in the guide
 #  (3) every repository path the guide names exists
 #  (4) llms.txt and llms-full.txt point agents at the guide
-#  (5) the example at the end of the shorter guide that wf shows parses too
-# When this fails you changed xlr8: update script/agents_guide/xlr8.txt (and bashbasicsbyvk_xlr8.txt) in the same change.
+# When this fails you changed xlr8: update script/agents_guide/xlr8.txt in the same change.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 X="$(find "$ROOT/script" -name bashbasicsbyvk_xlr8.sh | head -1)"
-GUIDE="$ROOT/script/agents_guide/xlr8.txt"; SHORT="$(find "$ROOT/script" -name bashbasicsbyvk_xlr8.txt | head -1)"
+GUIDE="$ROOT/script/agents_guide/xlr8.txt"
 fail=0; ok() { echo "  ok   $*"; }; bad() { echo "  FAIL $*"; fail=1; }
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 # shellcheck disable=SC1090
@@ -77,10 +76,6 @@ for f in llms.txt llms-full.txt; do
   grep -q "script/agents_guide/xlr8.txt" "$ROOT/$f" && ok "$f points to script/agents_guide/xlr8.txt" || bad "$f does not point to script/agents_guide/xlr8.txt"
   grep -qi "workflow" "$ROOT/$f" && ok "$f talks about workflows" || bad "$f never mentions workflows"
 done
-
-# (5) the example of the shorter guide
-awk '/^Example$/{f=1;next} /^-------$/{next} f' "$SHORT" > "$T/short_example.xlr8"
-if [ -s "$T/short_example.xlr8" ] && _xl_load "$T/short_example.xlr8"; then ok "the example of the shorter guide parses"; else bad "the example of the shorter guide does not parse: ${_XL_ERR:-empty}"; fi
 
 [ "$fail" = 0 ] && echo "ALL OK" || echo "FAILED"
 exit "$fail"
