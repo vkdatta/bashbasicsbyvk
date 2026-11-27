@@ -7,6 +7,7 @@ advert|bash tests/static/t_advert.sh
 arms|python3 -I tests/static/t_arms.py
 readloop|python3 -I tests/static/t_readloop.py
 shell|python3 -I tests/static/t_shell.py
+blind|python3 -I tests/static/t_blind.py
 replay|python3 -I tests/static/t_replay.py
 tidy|python3 -I tests/static/t_tidy.py
 templates|python3 -I tests/static/t_templates.py

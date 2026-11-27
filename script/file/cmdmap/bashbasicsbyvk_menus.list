@@ -22,3 +22,6 @@ rename   | _rename_single_mutation| prompt | u
 auth      | auth_menu              | menu   | u
 auth_sub  | _bvk_auth_sub_menu     | menu   | u
 auth_user | _bvk_auth_user_menu    | menu   | u
+buffers   | handle_staging_view    | menu   | u
+bufone    | _sp_view_one_buffer    | menu   | u
+bufset    | _sp_view_set           | menu   | u

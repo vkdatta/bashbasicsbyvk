@@ -24,7 +24,7 @@ _xl_value() {
     done
     return 1
   fi
-  if [[ "$s" =~ ^(.*[^[:space:],])[[:space:],]+((name|path|option)[[:space:]]*=.*)$ ]]; then out="${BASH_REMATCH[1]}"; _XL_REST="${BASH_REMATCH[2]}"
+  if [[ "$s" =~ ^(.*[^[:space:],])[[:space:],]+((name|path|option|number)[[:space:]]*=.*)$ ]]; then out="${BASH_REMATCH[1]}"; _XL_REST="${BASH_REMATCH[2]}"
   else out="$s"; _XL_REST=""; fi
   _xl_trim "$out"
 }
@@ -134,7 +134,7 @@ _xl_segment() {
       fi
       _xl_trim "$rest"; rest="$_XL_OUT"
       [ -z "$rest" ] || [[ "$rest" =~ ^as[[:space:]] ]] || { _XL_ERR="not understood: $s"; return 1; }
-      [[ "$w" =~ ^[0-9][0-9,-]*$ ]] && { _XL_ERR="a bare number breaks when the list changes: write  where name=\"...\"  or  where option=\"...\""; return 1; }
+      [[ "$w" =~ ^[0-9][0-9,-]*$ ]] && { _XL_ERR="a bare number breaks when the list changes: write  where name=\"...\"  ·  where option=\"...\"  ·  where number=N (by position)"; return 1; }
       _xl_add cmd "" "$w" "$_XL_PK" "$_XL_PV${rest:+$'\t'$rest}" "$s" ;;
   esac
   return 0

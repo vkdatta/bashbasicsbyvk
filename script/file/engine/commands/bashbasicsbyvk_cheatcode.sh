@@ -34,7 +34,7 @@
 #
 #  Two tabs split that list:
 #     ✳️ Menu Specific   the commands only THIS menu handles (its own keys, the file actions of the main list ...)
-#     🌏 General         the commands every screen takes: u q h cc rf = clr, print, loadtime and every main command run by
+#     🌏 General         the commands every screen takes: u q h cc rf =, print, loadtime and every main command run by
 #                        bvk_main_exec (s i -h -auth disk ram health ...)           (_ad_is_general, bashbasicsbyvk_advert.sh)
 #  The cc opens on Menu Specific, or on General when this menu has nothing of its own.  =filter searches the tab you are on.
 #

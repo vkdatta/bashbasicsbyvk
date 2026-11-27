@@ -120,7 +120,7 @@ echo
     local _CE_SELECT=0                                  # the port typed before starts selected when u comes back here
     [ -n "${PORT:-}" ] && _CE_SELECT=1
     echo
-    _mc_footer_std -b
+    _mc_footer_std
     _CM_BACKED=0
     if ! _bvk_read PORT "Enter localhost port: " -i "${PORT:-}"; then
         [ "${_CM_BACKED:-0}" = 1 ] && return 1

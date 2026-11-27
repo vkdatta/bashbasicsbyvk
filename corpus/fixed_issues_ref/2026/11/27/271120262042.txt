@@ -1,0 +1,12 @@
+1. ISSUE IN BRIEF
+A user's own AI agent had no single place to learn the xlr8 workflow language, so it could not be asked to write a workflow from a pasted copy of the repository, and the llms files did not say that workflows exist or where the guide is.
+
+HOW DID YOU DEBUG
+Read the parser (_xl_segment, _xl_if, _xl_pairs, _xl_value), the hooks, the recorder, the registry and the shorter user guide shown by wf, and collected the real question and option texts the examples need from the app (Find: 'Match case?' / 'exact case'; git push: 'Select version bump type' / 'Patch'; upgrade: 'Continue?'; command keys f, d, i, -u). The shorter guide is for a person typing; an agent needs the whole grammar, the matching rules, a procedure and a way to check its work.
+
+CAUSE
+The language was documented only for people (bashbasicsbyvk_xlr8.txt), in pieces added task by task, and nothing tied the documentation to the code.
+
+FIX
+New script/agents_guide/xlr8.txt: the complete reference for agents (what a workflow is, where it lives, file format, every step, how a run works, conditions and the registry, values, position and by-hand steps, calls, the recorder, a procedure to turn a request into a workflow, a syntax-check command, tested examples, error meanings, honest limits, a cheat sheet). Section 1 tells any agent that changes xlr8 to update the guide in the same change (AGENTS.md is owner-only, so the rule lives there). tests/pty/fast/engine/xlr8_guide.sh (new, registered) enforces it: every fenced example is loaded by the real parser, every word of the grammar (found in the parser source) must be in the guide, every repository path the guide names must exist, llms.txt and llms-full.txt must point at the guide, and the example of the shorter guide must parse; mutation-checked (a dropped word, a new parser word and a broken example each fail). llms.txt and llms-full.txt: workflows presented as a feature that boosts productivity, with the guide path (GitHub, raw, repository) and instructions for agents; section 9 of llms-full.txt untouched. xlr8.txt is mapped in loadmap.list by its basename. Also: the 'bare number' hint now mentions number=, and the unquoted-value reader knows number as a key.
+NOT run: a real agent writing a workflow from the guide; the examples are checked by the parser, not by the app.

@@ -314,3 +314,11 @@ bashbasicsbyvk_xlr8.sh|||workflows: reads the xlr8 language; loaded by the first
 bashbasicsbyvk_wf.sh|bashbasicsbyvk_xlr8.sh||workflows: record, run, list; the prompt hooks call it only while BVK_WF_DIR is set
 bashbasicsbyvk_xlr8.txt|||data: the xlr8 language guide, shown by wf
 bashbasicsbyvk_wf_when.txt|||data: the questions the app does not always ask; the recorder writes them inside if asked ... end if
+xlr8.txt|||data: the xlr8 guide for a user's own AI agent (script/agents_guide/xlr8.txt, named in llms.txt); every example in it is parsed by tests/pty/fast/engine/xlr8_guide.sh
+filepicker.txt|||data: the file picker guide for a user's own AI agent (script/agents_guide/filepicker.txt, named in llms.txt); every example in it is parsed by tests/pty/fast/engine/filepicker_guide.sh
+bashbasicsbyvk_buffers.map|||command-map wiring, read as data
+bashbasicsbyvk_buffersmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_bufone.map|||command-map wiring, read as data
+bashbasicsbyvk_bufonemenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)
+bashbasicsbyvk_bufset.map|||command-map wiring, read as data
+bashbasicsbyvk_bufsetmenucommands.sh|||command-map commands of one menu (loaded by the command map when the menu is wired)

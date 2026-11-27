@@ -1,0 +1,413 @@
+XLR8 AGENT GUIDE: how to write workflows for bashbasicsbyvk
+===========================================================
+File: script/agents_guide/xlr8.txt   (the complete reference; nothing else is needed to write a workflow)
+
+0. FOR THE PERSON: HOW TO USE THIS FILE
+---------------------------------------
+Paste this repository (or just this file) into your AI agent and say what you want automated. For example:
+
+    "Create an xlr8 workflow that pushes my project to GitHub and asks me for the commit message every time."
+    "Create an xlr8 workflow that opens the upgrade list and installs the latest version."
+    "Create an xlr8 workflow that deletes files, but lets ME pick which ones each time."
+
+The agent reads this file, writes  NAME.xlr8  into your workflows folder (section 3), checks it (section 12) and tells you
+how to run it:  wf NAME.   A workflow replays a whole multi-step task in one command, so a task you repeat daily becomes
+one line. It runs locally and answers the app's own prompts; it never leaves the app.
+
+1. FOR AGENTS THAT CHANGE XLR8: KEEP THIS FILE CURRENT (read before editing code)
+---------------------------------------------------------------------------------
+The owner's rule: whenever you add, remove, rename or change the behaviour of ANYTHING in xlr8, you must update this file in
+the same change. "Anything" means: a step word, a key (name, number ...), a form, a matching rule, a message the person
+sees, the registry script/file/workflow/bashbasicsbyvk_wf_when.txt, the recorder (start_record / stop_record), the hooks, or
+any file in script/file/workflow/.
+
+  * Update the grammar (section 5), the rules (6 to 11), the examples (13), the errors (14) and the limits (15) here.
+  * Update script/file/workflow/bashbasicsbyvk_xlr8.txt too (the shorter guide that `wf` shows to the user) when something a
+    user types changes.
+  * Every example in this file sits between "--- example: NAME ---" and "--- end example ---" and MUST parse.
+    tests/pty/fast/engine/xlr8_guide.sh loads every example and fails when a word of the grammar is missing from this
+    file, so a stale guide breaks the build.
+  * Add a test for the new behaviour to tests/pty/fast/engine/xlr8_flow.sh (it shows how to drive the hooks without a
+    terminal) and a corpus note, like any other change in this repository.
+  * AGENTS.md is owner-only: do not edit it. This section is where the xlr8 rule lives.
+
+2. WHAT A WORKFLOW IS
+---------------------
+A workflow is a plain text file of steps. When it runs, the app asks its normal questions (a menu, a yes/no, a typed line,
+the file list prompt) and the workflow ANSWERS each one, in order. There is no timing and no screen scraping: the app calls
+the workflow at the moment it asks, so the answer is always there when it is needed.
+
+Three properties matter when you write one:
+
+  * ORDER:  steps are answers, consumed in the order the app asks. Your list of steps must follow the app's own order.
+  * GUARD:  an answer is given only to the question it was written for. If the app asks something else, the run stops
+            at that step, says which step and why, and hands control back. Nothing after it has run.
+  * NAMES:  menus and rows are found by their words, not by their number, so reordering does not break a workflow.
+            (Where position IS what you mean, "latest first", use number=, section 9.)
+
+3. WHERE IT LIVES AND HOW IT RUNS
+---------------------------------
+  Folder:     ~/.bashbasicsbyvk/workflows/        (the environment variable BVK_WF_HOME overrides it)
+  File:       NAME.xlr8      NAME = letters, digits, _ . -   (for example push.xlr8)
+  Run:        wf NAME                     at the main file list of the app (start the app with:  o)
+              wf NAME some text           with a value for a {$name} (section 8)
+              wf                          a menu: list, view, edit, rename, delete
+  Record:     start_record ... do the task once ... stop_record      (section 11)
+  Help:       the shorter guide script/file/workflow/bashbasicsbyvk_xlr8.txt is shown by wf.
+
+To create a workflow as an agent: write the file into the folder (create the folder if it is missing), run the check in
+section 12, then tell the person the full path and the command  wf NAME.
+
+4. FILE FORMAT
+--------------
+  * One step per line. Several steps can be joined on one line with  =>
+  * A line whose first character is # is a comment. A comment must be on its own line: a # after a step is NOT a comment.
+  * Blank lines and indentation are ignored (indent the inside of an if block for readability).
+  * Keywords are case-insensitive. Values keep their case.
+  * "Double quotes" hold text with spaces. Inside quotes a backslash escapes the next character:  \"  and  \\
+  * An unquoted value runs to the end of the step (or to the next  name= / path= / option= / number=  key), so it may
+    contain spaces. Quote anything with a comma, an equals sign or a quote in it.
+  * The words  start  and  end  are allowed on a line of their own and mean nothing; use them as visible edges.
+
+5. THE STEPS (complete grammar)
+-------------------------------
+5.1  Edges and places
+
+  start                          nothing; marks the top (optional)
+  end                            nothing; marks the bottom (optional)
+  from here                      the run starts where the person is (the default)
+  from "/some/folder"            the run starts in this folder (must exist; {$name} allowed)
+  on main                        the screen the following steps expect; a different screen stops the run
+  on switch                      the screen names are the folders under script/file/cmdmap/ (main, switch, upgrade,
+                                 find, settings ...). If unsure, leave  on  out: it is only a guard.
+  goto start                     go back to the folder the run started in
+  goto "/some/folder"            go to this folder   (a leading ~ is the home folder)
+  goto bookmarks                 on the tabbed switch screen (cmd sw): move to the tab with this name
+
+5.2  Typing a command at the file list
+
+  cmd c-a                        type the command  c-a  at the list prompt (any command of the app)
+  cmd d                          for example: start "delete items"
+  cmd d- set1                    a command with an argument: write it as one word group
+  cmd "q"                        a command may be quoted
+  cmd c- name="a.txt"            a command on rows found by NAME   (the app gets the row numbers it needs)
+  cmd c- path="/x/a.txt"         rows found by full PATH
+  cmd c- number=2                rows found by POSITION (section 9)
+  cmd x- name="a" as set1        anything after  as  is passed through as typed
+  A bare number such as  cmd 3  is refused on purpose: row numbers change. Use where name= / option= / number=.
+
+5.3  Choosing a row or an option   (where)
+
+  where name="myproject"         open / choose the row of a list whose text is this        (several: name="a" name="b")
+  where path="/x/myproject"      the same, found by full path (use it when two rows share a name)
+  where number=1                 the row at this position (1 = first); also on a menu: the option at this position
+  where option="Yes"             on a MENU or yes/no: the option whose words are this
+  "Question?" where option="Yes" the same, and the question must be the one asked (strongly recommended)
+  where option="A","B"           a menu that accepts several choices (or several  option=  keys)
+
+  Matching of names and options, in order: exact text; same text ignoring case; the text before the first double space
+  (a menu label  "Patch  (#patch)"  is matched by  "Patch" ). It must match exactly one row or option, else the run
+  stops and lists what was there.
+  A yes/no or confirm step ("Question?" where option="Yes") is SKIPPED, and the run says so, when the app does not ask it.
+  Any other where step is required.
+
+5.4  Picking items on a "pick items" screen   (after cmd d, rename, compress ...)
+
+  select all                     every item
+  select all except name="a"     everything but these (also except path= / number=)
+  select name="a" name="b"       these items by name (also path= / number=)
+  select number=1,3              by position; ranges work: select number=2-4
+  select ask                     YOU pick the items yourself (the run waits, then goes on)
+
+5.5  Typed lines   (input)
+
+  input "Enter commit message" ask                   the run stops, YOU type the line, the run goes on
+  input "Enter commit message" default               just press Enter (accept the default)
+  input "Enter commit message" value="fix login"     always type this text   ({$name} allowed)
+  The quoted text must be the question (or part of it); letters only count. On a MENU, "ask" means YOU choose.
+
+5.6  Safety stops
+
+  confirm auto                   types the safety number for you ("type this number to confirm")
+                                 This REMOVES a safety stop: use it only when the person has asked for hands-off.
+
+5.7  By hand, conditions, values, calls   (details in sections 7 to 10)
+
+  pause "pick the files"         the NEXT question is yours; the note is shown; the run goes on after your answer
+  pause                          the same, without a note
+  if asked "Question" ... end if run the steps inside only when the app asks that question next
+  if option "Label"              the menu shown has this option
+  if screen main                 the list screen is this one
+  if not asked "Question"        the other way round (not works with all three)
+  else                           the steps for when the condition is false
+  end if  /  endif               closes an if (ifs can nest)
+  {$name}                        a value given when the run starts (section 8)
+  wf other_workflow              run another workflow here (section 10); also written  cmd wf other_workflow
+
+6. HOW A RUN WORKS (write steps in the app's order)
+---------------------------------------------------
+  * wf NAME loads the file, resolves calls, collects {$name} values, then the run starts. Mistakes in the file are
+    reported before anything runs ("'NAME' has a mistake, nothing was run").
+  * At each prompt the app asks the workflow for the next step. The step must be the right KIND for the prompt
+    (cmd/where/select for the file list and pick screens, where option / input for menus and typed lines).
+  * Question text: compared with letters only (case, emoji and punctuation ignored); the step's text only has to be
+    PART of the real question. Use a short, stable part: "Select version bump type" for "Select version bump type:".
+  * If a step does not fit, the run stops:
+        Workflow 'NAME' stopped at step N of M
+           step:   <the step as written>
+           reason: <what the app asked and what the step expected>
+           Steps before it are done; nothing after it was run. You are in control now.
+  * When the last step is used the run ends with "finished: all N steps". A recorded workflow ends with  goto start
+    (back to the folder it began in); a hand-written one may leave it out.
+  * Screens that leave the app: a workflow never has to leave. cmd cd and cmd q followed by cmd o are shortened inside
+    the app automatically.
+  * Secrets (hidden typing, passwords) are never recorded or replayed; use  input "..." ask  or  pause  for them.
+
+7. CONDITIONS: questions that are not always asked
+--------------------------------------------------
+Some questions appear only sometimes: a Settings value is on its default so the question is skipped; there is nothing to
+commit so the version menu never comes; an option exists only in some states. A plain step would stop the run. Put the
+steps that belong to the question inside an if:
+
+--- example: conditional_block ---
+start
+from here
+on main
+if asked "Select version bump type"
+  where option="Patch"
+  input "Enter commit message" ask
+end if
+goto start
+--- end example ---
+
+Rule: an if is decided when the app asks its NEXT question. If that is the question named, the block runs. If not, the
+block is skipped (the run prints  skipped: if asked "..."  and, for known questions, WHY), and the step after  end if
+is tried on the SAME question. Nothing inside a skipped block runs; the steps after the if still have to fit.
+
+Tests:  if asked "text" (menu / question mean the same)  ·  if option "Label"  ·  if screen NAME  ·  if not <test>
+Branches:  else  ·  end if  ·  nesting is fine.
+
+THE REGISTRY of questions that may be missing: script/file/workflow/bashbasicsbyvk_wf_when.txt
+  Format, one per line:   QUESTION | SETTING | ASKED ONLY WHEN
+    QUESTION          words of the question; a leading = means the WHOLE question, not just a part
+    SETTING           the settings variable that decides, or  -  when it is the state of the files
+    ASKED ONLY WHEN   the setting value that asks, or the state in words
+  The recorder writes every listed question inside  if asked "<short text>" ... end if  by itself, and the run names the
+  setting when it skips one (skipped: ... Settings: find_case_mode is 'exact', it asks only on 'ask').
+  When you write a workflow by hand: put a question inside an if when it is listed there, or when its ask site in the code
+  is conditional (a `case` on a setting, a check of the git state, a file that may not exist). Leave a question that is
+  ALWAYS asked as a plain step: the guard then catches real surprises.
+  When you find a switchable question that is not listed, add a line to the registry (and keep this guide true).
+
+8. VALUES YOU GIVE EACH TIME: {$name}
+-------------------------------------
+Where the text differs on every run (a commit message, a folder, a number), write {$name} instead of fixed text:
+
+--- example: git_push_with_message ---
+start
+from here
+on main
+cmd i
+where option="Git Push"
+if asked "Select version bump type"
+  "Select version bump type" where option="Patch"
+  input "Enter commit message" value="{$msg}"
+  "Create this commit" where option="Yes"
+end if
+goto start
+--- end example ---
+
+Give the value when you start:
+    wf push fix the login bug            ONE name: the rest of the line is the value
+    wf push msg="fix login" branch=dev   several names: name=value
+    wf push "fix login" dev              or bare values, in the order the names first appear
+    wf push                              nothing given: the app asks for each value first, then runs hands-off
+The question asked for a name is the text of the first  input "..."  step that uses it.
+  * A name is letters, digits and _ (not starting with a digit):  {$msg}  {$branch_2}
+  * It works inside: input value="...", where name= / path= / option= / number=, goto, from, cmd, pause notes, if tests.
+  * A value is inserted once; a value that itself contains {$x} is NOT expanded again.
+  * Used bare (goto {$dir}) a value should contain no spaces; inside quotes anything is fine.
+  * A different message each time without leaving the run: use {$msg}. A pause in the middle of the run: input "..." ask.
+
+9. PICKING BY POSITION, AND BY HAND
+-----------------------------------
+BY POSITION (number=): for lists and menus that change every time (versions, tags, newest files, branch names).
+    where number=1            first row / option          where number=last     the last (first = 1)
+    where number=-2           the one before the last      where number=1,3      several;  select number=2-4  a range
+    select all except number=1                              cmd c- number=2       a command on the second row
+    where number={$n}         a position given at the start:  wf upgrade n=2
+  The question text (if written) is still checked; a position past the end stops the run and says how many there are.
+  Position is only as safe as the order: use it where the order is the point (latest first), a name where the thing matters.
+
+--- example: upgrade_to_latest ---
+start
+from here
+on main
+cmd -u
+# row 1 of the upgrade list is the latest version
+where number=1
+if asked "Continue?"
+  "Continue?" where option="Yes"
+end if
+goto start
+--- end example ---
+
+BY HAND (the person decides each time):
+    select ask                the person picks the items on the pick screen
+    pause "note"              the NEXT question, whatever it is (a file list command, a pick screen, a menu, a typed
+                              line), is the person's: the note is shown, the run waits, then continues
+    input "Question" ask      the person types that line / chooses that menu option
+  pause takes exactly ONE answer; use one pause per command when several are needed.
+
+--- example: delete_files_you_pick ---
+start
+from here
+on main
+cmd d
+select ask
+"Delete these?" where option="Yes"
+goto start
+--- end example ---
+
+10. CALLING ANOTHER WORKFLOW
+----------------------------
+    wf pick_files           (or  cmd wf pick_files )   runs workflow pick_files at this point
+    wf commit msg="fix"     values for the called workflow's {$names}; or  wf commit fix  (same rules as the command line)
+
+When the run starts, the steps of the called workflow are put in place of the call, so everything in this guide (if, pause,
+{$name}, the guard) works inside it unchanged. Rules:
+  * It runs where the caller is: its  from  line is not used. Its closing  goto start  is left out.
+  * It can call others. A circle (a calls b calls a), more than 8 levels, a missing workflow or a mistake inside a called
+    one is refused before anything runs, with the path shown.
+  * Names the call does not give are shared with the caller: asked once, when the run starts.
+  * A call may sit inside an if block.
+  * The recorder never writes a call (typing wf while recording only explains this): add the line by hand.
+
+--- example: caller_and_callee ---
+start
+from here
+on main
+cmd d
+wf pick_files
+"Delete these?" where option="Yes"
+goto start
+--- end example ---
+
+11. THE RECORDER (an alternative to writing by hand)
+-----------------------------------------------------
+At the main file list type  start_record , do the task once, then type  stop_record  and name it. The app writes the file
+for you, with these decisions made automatically:
+  * answers are written as steps in order; a typed line becomes  input "Q" ask  (what was typed is never stored);
+    Enter alone becomes  input "Q" default
+  * a question listed in the registry (section 7) is written inside  if asked "<short text>" ... end if
+  * a choice among more than two options or rows keeps the position it had, on a comment line above it:
+        # position 2 of 12
+  * at  stop_record  two optional multi-select menus appear (Enter alone keeps everything as recorded):
+        "Pick by position?"   the steps that picked by a name; the chosen ones become  number=
+        "Leave steps to you?" the steps that name exact files; the chosen ones become  select ask  /  pause "recorded: ..."
+  Agents usually write the file directly; the recorder is for the person who would rather click through once.
+
+12. HOW AN AGENT CREATES A WORKFLOW FROM A REQUEST (procedure)
+--------------------------------------------------------------
+  1. Break the task into the app's own prompts. Find the REAL texts in the code; never invent them. Search the repository for
+     the prompt strings:  _bvk_menu  (menus; option labels are the "key:label" arguments)  ·  _bvk_yn / ask_yn
+     (yes/no)  ·  _bvk_read  (typed lines)  ·  _mc_select / _mc_steps  (multi-question menus)  ·  cmd_def in
+     script/file/cmdmap/main/bashbasicsbyvk_maincommands.sh  (the command words such as c-a, d, f, i, -u).
+     Known entry points: Find & replace = f (script/file/functions/find_replace/bashbasicsbyvk_find.sh), delete = d,
+     Infinity tools = i (git push: script/file/infinity/tools/bashbasicsbyvk_gitpush.sh), upgrade loop = -u.
+  2. Decide per prompt: ALWAYS asked -> a plain step.  Maybe asked (a setting, the git state, a file that may not exist)
+     -> inside if asked.  Text that changes every run -> {$name}.  Order that matters -> number=.  The person decides
+     -> select ask / pause / input ask.  Fixed choice -> where option="...".
+  3. Prefer  "Question" where option="..."  to a bare  where option  : the question text is the guard.
+  4. Do not use confirm auto, "Yes" on a delete / overwrite / force push, or a hard-coded file list unless the person asked
+     for hands-off. Offer select ask / pause for anything destructive.
+  5. Write NAME.xlr8 into the folder (section 3). Then CHECK the syntax from the repository root:
+         bash -c 'source script/file/workflow/bashbasicsbyvk_xlr8.sh; _xl_load ~/.bashbasicsbyvk/workflows/NAME.xlr8 && echo OK || echo "ERROR: $_XL_ERR"'
+     OK means every step is understood, every if is closed and every {$name} is well formed. It does not prove the app will
+     ask those questions in that order: say so, and tell the person to run it once with  wf NAME  (it stops safely, with
+     the step and the reason, if something is off), then fix that step.
+  6. Tell the person: the path, the command  wf NAME [values] , what it will do, and which steps still need them (pause, ask).
+
+13. MORE EXAMPLES (all tested by the guide test)
+------------------------------------------------
+Find & replace where Settings may hide some of the questions (the registry lists them; written by hand here):
+
+--- example: find_replace_with_ifs ---
+start
+from here
+on main
+cmd f
+if asked "Match case"
+  "Match case" where option="exact case"
+end if
+if asked "Pattern type"
+  "Pattern type" where option="plain text"
+end if
+if asked "Whole words only"
+  "Whole words only" where option="no"
+end if
+goto start
+--- end example ---
+
+The SHAPE of a recorded workflow (comments, a position, a pause, confirm; a shape, not advice: it answers Yes to a delete):
+
+--- example: recorded_shape ---
+start
+from here
+on main
+cmd c-a
+cmd sw
+on switch
+goto bookmarks
+where name="mysite"
+on main
+cmd d
+# position 1,3 of 12
+select number=1,3
+"delete" where option="Yes"
+"back up" where option="No"
+cmd i
+where option="Git Push"
+pause "check the diff yourself"
+confirm auto
+goto start
+end
+--- end example ---
+
+14. ERRORS AND WHAT THEY MEAN
+-----------------------------
+  'NAME' has a mistake, nothing was run. <reason>        the file does not parse (read the reason; section 12 step 5)
+  this 'if' has no 'end if' / 'else' without an 'if'      blocks do not pair
+  a variable is written {$name}                           a  {$  without a valid name and a closing }
+  more than one row is called 'x' / no row called 'x'     use path= or number= / check the real row text (the run lists some)
+  no option called 'x' (options: ...)                     the menu label differs: copy the label from the code
+  no option number 'N' (the menu has K: ...)              position past the end
+  the app asked 'A' but the step answers 'B'              wrong order, or the question is optional: wrap it in an if
+  expected the 'X' screen but this is 'Y'                 wrong  on  value, or the run is on another screen
+  workflows call each other in a circle: a -> b -> a      a call loop (also: more than 8 deep, no workflow called 'x')
+  a bare number breaks when the list changes              replace  cmd 3  with where name= / option= / number=
+  skipped: if asked "..."  (Settings: ...)                not an error: the question was not asked this time
+
+15. LIMITS (state them honestly to the person)
+----------------------------------------------
+  * A parse check (section 12) cannot know what the app will ask; the first real run is the test, and the guard makes it safe.
+  * A question that never appeared while recording (its setting was fixed) is not in a recorded file; if the setting later
+    asks, the run stops at it and names the question.
+  * pause and select ask take ONE answer each.
+  * number= is only as good as the order of the list.
+  * A # after a step on the same line is not a comment. The recorder does not write calls. Secrets are never stored.
+  * Values used bare should have no spaces; quote them.
+
+16. CHEAT SHEET (every word of the language)
+--------------------------------------------
+  edges        start  end  from  on  goto
+  list         cmd  (c-a  d  d- set1 ...)  as
+  choose       where  name  names  path  option  options  number  numbers  (first  last  -N  1,3  2-4)
+  pick         select  all  except  ask  name  path  number
+  typed        input  ask  default  value="..."
+  safety       confirm auto
+  by hand      pause  select ask  input ask
+  conditions   if  asked  menu  question  option  screen  not  else  end if  endif
+  values       {$name}
+  calls        wf NAME [values]  /  cmd wf NAME
+  commands     start_record  stop_record  wf

@@ -31,7 +31,7 @@ _AD_BUDGET=50
 _AD_COST_CC=0
 _AD_COST_FOOTER=10
 _AD_FREE_KEYS=" u q h cc "           # the ONE common footer (u) Up   q) Quit   h) Home   cc) Cheat codes): printed on every menu but main, costs nothing
-_AD_GENERAL_KEYS=" rf = clr "          # general commands every menu takes: listed by cc, NEVER printed in a footer (they are not menu specific)
+_AD_GENERAL_KEYS=" rf = "          # general commands every menu takes: listed by cc, NEVER printed in a footer (they are not menu specific). clr is NOT here: only the screens that handle it take it (switch, rules, Group by, the buffers), so it is menu specific: declared by them, in their cc and footer
 # _AD_STD_LINE (the common footer as ONE printed line) is rendered from _MC_FOOTERS[std_nav] in menuchrome.sh: the words live in one place only
 
 declare -g  _AD_MENU=""
@@ -80,7 +80,7 @@ _ad_open() {
 }
 
 # cc's two tabs: is KEY a GENERAL command (works on every screen) or MENU SPECIFIC (only this menu handles it)?
-#   general = the free keys (u q h cc), rf = clr, print / loadtime, and every key the map wires to a main command run by bvk_main_exec
+#   general = the free keys (u q h cc), rf =, print / loadtime, and every key the map wires to a main command run by bvk_main_exec
 _ad_is_general() {
   local k="${1,,}"
   [ -n "${_AD_GEN[$k]+x}" ] && return 0
@@ -128,7 +128,7 @@ declare -gA _AD_MAPMEMO=()
 # _ad_map_memo works the list out and keeps it in _AD_MAPMEMO.  The footer runs inside $( ) / mapfile < <( ), where a kept list is lost the moment the
 #   subshell ends — so the drawing code calls _ad_map_warm in the PARENT shell first and every footer draw after that only reads the list.
 _ad_map_memo() {
-  local m="${1:-main}" st="${2:-}" mode="${3:-menu}" lite="${4:-}" i key tgt p s rec k d memo_key="$1|${2:-}|${3:-menu}|${4:-}|${#_CM_DEF[@]}"   # the number of loaded command definitions is part of the key: a list worked out before they were all loaded is never reused
+  local m="${1:-main}" st="${2:-}" mode="${3:-menu}" lite="${4:-}" i key tgt p s rec k d md memo_key="$1|${2:-}|${3:-menu}|${4:-}|${#_CM_DEF[@]}"   # the number of loaded command definitions is part of the key: a list worked out before they were all loaded is never reused
   _AD_MEMOKEY="$memo_key"
   [ -n "$lite" ] && [ "$m" = main ] && { _AD_MAPMEMO[$memo_key]=""; return 0; }
   if [ -z "${_AD_MAPMEMO[$memo_key]+x}" ]; then
@@ -149,6 +149,8 @@ _ad_map_memo() {
       esac
       p=0; [ "${tm[i]}" != main ] && [ "$_CM_ACT" = local ] && p=40      # a command of the menu itself outranks the inherited main words
       s=m; [ "$_CM_HANDLER" = bvk_main_exec ] && [[ "$tgt" == bashbasicsbyvk_maincommands.sh:* ]] && s=g      # g = general (every screen can run it), m = menu specific
+      # a menu that re-declares a main command as its own local key (disk ram s -h ...) still takes the SAME general command: main says what it is
+      if [ "$s" = m ]; then md="${_CM_DEF[bashbasicsbyvk_maincommands.sh:$key]-}"; md="${md#*|}"; [ "${md%%|*}" = bvk_main_exec ] && s=g; fi
       memo+="${key}"$'\x1f'"${p}"$'\x1f'"${s}"$'\x1f'"${_CM_DESC}${_CM_EX:+  (e.g. $_CM_EX)}"$'\n'
     done
     _CM_MAP="$sv_map"; _CM_TBL_MAP=""
@@ -235,7 +237,7 @@ _ad_footer_cells() {
     best=-1; bp=0
     for (( j=0; j<${#_AD_KEY[@]}; j++ )); do
       [ "${_AD_ISFREE[j]}" = 1 ] && continue
-      case "$_AD_GENERAL_KEYS" in *" ${_AD_KEY[j]} "*) continue ;; esac      # rf = clr: cc only
+      case "$_AD_GENERAL_KEYS" in *" ${_AD_KEY[j]} "*) continue ;; esac      # rf =: cc only
       [[ " ${done_[*]} " == *" $j "* ]] && continue
       (( _AD_PRIO[j] > bp )) && { best=$j; bp=${_AD_PRIO[j]}; }
     done
@@ -256,7 +258,7 @@ _ad_footer_allow() {
   _ad_typed_of "$s"; k="$_AD_T"
   [ -n "$k" ] || return 0                                  # N · 1,3-5 · Enter: an instruction, not a command
   case "$_AD_FREE_KEYS" in *" ${k,,} "*) return 0 ;; esac  # standard keys cost nothing
-  case "$_AD_GENERAL_KEYS" in *" ${k,,} "*) return 1 ;; esac  # rf = clr: general commands, never in a footer (cc lists them)
+  case "$_AD_GENERAL_KEYS" in *" ${k,,} "*) return 1 ;; esac  # rf =: general commands, never in a footer (cc lists them)
   (( _AD_FT_SPENT + _AD_COST_FOOTER > _AD_BUDGET )) && return 1
   _AD_FT_SPENT=$(( _AD_FT_SPENT + _AD_COST_FOOTER ))
   return 0

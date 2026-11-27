@@ -1,0 +1,294 @@
+FILEPICKER AGENT GUIDE: how to let the user pick files and folders with bashbasicsbyvk
+======================================================================================
+File: script/agents_guide/filepicker.txt   (the complete reference; nothing else is needed to use the file picker)
+
+0. FOR THE PERSON: HOW TO USE THIS FILE
+---------------------------------------
+Paste this repository (or just this file) into your AI agent, or put the sentence below in your project's agent rules file
+(AGENTS.md, CLAUDE.md, GEMINI.md, .cursorrules ...) once, and your agent will stop guessing paths:
+
+    "Hey, instead of your native file picking tool or asking me to type a path, use the bashbasicsbyvk filepicker."
+
+Whenever the agent (or the code it writes for you) needs you to choose a file or a folder, a picker opens IN YOUR TERMINAL:
+you type a number to open a folder or pick a file, pick several at once, review and confirm. The agent gets the chosen
+absolute paths back. Nothing is typed by hand, nothing is guessed, and the rules (only .csv files, folders only ...) are
+enforced by the picker, not by the agent.
+
+Install (once):  pip install git+https://github.com/vkdatta/bashbasicsbyvk.git
+The picker is part of the local tool: it works offline and needs no account and no credits (FileAPI is a different feature).
+
+1. FOR AGENTS THAT CHANGE THE FILE PICKER: KEEP THIS FILE CURRENT (read before editing code)
+---------------------------------------------------------------------------------------------
+The owner's rule (also written in AGENTS.md): whenever you add, remove, rename or change the behaviour of ANYTHING in the
+file picker, you must update this file in the same change. "Anything" means: a command word (allow, block, .ext, a kind
+such as files / folders), the way several commands are joined, the optional prefix, an option of the shell door (-s, -f),
+an exit code, a Python function, argument or exception, a message the person or the caller sees, the keys the person types
+inside the picker, or any of these files:
+
+    script/file/engine/prompts/bashbasicsbyvk_filepicker        (the shell door)
+    script/file/engine/prompts/bashbasicsbyvk_filepicker.py     (the Python door)
+    script/file/engine/prompts/bashbasicsbyvk_qbridge.py        (how a Python tool run by the app asks through the app)
+    script/file/functions/transfer/bashbasicsbyvk_pickfilter.sh (the rules and the runner)
+    script/file/functions/transfer/bashbasicsbyvk_transfer.sh   (the picker itself, local_navigator)
+
+  * Update the commands (section 4), the shell door (5), the Python door (6), the keys (7), the procedure (9), the
+    examples (10), the errors (11) and the limits (12) here.
+  * Every example in section 10 sits between "--- example: NAME ---" and "--- end example ---" and MUST be accepted by the
+    real rule parser. tests/pty/fast/engine/filepicker_guide.sh loads every example and fails when a command word of the
+    parser, an exit code or a Python name is missing from this file, so a stale guide breaks the build.
+  * Add a corpus note, like any other change in this repository.
+  * llms.txt and llms-full.txt mention this guide: keep their wording true when the picker changes.
+
+2. WHAT THE FILE PICKER IS
+--------------------------
+One picker: the same file and folder picker the app's Transfer screen uses, callable from outside the app by any program
+(bash, Python, or an agent running shell commands). It is drawn on the person's TERMINAL (it opens /dev/tty), also when the
+caller's stdin and stdout are pipes, so a script can capture the answer from stdout while the person sees and uses the picker.
+
+Use it whenever you need the person to choose:
+  * a file to read, convert, upload, analyse, attach;
+  * several files at once (a batch);
+  * a folder (an output folder, a project to scan);
+  * files of one kind only (only .csv, only images, anything except .txt).
+Do NOT ask the person to type or paste a path, do not guess a path, and do not use a desktop dialog (tkinter, zenity,
+osascript) or your own native file chooser, when the person asked for this picker.
+
+3. REQUIREMENTS AND A QUICK CHECK
+---------------------------------
+  * bashbasicsbyvk installed: `command -v bashbasicsbyvk_filepicker` prints a path.
+  * A terminal the person is looking at and can type into (section 8).
+  * Bash 4+ and Python 3.8+ (the Python door only).
+If the command is missing, tell the person to run the install line from section 0 and stop; do not fall back to guessing
+paths unless the person agrees.
+
+4. THE COMMANDS (the rules of the picker)
+-----------------------------------------
+The rules are one text string. Several commands are joined with  ;  (a newline works too).
+
+  allow(files,folders)   these kinds can be picked (files, folders, or both)
+  allow(files)           files only
+  allow(folders)         folders only
+  block(folders)         these kinds can NOT be picked: block(folders) = files only
+  block(files)           block(files) = folders only
+  allow.ext(csv)         ONLY files with these extensions can be picked: allow.ext(csv,tsv)
+  block.ext(txt)         every file EXCEPT these extensions: block.ext(txt,log)
+
+How the rules combine (all verified against the real parser):
+  * No rule at all, or an empty string: files and folders can be picked.
+  * block beats allow: allow(files); block(files) leaves nothing to pick.
+  * allow.ext(csv) alone means "only .csv files": folders cannot be picked.
+  * allow(files,folders); allow.ext(csv) means .csv files AND any folder (the extension rule only filters files).
+  * Folders are always LISTED, because the person needs them to walk around; the rules decide what can be PICKED.
+    Files the rules refuse are not listed.
+  * Extensions: case-insensitive; a leading dot or star is ignored (csv, .csv, *.csv are the same); a compound extension
+    works (tar.gz). Files with no extension never match allow.ext.
+  * Kinds: file, files, folder, folders, dir, dirs, directory, directories (any case).
+  * Quotes around names are ignored. Extensions go in allow.ext / block.ext, never in allow(...): allow(csv) is an error.
+  * The prefix 3bvk.filepicker.  or  bvk.filepicker.  or  filepicker.  in front of a command is accepted and ignored, so
+    the text can be copied as it is: 3bvk.filepicker.allow(files,folders)
+
+5. THE SHELL DOOR (works from any language: bash, Python subprocess, Node, an agent's shell tool)
+-------------------------------------------------------------------------------------------------
+    paths=$(bashbasicsbyvk_filepicker "RULES" [-s START_FOLDER] [-f NAME_SHOWN_IN_THE_TITLE])
+
+  RULES   the command string of section 4 (quote it: it contains brackets and semicolons).
+  -s      the folder the picker opens in (default: the current folder). A missing folder is exit 64.
+  -f      who is asking, shown in the picker's title, for example -f "csv importer". Always pass it: the person then knows
+          which program wants the files.
+
+  stdout  the picked paths, ABSOLUTE, one per line. Nothing else is ever written to stdout.
+  exit 0  picked: stdout holds at least one path.
+  exit 2  nothing picked: the person left with q or u at the top, or pressed Ctrl-D. This is an answer, not an error:
+          stop and ask what the person wants instead; do not retry in a loop.
+  exit 3  cannot ask: bashbasicsbyvk is not (fully) installed: tell the person to reinstall.
+  exit 64 the rules were not understood (or the start folder does not exist); stderr says why. Fix the string, do not retry
+          the same string.
+
+Reading the answer safely:
+
+    mapfile -t picked < <(bashbasicsbyvk_filepicker "allow.ext(csv,tsv)" -s "$HOME" -f "csv importer")
+    rc=$?    # NOTE: in this form rc is mapfile's; use the next form when you need the exit code
+
+    out=$(bashbasicsbyvk_filepicker "allow(files)" -f "uploader"); rc=$?
+    case $rc in
+      0) mapfile -t picked <<<"$out" ;;
+      2) echo "nothing picked" >&2 ;;
+      *) echo "picker failed ($rc)" >&2 ;;
+    esac
+    for f in "${picked[@]}"; do printf '%s\n' "$f"; done      # always quote "$f": paths may contain spaces
+
+6. THE PYTHON DOOR
+------------------
+    import bashbasicsbyvk_filepicker as fp
+
+    paths = fp.pick("allow(files,folders)")                    # list of absolute path strings; [] when nothing was picked
+    paths = fp.pick("allow.ext(csv)")                          # only .csv files
+    paths = fp.pick("block(folders)")                          # files only
+    paths = fp.pick("block.ext(txt)")                          # everything except .txt files
+    paths = fp.pick("allow(files,folders); allow.ext(csv)")    # several commands joined with ;
+    paths = fp.pick("allow.ext(csv)", start="/data", strict=True)
+
+  pick(commands="allow(files,folders)", start=None, strict=False)
+    start   the folder to open in.
+    strict  False: nothing picked returns []. True: nothing picked raises EOFError.
+    The title of the picker shows the name of the running script automatically.
+
+  The same, spelled as calls (each opens the picker and returns the list; to combine rules use pick("...; ...")):
+    fp.filepicker.allow("files", "folders")   fp.filepicker.allow.ext("csv")
+    fp.filepicker.block("folders")            fp.filepicker.block.ext("txt")
+
+  Exceptions:
+    ValueError      the rules were not understood (the shell door's exit 64)
+    RuntimeError    bashbasicsbyvk is not installed or the picker could not be started (the shell door's exit 3)
+    EOFError        nothing picked, only with strict=True
+    KeyboardInterrupt  the person pressed Ctrl-C inside the picker (exit 130)
+
+  A Python name cannot start with a digit, so the call is fp.pick("..."), and the commands go in the string.
+
+  Importing it: the module sits in the same folder as the shell door, so when the import fails, add that folder:
+
+    import shutil, sys, os
+    _door = shutil.which("bashbasicsbyvk_filepicker")
+    if _door: sys.path.insert(0, os.path.dirname(os.path.realpath(_door)))
+    import bashbasicsbyvk_filepicker as fp
+
+  Inside the app: a Python tool the app itself runs (the Infinity Stones menu) asks through the app (the environment variable
+  BVK_QBRIDGE is set; see bashbasicsbyvk_qbridge.py). Nothing changes in your code.
+
+  If you cannot import it, call the shell door (section 5) with subprocess: it is the same picker.
+
+7. WHAT THE PERSON DOES INSIDE THE PICKER (tell them if they have never seen it)
+--------------------------------------------------------------------------------
+  N          type the number of a row: a folder opens, a file is picked
+  s-N        pick the folder N as it is (without opening it);  s-a  all rows;  s-2-4  a range
+  1,3-5      pick several rows at once (the app-wide selection grammar)
+  v          review the picked items and confirm
+  u          go up one folder (at the top: leave without picking)
+  q          quit without picking
+  Ctrl-D     the same as q
+The line under the title says in plain words what can be picked, so the person always knows the rules.
+
+8. WHERE IT CAN RUN (an honest limit, check it first)
+-----------------------------------------------------
+The picker needs the terminal the person is sitting at. It is meant for an agent whose shell tool runs in that terminal (a
+command-line agent the person started in their own terminal) and for scripts the person runs themselves.
+It cannot be shown when your shell runs somewhere the person cannot see or type into (a chat window's remote sandbox, a
+background job, CI). In that case do not retry: tell the person to run the one command themselves in their
+terminal and give it to them ready to paste, for example:
+
+    bashbasicsbyvk_filepicker "allow.ext(csv)" -f "csv importer"
+
+and ask them to paste the printed paths back.
+
+9. PROCEDURE: HOW TO TURN A REQUEST INTO A PICKER CALL
+------------------------------------------------------
+  1. Decide what must be picked: files, folders or both, one or many, which extensions.
+  2. Write the rules (section 4). Prefer the narrowest rule that fits: allow.ext(csv) for "pick a CSV", allow(folders) for
+     "pick an output folder", block(folders) when any file will do.
+  3. Check the picker exists (section 3). Choose the door: your own shell tool, or inside code you write: the Python door,
+     or the shell door from other languages.
+  4. Pass -f with the name of the job and -s with a sensible start folder when you know one.
+  5. Handle every exit code (section 5): 0 use the paths, 2 ask the person what to do, 3 reinstall message, 64 fix the rules.
+  6. Quote every path when you use it. Never build a shell command by pasting a picked path into a string.
+  7. Tell the person what you did in one line: which rules the picker used and which paths you got.
+When you WRITE CODE for the person that needs a file, put the picker call in the code (so the program asks every run) instead
+of hard-coding a path or reading sys.argv, unless the person asked for arguments.
+
+10. EXAMPLES (each rule string below is checked by the real rule parser)
+------------------------------------------------------------------------
+Any file or folder:
+--- example: anything ---
+allow(files,folders)
+--- end example ---
+
+Only .csv files:
+--- example: one_csv ---
+allow.ext(csv)
+--- end example ---
+
+Spreadsheet-like files, either extension:
+--- example: tables ---
+allow.ext(csv,tsv)
+--- end example ---
+
+Images only, several can be picked:
+--- example: images ---
+allow.ext(png,jpg,jpeg,webp,gif)
+--- end example ---
+
+An output folder:
+--- example: folder_only ---
+allow(folders)
+--- end example ---
+
+Any file, no folders:
+--- example: files_only ---
+block(folders)
+--- end example ---
+
+Everything except text files:
+--- example: not_text ---
+block.ext(txt)
+--- end example ---
+
+.csv files or any folder (a tool that takes a file or a whole folder of them):
+--- example: csv_or_folder ---
+allow(files,folders); allow.ext(csv)
+--- end example ---
+
+Copied from the docs, with the prefix:
+--- example: prefixed ---
+3bvk.filepicker.allow(files,folders)
+--- end example ---
+
+A compound extension:
+--- example: archives ---
+allow.ext(tar.gz,zip)
+--- end example ---
+
+A whole program, end to end (Python):
+
+    import bashbasicsbyvk_filepicker as fp
+    import csv
+
+    paths = fp.pick("allow.ext(csv)", strict=True)      # EOFError when the person quits
+    with open(paths[0], newline="") as f:
+        for row in csv.reader(f):
+            print(row)
+
+A whole script, end to end (bash):
+
+    out=$(bashbasicsbyvk_filepicker "allow.ext(log)" -s /var/log -f "log summary"); rc=$?
+    [ "$rc" = 0 ] || { echo "no file picked (exit $rc)" >&2; exit 1; }
+    mapfile -t logs <<<"$out"
+    wc -l -- "${logs[@]}"
+
+11. ERRORS AND WHAT THEY MEAN
+-----------------------------
+  not understood: 'X' (use allow(files,folders) ...)   the command is not allow / block / allow.ext / block.ext
+  'csv' in 'allow(csv)': use files or folders ...      an extension was put in allow( ): use allow.ext(csv)
+  'allow()' needs at least one name inside the brackets   an empty list
+  empty extension in 'allow.ext(.)'                     only a dot or star was given
+  start folder not found: PATH                         the -s folder does not exist (exit 64)
+  the file picker is not installed (reinstall bashbasicsbyvk)   exit 3: a broken install
+  nothing picked: exit 2 / [] / EOFError               the person quit: ask them what they want, do not loop
+
+12. LIMITS (say these honestly)
+-------------------------------
+  * It picks paths on the machine where it runs. It does not upload, copy or move anything.
+  * It needs the person's terminal (section 8). It is a terminal picker, not a graphical dialog.
+  * Paths come back one per line, so a path that contains a newline cannot be returned correctly (very rare).
+  * The picker is interactive: it cannot be scripted or answered by an agent on the person's behalf. Do not try to feed it keys.
+  * The command language is only allow / block with kinds and extensions: there is no size, date or name rule.
+  * An end-to-end run of the picker in a real terminal is covered by the app's own tests; the guide's examples are checked
+    against the rule parser only.
+
+13. CHEAT SHEET
+---------------
+  door        bashbasicsbyvk_filepicker "RULES" [-s START] [-f TITLE]      (stdout = paths, one per line)
+  python      import bashbasicsbyvk_filepicker as fp; fp.pick("RULES", start=None, strict=False)
+  kinds       files · folders          extensions   allow.ext(csv,tsv) · block.ext(txt)
+  verbs       allow · block            join         RULES ; RULES
+  exit        0 picked · 2 nothing picked · 3 not installed · 64 rules not understood
+  python      [] / EOFError (strict) · ValueError · RuntimeError · KeyboardInterrupt
+  keys        N open or pick · s-N pick a folder · 1,3-5 several · v review and confirm · u up · q quit

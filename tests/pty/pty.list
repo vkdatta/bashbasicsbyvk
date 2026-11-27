@@ -11,6 +11,8 @@ loadmap|fast|60|bash tests/pty/fast/engine/loadmap.sh|python3
 regex_portability|fast|30|bash tests/pty/fast/engine/regex_portability.sh|
 startup_spawns|fast|30|bash tests/pty/fast/engine/startup_spawns.sh|
 xlr8_flow|fast|30|bash tests/pty/fast/engine/xlr8_flow.sh|
+filepicker_guide|fast|30|bash tests/pty/fast/engine/filepicker_guide.sh|python3
+xlr8_guide|fast|30|bash tests/pty/fast/engine/xlr8_guide.sh|
 sys|fast|30|bash tests/pty/fast/engine/sys/sys_test.sh|python3
 track|fast|60|bash tests/pty/fast/engine/track/track_test.sh|python3
 wheel_target|fast|120|bash tests/pty/fast/engine/wheel_target.sh|python3
