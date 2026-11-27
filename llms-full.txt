@@ -275,7 +275,7 @@ Every main command, typed at any prompt (`cc` lists the ones the current prompt 
 | `ux-` | act | Share with a user | `ux-1` |
 | `uz-` | act | Unzip items | `uz-2` |
 | `v-` | act | View staged items and sets |  |
-| `wf` | act | Workflows — wf lists them, wf NAME runs one | `wf deploy` |
+| `wf` | act | Workflows — wf lists them, wf NAME [text] runs one | `wf deploy` |
 | `xtr-` | act | Extract lines / words / characters / bytes from files (files only) | `xtr-1,3` |
 | `z` | act | Organise by year, month, extension… |  |
 | `z-` | act | Zip items | `z-1,3` |

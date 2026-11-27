@@ -7,11 +7,17 @@
 #  A hook returns 0 = "answered (recording never does)", 1 = ask the person.
 #  State lives in FILES (BVK_WF_DIR: mode, steps, at, start, name, screen): tools run in subshells, and  cd  replaces the app by a shell.
 #  THE GUARD: an answer is only given to the kind of question (and the question text) it was recorded for; anything else stops the run.
+#  IF:   "if asked / option / screen ... else ... end if" is decided when the app asks its NEXT question (_wf_ctx says what that is).
+#  {$name}: a value given when the run starts (wf NAME name=value, or asked then); the steps use it: input "Q" value="{$name}".
 # ════════════════════════════════════════════════════════════════════════════
 
 declare -g _WF_HOME="${BVK_WF_HOME:-$HOME/.bashbasicsbyvk/workflows}"
 declare -g _WF_ANSWER="" _WF_MUTE=0
 declare -g _WF_NEVER=" cc print tidy loadtime start_record stop_record "   # tools about the app, not steps of a task
+declare -g _WF_CK="" _WF_CQ="" _WF_FLOW=0   # what the app asks NOW (list | menu | input | pick | confirm) and its text: the 'if' steps read it
+declare -ga _WF_WQ=() _WF_WS=() _WF_WV=() _WF_WE=()   # bashbasicsbyvk_wf_when.txt: question, setting, asked only when, whole-question flag
+declare -g _WF_WI=0 _WF_WLOADED=0
+declare -gA _WF_ARGV=()                     # the {$name} values while a run starts (the run then keeps them in BVK_WF_DIR/var.NAME)
 
 _wf_mode() { _WF_M=""; [ -n "${BVK_WF_DIR:-}" ] && [ -r "$BVK_WF_DIR/mode" ] && IFS= read -r _WF_M < "$BVK_WF_DIR/mode"; [ "${_WF_MUTE:-0}" = 0 ] && [ -n "$_WF_M" ]; }
 _wf_get() { _WF_G=""; [ -r "$BVK_WF_DIR/$1" ] && IFS= read -r _WF_G < "$BVK_WF_DIR/$1"; return 0; }
@@ -74,6 +80,67 @@ _wf_trip() {
 
 # ── recording ──────────────────────────────────────────────────────────────
 _wf_emit() { printf '%s\n' "$1" >> "$BVK_WF_DIR/steps"; }
+# ── the questions the app does not always ask (bashbasicsbyvk_wf_when.txt) ─
+_wf_when_load() {   # once
+  local f q s v
+  (( _WF_WLOADED )) && return 0
+  _WF_WLOADED=1
+  f="$(_wf_find_doc bashbasicsbyvk_wf_when.txt)" || return 0
+  while IFS='|' read -r q s v; do
+    _xl_trim "$q"; q="$_XL_OUT"
+    case "$q" in ''|'#'*) continue ;; esac
+    if [ "${q:0:1}" = "=" ]; then _WF_WE+=(1); q="${q:1}"; else _WF_WE+=(0); fi
+    _WF_WQ+=("$q"); _xl_trim "$s"; _WF_WS+=("$_XL_OUT"); _xl_trim "$v"; _WF_WV+=("$_XL_OUT")
+  done < "$f"
+}
+_wf_when_find() {   # QUESTION -> _WF_WI = its line; rc 1 = this question is always asked
+  local i k
+  _wf_when_load
+  for i in "${!_WF_WQ[@]}"; do
+    if (( _WF_WE[i] )); then _wf_key "${_WF_WQ[$i]}"; k="$_XL_OUT"; _wf_key "$1"; [ -n "$k" ] && [ "$_XL_OUT" = "$k" ] || continue
+    else _wf_has "${_WF_WQ[$i]}" "$1" || continue; fi
+    _WF_WI=$i; return 0
+  done
+  return 1
+}
+_wf_when_why() {   # LINE -> _XL_OUT: why the question may be missing (the setting and what it is set to now)
+  local s="${_WF_WS[$1]}" v="${_WF_WV[$1]}"
+  if [[ "$s" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then _XL_OUT="Settings: $s is '${!s:-}', it asks only on '$v'"; else _XL_OUT="asked only when $v"; fi
+}
+# PREFIX"QUESTION" REST as a step.  A question that Settings or the state can switch off goes inside  if asked "..." ... end if  (named by
+# the short text of the list, so a question with a file name in it still fits on the next run)
+_wf_emit_q() {   # QUESTION PREFIX REST
+  if _wf_when_find "$1"; then
+    _xl_quote "${_WF_WQ[$_WF_WI]}"; _wf_emit "if asked $_XL_OUT"; _wf_emit "  $2$_XL_OUT $3"; _wf_emit "end if"
+  else _xl_quote "$1"; _wf_emit "$2$_XL_OUT $3"; fi
+}
+# the steps that name the exact rows you used (select name=..., a command or an open on a name): a multi-select offers to leave them to you
+_wf_by_name() {   # TRIMMED-STEP
+  case "$1" in 'select ask') return 1 ;; select*) return 0 ;; esac
+  [[ "$1" =~ ^(cmd|where)[[:space:]].*[[:space:]](name|path)= || "$1" =~ ^where[[:space:]]+(name|path)= ]]
+}
+_wf_manual_pass() {   # STEPSFILE: the chosen steps become  select ask  /  pause "..."   (Enter alone, or u: nothing changes)
+  local f="$1" line t n=0 k=0 picked="" ind out
+  local -a rows=() at=()
+  while IFS= read -r line; do
+    n=$(( n + 1 )); t="${line#"${line%%[![:space:]]*}"}"
+    _wf_by_name "$t" || continue
+    k=$(( k + 1 )); at[k]=$n; rows+=("$k:${t:0:70}")
+  done < "$f"
+  (( k )) || return 0
+  _bvk_menu picked -m -t "Leave steps to you?" -i "✋" -q "These steps name the exact files you used. Which should wait for you each time (you pick, the workflow goes on)?" "${rows[@]}" || return 0
+  [ -n "$picked" ] || return 0
+  local -A hand=()
+  for k in $picked; do [ -n "${at[$k]:-}" ] && hand[${at[$k]}]=1; done
+  out="$f.new"; n=0
+  while IFS= read -r line; do
+    n=$(( n + 1 ))
+    if [ -n "${hand[$n]:-}" ]; then
+      ind="${line%%[![:space:]]*}"; t="${line#"$ind"}"
+      case "$t" in select*) printf '%sselect ask\n' "$ind" ;; *) _xl_quote "recorded: $t"; printf '%spause %s\n' "$ind" "$_XL_OUT" ;; esac
+    else printf '%s\n' "$line"; fi
+  done < "$f" > "$out" && mv "$out" "$f"
+}
 _wf_start_record() {
   _wf_mode && { echo "🔴  Already ${_WF_M/rec/recording}: type stop_record first"; return 0; }
   _cm_ctx_find 2>/dev/null
@@ -98,6 +165,7 @@ _wf_stop_record() {
     if ! [[ "$_wf_name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then echo "🔴  Use letters, numbers, - _ . (no spaces)"; continue; fi
     _wf_file="$_WF_HOME/$_wf_name.xlr8"
     if [ -e "$_wf_file" ]; then _bvk_yn _wf_ans "Replace the workflow '$_wf_name'?" || continue; [ "$_wf_ans" = y ] || continue; fi
+    _wf_manual_pass "$BVK_WF_DIR/steps"
     mkdir -p "$_WF_HOME" && { cat "$BVK_WF_DIR/steps"; printf 'goto start\nend\n'; } > "$_wf_file" || { echo "❌ Could not save $_wf_file"; break; }
     echo "💫 Saved '$_wf_name'. Run it:  wf $_wf_name   ·   see or edit it:  wf"
     _wf_off; break
@@ -143,6 +211,7 @@ _wf_names() {
 _wf_numbers() {   # KEY VALUES
   local key="$1" v out="" rc
   while IFS= read -r v; do
+    _wf_subst "$v"; v="$_XL_OUT"
     if [ "$key" = path ]; then _wf_index "$v" "${_WF_PATHS[@]}"; else _wf_index "$v" "${_WF_ROWS[@]}"; fi
     rc=$?
     if (( rc )); then
@@ -159,26 +228,44 @@ _wf_numbers() {   # KEY VALUES
 _wf_load_run() {
   _xl_load "$BVK_WF_DIR/steps" || { echo "❌ Workflow cannot be read: $_XL_ERR"; _wf_off; return 1; }
 }
-_wf_run() {   # NAME
-  local name="$1" file i start
-  _wf_mode && { echo "🔴  Finish first (stop_record) before running a workflow"; return 0; }
+_wf_run() {   # NAME [VALUES for the {$name}s: name=value ... | value ...]
+  local name="$1" args="${2:-}" file i start v a
+  if _wf_mode; then
+    if [ "$_WF_M" = rec ]; then echo "🔴  Finish first (stop_record). To run one workflow from another, add the line  wf NAME  to the saved workflow (wf, then edit)"
+    else echo "🔴  A workflow is running. To run one from another, make  wf NAME  a step of the workflow"; fi
+    return 0
+  fi
   file="$_WF_HOME/${name%.xlr8}.xlr8"
   [ -r "$file" ] || { echo "❌ No workflow called '$name' (type wf to see them)"; return 0; }
   _xl_load "$file" || { echo "❌ '$name' has a mistake, nothing was run. $_XL_ERR"; return 0; }
+  _WF_FLAT=""
+  if _wf_has_call; then   # one list: the called workflows' steps are put in place of the  wf NAME  steps
+    local flat rc
+    _WF_FLAT=$'start\n'
+    _wf_flatten "$name" "${name%.xlr8}" 1 "" || { echo "❌ '$name': $_XL_ERR. Nothing was run."; _WF_FLAT=""; return 0; }
+    flat="$(mktemp "${TMPDIR:-/tmp}/bvk-wfflat.XXXXXX")" || { _WF_FLAT=""; return 0; }
+    printf '%s' "$_WF_FLAT" > "$flat"; _xl_load "$flat"; rc=$?; rm -f "$flat"
+    (( rc == 0 )) || { echo "❌ '$name' has a mistake once its calls are put in, nothing was run. $_XL_ERR"; _WF_FLAT=""; return 0; }
+  fi
+  _wf_collect "$args" || { _WF_ARGV=(); _WF_FLAT=""; return 0; }
   start="$path"
   for i in "${!_XL_T[@]}"; do
     [ "${_XL_T[$i]}" = from ] || continue
-    case "${_XL_A[$i]}" in
+    _wf_subst "${_XL_A[$i]}"; a="$_XL_OUT"
+    case "$a" in
       here|current_path|navigation_path) ;;
-      *) [ -d "${_XL_A[$i]}" ] || { echo "❌ '$name' starts in a folder that is gone: ${_XL_A[$i]}. Nothing was run."; return 0; }
-         path="${_XL_A[$i]}"; group_prefix=""; force_show=false ;;
+      *) [ -d "$a" ] || { echo "❌ '$name' starts in a folder that is gone: $a. Nothing was run."; _WF_ARGV=(); _WF_FLAT=""; return 0; }
+         path="$a"; group_prefix=""; force_show=false ;;
     esac
   done
   _wf_off
   BVK_WF_DIR="$(mktemp -d "${TMPDIR:-/tmp}/bvk-wf.XXXXXX")" || return 0
   export BVK_WF_DIR
-  cp -- "$file" "$BVK_WF_DIR/steps"
+  if [ -n "$_WF_FLAT" ]; then printf '%s' "$_WF_FLAT" > "$BVK_WF_DIR/steps"; else cp -- "$file" "$BVK_WF_DIR/steps"; fi
+  _WF_FLAT=""
   _wf_set mode play; _wf_set at 0; _wf_set name "${name%.xlr8}"; _wf_set start "$path"; _wf_set screen ""
+  if (( ${#_WF_ARGV[@]} )); then for v in "${!_WF_ARGV[@]}"; do printf '%s\n' "${_WF_ARGV[$v]}" > "$BVK_WF_DIR/var.$v"; done; fi
+  _WF_ARGV=()
   echo "▶ Running workflow '${name%.xlr8}' from $path"
 }
 _wf_done() { _wf_get name; [ -t 1 ] && builtin printf '\r\033[K'; echo "✅ Workflow '$_WF_G' finished: all ${#_XL_T[@]} steps."; _wf_off; }
@@ -192,6 +279,13 @@ _wf_next() {   # SCREEN ('' = not a list screen)
     t="${_XL_T[$at]}"
     if [ "$t" = from ]; then at=$(( at + 1 )); continue; fi
     if [ "$t" = on ]; then _wf_set screen "${_XL_A[$at]}"; at=$(( at + 1 )); continue; fi
+    case "$t" in if|else|endif) _wf_flow "$at"; at=$_WF_FLOW; continue ;; esac
+    if [ "$t" = pause ]; then   # the NEXT question is the person's: say so, step over, and let the app ask them
+      _wf_subst "${_XL_Q[$at]}"
+      [ -t 1 ] && builtin printf '\r\033[K'; echo "✋ $(( at + 1 ))/${#_XL_T[@]}  Your turn${_XL_OUT:+: $_XL_OUT}. The workflow goes on after your answer."
+      at=$(( at + 1 )); _wf_set at "$at"; _wf_set tries 0; _WF_AT=$at
+      return 1
+    fi
     if [ "$t" = goto ] && [ -n "$1" ]; then
       case "${_XL_A[$at]}" in
         start|path|/*|"~"*) ;;
@@ -210,10 +304,153 @@ _wf_optional() {
   local t="${_XL_T[$1]}" v="${_XL_V[$1],,}"
   [ "$t" = confirm ] || { [ "$t" = where ] && [ "${_XL_K[$1]}" = option ] && { [ "$v" = yes ] || [ "$v" = no ]; }; }
 }
-_wf_asks() {   # STEP QUESTION: is this the question the step was written for?
+_wf_has() {   # WANT GOT: is GOT the question WANT was written for?  (letters only; an empty WANT fits any)
   local want got
-  _wf_key "${_XL_Q[$1]}"; want="$_XL_OUT"; _wf_key "$2"; got="$_XL_OUT"
+  _wf_key "$1"; want="$_XL_OUT"; _wf_key "$2"; got="$_XL_OUT"
   [ -z "$want" ] || [[ "$got" == *"$want"* ]]
+}
+_wf_asks() { _wf_has "${_XL_Q[$1]}" "$2"; }   # STEP QUESTION: is this the question the step was written for?
+
+# ── {$name}: values the steps use ──────────────────────────────────────────
+_wf_var_get() {   # NAME -> _WF_G   (the run's files; while a run starts, _WF_ARGV)
+  _WF_G=""
+  if [ -n "${BVK_WF_DIR:-}" ] && [ -r "$BVK_WF_DIR/var.$1" ]; then IFS= read -r _WF_G < "$BVK_WF_DIR/var.$1"; else _WF_G="${_WF_ARGV[$1]:-}"; fi
+  return 0
+}
+_wf_subst() {   # TEXT -> _XL_OUT = TEXT with every {$name} replaced by its value (one pass: a value is never read again as a name)
+  local s="$1" out=""
+  while [[ "$s" == *'{$'* ]]; do
+    out+="${s%%'{$'*}"; s="${s#*'{$'}"
+    if [[ "$s" =~ ^([A-Za-z_][A-Za-z0-9_]*)\} ]]; then _wf_var_get "${BASH_REMATCH[1]}"; out+="$_WF_G"; s="${s:${#BASH_REMATCH[0]}}"
+    else out+='{$'; fi
+  done
+  _XL_OUT="$out$s"
+}
+_wf_arg_word() {   # TEXT -> _XL_OUT = its first word (a "quoted" word keeps its spaces), _XL_REST = the rest;  rc 1 = a quote is not closed
+  local s="$1" w
+  if [ "${s:0:1}" = '"' ]; then _xl_value "$s"; return; fi
+  w="${s%%[[:space:]]*}"; _XL_OUT="$w"; _XL_REST="${s:${#w}}"
+}
+# the values of the {$name}s of the workflow just loaded (_XL_VN) -> _WF_ARGV, from a command line or a call:  name=value ...  or bare values
+# in the order the names first appear  (ONE name: the whole rest of the line is its value).  rc 1 + _XL_ERR = refused
+_wf_args_parse() {   # ARGS (one string)
+  local s="$1" k val i j
+  local -a bare=()
+  _WF_ARGV=()
+  _xl_trim "$s"; s="$_XL_OUT"
+  if (( ! ${#_XL_VN[@]} )); then [ -z "$s" ] || { _XL_ERR="this workflow has no {\$name} to fill, so '$s' is not used."; return 1; }; return 0; fi
+  if (( ${#_XL_VN[@]} == 1 )) && [ -n "$s" ] && ! [[ "$s" =~ ^${_XL_VN[0]}[[:space:]]*= ]]; then
+    val="$s"
+    if [ "${s:0:1}" = '"' ] && _xl_value "$s"; then val="$_XL_OUT"; _xl_trim "$_XL_REST"; [ -z "$_XL_OUT" ] || val="$s"; fi
+    _WF_ARGV[${_XL_VN[0]}]="${val//$'\n'/ }"; s=""
+  fi
+  while :; do
+    _xl_trim "$s"; s="$_XL_OUT"; [ -n "$s" ] || break
+    if [[ "$s" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      k="${BASH_REMATCH[1]}"; s="${BASH_REMATCH[2]}"
+      [[ " ${_XL_VN[*]} " == *" $k "* ]] || { _XL_ERR="this workflow has no {\$$k}."; return 1; }
+      _wf_arg_word "$s" || { _XL_ERR="a quote is not closed."; return 1; }
+      _WF_ARGV[$k]="$_XL_OUT"
+    else
+      _wf_arg_word "$s" || { _XL_ERR="a quote is not closed."; return 1; }
+      bare+=("$_XL_OUT")
+    fi
+    s="$_XL_REST"
+  done
+  i=0
+  for (( j=0; j<${#bare[@]}; j++ )); do
+    while (( i < ${#_XL_VN[@]} )) && [ -n "${_WF_ARGV[${_XL_VN[$i]}]+x}" ]; do i=$(( i + 1 )); done
+    (( i < ${#_XL_VN[@]} )) || { _XL_ERR="more values than names to fill ({\$${_XL_VN[0]}} ...)."; return 1; }
+    _WF_ARGV[${_XL_VN[$i]}]="${bare[$j]}"
+  done
+  return 0
+}
+# _wf_args_parse, then ask for what is still missing (the question is the text of the first input step that uses the name).  rc 1 = nothing is run
+_wf_collect() {   # ARGS (one string)
+  local v q val i
+  _wf_args_parse "$1" || { echo "❌ ${_XL_ERR^} Nothing was run."; return 1; }
+  for v in "${_XL_VN[@]}"; do
+    [ -n "${_WF_ARGV[$v]+x}" ] && continue
+    q=""
+    for i in "${!_XL_T[@]}"; do
+      [ "${_XL_T[$i]}" = input ] && [ -n "${_XL_Q[$i]}" ] && [[ "${_XL_S[$i]}" == *"{\$$v}"* ]] && { q="${_XL_Q[$i]}"; break; }
+    done
+    val=""
+    _bvk_read val "${q:-Value for {\$$v}}: " && [ -n "$val" ] || { echo "🔴  No value for {\$$v}: nothing was run."; return 1; }
+    _WF_ARGV[$v]="${val//$'\n'/ }"
+  done
+  return 0
+}
+
+# ── wf NAME [values]: a workflow that runs another one ─────────────────────
+# At the start of a run every  wf NAME  step is replaced by the steps of that workflow (and of the ones it calls), so the run sees ONE list and
+# if / pause / {$name} / the guard work inside it unchanged.  A called workflow keeps its steps but not its  from  (it runs where the caller is)
+# and not the  goto start  the recorder writes at its end (the caller decides where to go next).  The values given in the call are put into its
+# {$name}s; the names it is not given are shared with the caller (asked once, when the run starts).
+declare -g _WF_FLAT=""
+_wf_inject() {   # TEXT NAME VALUE -> _XL_OUT: every {$NAME} in TEXT becomes VALUE (made safe inside "...")
+  local s="$1" tag="{\$$2}" out="" v
+  _xl_quote "$3"; v="${_XL_OUT:1:${#_XL_OUT}-2}"
+  while [[ "$s" == *"$tag"* ]]; do out+="${s%%"$tag"*}$v"; s="${s#*"$tag"}"; done
+  _XL_OUT="$out$s"
+}
+_wf_flatten() {   # NAME CHAIN TOP ARGS: append the steps of workflow NAME to _WF_FLAT.  rc 1 + _XL_ERR
+  local name="${1%.xlr8}" chain="$2" top="$3" args="$4" file i last s k
+  local -a T=() A=() Q=() V=() S=() ch=()
+  local -A given=()
+  if [ "$top" != 1 ]; then
+    [[ " $chain " == *" $name "* ]] && { _XL_ERR="workflows call each other in a circle: ${chain// / → } → $name"; return 1; }
+    chain="$chain $name"; read -ra ch <<<"$chain"
+    (( ${#ch[@]} <= 9 )) || { _XL_ERR="workflows call each other more than 8 deep: ${chain// / → }"; return 1; }
+  fi
+  file="$_WF_HOME/$name.xlr8"
+  [ -r "$file" ] || { _XL_ERR="there is no workflow called '$name' (type wf to see them)"; return 1; }
+  _xl_load "$file" || { _XL_ERR="'$name' has a mistake: $_XL_ERR"; return 1; }
+  if [ "$top" != 1 ]; then
+    _wf_args_parse "$args" || { _XL_ERR="the call  wf $name $args : $_XL_ERR"; return 1; }
+    for k in "${!_WF_ARGV[@]}"; do given[$k]="${_WF_ARGV[$k]}"; done
+    _WF_ARGV=()
+  fi
+  T=("${_XL_T[@]}"); A=("${_XL_A[@]}"); Q=("${_XL_Q[@]}"); V=("${_XL_V[@]}"); S=("${_XL_S[@]}")
+  last=$(( ${#T[@]} - 1 ))
+  for i in "${!T[@]}"; do
+    case "${T[$i]}" in
+      from) [ "$top" = 1 ] || continue ;;
+      goto) [ "$top" != 1 ] && (( i == last )) && [ "${A[$i]}" = start ] && continue ;;
+      call) _wf_flatten "${Q[$i]}" "$chain" 0 "${V[$i]}" || return 1; continue ;;
+    esac
+    s="${S[$i]}"
+    for k in "${!given[@]}"; do _wf_inject "$s" "$k" "${given[$k]}"; s="$_XL_OUT"; done
+    _WF_FLAT+="$s"$'\n'
+  done
+}
+_wf_has_call() { local t; for t in "${_XL_T[@]}"; do [ "$t" = call ] && return 0; done; return 1; }
+
+# ── if / else / end if: decided against the question the app asks NOW ──────
+_wf_ctx() { _WF_CK="$1"; _WF_CQ="$2"; }   # KIND TEXT   (the options of a menu are in _WF_LABS)
+_wf_cond() {   # IDX: does the condition of this 'if' hold now?   (not: the caller turns it round)
+  local at="$1" want
+  _wf_subst "${_XL_Q[$at]}"; want="$_XL_OUT"
+  case "${_XL_A[$at]}" in
+    asked)  [ "$_WF_CK" != list ] && _wf_has "$want" "$_WF_CQ" ;;
+    option) _wf_index "$want" "${_WF_LABS[@]}"; (( $? == 0 || $? == 2 )) ;;
+    screen) [ "$_WF_CK" = list ] && [ "${_WF_CQ,,}" = "${want,,}" ] ;;
+  esac
+}
+_wf_flow() {   # IDX of an if / else / end if -> _WF_FLOW = the index of the step that follows
+  local at="$1" yes=0
+  case "${_XL_T[$at]}" in
+    endif) _WF_FLOW=$(( at + 1 )); return 0 ;;
+    else)  _WF_FLOW=$(( ${_XL_J[$at]} + 1 )); return 0 ;;   # the if-side has run: step over the else-side
+  esac
+  _wf_cond "$at" && yes=1
+  [ "${_XL_K[$at]}" = not ] && yes=$(( 1 - yes ))
+  if (( yes )); then _wf_say "$at"; _WF_FLOW=$(( at + 1 ))
+  else
+    local why=""
+    if [ "${_XL_A[$at]}" = asked ] && [ -z "${_XL_K[$at]}" ] && _wf_when_find "${_XL_Q[$at]}"; then _wf_when_why "$_WF_WI"; why="  ($_XL_OUT)"; fi
+    [ -t 1 ] && builtin printf '\r\033[K'; echo "⏭  $(( at + 1 ))/${#_XL_T[@]}  skipped: ${_XL_S[$at]}$why"; _WF_FLOW=$(( ${_XL_J[$at]} + 1 ))
+  fi
 }
 _wf_skip() { echo "⏭  $(( _WF_AT + 1 ))/${#_XL_T[@]}  not asked this time: ${_XL_S[$_WF_AT]}"; _wf_advance; _wf_next "$1"; }
 
@@ -226,11 +463,12 @@ _wf_list() {   # record|play
   [ "${_sw_in_mode:-0}" = 1 ] && [ "$scr" = main ] && scr=switch
   if [ "$1" = record ]; then [ "$_WF_M" = rec ] && _wf_rec_list "$scr"; return 0; fi
   [ "$_WF_M" = play ] || return 1
+  _WF_LABS=(); _wf_ctx list "$scr"
   _wf_next "$scr" || return 1
   while (( _WF_AT < ${#_XL_T[@]} )) && _wf_optional "$_WF_AT"; do _wf_skip "$scr" || return 1; done
   (( _WF_AT >= ${#_XL_T[@]} )) && { _wf_done; return 1; }
   local at=$_WF_AT t a want n
-  t="${_XL_T[$at]}"; a="${_XL_A[$at]}"
+  t="${_XL_T[$at]}"; _wf_subst "${_XL_A[$at]}"; a="$_XL_OUT"
   _wf_get screen; want="$_WF_G"
   [ -z "$want" ] || [ "$want" = "$scr" ] || { _wf_fail "expected the '$want' screen but this is '$scr'"; return 1; }
   case "$t" in
@@ -320,6 +558,7 @@ _wf_pick() {   # record|play
     return 0
   fi
   [ "$_WF_M" = play ] || return 1
+  _WF_LABS=(); _wf_ctx pick "pick items"
   _wf_next "" || return 1
   (( _WF_AT < ${#_XL_T[@]} )) || return 1
   local at=$_WF_AT t a
@@ -349,10 +588,15 @@ _wf_answer_options() {
   if [ "$t" = cmd ]; then
     if (( ! yn )) || [ "${_XL_A[$at]}" = u ] || [ "${_XL_A[$at]}" = q ]; then _wf_say "$at"; _wf_advance; _WF_ANSWER="${_XL_A[$at]}"; return 0; fi
   fi
+  if [ "$t" = input ] && [ "${_XL_A[$at]}" = ask ]; then   # input "Question" ask: you choose this one
+    _wf_asks "$at" "$q" || { _wf_fail "the app asked '$q' but the step answers '${_XL_Q[$at]}'"; return 1; }
+    _wf_say "$at"; _wf_advance; return 1
+  fi
   [ "$t" = where ] && [ "${_XL_K[$at]}" = option ] || { _wf_fail "unexpected question: $q"; return 1; }
   _wf_asks "$at" "$q" || { _wf_fail "the app asked '$q' but the step answers '${_XL_Q[$at]}'"; return 1; }
   (( yn )) && [ -z "${_XL_Q[$at]}" ] && [ "${_XL_V[$at],,}" = yes ] && { _wf_fail "a Yes must name its question:  \"...?\" where option=\"Yes\"   (asked now: $q)"; return 1; }
   while IFS= read -r v; do
+    _wf_subst "$v"; v="$_XL_OUT"
     _wf_index "$v" "${_WF_LABS[@]}" || { _wf_fail "no option called '$v' (options: $(printf '%s · ' "${_WF_LABS[@]}"))"; return 1; }
     out+="${out:+ }${_WF_KEYS[$_WF_I]}"
   done <<<"${_XL_V[$at]}"
@@ -365,8 +609,7 @@ _wf_rec_options() {   # QUESTION KEYS-chosen...
     for i in "${!_WF_KEYS[@]}"; do [ "${_WF_KEYS[$i]}" = "$k" ] && { _xl_quote "${_WF_LABS[$i]%%  *}"; out+="${out:+,}$_XL_OUT"; break; }; done
   done
   [ -n "$out" ] || return 1
-  _xl_quote "$q"; q="$_XL_OUT"
-  _wf_emit "$q where option=$out"
+  _wf_emit_q "$q" "" "where option=$out"
 }
 
 # ── hook: yes/no and choice boxes (_bvk_menu: its _bc_ variables) ──────────
@@ -384,6 +627,7 @@ _wf_box() {   # record|play
     return 0
   fi
   [ "$_WF_M" = play ] || return 1
+  _wf_ctx menu "$q"
   _wf_answer_options "$q" "$_bc_yn" || return 1
   case "$_WF_ANSWER" in u|q) _BVK_LEFT="$_WF_ANSWER"; _WF_ANSWER="" ;; esac
   return 0
@@ -417,12 +661,12 @@ _wf_prompt() {
       local -a g=(); read -ra g <<<"${ans//,/ }"
       _wf_rec_options "$_WF_Q" "${g[@]}" && return 0
     fi
-    _xl_quote "$_WF_Q"
     # what was typed is never stored: the run stops here and asks again (a commit message is new every time); Enter alone = the default
-    if [ -n "$ans" ]; then _wf_emit "input $_XL_OUT ask"; else _wf_emit "input $_XL_OUT default"; fi
+    if [ -n "$ans" ]; then _wf_emit_q "$_WF_Q" "input " ask; else _wf_emit_q "$_WF_Q" "input " default; fi
     return 0
   fi
   [ "$_WF_M" = play ] || return 1
+  if (( _WF_MENU )); then _wf_ctx menu "$_WF_Q $p"; else _wf_ctx input "$p"; fi
   if (( _WF_MENU )); then
     _wf_next "" || return 1
     if (( _WF_AT < ${#_XL_T[@]} )) && [ "${_XL_T[$_WF_AT]}" != input ]; then _wf_answer_options "$_WF_Q" 0; return $?; fi
@@ -440,7 +684,7 @@ _wf_prompt() {
   case "$a" in
     ask) echo "✍️  Your turn: type it, then the workflow goes on"; return 1 ;;
     default) _WF_ANSWER="" ;;
-    value) _WF_ANSWER="${_XL_V[$at]}" ;;
+    value) _wf_subst "${_XL_V[$at]}"; _WF_ANSWER="$_XL_OUT" ;;
   esac
 }
 
@@ -449,6 +693,7 @@ _wf_confirm() {   # record|play ; rc 0 (play) = the workflow confirms
   _wf_mode || return 1
   if [ "$1" = record ]; then [ "$_WF_M" = rec ] && _wf_emit "confirm auto"; return 0; fi
   [ "$_WF_M" = play ] || return 1
+  _WF_LABS=(); _wf_ctx confirm "type this number"
   _wf_next "" || return 1
   (( _WF_AT < ${#_XL_T[@]} )) && [ "${_XL_T[$_WF_AT]}" = confirm ] || { _wf_fail "a safety number is asked and the workflow has no 'confirm auto' here"; return 1; }
   _wf_say "$_WF_AT"; _wf_advance
@@ -504,8 +749,9 @@ _wf_find_doc() {   # an installed *.txt sits in the data dir, a source tree besi
   for c in "$d/$1" "$d/../share/bashbasicsbyvk/$1" "${SCRIPT_DIR:-.}/../bashbasicsbyvk/$1" "${SCRIPT_DIR:-.}/$1"; do [ -r "$c" ] && { printf '%s' "$c"; return 0; }; done
   return 1
 }
-handle_wf_cmd() {   # "wf" | "wf NAME"
-  local name="${1#??}"
+handle_wf_cmd() {   # "wf" | "wf NAME" | "wf NAME value..." (the values of the workflow's {$name}s)
+  local name="${1#??}" args=""
   _xl_trim "$name"; name="$_XL_OUT"
-  if [ -n "$name" ]; then _wf_run "$name"; else _wf_menu; fi
+  if [[ "$name" =~ ^([^[:space:]]+)[[:space:]]+(.*)$ ]]; then name="${BASH_REMATCH[1]}"; args="${BASH_REMATCH[2]}"; fi
+  if [ -n "$name" ]; then _wf_run "$name" "$args"; else _wf_menu; fi
 }

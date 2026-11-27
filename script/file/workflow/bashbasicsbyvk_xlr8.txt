@@ -4,6 +4,7 @@ XLR8 - the workflow language of bashbasicsbyvk
   start_record   begin recording (from the main file list)
   stop_record    finish and give it a name
   wf NAME        run it
+  wf NAME text   run it with a value (see "Values you give each time")
   wf             list, view, edit, rename, delete
 
 A workflow is a text file, one step per line (or several joined with =>).
@@ -23,8 +24,126 @@ Lines starting with # are notes.
   input "Question" default     just press Enter
   input "Question" value="x"   always type x
   confirm auto                 type the safety number for you
+  if asked "Question" ... end if   only when the app asks it (see "Conditions")
+  pause "note"                 the NEXT question is yours (see "Doing a step yourself")
+  wf NAME [values]             run another workflow here (see "Calling another workflow")
+  select ask                   you pick the items yourself
+  {$name}                      a value you give each time
 
 Row numbers are never written: menus can be reordered and it still works.
+
+Conditions: if / else / end if
+------------------------------
+Some questions are not always asked: a setting is on its default, there is
+nothing to commit, an option only exists sometimes. Put the steps that belong
+to such a question between  if  and  end if:
+
+  if asked "Select version bump type"
+    where option="Patch"
+    input "Enter commit message" ask
+  end if
+
+The app is looked at when it asks its NEXT question. If it is that question,
+the steps run. If not, they are skipped (and the run says so), and the next
+step after end if is tried on the same question. Ways to write the test:
+
+  if asked "text"       the question contains this text   (menu / question mean the same)
+  if option "Label"     the menu being shown has this option
+  if screen main        the list screen is this one       (main, switch ...)
+  if not ...            the other way round
+  else                  the steps for when it is not so
+  end if                (endif works too)    ifs can sit inside ifs
+
+Example, a find and replace where Settings may hide some of the questions:
+
+  if asked "Case sensitive"
+    "Case sensitive" where option="No"
+  end if
+  if asked "Whole word"
+    "Whole word" where option="No"
+  end if
+
+What the recorder writes for you
+--------------------------------
+You do not have to type the ifs above. When you record, a question that
+Settings (or the state of your files) can switch off is written inside
+if asked ... end if  by itself: Match case, Whole words, Pattern type, Where?,
+the no-extension question of rename, the version / message / commit questions
+of git push, and more. They are listed in bashbasicsbyvk_wf_when.txt, one line
+each, with the setting that decides. Every other question stays a plain step,
+so the run still stops when something unexpected is asked.
+When a block is skipped the run says why, e.g.
+  skipped: if asked "Match case?"  (Settings: find_case_mode is 'exact', it asks only on 'ask')
+A question that never appeared while you recorded (its setting was on a fixed
+value) cannot be recorded; if you later switch that setting to ask, the run
+stops there and tells you which question has no answer.
+
+Doing a step yourself
+---------------------
+Sometimes the workflow should not pick for you: which files to delete, which
+option to take. Four ways, from the end of a recording to hand-written:
+
+  stop_record        when you save, the steps that name exact files you used
+                     (select name=..., a command or an open on a name) are
+                     listed. Mark the ones you want to do by hand each time;
+                     Enter alone keeps the recording as it is.
+  select ask         you pick the items yourself on the pick screen.
+  pause "note"       the NEXT question is yours, whatever it is: a command on
+                     the file list, a pick screen, a menu, a typed line. The
+                     run shows your note, waits for your answer and then goes
+                     on with the steps after the pause.
+  input "Question" ask   you choose the option of that menu (or type that line).
+
+Example, delete the files you pick each time, then confirm:
+
+  cmd d
+  select ask
+  "Delete these?" where option="Yes"
+
+pause takes ONE answer. If you need several commands on a list (open a folder,
+then pick), put a pause for each.
+
+Calling another workflow
+------------------------
+A workflow can run another one at any point:
+
+  cmd d
+  wf pick_files                  (cmd wf pick_files means the same)
+  "Delete these?" where option="Yes"
+
+When the run starts, the steps of pick_files are put in place of that line, so
+everything above (if, pause, {$name}, the guard) works inside it as it does on
+its own. Rules:
+
+  * The called workflow runs where the caller is: its  from  line is not used.
+  * Its closing  goto start  (the recorder writes one) is left out: the caller
+    decides where to go next.
+  * It can call others. A circle (a calls b calls a) or more than 8 levels is
+    refused, and so is a workflow that does not exist, before anything runs.
+  * Values go in the call:  wf commit msg="fix login"   or   wf commit fix login
+    (the same rules as on the command line). A {$name} the call does not give
+    is shared with the caller: it is given, or asked, once when the run starts.
+    Inside quotes a value is safe; used bare (goto {$dir}) it should have no spaces.
+  * A call can sit inside an if:   if asked "..." / wf other / end if
+  * The recorder does not write calls (typing wf while recording only says so).
+    Add the line when you edit a workflow (wf, then edit).
+
+Values you give each time: {$name}
+----------------------------------
+Where the text is different on every run (a commit message), write it as
+{$name} in a value, and give it when you start:
+
+  input "Enter commit message" value="{$msg}"
+
+  wf push fix the login bug             one name: the rest of the line is the value
+  wf push msg="fix login" branch=dev    several: name=value
+  wf push "fix login" dev               or in the order the names first appear
+  wf push                               nothing given: you are asked first, then it runs
+
+{$name} works in value="...", where name="...", where option="...", goto, from
+and cmd. A value is never read as a name again. The question a name is asked
+with is the text of the first  input "..."  step that uses it.
+(input "..." ask still stops in the middle of the run for you to type.)
 
 Safety
 ------
@@ -32,6 +151,8 @@ Safety
   unexpected stops the run and shows the step number and the reason.
 * A Yes must name its question.
 * A yes/no or confirm step is skipped (and said so) when the app does not ask.
+* An if only skips what is inside it. The steps after it still have to fit
+  what the app asks, so a wrong answer still stops the run.
 * Secrets (hidden typing) are never recorded or replayed.
 * confirm auto removes a safety stop. Delete that line to be asked yourself.
 
@@ -53,9 +174,11 @@ Example
   cmd d-
   cmd i
   where option="Git Push"
-  where option="Patch"
-  input "Enter commit message" ask
-  "Create this commit" where option="Yes"
+  if asked "Select version bump type"
+    where option="Patch"
+    input "Enter commit message" value="{$msg}"
+    "Create this commit" where option="Yes"
+  end if
   "override the remote" where option="Yes"
   confirm auto
   goto start

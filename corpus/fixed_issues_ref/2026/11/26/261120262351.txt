@@ -1,0 +1,24 @@
+1. ISSUE IN BRIEF
+A recorded workflow stopped when a question that Settings can switch off (Match case, Whole words, a clean tree skipping the git push version menu) was not asked on the next run: the recorder wrote every answer as a plain step, so the engine had nothing to tell a question that may be absent from one that must come.
+
+HOW DID YOU DEBUG
+Read the recorder hooks (_wf_rec_options, _wf_prompt record) and the ask sites of the app: Find (_find_resolve_options), Rename, Chmod, Compress, Backup and the buffer conflicts each decide from a setting whether to ask, so one declaration per site was too many places. A registry that names each switchable question and the setting (or state) that governs it is one file.
+
+CAUSE
+Recorded steps carried no notion that a question can be absent; the new if / end if (previous task) had nobody writing it.
+
+FIX
+New data file bashbasicsbyvk_wf_when.txt (QUESTION | SETTING | ASKED ONLY WHEN; a leading = means the whole question), registered in loadmap.list, found by _wf_find_doc like the xlr8 guide. wf.sh: _wf_when_load / _wf_when_find read it, _wf_emit_q writes  if asked "<short text>" / step / end if  for a listed question (the short text, so a question with a file name in it still fits next run) and a plain step for every other; both recorder sites use it. _wf_flow names the setting and its current value when it skips a block (_wf_when_why). A stale-check in the test: every question and setting of the list must still exist in the app. Lesson: a question not in the list stays strict on purpose.
+
+2. ISSUE IN BRIEF
+A recorded workflow always hard-coded the exact files used (select name=..., a command on a name); there was no way to stop at that step and let the person pick the files, or choose a menu option, by hand each time.
+
+HOW DID YOU DEBUG
+Read _wf_pick (input "pick items" ask already stopped for the person but only for unmappable names), _wf_answer_options (menus had no 'you choose') and the hook return convention (rc 1 = the app asks the person) shared by all five hooks through _wf_next.
+
+CAUSE
+No step meant 'the next answer is the person's'; ask existed only for typed lines and unmappable picks.
+
+FIX
+xlr8.sh: pause ["note"] (new step type) and select ask (= input "pick items" ask). wf.sh: _wf_next handles pause for every hook at once (says the note, steps over, returns 1 so the app asks); _wf_answer_options accepts input "Q" ask on menus. At stop_record _wf_manual_pass lists the steps that name exact files (_wf_by_name) in a multi-select _bvk_menu; chosen ones become select ask / pause "recorded: ..."; Enter or u changes nothing; no such step: no menu. Docs: xlr8.txt, README.md.
+Verified with tests/pty/fast/engine/xlr8_flow.sh (sections 5-7): recorder output, replay with a different file name and a switched setting, pause / select ask / menu ask, the multi-select with a stubbed menu. NOT run: a real terminal session (the multi-select screen itself was not looked at).

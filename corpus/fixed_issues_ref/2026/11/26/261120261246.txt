@@ -1,0 +1,25 @@
+1. ISSUE IN BRIEF
+A workflow step that the app only asks sometimes (a setting left on its default hides a find-and-replace question; a clean working tree skips the git-push version menu) stopped the run: the run expected a menu option but the app had already gone back to the file list. A workflow had no way to say 'only if the app asks this'.
+
+HOW DID YOU DEBUG
+Read the failing message back to _wf_list (wf.sh) and the call sites of the hooks (browse.sh, choose.sh, smartmenu.sh): the engine does not watch the screen, the app calls a hook when it asks, so a draw/read race is not possible there. The step 'where option=Patch' met the file-list hook because _bvk_menu "Select version bump type" was never asked: gitpush.sh create_commit returns before the version menu when git diff --cached --quiet finds nothing staged, and the tool then exits to the list. Confirmed by the owner (tree was up to date; after a small change the same workflow ran).
+
+CAUSE
+Every step of a workflow had to be answered; only yes/no and confirm steps could be left unasked (_wf_optional). A real choice or typed line that the app legitimately does not ask stopped the run.
+
+FIX
+xlr8.sh: new steps  if [not] asked|menu|question "text" / option "label" / screen NAME,  else,  end if (endif);  _xl_if parses, _xl_check pairs them (_XL_J) and refuses an if without end if, an else without if, a bad variable.
+wf.sh: _wf_next steps over if/else/end if through _wf_flow; _wf_cond decides against what the app asks NOW (_wf_ctx kind + text, set by _wf_list, _wf_pick, _wf_box, _wf_prompt, _wf_confirm; menu options in _WF_LABS). False = the block is skipped and said so; the guard for every step after it is unchanged. _wf_has is the one question matcher (_wf_asks uses it). Lesson: an if looks at the NEXT question only; a skipped block never hides a wrong answer after it.
+
+2. ISSUE IN BRIEF
+A workflow could answer a typed question only with one fixed text (value=) or stop and ask in the middle of the run (ask); there was no way to give a different text on every run, such as a new commit message for every push, without losing the unattended run.
+
+HOW DID YOU DEBUG
+Read _wf_prompt (input steps: ask / default / value), _wf_run and handle_wf_cmd (the command line carried only the name). State must live in files (cd replaces the app by a shell), so values are stored per run.
+
+CAUSE
+The language had no variables and wf NAME took no arguments.
+
+FIX
+{$name} in value=, where name= / option= / path=, goto, from and cmd. wf.sh: _wf_collect takes the values from the command line (one name: the whole rest of the line; name=value; bare values in order) and asks for the missing ones with _bvk_read before anything runs (the question is the text of the first input step that uses the name); _wf_run writes BVK_WF_DIR/var.NAME; _wf_subst replaces in one pass (a value is never read as a name); handle_wf_cmd splits "wf NAME values". Docs: xlr8.txt, README.md, the wf line in maincommands.sh and llms-full.txt (generated). Loadmap stubs regenerated.
+Verified with tests/pty/fast/engine/xlr8_flow.sh (new, registered in pty.list): it calls the real hooks the way the app does, including the clean-tree git push. NOT run: a real terminal session of the app with a recorded workflow.

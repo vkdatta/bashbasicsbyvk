@@ -1,0 +1,12 @@
+1. ISSUE IN BRIEF
+A workflow could not run another workflow: typing wf NAME inside a running workflow was refused, so a common task (pick files, commit and push) had to be copied into every workflow that needs it.
+
+HOW DID YOU DEBUG
+Read _wf_run (it refuses while a run or recording is alive, and a run is one state directory with one steps file, one 'at' index) and the hooks (they only ever look at the steps array). A nested run with its own state would need a stack in every hook; resolving the calls when the run starts needs none.
+
+CAUSE
+The language had no step for 'run workflow X here', and a run is a single flat list of steps.
+
+FIX
+xlr8.sh: wf NAME [values] and cmd wf NAME [values] are a new step type 'call' (Q = the workflow, V = the values). wf.sh: _wf_flatten replaces every call by the steps of that workflow (recursively) when the run starts and writes ONE list into BVK_WF_DIR/steps, so if / pause / {$name} / the guard work inside a called workflow unchanged; a workflow with no call is copied byte for byte as before. A called workflow loses its from and the closing goto start the recorder adds. Circles, more than 8 levels, a missing workflow and a mistake in a called one are refused before anything runs, with the way round named. Values in the call go into the called workflow's {$name}s (_wf_inject, quote-safe); names it is not given are shared with the caller and asked once at the start. _wf_args_parse is now shared by the command line and the call (it was inside _wf_collect). Typing wf during a recording or a run says how to call one instead. Lesson: the first version of the circle check ran after the callee's name had been added to the chain, so every call looked like a circle; the test found it.
+Verified with tests/pty/fast/engine/xlr8_flow.sh section 8 (nesting, order, circle, missing, depth, values with quotes and &, shared names, a call inside an if, a replay across the call boundary). NOT run: a real terminal session.

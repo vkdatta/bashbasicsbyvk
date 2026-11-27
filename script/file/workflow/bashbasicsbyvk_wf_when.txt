@@ -1,0 +1,26 @@
+# bashbasicsbyvk_wf_when.txt: the questions the app does NOT always ask.
+#
+# The recorder (start_record / stop_record) writes each of these inside   if asked "..." ... end if
+# so a recorded workflow still runs when Settings (or the state of your files) switches the question off,
+# and still stops on any other question it did not expect.
+#
+#   QUESTION | SETTING | ASKED ONLY WHEN
+#
+#   QUESTION          words of the question (only letters count). A leading =  means the whole question, not a part of it.
+#   SETTING           the variable Settings uses to decide, or  -  when it is the state of your files, not a setting.
+#   ASKED ONLY WHEN   the value of that setting that asks, or the state in words.  The run says it when a block is skipped.
+#
+# A question that can be switched off and is not listed here is recorded as a plain step.
+# Add a line when you find one; nothing else has to change.
+=Where?                       | find_depth_mode      | ask
+=Match case?                  | find_case_mode       | ask
+=Pattern type?                | find_regex_mode      | ask
+=Whole words only?            | find_word_mode       | ask
+Find & Replace in             | find_input_mode      | ask
+has no extension              | rename_noext_mode    | ask
+on everything inside          | chmod_recursive_mode | ask
+=Compress as                  | compress_format      | ask
+already exists. Overwrite?    | -                    | the archive name already exists
+Select version bump type      | -                    | there is something to commit
+Enter commit message          | -                    | there is something to commit
+Create this commit?           | -                    | there is something to commit
