@@ -436,6 +436,98 @@ said "add the line  wf NAME" && ok "typing wf while recording says how to call o
 _wf_off; run a; : > "$LOG"; _wf_run b >>"$LOG" 2>&1
 said "make  wf NAME  a step" && ok "typing wf during a run says how to call one instead" || bad "run hint missing"
 
+# ── (10) by position:  where number=1  (the upgrade loop: row 1 = the latest, whatever its name) ──
+echo "(10) position"
+printf 'start\nwhere number=1\n"Pick a tag" where number=last\nselect number=1,3\ncmd c- number=2\nwhere number={$n}\nwhere numbers=-2\n' > "$T/n.xlr8"
+_xl_load "$T/n.xlr8" && ok "number= / numbers= load in where, select, cmd" || bad "number refused: $_XL_ERR"
+[ "${_XL_K[0]}|${_XL_V[0]}|${_XL_K[2]}|${_XL_V[2]}|${_XL_K[3]}" = 'number|1|number|1,3|number' ] && ok "number keeps its values (a list 1,3 stays one value)" || bad "number fields: ${_XL_K[0]}|${_XL_V[0]}|${_XL_K[2]}|${_XL_V[2]}"
+printf 'start\nwhere number=\n' > "$T/bad.xlr8"; _xl_load "$T/bad.xlr8" && bad "empty number accepted" || ok "an empty number is refused"
+# a menu whose labels change every time
+wf_write tag 'start
+from here
+on main
+"Pick a tag" where number=1
+"Pick a tag" where number=last
+"Pick a tag" where number=-2
+"Pick a tag" where number={$n}
+"Pick a tag" where number=first'
+run tag 'n=2'
+menu "Pick a tag:" 0 "v9.9.9  (latest)" "v9.9.8" "v9.9.7";  check "menu: number=1 is the first option, whatever it is called" [ "$_WF_ANSWER" = 1 ]
+menu "Pick a tag:" 0 "x1" "x2" "x3" "x4";                    check "menu: number=last" [ "$_WF_ANSWER" = 4 ]
+menu "Pick a tag:" 0 "a" "b" "c";                            check "menu: number=-2 is the one before the last" [ "$_WF_ANSWER" = 2 ]
+menu "Pick a tag:" 0 "a" "b" "c";                            check "menu: number={\$n} takes the value given at the start" [ "$_WF_ANSWER" = 2 ]
+menu "Pick a tag:" 0 "only";                                 check "menu: number=first" [ "$_WF_ANSWER" = 1 ]
+wf_write tag9 'start
+from here
+on main
+"Pick a tag" where number=9'
+run tag9; menu "Pick a tag:" 0 "a" "b"
+said "no option number '9' (the menu has 2" && ok "menu: a number past the end stops the run and says how many there are" || bad "no message for number 9"
+wf_write tagq 'start
+from here
+on main
+"Pick a tag" where number=1'
+run tagq; menu "Something else:" 0 "a" "b"
+said "the app asked 'Something else:' but the step answers 'Pick a tag'" && ok "menu: the question is still checked with a number" || bad "question not checked"
+# list rows (the upgrade screen): a number types the row number
+_wf_rows() { _WF_ROWS=("v3 (latest)" v2 v1); _WF_PATHS=("" "" ""); }
+wf_write rows 'start
+from here
+on main
+where number=1
+where number=last
+where number=7'
+run rows; list; check "list: where number=1 types row 1" [ "$choice" = 1 ]
+list; check "list: where number=last types the last row" [ "$choice" = 3 ]
+list; said "no row number '7' here (the list has 3 rows)" && ok "list: a row past the end stops the run and says so" || bad "no message for row 7"
+wf_write pickn 'start
+from here
+on main
+cmd d
+select number=1,3
+select all except number=2'
+run pickn; list; _WF_LABS=(); _wf_ctx pick "pick items"; _buf=""; _wf_pick play >>"$LOG" 2>&1
+check "pick: select number=1,3" [ "$_buf" = "1,3" ]
+_WF_LABS=(); _wf_ctx pick "pick items"; _buf=""; _wf_pick play >>"$LOG" 2>&1; check "pick: select all except number=2" [ "$_buf" = "a-2" ]
+
+# the recorder keeps the position it saw, stop_record can turn a name into it
+parse_selection() { tr ',' '\n' <<<"$1"; }
+_wf_off; : > "$LOG"; _wf_start_record >>"$LOG" 2>&1
+rmenu "Pick a tag" 2 "v9 (latest)" "v8" "v7"
+rmenu "Delete these?" 1 "Yes" "No"
+choice=1; _wf_rec_list main >>"$LOG" 2>&1
+S="$(steps)"
+check "a choice among 3 options keeps its position as a comment above it" bash -c "grep -qx '# position 2 of 3' <<<'$S'"
+check "a yes / no gets no position comment" bash -c "[ \"\$(grep -c '^# position' <<<'$S')\" = 2 ]"
+check "a list row typed by number keeps its position too" bash -c "grep -qx '# position 1 of 3' <<<'$S' && grep -q '^where name=' <<<'$S'"
+cp "$BVK_WF_DIR/steps" "$T/steps"; PICK="1 2"; PICKRC=0; _wf_position_pass "$T/steps" >>"$LOG" 2>&1
+check "chosen: the option step is taken by position" grep -qx '"Pick a tag" where number=2' "$T/steps"
+check "chosen: the list row step is taken by position" grep -qx 'where number=1' "$T/steps"
+check "a yes / no is never offered, and stays" grep -qx '"Delete these?" where option="Yes"' "$T/steps"
+{ cat "$T/steps"; printf 'goto start\nend\n'; } > "$T/pos.xlr8"; check "the file after the pass loads" _xl_load "$T/pos.xlr8"
+cp "$BVK_WF_DIR/steps" "$T/steps"; cp "$T/steps" "$T/steps0"; PICK="";   _wf_position_pass "$T/steps"; check "Enter alone changes nothing" cmp -s "$T/steps" "$T/steps0"
+PICK="1"; PICKRC=1; _wf_position_pass "$T/steps"; check "u / q changes nothing" cmp -s "$T/steps" "$T/steps0"; PICKRC=0
+cp "$BVK_WF_DIR/steps" "$T/steps"; PICK="1"; _wf_position_pass "$T/steps"; _wf_manual_pass "$T/steps" >>"$LOG" 2>&1
+check "both passes together leave a loadable file" bash -c "true"
+{ cat "$T/steps"; printf 'goto start\nend\n'; } > "$T/pos2.xlr8"; _xl_load "$T/pos2.xlr8" && ok "position pass then by-hand pass: the file loads" || bad "both passes broke the file: $_XL_ERR"
+unset -f parse_selection
+wf_write multi 'start
+from here
+on main
+"Pick" where number=1,3
+"Pick" where number=2-3
+"Pick" where number=1,9'
+run multi
+menu "Pick:" 0 "a" "b" "c" "d";  check "menu: number=1,3 answers both options (multi-select)" [ "$_WF_ANSWER" = "1 3" ]
+menu "Pick:" 0 "a" "b" "c" "d";  check "menu: number=2-3 is a range" [ "$_WF_ANSWER" = "2 3" ]
+menu "Pick:" 0 "a" "b" "c" "d"
+said "no option number '9'" && ok "menu: only the missing part of a list is named" || bad "missing part not named"
+wf_write rng 'start
+from here
+on main
+where number=2-3'
+run rng; list; check "list: number=2-3 types the rows 2,3" [ "$choice" = "2,3" ]
+
 # the registry itself: every question and setting it names still exists in the app
 echo "(9) registry"
 python3 - "$ROOT" <<'PYEOF' || fail=1

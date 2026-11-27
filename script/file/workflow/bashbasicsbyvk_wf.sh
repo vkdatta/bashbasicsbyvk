@@ -16,7 +16,9 @@ declare -g _WF_ANSWER="" _WF_MUTE=0
 declare -g _WF_NEVER=" cc print tidy loadtime start_record stop_record "   # tools about the app, not steps of a task
 declare -g _WF_CK="" _WF_CQ="" _WF_FLOW=0   # what the app asks NOW (list | menu | input | pick | confirm) and its text: the 'if' steps read it
 declare -ga _WF_WQ=() _WF_WS=() _WF_WV=() _WF_WE=()   # bashbasicsbyvk_wf_when.txt: question, setting, asked only when, whole-question flag
-declare -g _WF_WI=0 _WF_WLOADED=0
+declare -g _WF_WI=0 _WF_WLOADED=0 _WF_POS="" _WF_PBAD=""
+declare -ga _WF_PL=()
+declare -gA _WF_HAND=()
 declare -gA _WF_ARGV=()                     # the {$name} values while a run starts (the run then keeps them in BVK_WF_DIR/var.NAME)
 
 _wf_mode() { _WF_M=""; [ -n "${BVK_WF_DIR:-}" ] && [ -r "$BVK_WF_DIR/mode" ] && IFS= read -r _WF_M < "$BVK_WF_DIR/mode"; [ "${_WF_MUTE:-0}" = 0 ] && [ -n "$_WF_M" ]; }
@@ -109,37 +111,55 @@ _wf_when_why() {   # LINE -> _XL_OUT: why the question may be missing (the setti
 }
 # PREFIX"QUESTION" REST as a step.  A question that Settings or the state can switch off goes inside  if asked "..." ... end if  (named by
 # the short text of the list, so a question with a file name in it still fits on the next run)
-_wf_emit_q() {   # QUESTION PREFIX REST
+_wf_emit_q() {   # QUESTION PREFIX REST [COMMENT line for just above the step]
   if _wf_when_find "$1"; then
-    _xl_quote "${_WF_WQ[$_WF_WI]}"; _wf_emit "if asked $_XL_OUT"; _wf_emit "  $2$_XL_OUT $3"; _wf_emit "end if"
-  else _xl_quote "$1"; _wf_emit "$2$_XL_OUT $3"; fi
+    _xl_quote "${_WF_WQ[$_WF_WI]}"; _wf_emit "if asked $_XL_OUT"; [ -n "${4:-}" ] && _wf_emit "  $4"; _wf_emit "  $2$_XL_OUT $3"; _wf_emit "end if"
+  else _xl_quote "$1"; [ -n "${4:-}" ] && _wf_emit "$4"; _wf_emit "$2$_XL_OUT $3"; fi
 }
-# the steps that name the exact rows you used (select name=..., a command or an open on a name): a multi-select offers to leave them to you
+# ── at stop_record: two optional passes over the recorded steps, each a multi-select ──────────────────
+# a multi-select over the steps of FILE that TESTFN accepts (TESTFN STEP PREVIOUS-LINE) -> _WF_HAND[line]=1.  rc 1 = none to offer, none chosen, or u
+_wf_pass_menu() {   # FILE TESTFN TITLE QUESTION
+  local f="$1" test="$2" line t prev="" n=0 k=0 picked=""
+  local -a rows=() at=()
+  _WF_HAND=()
+  while IFS= read -r line; do
+    n=$(( n + 1 )); t="${line#"${line%%[![:space:]]*}"}"
+    if "$test" "$t" "$prev"; then k=$(( k + 1 )); at[k]=$n; rows+=("$k:${t:0:70}"); fi
+    prev="$t"
+  done < "$f"
+  (( k )) || return 1
+  _bvk_menu picked -m -t "$3" -i "✋" -q "$4" "${rows[@]}" || return 1
+  [ -n "$picked" ] || return 1
+  for k in $picked; do [ -n "${at[$k]:-}" ] && _WF_HAND[${at[$k]}]=1; done
+  (( ${#_WF_HAND[@]} ))
+}
+# every line chosen above is replaced by what REWRITEFN prints for it (REWRITEFN STEP PREVIOUS-LINE)
+_wf_pass_apply() {   # FILE REWRITEFN
+  local f="$1" fn="$2" line t prev="" ind n=0
+  while IFS= read -r line; do
+    n=$(( n + 1 )); ind="${line%%[![:space:]]*}"; t="${line#"$ind"}"
+    if [ -n "${_WF_HAND[$n]:-}" ]; then printf '%s' "$ind"; "$fn" "$t" "$prev"; else printf '%s\n' "$line"; fi
+    prev="$t"
+  done < "$f" > "$f.new" && mv "$f.new" "$f"
+}
+# 1. a choice made by a name, with the position the recorder saw above it: it can be taken by position instead (row 1 = the newest, whatever it is called next time)
+_wf_pos_re='^(.*(where|except|select))[[:space:]]+(name|names|path|option|options)[[:space:]]*='
+_wf_pos_test() { [[ "$2" =~ ^#\ position\ [0-9,]+\ of\ [0-9]+$ ]] && [[ "$1" =~ $_wf_pos_re ]]; }
+_wf_pos_rewrite() { [[ "$1" =~ $_wf_pos_re ]]; local pre="${BASH_REMATCH[1]}"; [[ "$2" =~ ^#\ position\ ([0-9,]+)\ of ]]; printf '%s number=%s\n' "$pre" "${BASH_REMATCH[1]}"; }
+_wf_position_pass() {   # STEPSFILE (Enter alone, or u: nothing changes)
+  _wf_pass_menu "$1" _wf_pos_test "Pick by position?" "These steps pick by a name (a version, a file). Which should pick by position instead: the same row or option number next time, whatever it is called?" && _wf_pass_apply "$1" _wf_pos_rewrite
+  return 0
+}
+# 2. the steps that name the exact rows you used (select name=..., a command or an open on a name): they can wait for you each time
 _wf_by_name() {   # TRIMMED-STEP
   case "$1" in 'select ask') return 1 ;; select*) return 0 ;; esac
   [[ "$1" =~ ^(cmd|where)[[:space:]].*[[:space:]](name|path)= || "$1" =~ ^where[[:space:]]+(name|path)= ]]
 }
+_wf_hand_test() { _wf_by_name "$1"; }
+_wf_hand_rewrite() { local t="$1"; case "$t" in select*) printf 'select ask\n' ;; *) _xl_quote "recorded: $t"; printf 'pause %s\n' "$_XL_OUT" ;; esac; }
 _wf_manual_pass() {   # STEPSFILE: the chosen steps become  select ask  /  pause "..."   (Enter alone, or u: nothing changes)
-  local f="$1" line t n=0 k=0 picked="" ind out
-  local -a rows=() at=()
-  while IFS= read -r line; do
-    n=$(( n + 1 )); t="${line#"${line%%[![:space:]]*}"}"
-    _wf_by_name "$t" || continue
-    k=$(( k + 1 )); at[k]=$n; rows+=("$k:${t:0:70}")
-  done < "$f"
-  (( k )) || return 0
-  _bvk_menu picked -m -t "Leave steps to you?" -i "✋" -q "These steps name the exact files you used. Which should wait for you each time (you pick, the workflow goes on)?" "${rows[@]}" || return 0
-  [ -n "$picked" ] || return 0
-  local -A hand=()
-  for k in $picked; do [ -n "${at[$k]:-}" ] && hand[${at[$k]}]=1; done
-  out="$f.new"; n=0
-  while IFS= read -r line; do
-    n=$(( n + 1 ))
-    if [ -n "${hand[$n]:-}" ]; then
-      ind="${line%%[![:space:]]*}"; t="${line#"$ind"}"
-      case "$t" in select*) printf '%sselect ask\n' "$ind" ;; *) _xl_quote "recorded: $t"; printf '%spause %s\n' "$ind" "$_XL_OUT" ;; esac
-    else printf '%s\n' "$line"; fi
-  done < "$f" > "$out" && mv "$out" "$f"
+  _wf_pass_menu "$1" _wf_hand_test "Leave steps to you?" "These steps name the exact files you used. Which should wait for you each time (you pick, the workflow goes on)?" && _wf_pass_apply "$1" _wf_hand_rewrite
+  return 0
 }
 _wf_start_record() {
   _wf_mode && { echo "🔴  Already ${_WF_M/rec/recording}: type stop_record first"; return 0; }
@@ -165,7 +185,7 @@ _wf_stop_record() {
     if ! [[ "$_wf_name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then echo "🔴  Use letters, numbers, - _ . (no spaces)"; continue; fi
     _wf_file="$_WF_HOME/$_wf_name.xlr8"
     if [ -e "$_wf_file" ]; then _bvk_yn _wf_ans "Replace the workflow '$_wf_name'?" || continue; [ "$_wf_ans" = y ] || continue; fi
-    _wf_manual_pass "$BVK_WF_DIR/steps"
+    _wf_position_pass "$BVK_WF_DIR/steps"; _wf_manual_pass "$BVK_WF_DIR/steps"
     mkdir -p "$_WF_HOME" && { cat "$BVK_WF_DIR/steps"; printf 'goto start\nend\n'; } > "$_wf_file" || { echo "❌ Could not save $_wf_file"; break; }
     echo "💫 Saved '$_wf_name'. Run it:  wf $_wf_name   ·   see or edit it:  wf"
     _wf_off; break
@@ -199,6 +219,7 @@ _wf_names() {
   local -a nums=()
   read -ra nums <<<"$(parse_selection "${1// /}" "${#_WF_ROWS[@]}" 2>/dev/null | tr '\n' ' ')"
   (( ${#nums[@]} )) || return 1
+  _WF_POS="${nums[*]}"; _WF_POS="${_WF_POS// /,}"
   for n in "${nums[@]}"; do
     i=$(( n - 1 )); (( i >= 0 )) && [ -n "${_WF_ROWS[$i]:-}" ] || return 1
     _wf_index "${_WF_ROWS[$i]}" "${_WF_ROWS[@]}"; dup=$?
@@ -208,12 +229,41 @@ _wf_names() {
   _XL_OUT="$out"
 }
 # rows named by a step -> _XL_OUT = "1,3"  (rc 1: _WF_WHY)
+# a position: 3 · first · last · -1 (the last) · -2 ...  COUNT = how many there are -> _WF_I (0-based).  rc 1 = there is no such position
+_wf_pos() {   # VALUE COUNT
+  local v="${1,,}" n="$2"
+  v="${v// /}"
+  case "$v" in first) v=1 ;; last) v=-1 ;; esac
+  [[ "$v" =~ ^-?[0-9]+$ ]] || return 1
+  (( v < 0 )) && v=$(( n + v + 1 ))
+  (( v >= 1 && v <= n )) || return 1
+  _WF_I=$(( v - 1 ))
+}
+# "1,3" · "2-4" · "last" · "-2" · "first", COUNT things -> _WF_PL (0-based indexes).  rc 1 = _WF_PBAD is the part that is not there
+_wf_pos_list() {   # VALUE COUNT
+  local v="${1// /}" n="$2" part a b j
+  local -a parts=()
+  _WF_PL=(); _WF_PBAD=""
+  IFS=, read -ra parts <<<"$v"
+  for part in "${parts[@]}"; do
+    if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      a="${BASH_REMATCH[1]}"; b="${BASH_REMATCH[2]}"
+      (( a >= 1 && b >= a && b <= n )) || { _WF_PBAD="$part"; return 1; }
+      for (( j=a; j<=b; j++ )); do _WF_PL+=($(( j - 1 ))); done
+    else _wf_pos "$part" "$n" || { _WF_PBAD="$part"; return 1; }; _WF_PL+=("$_WF_I"); fi
+  done
+  (( ${#_WF_PL[@]} )) || { _WF_PBAD="$1"; return 1; }
+}
 _wf_numbers() {   # KEY VALUES
-  local key="$1" v out="" rc
+  local key="$1" v out="" rc j
   while IFS= read -r v; do
     _wf_subst "$v"; v="$_XL_OUT"
-    if [ "$key" = path ]; then _wf_index "$v" "${_WF_PATHS[@]}"; else _wf_index "$v" "${_WF_ROWS[@]}"; fi
-    rc=$?
+    if [ "$key" = number ]; then   # 1 · 1,3 · 2-4 · last · -2 : the rows by position
+      _wf_pos_list "$v" "${#_WF_ROWS[@]}" || { _WF_WHY="no row number '$_WF_PBAD' here (the list has ${#_WF_ROWS[@]} rows)"; return 1; }
+      for j in "${_WF_PL[@]}"; do out+="${out:+,}$(( j + 1 ))"; done
+      continue
+    fi
+    if [ "$key" = path ]; then _wf_index "$v" "${_WF_PATHS[@]}"; rc=$?; else _wf_index "$v" "${_WF_ROWS[@]}"; rc=$?; fi
     if (( rc )); then
       local seen; seen="$(printf '%s, ' "${_WF_ROWS[@]:0:8}")"
       (( rc == 2 )) && _WF_WHY="more than one row is called '$v'" || _WF_WHY="no row called '$v' here (rows: ${seen%, })"
@@ -532,7 +582,7 @@ _wf_rec_list() {   # SCREEN ; reads choice
   if [ "$c" = __navpath__ ]; then _xl_quote "${_BVK_NAV_TARGET:-}"; _wf_emit "goto $_XL_OUT"; return 0; fi
   _wf_rows
   if [[ "$c" =~ ^[0-9][0-9,\ -]*$ ]]; then
-    if _wf_names "$c"; then _wf_emit "where${_XL_OUT}"; else _wf_emit "# a row number with no name was typed here; write: where name=\"...\""; fi
+    if _wf_names "$c"; then (( ${#_WF_ROWS[@]} > 1 )) && _wf_emit "# position $_WF_POS of ${#_WF_ROWS[@]}"; _wf_emit "where${_XL_OUT}"; else _wf_emit "# a row number with no name was typed here; write: where name=\"...\""; fi
     return 0
   fi
   if [[ "$c" =~ ^(([A-Za-z]{1,6}--?)|(fa\ ))([0-9][0-9,-]*)(\ +as\ .+)?$ ]]; then
@@ -552,8 +602,8 @@ _wf_pick() {   # record|play
       "") return 0 ;;
       u|q) _wf_emit "cmd ${c,,}" ;;
       a) _wf_emit "select all" ;;
-      a-*) _wf_rows; if _wf_names "${c#a-}"; then _wf_emit "select all except$_XL_OUT"; else _wf_emit 'input "pick items" ask'; fi ;;
-      *) _wf_rows; if _wf_names "$c"; then _wf_emit "select$_XL_OUT"; else _wf_emit 'input "pick items" ask'; fi ;;
+      a-*) _wf_rows; if _wf_names "${c#a-}"; then _wf_emit "# position $_WF_POS of ${#_WF_ROWS[@]}"; _wf_emit "select all except$_XL_OUT"; else _wf_emit 'input "pick items" ask'; fi ;;
+      *) _wf_rows; if _wf_names "$c"; then _wf_emit "# position $_WF_POS of ${#_WF_ROWS[@]}"; _wf_emit "select$_XL_OUT"; else _wf_emit 'input "pick items" ask'; fi ;;
     esac
     return 0
   fi
@@ -580,7 +630,7 @@ _wf_pick() {   # record|play
 # ── answering / recording a question with options ──────────────────────────
 # _wf_answer_options QUESTION YESNO(0|1) MULTI  (arrays _WF_KEYS _WF_LABS) -> _WF_ANSWER.  rc 0 answered, 1 ask the person
 _wf_answer_options() {
-  local q="$1" yn="$2" at t v out=""
+  local q="$1" yn="$2" at t v out="" _wf_j
   _wf_next "" || return 1
   while (( _WF_AT < ${#_XL_T[@]} )) && _wf_optional "$_WF_AT" && ! { [ "${_XL_T[$_WF_AT]}" = where ] && _wf_asks "$_WF_AT" "$q"; }; do _wf_skip "" || return 1; done
   (( _WF_AT < ${#_XL_T[@]} )) || { _wf_get at; _wf_fail "the app asked something the workflow has no answer for: $q"; return 1; }
@@ -592,11 +642,16 @@ _wf_answer_options() {
     _wf_asks "$at" "$q" || { _wf_fail "the app asked '$q' but the step answers '${_XL_Q[$at]}'"; return 1; }
     _wf_say "$at"; _wf_advance; return 1
   fi
-  [ "$t" = where ] && [ "${_XL_K[$at]}" = option ] || { _wf_fail "unexpected question: $q"; return 1; }
+  [ "$t" = where ] && { [ "${_XL_K[$at]}" = option ] || [ "${_XL_K[$at]}" = number ]; } || { _wf_fail "unexpected question: $q"; return 1; }
   _wf_asks "$at" "$q" || { _wf_fail "the app asked '$q' but the step answers '${_XL_Q[$at]}'"; return 1; }
   (( yn )) && [ -z "${_XL_Q[$at]}" ] && [ "${_XL_V[$at],,}" = yes ] && { _wf_fail "a Yes must name its question:  \"...?\" where option=\"Yes\"   (asked now: $q)"; return 1; }
   while IFS= read -r v; do
     _wf_subst "$v"; v="$_XL_OUT"
+    if [ "${_XL_K[$at]}" = number ]; then   # 1 · 1,3 · 2-4 · last · -2 : the options by position
+      _wf_pos_list "$v" "${#_WF_LABS[@]}" || { _wf_fail "no option number '$_WF_PBAD' (the menu has ${#_WF_LABS[@]}: $(printf '%s · ' "${_WF_LABS[@]}"))"; return 1; }
+      for _wf_j in "${_WF_PL[@]}"; do out+="${out:+ }${_WF_KEYS[$_wf_j]}"; done
+      continue
+    fi
     _wf_index "$v" "${_WF_LABS[@]}" || { _wf_fail "no option called '$v' (options: $(printf '%s · ' "${_WF_LABS[@]}"))"; return 1; }
     out+="${out:+ }${_WF_KEYS[$_WF_I]}"
   done <<<"${_XL_V[$at]}"
@@ -604,12 +659,13 @@ _wf_answer_options() {
   _WF_ANSWER="$out"
 }
 _wf_rec_options() {   # QUESTION KEYS-chosen...
-  local q="$1" k i out=""; shift
+  local q="$1" k i out="" pos="" note=""; shift
   for k in "$@"; do
-    for i in "${!_WF_KEYS[@]}"; do [ "${_WF_KEYS[$i]}" = "$k" ] && { _xl_quote "${_WF_LABS[$i]%%  *}"; out+="${out:+,}$_XL_OUT"; break; }; done
+    for i in "${!_WF_KEYS[@]}"; do [ "${_WF_KEYS[$i]}" = "$k" ] && { _xl_quote "${_WF_LABS[$i]%%  *}"; out+="${out:+,}$_XL_OUT"; pos+="${pos:+,}$(( i + 1 ))"; break; }; done
   done
   [ -n "$out" ] || return 1
-  _wf_emit_q "$q" "" "where option=$out"
+  (( ${#_WF_KEYS[@]} > 2 )) && note="# position $pos of ${#_WF_KEYS[@]}"   # what stop_record can turn the choice into (a yes / no is never by position)
+  _wf_emit_q "$q" "" "where option=$out" "$note"
 }
 
 # ── hook: yes/no and choice boxes (_bvk_menu: its _bc_ variables) ──────────

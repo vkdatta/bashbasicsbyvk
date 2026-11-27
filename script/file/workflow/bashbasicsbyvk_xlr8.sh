@@ -34,7 +34,7 @@ _xl_pairs() {
   _XL_PK=""; _XL_PV=""
   while :; do
     _xl_trim "$s"; s="${_XL_OUT#,}"; _xl_trim "$s"; s="$_XL_OUT"
-    [[ "$s" =~ ^(name|names|path|option|options)[[:space:]]*=(.*)$ ]] || break
+    [[ "$s" =~ ^(name|names|path|option|options|number|numbers)[[:space:]]*=(.*)$ ]] || break
     _XL_PK="${BASH_REMATCH[1]%s}"
     _xl_value "${BASH_REMATCH[2]}" || return 1
     [ -n "$_XL_OUT" ] || return 1
@@ -42,7 +42,7 @@ _xl_pairs() {
     s="$_XL_REST"
     # further bare / quoted values of the same key:  options="A","B"
     while _xl_trim "$s"; [ "${_XL_OUT:0:1}" = "," ]; do
-      s="${_XL_OUT:1}"; _xl_trim "$s"; [[ "$_XL_OUT" =~ ^(name|names|path|option|options)[[:space:]]*= ]] && break
+      s="${_XL_OUT:1}"; _xl_trim "$s"; [[ "$_XL_OUT" =~ ^(name|names|path|option|options|number|numbers)[[:space:]]*= ]] && break
       _xl_value "$s" || return 1; _XL_PV+=$'\n'"$_XL_OUT"; s="$_XL_REST"
     done
   done
@@ -78,7 +78,7 @@ _xl_segment() {
     "confirm auto"|"auto confirm"|"auto confirm?"|"auto confirm"[?\ ]*yes*) _xl_add confirm "" auto "" "" "$s"; return 0 ;;
   esac
   [ "$w" = if ] && { _xl_if "$rest" "$s"; return $?; }
-  if [[ "$low" =~ (^|[[:space:]\"\?])where[[:space:]]+(name|names|path|option|options)[[:space:]]*= ]]; then
+  if [[ "$low" =~ (^|[[:space:]\"\?])where[[:space:]]+(name|names|path|option|options|number|numbers)[[:space:]]*= ]]; then
     local m="${BASH_REMATCH[0]}" head
     head="${low%%"$m"*}"; q="${s:0:${#head}}${BASH_REMATCH[1]}"
     _xl_trim "$q"; q="$_XL_OUT"
@@ -109,9 +109,9 @@ _xl_segment() {
         all) _xl_add select "" all "" "" "$s" ;;
         "all except "*) rest="${rest:11}"; _xl_pairs "$rest" && [ -n "$_XL_PV" ] || { _XL_ERR="select all except name=\"...\""; return 1; }
                         _xl_add select "" except "$_XL_PK" "$_XL_PV" "$s" ;;
-        name*|path*) _xl_pairs "$rest" && [ -n "$_XL_PV" ] || { _XL_ERR="select name=\"...\""; return 1; }
+        name*|path*|number*) _xl_pairs "$rest" && [ -n "$_XL_PV" ] || { _XL_ERR="select name=\"...\"  ·  select number=1,3"; return 1; }
                      _xl_add select "" only "$_XL_PK" "$_XL_PV" "$s" ;;
-        *) _XL_ERR="select all  ·  select ask  ·  select name=\"...\""; return 1 ;;
+        *) _XL_ERR="select all  ·  select ask  ·  select name=\"...\"  ·  select number=1,3"; return 1 ;;
       esac ;;
     input)
       if [ "${rest:0:1}" = '"' ]; then _xl_value "$rest" || { _XL_ERR="a quote is not closed"; return 1; }; q="$_XL_OUT"; _xl_trim "$_XL_REST"; rest="$_XL_OUT"; fi
@@ -129,7 +129,7 @@ _xl_segment() {
         w="${rest%%[[:space:]]*}"; rest="${rest:${#w}}"; _xl_trim "$rest"; rest="$_XL_OUT"
         [ "$w" = "d-" ] && [ -n "$rest" ] && { w="d- $rest"; rest=""; }          # d- set1
       fi
-      if [ -n "$rest" ] && [[ "$rest" =~ ^(name|names|path)[[:space:]]*= ]]; then
+      if [ -n "$rest" ] && [[ "$rest" =~ ^(name|names|path|number|numbers)[[:space:]]*= ]]; then
         _xl_pairs "$rest" || { _XL_ERR="did not understand the names"; return 1; }; rest="$_XL_REST"
       fi
       _xl_trim "$rest"; rest="$_XL_OUT"

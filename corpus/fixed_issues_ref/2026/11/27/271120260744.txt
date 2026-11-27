@@ -1,0 +1,12 @@
+1. ISSUE IN BRIEF
+A workflow could only choose a menu option or a list row by its name. Where the names change every run (the versions of the upgrade list, tags, newest files) a recorded name is wrong next time, and there was no way to say 'the first one' or 'the last one'.
+
+HOW DID YOU DEBUG
+Read _wf_index (matches labels in three passes, by text only), _wf_numbers (rows named by a step), _wf_answer_options (menus) and the recorder: a typed row number was turned into the row's NAME (_wf_names) and the number thrown away. The upgrade list row text is the whole line ('v3.1 (latest)'), which changes with every release. Not thought of in the first versions of if / pause / variables; found when asked.
+
+CAUSE
+Only text matching existed. The position the person typed or picked was known to the recorder and not kept.
+
+FIX
+xlr8.sh: key number / numbers in where, select, select all except and cmd (3 key lists + the select and cmd branches). wf.sh: _wf_pos (3, first, last, -1, -2) and _wf_pos_list (1,3 / 2-4) shared by _wf_numbers (list rows, also select / cmd) and _wf_answer_options (menus); a number past the end stops the run and names the part that is missing and how many there are; the question text is still checked; {$n} works. Recorder: _wf_names keeps _WF_POS and the recorder writes '# position 2 of 12' above a name-based choice among more than two (a yes / no never); _wf_position_pass at stop_record lists those steps in a multi-select and rewrites the chosen ones to number=. The 'leave to you' pass now shares the multi-select and rewrite with it (_wf_pass_menu, _wf_pass_apply) instead of being a second copy. Lesson: the first version of number=1,3 was one value '1,3' (the parser reads a bare value up to a space), so the list was split where it is used; the test found it.
+Verified with tests/pty/fast/engine/xlr8_flow.sh section 10 (menu and list, first / last / negative / ranges / lists / {$n}, past the end, question still checked, the recorder comment, the conversion, Enter and u change nothing, both passes together). NOT run: a real upgrade screen in a terminal; the Pick by position menu itself was not looked at.

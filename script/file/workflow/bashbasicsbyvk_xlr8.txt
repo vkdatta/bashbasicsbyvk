@@ -27,6 +27,7 @@ Lines starting with # are notes.
   if asked "Question" ... end if   only when the app asks it (see "Conditions")
   pause "note"                 the NEXT question is yours (see "Doing a step yourself")
   wf NAME [values]             run another workflow here (see "Calling another workflow")
+  where number=1               the first row / option, whatever it is called (see "Picking by position")
   select ask                   you pick the items yourself
   {$name}                      a value you give each time
 
@@ -102,6 +103,33 @@ Example, delete the files you pick each time, then confirm:
 
 pause takes ONE answer. If you need several commands on a list (open a folder,
 then pick), put a pause for each.
+
+Picking by position: number=
+----------------------------
+Some lists and menus change every time: versions and tags, the newest files,
+branch names. A name written in the workflow would be wrong next run. Say where
+it stands instead:
+
+  where number=1                the first row of a list (the upgrade screen:
+                                row 1 is the latest version)
+  "Pick a tag" where number=1   the first option of that menu
+  where number=last             the last one        (first = 1)
+  where number=-2               the one before the last
+  where number=1,3              two of them         (a menu that takes several,
+  select number=2-4             or a pick screen)   2-4 is a range
+  select all except number=1    everything but the first
+  cmd c- number=2               a command on the second row
+  where number={$n}             a number you give when you start (wf upgrade n=2)
+
+The question text (if you write one) is still checked, and a number past the end
+stops the run and says how many there are. Position is only as safe as the
+order: use it where the order is what you mean (latest first), and a name where
+the thing itself matters.
+
+The recorder helps: it writes the position it saw on a comment line above every
+choice among more than two (# position 2 of 12). When you stop recording, a menu
+"Pick by position?" lists those steps; mark the ones that should pick by position
+and they become number=. Enter alone keeps the names. A yes / no is never offered.
 
 Calling another workflow
 ------------------------
