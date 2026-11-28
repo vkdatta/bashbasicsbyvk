@@ -1,0 +1,13 @@
+1. ISSUE IN BRIEF
+Carpet animation was invisible everywhere except the Transfer picker. The viewport wrote each row as it was built, but from the row cache, so a whole screen reached the terminal in about 1 ms.
+
+1. HOW DID YOU DEBUG
+Read _vp_emit / _vp_el / _vp_render_fresh, _vp_row_text (cache) and _pick_rows_raw (the Transfer picker). The picker formats rows one by one with real per-row work; the viewport pre-formats everything (_vp_prime_rows, _sel_prewarm), so its draw has no gaps to see. Ran the real _vp_el / _vp_roll_pace functions: pop 1 ms, carpet 24-row screen 468 ms.
+
+1. CAUSE
+The previous fix only changed WHEN rows were written, not how long a draw takes. A cached frame written line by line still lands at once.
+
+1. FIX
+viewport.sh: carpet now waits a few ms after every row (_vp_nap, 14 ms per row, capped so a screen takes about 0.45 s; _vp_roll_pace; BVK_ROLL_MS / BVK_ROLL_CAP_MS override). pop is unchanged. Only fresh screens roll (render_fresh / tab repaint); arrow keys, resize and filter repaints still pop. The Transfer picker keeps its own per-row print for carpet and one write for pop. settings_desc.sh: the Display|anim text no longer says both styles are instant; the carpet text describes the pause.
+
+VERIFIED: bash -n on both files; timing run of the changed functions (above). Not run: the full app in a real terminal.
