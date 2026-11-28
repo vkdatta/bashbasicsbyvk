@@ -480,21 +480,10 @@ perform_copy() {
       failed+=("$(basename -- "$item") — not found")
       continue
     fi
-    local base name ext count newbase
+    local base newbase kind=""
     base=$(basename -- "$item")
-    name="${base%.*}"
-    ext="${base##*.}"
-    [[ "$base" == "$ext" ]] && ext=""
-    count=1
-    newbase="$base"
-    while [ -e "$dest/$newbase" ]; do
-      if [ -n "$ext" ]; then
-        newbase="${name}${count}.${ext}"
-      else
-        newbase="${name}${count}"
-      fi
-      count=$((count+1))
-    done
+    [ -d "$item" ] && kind=dir
+    _bvk_unique_name "$dest" "$base" "$kind"; newbase="$_BVK_UQ"      # the same naming rule as Create
     if err=$(cp -r -- "$item" "$dest/$newbase" 2>&1); then
       ok=$((ok+1))
       _carry_copy "$item" "$dest/$newbase"    # copy of a locked item is locked; copied shortcuts are indexed
@@ -502,6 +491,7 @@ perform_copy() {
       failed+=("$base — ${err:-cp returned $?}")
     fi
   done
+  _dsize_invalidate 2>/dev/null                 # folder sizes are no longer true
   _transfer_report "Copied" "$ok" "$total" "$dest" "${failed[@]}"
   (( ${#failed[@]} )) && [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "some items were not copied (listed above)"
   return 0
@@ -542,6 +532,7 @@ perform_move() {
     fi
   done
   _carry_end
+  _dsize_invalidate 2>/dev/null                 # folder sizes are no longer true (source and destination both changed)
   _transfer_report "Moved" "$ok" "$total" "$dest" "${failed[@]}"
   (( ${#failed[@]} )) && [ -n "${BVK_WF_DIR:-}" ] && _wf_trip "some items were not moved (listed above)"
   return 0

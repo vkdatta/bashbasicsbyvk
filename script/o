@@ -245,4 +245,11 @@ while true; do
     cs)          _inner_run cs ;;
     *)           handle_selection "$choice" ;;
   esac
+  # Anything that can change the disk (create, delete, transfer, rename, extract, find & replace, a staged do-, an editor ...)
+  # leaves the folder-size cache wrong, so every command except pure navigation / display clears it. The operations clear it
+  # themselves too (they also run inside the fx / switch loops); this is the net under every path that does not.
+  case "$choice" in
+    q|u|h|-h|fs|ns|cd|__*|goto|goto\ *|=*|clear|disk|ram|health|lang|[0-9]*|"") ;;   # a row number: opening a file clears it itself (handle_selection)
+    *) _dsize_invalidate ;;
+  esac
 done

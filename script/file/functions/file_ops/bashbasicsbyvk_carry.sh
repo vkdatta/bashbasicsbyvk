@@ -28,17 +28,20 @@ _carry_move() {                    # <old> <new>
   _lk_move "$1" "$2"
   _sync_shortcuts_for_rename "$1" "$2"
   _trk_move "$1" "$2"              # bookmarks re-point, Recents rows follow
+  _dsize_invalidate 2>/dev/null    # folder sizes (cache) no longer describe the disk
 }
 
 _carry_copy() {                    # <old> <new>
   _lk_copy "$1" "$2"
   _scr_add_tree "$2"
+  _dsize_invalidate 2>/dev/null
 }
 
 _carry_forget() {                  # <deleted path>
   _lk_forget "$1"
   _scr_forget_under "$1"
   _trk_forget "$1"                 # its Recents row goes (a bookmark stays and shows 🔴)
+  _dsize_invalidate 2>/dev/null
 }
 
 _carry_move_batch() {              # <dest-dir> <src>...

@@ -1377,6 +1377,24 @@ _bvk_name_too_long() {
     rest="${rest#*/}"
   done
 }
+# _bvk_unique_name DIR NAME [dir]  -> _BVK_UQ   NAME itself when it is free in DIR, else "base (1).ext", "base (2).ext", ...
+# ONE rule for Create and for Copy. A FOLDER has no extension ("my.project" -> "my.project (1)", never "my (1).project"),
+# a dotfile has none (".bashrc" -> ".bashrc (1)"), and a double extension stays whole ("a.tar.gz" -> "a (1).tar.gz").
+_bvk_unique_name() {
+  local dir="$1" name="$2" kind="${3:-}" base ext="" n=1
+  _BVK_UQ="$name"
+  [ -e "$dir/$name" ] || [ -L "$dir/$name" ] || return 0
+  base="$name"
+  if [ "$kind" != dir ]; then
+    case "$name" in
+      ?*.tar.*) base="${name%.tar.*}"; ext=".tar.${name##*.tar.}" ;;
+      ?*.*)     base="${name%.*}";     ext=".${name##*.}" ;;
+    esac
+  fi
+  while [ -e "$dir/$base ($n)$ext" ] || [ -L "$dir/$base ($n)$ext" ]; do n=$((n+1)); done
+  _BVK_UQ="$base ($n)$ext"
+  return 0
+}
 # _bvk_name_bytes NAME  -> _BVK_NB (its length in bytes)
 _bvk_name_bytes() { local LC_ALL=C; _BVK_NB=${#1}; }
 # _bvk_name_refuse NAME [folder|file]   prints why it was not created / renamed

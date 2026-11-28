@@ -6,26 +6,17 @@ create_files() {
     file="${file#"${file%%[![:space:]]*}"}"; file="${file%"${file##*[![:space:]]}"}"
     [ -z "$file" ] && continue
 
-    local base ext newname count target
-    base="${file%.*}"
-    ext="${file##*.}"
-    [[ "$file" == "$ext" ]] && ext=""
-
-    count=1
-    newname="$file"
-    while [ -e "$path/$newname" ]; do
-      if [ -n "$ext" ]; then
-        newname="${base} (${count}).${ext}"
-      else
-        newname="${base} (${count})"
-      fi
-      count=$((count+1))
-    done
+    local newname
+    _bvk_unique_name "$path" "$file"; newname="$_BVK_UQ"      # one naming rule for Create and Copy
 
     if _bvk_name_too_long "$newname"; then _bvk_name_refuse "$newname" "File"; skipped=$((skipped+1)); continue; fi
-    touch "$path/$newname"
-    echo "💫 Created file: $newname"
+    if touch -- "$path/$newname" 2>/dev/null; then
+      echo "💫 Created file: $newname"
+    else
+      echo "🔴 Could not create file: $newname (no permission, or the folder is read-only)"
+    fi
   done
+  _dsize_invalidate 2>/dev/null
   [ "$skipped" -gt 0 ] && echo " $skipped file(s) not created because their names exceed 255 bytes (the accepted standard)."
   return 0
 }
@@ -33,12 +24,19 @@ create_files() {
 create_dirs() {
   _bvk_read dirlist "Enter folder names (separated by ,): " || return 3   # u = back to Create:
   IFS=',' read -ra dirs <<< "$dirlist"
-  local skipped=0
+  local skipped=0 dir newname
   for dir in "${dirs[@]}"; do
-    if _bvk_name_too_long "$dir"; then _bvk_name_refuse "$dir" "Folder"; skipped=$((skipped+1)); continue; fi
-    mkdir -p "$path/$dir"
-    echo "💫 Created folder: $dir"
+    dir="${dir#"${dir%%[![:space:]]*}"}"; dir="${dir%"${dir##*[![:space:]]}"}"      # "a, b" makes "a" and "b", not "a" and " b"
+    [ -z "$dir" ] && continue
+    _bvk_unique_name "$path" "$dir" dir; newname="$_BVK_UQ"     # an existing folder is never silently "created" again
+    if _bvk_name_too_long "$newname"; then _bvk_name_refuse "$newname" "Folder"; skipped=$((skipped+1)); continue; fi
+    if mkdir -p -- "$path/$newname" 2>/dev/null; then
+      echo "💫 Created folder: $newname"
+    else
+      echo "🔴 Could not create folder: $newname (no permission, or the folder is read-only)"
+    fi
   done
+  _dsize_invalidate 2>/dev/null
   [ "$skipped" -gt 0 ] && echo " $skipped folder(s) not created because their names exceed 255 bytes (the accepted standard)."
   return 0
 }

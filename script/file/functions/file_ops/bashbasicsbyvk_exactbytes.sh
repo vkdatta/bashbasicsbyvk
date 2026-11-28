@@ -12,7 +12,7 @@
 #
 #   Where the bytes come from (nothing is measured twice):
 #     file    item_size[]  (the list already knows it)   else  wc -c
-#     folder  item_dsize[] (the background size job)     else  du -sb  else  find + wc -c
+#     folder  measured now (the list's size engine)     else  du -sb  else  find + wc -c
 #   Folders count every file below them (apparent size, the same number the list shows next to a folder).
 #
 #   Needs: bashbasicsbyvk_staging_helpers.sh (_sp_guard_and_resolve), bashbasicsbyvk_choose.sh (_bvk_menu),
@@ -39,11 +39,16 @@ _eb_unit() {
   printf -v _EB_U '%d.%02d %s' "$whole" "$frac" "${names[$i]}"
 }
 
-# _eb_dir_bytes DIR -> _EB_B  (the list's cached folder size when the size job has finished, otherwise measured now)
+# _eb_dir_bytes DIR -> _EB_B  (measured NOW, with the same engine and rules as the list's folder sizes, so the two always agree;
+#                              never read from the list cache: "exact" must be the disk as it is this second)
 _eb_dir_bytes() {
-  local d="$1" v n
-  v="${item_dsize[$d]:-}"
-  if [[ "$v" =~ ^[0-9]+$ ]]; then _EB_B="$v"; return 0; fi
+  local d="$1" v n tmp
+  if declare -F _py_recursive_size >/dev/null 2>&1 && tmp="$(mktemp)"; then
+    printf '%s\n' "$d" > "$tmp"
+    v="$(_py_recursive_size "$tmp" 2>/dev/null)"; rm -f "$tmp"
+    v="${v##*|}"
+    if [[ "$v" =~ ^[0-9]+$ ]]; then _EB_B="$v"; item_dsize["$d"]="$v"; return 0; fi
+  fi
   v="$(du -sb -- "$d" 2>/dev/null | { read -r n _; printf '%s' "$n"; })"
   if [[ "$v" =~ ^[0-9]+$ ]]; then _EB_B="$v"; return 0; fi
   # no GNU du (macOS, busybox): add up wc -c of every file; wc prints one "total" line per batch, it is not a file

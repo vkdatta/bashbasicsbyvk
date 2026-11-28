@@ -540,14 +540,14 @@ handle_selection() {
         if [ "$sc_type" == "dir" ] || [ -d "$sc_target" ]; then
           path="$sc_target"; group_prefix=""; force_show=false
         else
-          handle_file "$sc_target"
+          handle_file "$sc_target"; _dsize_invalidate     # an editor / a run may have changed sizes
         fi
         return
       fi
       if [ -d "$selected" ]; then
         path="$selected"; group_prefix=""; force_show=false
       elif [ -f "$selected" ]; then
-        handle_file "$selected"
+        handle_file "$selected"; _dsize_invalidate        # an editor / a run may have changed sizes
       fi
     else
       _bvk_invalid

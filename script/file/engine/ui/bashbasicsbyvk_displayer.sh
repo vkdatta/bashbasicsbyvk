@@ -137,6 +137,11 @@ declare -g _items_presorted_mode=""
 declare -g _BVK_DSIZE_JOB_PID=""
 declare -g _BVK_DSIZE_JOB_IN=""
 declare -g _BVK_DSIZE_JOB_OUT=""
+declare -g _BVK_DSIZE_JOB_GEN=0     # the cache generation the running job started in
+declare -g _RS_SIG=""               # _resort_by_size: the input it last ranked, and its answer
+declare -ga _RS_OUT=()
+declare -g _RS_SIG_OUT=""
+declare -g _BVK_DSIZE_GEN=0         # bumped by _dsize_invalidate: a job from an older generation is thrown away
 
 # Per-session temp dir for job scratch
 # (an exported name inherited from an earlier session may point to a folder that is gone: every _bvk_tmp call then fell back to mktemp + rm)
@@ -414,7 +419,7 @@ _py_meta_script() {
 _py_recursive_size() {
 _bvk_go_bin && { "$_BVK_GO_BIN" dsize "$1"; return; }
 python3 - "$1" <<'PYEOF'
-import os, sys
+import os, sys, stat
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 
@@ -425,10 +430,16 @@ def _pick_ctx():
     return mp.get_context("fork") if "fork" in m else mp.get_context()
 
 def _walk_size(path):
-    """Iterative DFS, symlink-loop protected."""
+    """Iterative DFS, symlinks not followed.  Same rules as the C engine (bvk-ls dsize):
+    every non-folder entry (file, symlink, fifo, socket, device) counts its lstat size; a file
+    with several hard links is returned in `multi` and counted ONCE per top folder by the caller.
+    Returns (total, multi, opened): opened is False when `path` itself cannot be listed."""
     total = 0
+    multi = {}
+    opened = True
     stack = [path]
     seen = set()
+    first = True
     while stack:
         d = stack.pop()
         try:
@@ -444,53 +455,65 @@ def _walk_size(path):
                     try:
                         if e.is_dir(follow_symlinks=False):
                             stack.append(e.path)
-                        elif e.is_file(follow_symlinks=False):
-                            total += e.stat(follow_symlinks=False).st_size
+                        else:
+                            st = e.stat(follow_symlinks=False)
+                            if st.st_nlink > 1 and not stat.S_ISLNK(st.st_mode):
+                                multi[(st.st_dev, st.st_ino)] = st.st_size
+                            else:
+                                total += st.st_size
                     except Exception:
                         pass
         except Exception:
-            pass
-    return total
+            if first:
+                opened = False
+        first = False
+    return total, multi, opened
 
 def _plan(paths):
     """
-    Each task is (top_path, walk_path, base_offset, tag).
-      tag == "walk"  → recurse walk_path, add base_offset
-      tag == "base"  → just return base_offset (immediate files of top)
+    Each task is (tag, top_path, payload).
+      tag == "walk"  -> payload is a path: recurse it            (its result goes to top_path)
+      tag == "base"  -> payload is (total, multi): the immediate non-folder entries of top_path
     """
     tasks = []
     for p in paths:
         try:
             entries = list(os.scandir(p))
         except Exception:
-            tasks.append((p, p, 0, "walk"))
+            tasks.append(("walk", p, p))          # _walk_size reports opened=False -> -1
             continue
         subdirs = []
         base = 0
+        multi = {}
         for e in entries:
             try:
                 if e.is_dir(follow_symlinks=False):
                     subdirs.append(e.path)
-                elif e.is_file(follow_symlinks=False):
-                    base += e.stat(follow_symlinks=False).st_size
+                else:
+                    st = e.stat(follow_symlinks=False)
+                    if st.st_nlink > 1 and not stat.S_ISLNK(st.st_mode):
+                        multi[(st.st_dev, st.st_ino)] = st.st_size
+                    else:
+                        base += st.st_size
             except Exception:
                 pass
         if len(subdirs) >= 4:
             for sd in subdirs:
-                tasks.append((p, sd, 0, "walk"))
-            if base:
-                tasks.append((p, p, base, "base"))
+                tasks.append(("walk", p, sd))
+            tasks.append(("base", p, (base, multi)))
         else:
-            # _walk_size(p) already counts p's direct files, so base must be 0
-            # here (it used to be `base`, which doubled every small folder).
-            tasks.append((p, p, 0, "walk"))
+            tasks.append(("walk", p, p))          # _walk_size(p) counts p's own entries too
     return tasks
 
 def _run(task):
-    top, walk, base, tag = task
+    tag, top, payload = task
     if tag == "base":
-        return (top, base)
-    return (top, _walk_size(walk) + base)
+        return (top, payload[0], payload[1], True)
+    t, m, ok = _walk_size(payload)
+    # a sub-folder that cannot be opened counts 0 (like du); only the TOP folder failing is an error
+    if payload != top:
+        ok = True
+    return (top, t, m, ok)
 
 with open(paths_file) as fh:
     paths = [l.rstrip("\n") for l in fh if l.strip()]
@@ -512,12 +535,78 @@ else:
         results = [_run(t) for t in tasks]
 
 totals = {}
-for top, sz in results:
+multis = {}
+failed = set()
+for top, sz, multi, ok in results:
     totals[top] = totals.get(top, 0) + sz
+    multis.setdefault(top, {}).update(multi)
+    if not ok:
+        failed.add(top)
 
 for p in paths:
-    print(f"{p}|{totals.get(p, 0)}")
+    if p in failed:
+        print(f"{p}|-1")                           # cannot be opened: shown as ---, never as 0
+    else:
+        print(f"{p}|{totals.get(p, 0) + sum(multis.get(p, {}).values())}")
 PYEOF
+}
+
+# _resort_by_size — sort big / small must rank a FOLDER by what is inside it. The scan and the sort helpers stat a
+# folder as size 0, so every folder landed at one end of the list whatever it held. Here the folders' recursive sizes
+# are measured (one parallel pass, only the folders not cached yet, stored in item_dsize so the rows reuse them) and
+# the list is ordered again: a folder counts its recursive size, a file its own size, equal sizes keep name order.
+_resort_by_size() {
+  case "${sort_mode:-az}" in big|small) ;; *) return 0 ;; esac
+  (( ${#items[@]} > 1 )) || return 0
+  # the main loop calls apply_sort on every pass: same list, same disk state (generation) = the answer is already known
+  local _rs_sig; printf -v _rs_sig '%s|%s|%s' "$sort_mode" "${_BVK_DSIZE_GEN:-0}" "$(printf '%s\n' "${items[@]}")"
+  [ "$_rs_sig" = "${_RS_SIG_OUT:-}" ] && return 0                   # this list is already the ranked one
+  if [ "$_rs_sig" = "${_RS_SIG:-}" ] && [ "${#_RS_OUT[@]}" -eq "${#items[@]}" ]; then items=("${_RS_OUT[@]}"); return 0; fi
+  local f dp ds tmp_in tmp_out any=false
+  tmp_in="$(_bvk_tmp rs_in)"; tmp_out="$(_bvk_tmp rs_out)"
+  for f in "${items[@]}"; do
+    [ -d "$f" ] || continue
+    any=true
+    [ -n "${item_dsize[$f]+x}" ] || printf '%s\n' "$f"
+  done > "$tmp_in"
+  $any || { case "$tmp_in" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$tmp_in"; : >"$tmp_out" ;; *) rm -f "$tmp_in" "$tmp_out" ;; esac; return 0; }
+  if [ -s "$tmp_in" ]; then
+    _py_recursive_size "$tmp_in" > "$tmp_out" 2>/dev/null
+    while IFS='|' read -r dp ds; do
+      [ -z "$dp" ] && continue
+      [[ "${ds:-}" =~ ^-?[0-9]+$ ]] || continue
+      item_dsize["$dp"]="$ds"
+    done < "$tmp_out"
+  fi
+  for f in "${items[@]}"; do
+    if [ -d "$f" ]; then printf 'D\t%s\t%s\n' "${item_dsize[$f]:-0}" "$f"
+    else printf 'F\t0\t%s\n' "$f"; fi
+  done > "$tmp_in"
+  local sorted
+  sorted="$(python3 - "$tmp_in" "${sort_mode}" <<'PYEOF'
+import os, sys
+rows = []
+for line in open(sys.argv[1], encoding="utf-8", errors="surrogateescape"):
+    line = line.rstrip("\n")
+    if not line:
+        continue
+    kind, size, path = line.split("\t", 2)
+    if kind == "D":
+        sz = max(int(size), 0)                   # -1 (cannot be read) ranks as empty
+    else:
+        try: sz = os.stat(path).st_size
+        except Exception: sz = 0
+    rows.append((sz, os.path.basename(path).lower(), path))
+rows.sort(key=lambda r: r[1])                    # name order first, so equal sizes stay stable
+rows.sort(key=lambda r: r[0], reverse=(sys.argv[2] == "big"))
+sys.stdout.write("\n".join(r[2] for r in rows))
+PYEOF
+)"
+  case "$tmp_in" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$tmp_in"; : >"$tmp_out" ;; *) rm -f "$tmp_in" "$tmp_out" ;; esac
+  [ -n "$sorted" ] && mapfile -t items <<< "$sorted"
+  _RS_SIG="$_rs_sig"; _RS_OUT=("${items[@]}")
+  printf -v _RS_SIG_OUT '%s|%s|%s' "$sort_mode" "${_BVK_DSIZE_GEN:-0}" "$(printf '%s\n' "${items[@]}")"
+  return 0
 }
 
 # build_items_with_meta / apply_sort — Layer 1
@@ -538,6 +627,7 @@ build_items_with_meta() {
 
   _items_presorted=true
   _items_presorted_mode="$mode"
+  _resort_by_size
 }
 
 apply_sort() {
@@ -546,6 +636,7 @@ apply_sort() {
 
   if [ "${_items_presorted:-false}" = "true" ] && \
      [ "${_items_presorted_mode:-}" = "$mode" ]; then
+    _resort_by_size
     _win_lo=0; _win_hi=0
     item_size=(); item_mtime=(); item_icon=(); item_children=()
     _meta_loaded=false
@@ -627,6 +718,7 @@ PYEOF
 
   _items_presorted=true
   _items_presorted_mode="$mode"
+  _resort_by_size
 
   _win_lo=0; _win_hi=0
   item_size=(); item_mtime=(); item_icon=(); item_children=()
@@ -736,6 +828,27 @@ _needs_dir_size() {
 
 # ── Async recursive dir-size orchestration
 
+# _dsize_invalidate — the folder-size cache is only true until something on disk changes.
+# Call it after ANY delete, move, copy, rename, create, extract, edit or find & replace. A folder's size includes
+# everything below it, so one change makes every folder above it wrong: the whole cache goes, the running size job
+# is stopped (its answer would describe the old disk), and the metadata window reloads on the next draw.
+_dsize_invalidate() {
+  _BVK_DSIZE_GEN=$(( ${_BVK_DSIZE_GEN:-0} + 1 ))
+  if [ -n "${_BVK_DSIZE_JOB_PID:-}" ]; then
+    kill "$_BVK_DSIZE_JOB_PID" 2>/dev/null
+    command -v pkill >/dev/null 2>&1 && pkill -P "$_BVK_DSIZE_JOB_PID" 2>/dev/null
+  fi
+  if [ -n "${_BVK_DSIZE_JOB_IN:-}" ]; then
+    case "$_BVK_DSIZE_JOB_IN" in "${_BVK_DSIZE_TMP:-/nonexistent}"/*) : >"$_BVK_DSIZE_JOB_IN" ;; *) rm -f "$_BVK_DSIZE_JOB_IN" ;; esac
+    rm -f "${_BVK_DSIZE_JOB_OUT:-/nonexistent}" 2>/dev/null
+  fi
+  _BVK_DSIZE_JOB_PID=""; _BVK_DSIZE_JOB_IN=""; _BVK_DSIZE_JOB_OUT=""
+  item_dsize=()
+  item_size=(); item_mtime=(); item_icon=(); item_children=()
+  _win_lo=0; _win_hi=0; _meta_loaded=false
+  return 0
+}
+
 # Spawn (or replace) a background job that computes recursive sizes for
 # any dirs in the current window that don't yet have cached sizes.
 # Non-blocking: returns immediately.
@@ -773,6 +886,7 @@ _load_dir_size_window() {
 
   _BVK_DSIZE_JOB_IN="$tmp_in"
   _BVK_DSIZE_JOB_OUT="${tmp_in}.out"
+  _BVK_DSIZE_JOB_GEN="$_BVK_DSIZE_GEN"
 
   { declare -F _lt_bg >/dev/null 2>&1 && _lt_bg; _py_recursive_size "$tmp_in" > "$_BVK_DSIZE_JOB_OUT" 2>/dev/null; } &
   _BVK_DSIZE_JOB_PID=$!
@@ -786,12 +900,15 @@ _dir_size_job_poll() {
   [ -z "$_BVK_DSIZE_JOB_PID" ] && return 1
   kill -0 "$_BVK_DSIZE_JOB_PID" 2>/dev/null && return 1
 
-  # Job finished — harvest.
+  # Job finished — harvest.  An answer from before the last change on disk is thrown away (_dsize_invalidate).
   if [ -f "$_BVK_DSIZE_JOB_OUT" ]; then
-    while IFS='|' read -r dp ds; do
-      [ -z "$dp" ] && continue
-      item_dsize["$dp"]="${ds:-0}"
-    done < "$_BVK_DSIZE_JOB_OUT"
+    if [ "${_BVK_DSIZE_JOB_GEN:-0}" = "${_BVK_DSIZE_GEN:-0}" ]; then
+      while IFS='|' read -r dp ds; do
+        [ -z "$dp" ] && continue
+        [[ "${ds:-}" =~ ^-?[0-9]+$ ]] || continue          # no number = no answer: never cached as 0
+        item_dsize["$dp"]="$ds"                            # -1 = the folder cannot be read: shown as ---
+      done < "$_BVK_DSIZE_JOB_OUT"
+    fi
     rm -f "$_BVK_DSIZE_JOB_OUT" "$_BVK_DSIZE_JOB_IN"
   fi
 
@@ -807,12 +924,12 @@ _dir_size_job_poll() {
 # ── Size / time formatters
 
 _fmt_size_v() {
-  local b="${1:-0}"
-  if   (( b < 0 ));         then _fs_out="---"
-  elif (( b < 1024 ));      then _fs_out="${b}B"
-  elif (( b < 1048576 ));   then _fs_out="$(( b / 1024 ))K"
-  elif (( b < 1073741824 )); then _fs_out="$(( b / 1048576 ))M"
-  else                           _fs_out="$(( b / 1073741824 ))G"
+  local b="${1:-0}" t
+  if   (( b < 0 ));          then _fs_out="---"
+  elif (( b < 1024 ));       then _fs_out="${b}B"
+  elif (( b < 1048576 ));    then _fs_out="$(( b / 1024 ))K"
+  elif (( b < 1073741824 )); then t=$(( b * 10 / 1048576 ));    _fs_out="$(( t / 10 )).$(( t % 10 ))M"   # one decimal, rounded DOWN: 1.9M never reads 2M or 1M
+  else                            t=$(( b * 10 / 1073741824 )); _fs_out="$(( t / 10 )).$(( t % 10 ))G"
   fi
 }
 

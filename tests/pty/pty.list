@@ -67,3 +67,4 @@ read_lint|slow|90|python3 tests/pty/slow/input/prompt_template/read_lint.py|pyth
 textedit|slow|180|python3 tests/pty/slow/input/textedit/textedit_pty_test.py|python3
 textedit_unit|slow|30|bash tests/pty/slow/input/textedit/textedit_unit.sh|
 yn_tools|slow|120|python3 tests/pty/slow/input/yn/yn_test.py|python3
+dsize_cache|fast|60|bash tests/pty/fast/engine/dsize_cache.sh|

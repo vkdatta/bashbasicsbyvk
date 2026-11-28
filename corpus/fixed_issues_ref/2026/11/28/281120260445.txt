@@ -1,0 +1,157 @@
+1. ISSUE IN BRIEF
+Folder sizes in the list never changed after a delete, move, copy, create or rename: the recursive-size cache (item_dsize) was filled once per path and never cleared, so a folder kept showing its old size until the app restarted.
+
+1. HOW DID YOU DEBUG
+Read displayer.sh (_load_dir_size_window skips any folder already in item_dsize; nothing ever empties it, while item_size is reset on every rebuild). Reproduced with a driver that sizes a folder, deletes a file, and sizes it again: the old number came back.
+
+1. CAUSE
+item_dsize had no invalidation anywhere; only item_size was reset when the list was rebuilt.
+
+1. FIX
+New _dsize_invalidate (displayer.sh) clears item_dsize and the metadata window and stops the running job. Called from _carry_move / _carry_copy / _carry_forget (every move, copy, rename and delete path), delete_items, create_files / create_dirs, perform_copy, perform_move, after handle_file in handle_selection, and by a net in the main loop of o after every command except navigation and display. Lesson: a cache of something recursive must be cleared by every writer, not keyed by path alone.
+
+2. ISSUE IN BRIEF
+A change inside a folder left every folder above it wrong (d2 kept its size after the work was done in d2/d1), because only a single entry was ever considered.
+
+2. HOW DID YOU DEBUG
+Same driver: a parent keeps its old total when a child changes.
+
+2. CAUSE
+A folder size includes everything below it, so one change makes all ancestors stale; the cache had no notion of that.
+
+2. FIX
+_dsize_invalidate drops the whole cache, so ancestors are recomputed with the folder itself.
+
+3. ISSUE IN BRIEF
+Deleting a folder and creating a new one with the same name, or renaming A to B and back, showed the old folder's size for the new contents.
+
+3. HOW DID YOU DEBUG
+Read the cache key (the path) and the harvest loop in _dir_size_job_poll.
+
+3. CAUSE
+The cache was keyed by path with no generation, so a path that came back reused the old entry.
+
+3. FIX
+Same fix as issue 1 (clear on every writer); the generation counter (_BVK_DSIZE_GEN) also lets the harvest ignore results from before the change.
+
+4. ISSUE IN BRIEF
+A background size job still running when a file operation happened stored its (old) answer afterwards, so a correct refresh could be overwritten by stale numbers.
+
+4. HOW DID YOU DEBUG
+Read _dir_size_job_poll: it stored whatever the job wrote. Test: start a job, change the disk, invalidate, poll: nothing is stored now (dsize_cache.sh).
+
+4. CAUSE
+No link between a job and the state of the disk it measured.
+
+4. FIX
+Each job records the generation it started in (_BVK_DSIZE_JOB_GEN); _dsize_invalidate bumps it, kills the job and its children, and the harvest discards a job from an older generation.
+
+5. ISSUE IN BRIEF
+A folder that could not be read, or a job that wrote no number, was stored as 0 and never measured again, so it read 0B for good.
+
+5. HOW DID YOU DEBUG
+Read the harvest (item_dsize=${ds:-0}) and the C walk (opendir failure returned 0).
+
+5. CAUSE
+Failure and an empty folder were the same value, and any cached value is final.
+
+5. FIX
+The C engine returns -1 when the top folder cannot be opened and the Python fallback does the same; the harvest stores only real numbers; -1 is shown as --- (_fmt_size_v already did). A sub-folder that cannot be read still counts 0, like du.
+
+6. ISSUE IN BRIEF
+Folder and file sizes were rounded down to whole M and G, so 1.9M read 1M and a 139.9M folder could not show a change under 1M.
+
+6. HOW DID YOU DEBUG
+Read _fmt_size_v (integer division).
+
+6. CAUSE
+Whole units only for M and G.
+
+6. FIX
+_fmt_size_v shows one decimal for M and G, rounded down so it never claims more than there is (1.8M, 140.0M, 1.0G). K stays whole.
+
+7. ISSUE IN BRIEF
+Sort by size (big / small) did not rank folders by what is in them: every folder was stated as size 0, so all folders sat together at one end.
+
+7. HOW DID YOU DEBUG
+Read the scan and sort helpers in displayer.sh (sz = 0 if isd) and the C scan; ran the sort on a folder with a 3M folder, a 2M file and a 1.5M folder.
+
+7. CAUSE
+The scan and sort helpers only stat the folder entry itself.
+
+7. FIX
+New _resort_by_size (displayer.sh), called from build_items_with_meta and both exits of apply_sort: it measures the folders not yet cached (one parallel pass, stored in item_dsize so the rows reuse them), then orders by recursive size for folders and own size for files, equal sizes by name. It remembers its last answer so the main loop's repeated apply_sort does not respawn python. Not covered: lists over BVK_PRIME_MAX rows that the C 'window' command sorts itself.
+
+8. ISSUE IN BRIEF
+The Exact bytes screen (eb-) could report a stale folder size because it read the list's size cache first.
+
+8. HOW DID YOU DEBUG
+Read _eb_dir_bytes in exactbytes.sh.
+
+8. CAUSE
+It trusted item_dsize, which was stale (issue 1), and its du fallback counts directory entries the list does not.
+
+8. FIX
+_eb_dir_bytes now measures with the list's own engine (_py_recursive_size) at that moment, and refreshes the cache entry; du / find stay only as a fallback when that engine is missing.
+
+9. ISSUE IN BRIEF
+The C and Python folder-size engines disagreed: C counted symlinks and special files by their lstat size, Python skipped them; neither handled hard links, so one file with two links counted twice.
+
+9. HOW DID YOU DEBUG
+Read bashbasicsbyvk_dsize.c and _walk_size / _plan in displayer.sh; ran both on a tree with a symlink, a fifo and a hard link before and after.
+
+9. CAUSE
+Two implementations with different rules.
+
+9. FIX
+Both now count every non-folder entry by lstat size and a hard-linked file once per call (dev+inode); both return -1 for an unreadable top folder. Sizes are apparent sizes (like ls -l and the file rows), not disk blocks: kept on purpose so a folder and a file in the same list use one unit. Verified equal on the same trees; the C engine was compiled and run, not installed.
+
+10. ISSUE IN BRIEF
+Delete always printed that the items were deleted, even when rm failed (a read-only folder, a permission): the person was told space was freed when files were still there.
+
+10. HOW DID YOU DEBUG
+Read delete_items (rm -rf ... && _carry_forget, then an unconditional message). Ran it as a non-root user against a folder with a read-only subfolder.
+
+10. CAUSE
+The result of rm was never looked at and the message was fixed.
+
+10. FIX
+delete_items checks that each item is really gone, forgets (locks, shortcuts, recents) only what was removed, and prints how many were deleted and which were not, with rm's reason.
+
+11. ISSUE IN BRIEF
+Copying a folder with a dot in its name mangled it on a name clash (my.project became my1.project, v1.2 became v11.2), and Copy used name1.ext where Create used name (1).ext.
+
+11. HOW DID YOU DEBUG
+Read perform_copy and create_files: both split the name at the last dot and each had its own loop.
+
+11. CAUSE
+Two copies of the naming logic; the copy one treated a folder name as having an extension.
+
+11. FIX
+One shared helper _bvk_unique_name (viewport.sh, next to _bvk_name_too_long) used by Create and Copy: folders have no extension, dotfiles have none, a.tar.gz stays whole, the result is name (N).
+
+12. ISSUE IN BRIEF
+Create folder was looser than Create file: a name after a comma kept its leading space (a, b made ' b'), an existing folder printed Created again without making anything, and a failed mkdir / touch still printed Created.
+
+12. HOW DID YOU DEBUG
+Read create_dirs and create_files.
+
+12. CAUSE
+create_dirs never trimmed or deduped and neither function checked the command's result.
+
+12. FIX
+Both trim names, skip empty ones, use _bvk_unique_name, and report a failed mkdir / touch instead of Created. An existing folder name now gets name (1), like a file.
+
+13. ISSUE IN BRIEF
+Creating a file whose name already exists mangled dotfiles and double extensions: .bashrc became ' (1).bashrc' (empty base, a leading space) and a.tar.gz became 'a.tar (1).gz'.
+
+13. HOW DID YOU DEBUG
+Read the clash loop in create_files (base=${file%.*}, ext=${file##*.}) and ran the new helper on .bashrc, k.tar.gz, my.project, v1.2, a.txt and noext.
+
+13. CAUSE
+The name was split at the last dot with no case for a leading dot or a .tar.* pair.
+
+13. FIX
+Handled in the shared _bvk_unique_name (see issue 11): a leading-dot name has no extension, .tar.* stays whole. Found while fixing issues 11 and 12; covered by dsize_cache.sh.
+
+VERIFIED: tests/pty/fast/engine/dsize_cache.sh (new, fails when the cache clear is removed, passes with it); C engine compiled with gcc and compared with the Python engine; static suites: same findings as the untouched upload (structure labels:n; footer and intent hit the 25 s cap and run clean directly). Not run: a real device, Drive mode, favourites mode, the staging do- path in a terminal.
