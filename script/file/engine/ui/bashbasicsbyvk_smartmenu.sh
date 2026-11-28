@@ -54,7 +54,7 @@ _sm_active=false          # re-entrancy guard
 _sm_result=""
 _sm_tok=""
 
-_sm_reset() { _sm_lines=(); _sm_partial=""; }
+_sm_reset() { _sm_lines=(); _sm_partial=""; _BVK_STREAM_ROLLED=0; }
 
 # capture
 _sm_record() {
@@ -800,7 +800,11 @@ _sm_run() {
     builtin printf '\r\033[J'
   fi
 
+  # a list the Transfer picker has just rolled in itself is only swapped for the viewport's copy (pop); any other menu is drawn by the viewport and rolls (carpet)
+  (( ${_BVK_STREAM_ROLLED:-0} )) && _vp_force_pop=1
+  _BVK_STREAM_ROLLED=0
   _vp_render_fresh
+  _vp_force_pop=0
   _sm_count
   n="$_vp_n"
 

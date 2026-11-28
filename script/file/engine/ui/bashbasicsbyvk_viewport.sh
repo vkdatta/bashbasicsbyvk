@@ -401,7 +401,7 @@ _vp_gv_hidden() {
 }
 _vp_row_text() {
   local i="$1" t
-  if [ -n "${_vp_rowcache[$i]+x}" ]; then
+  if (( ! _vp_roll )) && [ -n "${_vp_rowcache[$i]+x}" ]; then      # carpet: every row is built now, not read back from the cache
     _vp_line="${_vp_rowcache[$i]}"
     return 0
   fi
@@ -678,37 +678,21 @@ _vp_ensure_visible() {
 # Frame buffering: every line of a screen is appended to _vp_frame.  The Animation setting ($anim, one value for the whole app) decides how it reaches the terminal:
 #   pop     the whole frame is written in ONE write at the end of _vp_emit (synchronized output): the screen appears at once.
 #   carpet  each line is written the moment it is built (_vp_el), so the screen rolls in from the top, row by row.
-# pop adds nothing.  carpet paces the roll: every row is written, then the draw waits a few ms (_vp_nap), so the rows are SEEN arriving one at a time on any
-# machine (a fresh screen is built from the row cache in a few ms, which the eye cannot follow).  The pace is capped so a whole screen rolls in under ~0.45 s.
-# Only a FRESH screen rolls (_vp_render_fresh / _vp_tab_repaint): the in-place repaints (arrow keys, a resize,
-# _vp_force_pop=1) always pop, otherwise every key press would flicker.
+# carpet draws the way the Transfer picker always has: each row is BUILT (formatted, from the item, not from the row cache) and written the moment it is
+# built, so the rows arrive one at a time.  No sleep, no timer: the roll is the real per-row work.
+# Only a FRESH screen rolls (_vp_render_fresh / _vp_tab_repaint): the in-place repaints (arrow keys, a resize, _vp_force_pop=1) always pop, otherwise every
+# key press would flicker.  A list the Transfer picker has just rolled itself (_BVK_STREAM_ROLLED) is not rolled a second time when the menu layer takes it over.
 _vp_frame=""
 _vp_force_pop=0         # 1 = this draw must pop whatever $anim says (an in-place repaint)
 _vp_roll=0              # 1 = _vp_el writes each line now (carpet); set by _vp_roll_set for one draw only
-_vp_nap=""              # seconds to wait after each rolled row (computed per draw by _vp_roll_pace)
-_VP_ROLL_MS=${BVK_ROLL_MS:-14}          # wait per row, ms
-_VP_ROLL_CAP_MS=${BVK_ROLL_CAP_MS:-450} # the whole screen never takes longer than this
 
 _vp_roll_set() { _vp_roll=0; [ "${anim:-pop}" = carpet ] && (( ! _vp_force_pop )) && _vp_roll=1; return 0; }
 
 _vp_el() {
   local _l=$'\r\033[2K\033[?7l'"$1"$'\033[?7h\n'
   _vp_frame+="$_l"
-  if (( _vp_roll )); then
-    builtin printf '%s' "$_l"
-    [ -n "$_vp_nap" ] && command sleep "$_vp_nap" 2>/dev/null
-  fi
+  (( _vp_roll )) && builtin printf '%s' "$_l"
   return 0
-}
-
-# carpet: the wait after each row, from the number of rows this screen has
-_vp_roll_pace() {
-  local rows=$(( ${#_vp_hdr_out[@]} + ${#_vp_ftr_out[@]} + _vp_end - _vp_start + 3 )) ms
-  (( rows < 1 )) && rows=1
-  ms=$(( _VP_ROLL_CAP_MS / rows ))
-  (( ms > _VP_ROLL_MS )) && ms=$_VP_ROLL_MS
-  (( ms < 2 )) && ms=2
-  printf -v _vp_nap '0.%03d' "$ms"
 }
 
 _vp_emit() {
@@ -718,8 +702,6 @@ _vp_emit() {
   (( _vp_end > _vp_R )) && _vp_end=$_vp_R
 
   _vp_frame=""
-  _vp_nap=""
-  (( _vp_roll )) && _vp_roll_pace
   local _it _lo=$_vp_start _hi=$_vp_end
   if (( _vp_gv )); then
     _vp_gv_hidden                              # items above / below the visible rows

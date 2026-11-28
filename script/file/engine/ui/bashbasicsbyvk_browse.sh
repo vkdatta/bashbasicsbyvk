@@ -688,7 +688,8 @@ _pick_rows_raw() {
   fi
   # the Animation setting: carpet = each row is written as it is built (the list rolls in) · pop = the rows are collected and written in ONE write
   local _prr_roll=0 _prr_buf=""
-  [ "${anim:-pop}" = carpet ] && _prr_roll=1
+  _BVK_STREAM_ROLLED=0
+  [ "${anim:-pop}" = carpet ] && { _prr_roll=1; _BVK_STREAM_ROLLED=1; }      # the menu layer must not roll this list again (smartmenu.sh)
   for (( i=1; i<=${#items[@]}; i++ )); do
     _item_line_text_v "$i"; ln="$_ilt_out"
     if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "${items[i-1]}" "$ln"; then ln="$_smk_out"; fi     # selected with .s — green "+"

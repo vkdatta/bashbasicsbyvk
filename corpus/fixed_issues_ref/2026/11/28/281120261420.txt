@@ -1,13 +1,13 @@
 1. ISSUE IN BRIEF
-Carpet animation was invisible everywhere except the Transfer picker. The viewport wrote each row as it was built, but from the row cache, so a whole screen reached the terminal in about 1 ms.
+Carpet animation was visible only in the Transfer picker. Every other screen is drawn by the viewport from its row cache in about 1 ms, so it looked like pop.
 
 1. HOW DID YOU DEBUG
-Read _vp_emit / _vp_el / _vp_render_fresh, _vp_row_text (cache) and _pick_rows_raw (the Transfer picker). The picker formats rows one by one with real per-row work; the viewport pre-formats everything (_vp_prime_rows, _sel_prewarm), so its draw has no gaps to see. Ran the real _vp_el / _vp_roll_pace functions: pop 1 ms, carpet 24-row screen 468 ms.
+Read how the Transfer picker draws: it PRINTS its rows one at a time (_pick_rows_raw), then the menu layer (smartmenu.sh, "wipe the already-printed copy") erases that copy and redraws the list through the viewport. The main list (script/o) goes straight through _vp_render_fresh. A first attempt added a fixed per-row sleep; it was wrong (a different look, and it re-rolled over the Transfer picker's own roll) and is removed.
 
 1. CAUSE
-The previous fix only changed WHEN rows were written, not how long a draw takes. A cached frame written line by line still lands at once.
+Carpet only existed where rows were built one by one (the Transfer picker). The viewport formats everything first (_vp_prime_rows) and only copies cached text to the screen.
 
 1. FIX
-viewport.sh: carpet now waits a few ms after every row (_vp_nap, 14 ms per row, capped so a screen takes about 0.45 s; _vp_roll_pace; BVK_ROLL_MS / BVK_ROLL_CAP_MS override). pop is unchanged. Only fresh screens roll (render_fresh / tab repaint); arrow keys, resize and filter repaints still pop. The Transfer picker keeps its own per-row print for carpet and one write for pop. settings_desc.sh: the Display|anim text no longer says both styles are instant; the carpet text describes the pause.
+viewport.sh: when a fresh screen rolls (anim=carpet), _vp_row_text skips the row cache, so every row is built from the item the way the Transfer picker builds it, and _vp_el writes it the moment it is built. No sleep, no timer. pop unchanged (one write). Arrow keys, resize and filter repaints always pop. smartmenu.sh: when the Transfer picker has just rolled its own rows (_BVK_STREAM_ROLLED, set in _pick_rows_raw, cleared in _sm_reset), the takeover redraw pops instead of rolling again, so the picker's carpet is left as it was; every other menu rolls through the viewport. settings_desc.sh: Animation texts say what carpet really does.
 
-VERIFIED: bash -n on both files; timing run of the changed functions (above). Not run: the full app in a real terminal.
+VERIFIED: bash -n on the changed files; a run of the real _vp_row_text / _vp_roll_set / _vp_el showing carpet bypasses the cache and writes per row, pop uses the cache, an in-place repaint never rolls. Not run: the full app in a real terminal, so how fast it rolls on a device is not measured.

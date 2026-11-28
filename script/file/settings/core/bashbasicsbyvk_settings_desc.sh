@@ -98,7 +98,7 @@ Big-folder limit|set	Type a new number of items. Pick a larger value if your pho
 Big-folder limit|reset	Put the limit back to the standard 200 items. Use it if you changed the number and the lists now feel too long or too short.
 Animation|*\tChoose how every screen in the program appears: all at once, or rolling in row by row. The choice is the same for all screens, including the file and folder lists of Transfer.
 Animation|pop\tThe whole screen appears at once. This is quick and clear and is the standard.
-Animation|carpet\tEvery screen rolls in from the top, one row after another (a short pause after each row, about half a second for a whole screen at most). Moving the cursor or resizing never rolls; only a freshly opened screen does.
+Animation|carpet\tScreens roll in from the top, one row after another, the way the Transfer picker draws. Each row is built and shown as it is ready, with no pause added, so how fast it rolls depends on how fast your device builds the rows. Moving the cursor or resizing never rolls; only a freshly opened screen does.
 Mouse / touch|*	Decide whether you can use a mouse or your finger. It only changes how you operate the program, not what it does.
 Mouse / touch|v:on	Mouse and touch work: tap or click a number to pick it, tap twice quickly to open it, and swipe or use the wheel to scroll. To select and copy text on screen you may need to hold the Shift key. Recommended for phones.
 Mouse / touch|v:off	Only the keyboard is used. Taps and clicks go back to your terminal, so selecting and copying text works in the usual way. Choose this if taps open things you did not mean to open.
