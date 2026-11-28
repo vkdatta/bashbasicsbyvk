@@ -3,7 +3,7 @@ declare -F _lt_b >/dev/null 2>&1 || { _lt_b(){ :; }; _lt_e(){ :; }; _lt_enter(){
 #  Styled exactly like the main menu (header · what this screen is · rule · numbered rows · rule ·
 #  footer of suggested commands · "Select:" prompt):
 #
-#     ⚙ Settings › Display
+#     🔧 Settings › Display
 #
 #     How the list of files looks and behaves. Choose a row ...      (the screen's own text, see settings_desc.sh)
 #        ─────────────────────────────
@@ -307,7 +307,7 @@ _st_draw() {
   local _gap=""
   if [ -n "$f2" ]; then _gap=$'\n'; _ST_TAIL=$(( _ST_TAIL + 1 )); fi
   _tpl_clear
-  _tpl_set menu_name "${_st_icon:-⚙} ${hd:0:cols-4}" menu_description "$_desc" menu_list "$_lst" \
+  _tpl_set menu_name "${_st_icon:-🔧} ${hd:0:cols-4}" menu_description "$_desc" menu_list "$_lst" \
            footer_commands "${f1:0:cols-1}"$'\n'"${f2:0:cols-1}$_gap" menu_suggestions "$_sug"
   _tpl_build -p "$nl" 373QS6 menu_header _th; _tpl_build -p "$nl" 373QS6 menu_body _tb; _tpl_build -p "$nl" 373QS6 menu_footer _tf
   out+="$_th$_tb$_tf"
@@ -393,7 +393,7 @@ _st_click() {
   return 0
 }
 
-# A tap on the path in the title row ("⚙ Settings › Display").  A part before the last › takes you back to that screen: the screens
+# A tap on the path in the title row ("🔧 Settings › Display").  A part before the last › takes you back to that screen: the screens
 # above this one close themselves (_ST_JUMP_DEPTH, checked at the top of every _st_run loop) until the depth of the tapped part is reached.
 # Only the Settings path: a screen with its own crumb (Pending ...) or none (cc) is left alone.  Runs inside _st_click (_MS_X = the column).
 _ST_JUMP_DEPTH=0
@@ -401,7 +401,7 @@ _st_crumb_tap() {
   [ "${_st_crumb-Settings}" = Settings ] && [[ "$path_title" == "Settings › "* ]] || return 0
   declare -F _bvk_dispw >/dev/null 2>&1 || return 0
   local c=$(( _MS_X - 1 )) off w
-  _bvk_dispw "${_st_icon:-⚙} "; off=$_BVK_W                 # the icon and its space come first
+  _bvk_dispw "${_st_icon:-🔧} "; off=$_BVK_W                 # the icon and its space come first
   _bvk_dispw "Settings"; w=$_BVK_W
   # the first part owns its text and the " › " after it (a fingertip is wider than one cell); the last part is where you already are
   if (( c >= off && c < off + w + 3 )); then _ST_JUMP_DEPTH=1; _st_back=1; fi

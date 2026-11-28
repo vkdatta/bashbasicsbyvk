@@ -91,7 +91,7 @@ _snap_daemon_status() {     # .dm.alien : what the alien daemon is doing
   else
     echo "🔴  Alien daemon is not running — it starts with the app once a path is on the snapshot list (snap-1), or with .dm.alien.restart"
   fi
-  [ "$(_bb_cfg_val snapshot_enabled on)" = off ] && echo "   ⏸  snapshots are PAUSED (Settings → File API → Snapshots)"
+  [ "$(_bb_cfg_val snapshot_enabled on)" = off ] && echo "   ⏳ snapshots are PAUSED (Settings → File API → Snapshots)"
   n=$(_snap_target_count)
   last=$(cat "$_SNAP_LASTRUN" 2>/dev/null); [[ "$last" =~ ^[0-9]+$ ]] || last=0
   if [ "$last" -gt 0 ]; then echo "   🕐 paths on the list: $n   last pass: $(( (now - last) / 60 )) min ago   every $(_bb_fmt_duration "$iv")   next in about $(( (last + iv - now) > 0 ? (last + iv - now) / 60 : 0 )) min"

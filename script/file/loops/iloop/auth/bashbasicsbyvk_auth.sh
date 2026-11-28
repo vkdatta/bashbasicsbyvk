@@ -204,7 +204,7 @@ _bvk_auth_create() {
    is accepted. Anything else is rejected outright, with no reply.
 TXT
   local mail; _bvk_read mail $'\n   Enter email: '
-  [ -z "$mail" ] && { echo "↩  Cancelled."; return; }
+  [ -z "$mail" ] && { echo "🔙 Cancelled."; return; }
   _bvk_auth_mail_ok "$mail" || { echo "❌ Invalid input (max 256 chars; no spaces, quotes, < > \` \$ \\ ; | & ( ) { })."; return; }
   [ -r "$_BVK_TELEMETRY_DIR/uuid" ] || { echo "❌ No telemetry id found (is BVK_TELEMETRY=off?). Creating a user needs it for abuse protection. Restart 'o' once with telemetry on."; return; }
   _dep_need -c "Creating a user" nodejs || return
@@ -215,7 +215,7 @@ TXT
   fek=""
   [ -n "$wrapped" ] && [ -n "$hash" ] && _bvk_auth_codes_ok "$P_DISEPS" $_BVK_DISEPS_N || { echo "❌ Local key generation failed."; return; }
 
-  echo "☁  Registering…"
+  echo "⛅ Registering…"
   local json; json=$(printf '{"mail":%s,"diseps":%s,"apikey_hash":"%s","fek_wrapped":"%s"}' \
         "$(_bvk_auth_jstr "$P_MAIL")" "$(_bvk_auth_jstr "$P_DISEPS")" "$hash" "$wrapped")
   if ! _bvk_auth_call POST /auth/create "$json"; then _bvk_auth_err; return; fi
@@ -321,7 +321,7 @@ _bvk_auth_import() {
 # ── acting as a user
 _bvk_auth_mailto() {  # $1=subject $2=body
   local url="mailto:$_BVK_SUPPORT_MAIL?subject=$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$1")&body=$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$2")"
-  echo "✉  To: $_BVK_SUPPORT_MAIL"; echo "   Subject: $1"; printf '   %s\n' "$2"
+  echo "📧 To: $_BVK_SUPPORT_MAIL"; echo "   Subject: $1"; printf '   %s\n' "$2"
   if   command -v termux-open-url >/dev/null 2>&1; then termux-open-url "$url"
   elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1
   elif command -v open >/dev/null 2>&1; then open "$url"
@@ -802,7 +802,7 @@ _au_ids_of_sel() {
 }
 
 _au_export_ids() {  # profile ids...
-  _au_pick_fields || { echo "↩  Cancelled."; return 1; }
+  _au_pick_fields || { echo "🔙 Cancelled."; return 1; }
   _bvk_auth_export "$_AU_FIELDSEL" "$@"
 }
 _au_remove_ids() {  # profile ids...
@@ -814,7 +814,7 @@ _au_remove_ids() {  # profile ids...
     rm -f "$_BVK_AUTH_DIR/profiles/$id" "$_BVK_AUTH_DIR/profiles/$id.prev"
     [ "$(cat "$_BVK_AUTH_DIR/active" 2>/dev/null)" = "$id" ] && rm -f "$_BVK_AUTH_DIR/active"
   done
-  echo "🗑  Removed $# user(s)."
+  echo "🚮 Removed $# user(s)."
 }
 
 _au_user_action() {  # $1 = 0-based action slot
@@ -920,7 +920,7 @@ auth_menu() {
       c)   _bvk_auth_create ;;
       ui)  _bvk_auth_import ;;
       r|r-*)
-        if _au_select_rows "REMOVE" "🗑  Remove users — which ones?" "$choice"; then
+        if _au_select_rows "REMOVE" "🚮 Remove users — which ones?" "$choice"; then
           _au_ids_of_sel; _au_remove_ids "${_AU_SELIDS[@]}"
         fi ;;
       ux|ux-*)

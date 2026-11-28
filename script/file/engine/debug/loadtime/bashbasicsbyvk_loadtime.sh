@@ -267,7 +267,7 @@ _lt_cleanup() { [ -n "${_SL_ON:-}" ] && _sl_shutdown; [ -n "$_LT_LOG" ] && [ "$$
 bvk_loadtime_cmd() {
   local arg="${1,,}"; arg="${arg#loadtime}"; arg="${arg# }"; arg="${arg//[^a-z0-9 ]/}"
   if [ "$_LT_ON" != 1 ] || [ ! -s "$_LT_LOG" ]; then
-    echo "⏱  loadtime is switched off (VK_LOADTIME=0) or could not create its log file."
+    echo "⏰ loadtime is switched off (VK_LOADTIME=0) or could not create its log file."
     return 0
   fi
   local core; core="$(command -v bashbasicsbyvk_loadtime_report 2>/dev/null)" || core=""

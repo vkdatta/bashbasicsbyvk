@@ -341,8 +341,8 @@ upgrade_menu() {
     _up_fresh=true
     case "$_up_choice" in
 
-      -u) echo "↩  Closing the upgrade loop"; break ;;
-      u)  echo "↩  Closing the upgrade loop"; break ;;
+      -u) echo "🔙 Closing the upgrade loop"; break ;;
+      u)  echo "🔙 Closing the upgrade loop"; break ;;
 
       fx) _inner_next=fx; break ;;
       sw) _inner_next=sw; break ;;

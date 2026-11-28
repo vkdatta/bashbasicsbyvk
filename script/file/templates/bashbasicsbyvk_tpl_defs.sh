@@ -50,10 +50,10 @@ _tpl_def menu_description var  ""      "plain words under the title: what the sc
 _tpl_def action           var  ""      "the verb of a picker: rename, delete, copy ..."
 _tpl_def what             var  "items" "what is being picked: items, groups, Destination ..."
 _tpl_def job              var  ""      "the job a picker is for: Transfer, Delete ..."
-_tpl_def icon             var  "🛷"    "the icon in front of a picker's title (🛷 Transfer, 🗑 Delete ...)"
+_tpl_def icon             var  "🛷"    "the icon in front of a picker's title (🛷 Transfer, 🚮 Delete ...)"
 _tpl_def job_word         var  "for"   "the word between what and job in a picker's title: for (Select Items for Transfer) · to (Select extensions to delete)"
 _tpl_def cd_path          fn   _tpl_p_cd_path          "the row  📂 cd path: <folder the app is in>"
-_tpl_def nav_path         fn   _tpl_p_nav_path         "the row  ☁ nav path: <where the list is>  (+ group / filter text; a picker sets nav_path_text)"
+_tpl_def nav_path         fn   _tpl_p_nav_path         "the row  ⛅ nav path: <where the list is>  (+ group / filter text; a picker sets nav_path_text)"
 _tpl_def imaginary_banner fn   _tpl_p_imaginary_banner "the banner of an imaginary (grouped) list, when there is one"
 _tpl_def pick_note        fn   _tpl_p_pick_note        "the dim line under a picker's title: the s-N suggestion, or the Settings description"
 _tpl_def status_row       fn   _tpl_p_status_row       "the top of the folder view: 💫 greeting, 🧠 insanity meter (while signed in), then the buttons [🔔 Notifications n]  [🐌 Pending n]; a blank row between the parts"
@@ -83,7 +83,7 @@ _TPL_ACCEPTOR="${_TPL_SPEC[footer_acceptor]}"
 # cd path / nav path: the two location rows of the folder view, split so a template can place them (browse.sh holds the rows)
 _tpl_p_cd_path()  { _loc_cd_row; }
 _tpl_p_nav_path() {
-  if [ -n "${_TPL_VAL[nav_path_text]-}" ]; then echo "☁ nav path: ${_TPL_VAL[nav_path_text]}"; else _loc_nav_row; fi
+  if [ -n "${_TPL_VAL[nav_path_text]-}" ]; then echo "⛅ nav path: ${_TPL_VAL[nav_path_text]}"; else _loc_nav_row; fi
 }
 _tpl_p_imaginary_banner() { [ "${_vp_mode:-}" == "imaginary" ] && [ -n "${_imag_banner:-}" ] && echo "$_imag_banner"; return 0; }
 # the top of the folder view (greeting, insanity meter, the two buttons; all read caches only: they never wait for the network)

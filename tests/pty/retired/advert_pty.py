@@ -96,7 +96,7 @@ for name, path, mp in SCREENS:
     try:
         if not open_path(a, path): print('SKIP %s: could not open (%s)' % (name, path)); continue
         F = footer_keys(a); C = cc_keys(a)
-        NOTE = ('❌', '🔴', '📜', '⚠', 'ℹ')
+        NOTE = ('❌', '🔴', '📜', '❗', '💡')
         def body(a): return [l for l in rows(a)[1:-1] if not l.strip().startswith(NOTE)]    # the screen without its first (status) row, the prompt and a note
         a.line('='); a.settle(0.4); home_body = body(a)
         universe = sorted((set(map_words(mp)) | (set(map_words('main')) if mp == 'main' else set()) | C | F | {'?', 'print', 'cc', 'loadtime', 'clr', 'a', 'd'}) - NEVER - STRUCT)

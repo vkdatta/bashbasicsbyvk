@@ -249,7 +249,7 @@ _sel_eval() {
       mapfile -d '' -t _SEL_FOUND < <(BVK_SKIPFILE="$_skf" _sel_core expand "$_lim" "$_hid" "${_roots[@]}" 2>/dev/null)
       _sk=$(grep -c '' "$_skf" 2>/dev/null)
       if [ "${_sk:-0}" -gt 0 ]; then
-        echo "⏭  Skipped $_sk folder(s) over the count limit:"
+        echo "⏩ Skipped $_sk folder(s) over the count limit:"
         head -5 "$_skf" | while IFS=$'\t' read -r c d; do printf '   • %s  (%s files)\n' "$(_sel_short "$d")" "$c"; done
         [ "$_sk" -gt 5 ] && echo "   … and $((_sk-5)) more"
       fi
@@ -362,7 +362,7 @@ handle_select_cmd() {
     sub)     _sel_summary out "➖ Unselected ${#found[@]} match(es) → selection now" ;;
   esac
   _sel_preview out
-  [ ${#out[@]} -gt 0 ] && echo "▶  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
+  [ ${#out[@]} -gt 0 ] && echo "⏩ fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }
 
 # .s.rec [N]  — take the CURRENT selection and expand it recursively (every
@@ -385,12 +385,12 @@ _sel_cmd_rec() {
   _sel_preview found
   local sk; sk=$(grep -c '' "$skipf" 2>/dev/null)
   if [ "${sk:-0}" -gt 0 ]; then
-    echo "⏭  Skipped $sk folder(s):"
+    echo "⏩ Skipped $sk folder(s):"
     head -5 "$skipf" | while IFS=$'\t' read -r c d; do printf '   • %s  (%s files)\n' "$(_sel_short "$d")" "$c"; done
     [ "$sk" -gt 5 ] && echo "   … and $((sk-5)) more"
   fi
   rm -f "$skipf" "$errf"
-  [ ${#found[@]} -gt 0 ] && echo "▶  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
+  [ ${#found[@]} -gt 0 ] && echo "⏩ fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }
 
 _sel_cmd_show() {                # .s.show — the selection, on the ONE results screen (results.sh); the old "all" word is no longer needed: every row scrolls
@@ -412,5 +412,5 @@ _sel_cmd_shown() {
   _sel_save out
   _sel_summary out "🎯 Selected what's displayed"
   _sel_preview out
-  echo "▶  fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
+  echo "⏩ fx → <action>/<action>.selected.items (copy / move / zip / upload / delete / ...)"
 }

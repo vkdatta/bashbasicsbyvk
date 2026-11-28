@@ -10,12 +10,12 @@
 # Two questions, one step each (_mc_steps: u = one question back): the extensions (the pick screen, MG2374), then Confirm delete / Back up.
 # They share _fx_adf_delete_by_ext's locals (files exts label ext_of); selected_items is the global every delete flow fills.
 _de_s_pick() {
-  _pick_groups -i 🗑 -w to "extensions" "delete" "extensions" "$path" files exts label ext_of selected_items
+  _pick_groups -i 🚮 -w to "extensions" "delete" "extensions" "$path" files exts label ext_of selected_items
   case $? in 0) return 0 ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac
 }
 _de_s_confirm() {
   local rc
-  _sel_summary selected_items "🗑  About to delete"
+  _sel_summary selected_items "🚮 About to delete"
   _sel_preview selected_items
   _fxdel_run_selected; rc=$?
   case "$rc" in 1|2) return "$rc" ;; esac
@@ -45,6 +45,6 @@ _fx_adf_delete_by_ext() {
   done
 
   _mc_steps _de_s_pick _de_s_confirm
-  case $? in 0) ;; 1) echo "↩  Back"; return ;; 2) return 1 ;; *) return ;; esac
+  case $? in 0) ;; 1) echo "🔙 Back"; return ;; 2) return 1 ;; *) return ;; esac
 }
 _fx_adf_register_fx "delete.by.extension" "_fx_adf_delete_by_ext"

@@ -522,7 +522,7 @@ _bb_fast_send() {
            [ -n "${_BB_OVERSIZE_OK:-}" ] && _bb_cfg_header X-Confirm-Oversized yes
            for fh in "${_BB_COMMIT_HDRS[@]}"; do _bb_cfg_header "${fh%%:*}" "${fh#*: }"; done
            true; })
-  [ -t 2 ] || [ "${_SVC_QUIET:-0}" = 1 ] || echo "☁  Uploading $nb encrypted blob(s)..."
+  [ -t 2 ] || [ "${_SVC_QUIET:-0}" = 1 ] || echo "⛅ Uploading $nb encrypted blob(s)..."
   local fout fverdict tline
   _bb_progress_begin      # the send bar owns the screen: no loading bar until it is done
   _lt_b "Go engine: send (network + server)"
@@ -552,7 +552,7 @@ _bb_fast_send() {
       local fwhy; IFS=$'\t' read -r _ _FS_ID fwhy <<<"$fverdict"
       [ "$_FS_ID" = "-" ] && _FS_ID=""
       _bb_xfer_note go-fallback "${fwhy:-interrupted}${_FS_ID:+ (upload $_FS_ID continued on the resumable path)}"
-      [ "${_SVC_QUIET:-0}" = 1 ] || echo "↪  Switching to the resumable path (${fwhy:-interrupted})…" >&2
+      [ "${_SVC_QUIET:-0}" = 1 ] || echo "🔀 Switching to the resumable path (${fwhy:-interrupted})…" >&2
       return 2 ;;
     *)
       _bb_xfer_note go-fallback "send gave no verdict (crashed?)"; return 2 ;;
@@ -662,7 +662,7 @@ _up_do_multipart_upload() {
       1) _up_cleanup; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1 ;;
       2) fast_id="$_FS_ID" ;;
       3) fast_id="$_FS_ID"; fast_intr=1
-         if [ -z "$fast_id" ]; then _up_cleanup; echo "⏹  Cancelled — nothing was kept."; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; fi ;;
+         if [ -z "$fast_id" ]; then _up_cleanup; echo "🛑 Cancelled — nothing was kept."; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1; fi ;;
     esac
   fi
 
@@ -683,11 +683,11 @@ _up_do_multipart_upload() {
   # ---- Phase 2 + 3: send what the server lacks (waits out a lost connection) → commit.  Ctrl-C / kill / offline keep it in Pending. ----
   if [ "$fast_intr" = 1 ]; then
     _pn_set "$pdir" status interrupted
-    echo "⏸  Stopped for now — nothing is lost. Continue it from Pending (pn)."
+    echo "⏳ Stopped for now — nothing is lost. Continue it from Pending (pn)."
     echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"
     _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""; return 1
   fi
-  [ -t 2 ] || [ $use_go = 1 ] || echo "☁  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
+  [ -t 2 ] || [ $use_go = 1 ] || echo "⛅ Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
   _pn_complete "$pdir" 0; local prc=$?
   if [ $prc -ne 0 ]; then
     [ $prc -ge 20 ] && echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"
@@ -771,7 +771,7 @@ _c2c_paths() {
     return 1
   fi
 
-  echo "☁  Uploading ${#paths[@]} encrypted file(s) merged into a single blob..."
+  echo "⛅ Uploading ${#paths[@]} encrypted file(s) merged into a single blob..."
   local result final_url deducted balance expires
   if ! result=$(_bb_authed_put "/copy" "" --data-binary "@$enc_tmp"); then
     rm -f "$enc_tmp"

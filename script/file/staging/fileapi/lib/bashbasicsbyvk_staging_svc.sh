@@ -166,7 +166,7 @@ _svc_upload() {
   # send what the server lacks (a lost connection is waited out) → commit.  Interrupted / offline: kept in Pending (return 4).
   if [ "$fast_intr" = 1 ]; then
     _pn_set "$pdir" status interrupted
-    [ "$_SVC_QUIET" = 1 ] || { echo "⏸  Stopped for now — nothing is lost. Continue it from Pending (pn)."; echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"; }
+    [ "$_SVC_QUIET" = 1 ] || { echo "⏳ Stopped for now — nothing is lost. Continue it from Pending (pn)."; echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"; }
     _BB_SVC=""; _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE=""; _BB_OVERSIZE_OK=""
     return 4
   fi

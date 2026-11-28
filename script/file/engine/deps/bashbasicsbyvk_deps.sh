@@ -551,7 +551,7 @@ _dep_run() {
 _dep_lane_sys() {          # system packages, then recipes (foreground: sudo may ask for a password)
   local rc=0 r
   if [ "${#_PL_SYS[@]}" -gt 0 ]; then
-    _dep_say "   ▶ ${_DEP_PRIV[*]:+${_DEP_PRIV[*]} }${_DEP_CMD[*]} ${_PL_SYS[*]}"
+    _dep_say "   ⏩ ${_DEP_PRIV[*]:+${_DEP_PRIV[*]} }${_DEP_CMD[*]} ${_PL_SYS[*]}"
     _dep_run "${_DEP_PRIV[@]}" "${_DEP_CMD[@]}" "${_PL_SYS[@]}"; rc=$?
     if [ $rc -ne 0 ] && [ "${#_DEP_UPD[@]}" -gt 0 ]; then       # stale package lists are the usual reason: refresh once, retry once
       _dep_say "   ↻ refreshing the package lists, then trying again"
@@ -559,7 +559,7 @@ _dep_lane_sys() {          # system packages, then recipes (foreground: sudo may
     fi
   fi
   for r in "${_PL_RECIPE[@]}"; do
-    _dep_say "   ▶ $(_dep_recipe_text "$r")"
+    _dep_say "   ⏩ $(_dep_recipe_text "$r")"
     case "$r" in
       gh-apt) _dep_recipe_gh_apt ;;
       gh-dnf) _dep_recipe_gh_dnf ;;
@@ -742,19 +742,19 @@ _dep_need() {
   [ -z "$title" ] && [ "${#_DEP_TITLES[@]}" -eq 1 ] && title="${_DEP_TITLES[0]}"
   [ -n "$title" ] && title="\"$title\""
   _dep_show "$title" "${miss[@]}"
-  for id in "${na_req[@]}"; do _dep_say "  ⚠ ${_DEP_LABEL[$id]}: ${_PL_HOW[$id]} - install it yourself, then try again."; done
+  for id in "${na_req[@]}"; do _dep_say "  ❗ ${_DEP_LABEL[$id]}: ${_PL_HOW[$id]} - install it yourself, then try again."; done
   [ "${#na_req[@]}" -gt 0 ] && [ "${#todo[@]}" -eq 0 ] && return 1
   [ "$check" = 1 ] && return $reqrc
   local needroot=0 rr
   [ "${#_PL_SYS[@]}" -gt 0 ] && needroot=1
   for rr in "${_PL_RECIPE[@]}"; do _dep_recipe_root "$rr" && needroot=1; done
   if [ "${_DEP_PRIV_OK:-0}" != 0 ] && [ "$needroot" = 1 ]; then
-    _dep_say "  ⚠ Installing system packages needs root and 'sudo' was not found: run as root, or install them yourself."
+    _dep_say "  ❗ Installing system packages needs root and 'sudo' was not found: run as root, or install them yourself."
     return $reqrc
   fi
   if [ -n "$assume" ]; then BVK_DEPS_ASSUME=$assume; fi
   if ! _dep_ask; then
-    _dep_say "  ↩ Not installed."
+    _dep_say "  🔙 Not installed."
     if [ "${_DEP_NOASK:-0}" != 1 ]; then for id in "${miss[@]}"; do [ "${_DEP_REQ[$id]:-1}" = 0 ] && _dep_decline "$id"; done; fi
     return $reqrc
   fi
@@ -779,16 +779,16 @@ _dep_install() {
   if [ "${#_PL_NPM[@]}" -gt 0 ]; then
     if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then bg_npm=1; else late_npm=1; fi
   fi
-  [ $bg_pip = 1 ] && { _dep_say "   ▶ Python packages (in the background): ${_PL_PIP[*]}"; ( _dep_lane_pip ) > "$tmp/pip.log" 2>&1 & pids+=($!); }
-  [ $bg_npm = 1 ] && { _dep_say "   ▶ npm packages (in the background): ${_PL_NPM[*]}"; ( _dep_lane_npm ) > "$tmp/npm.log" 2>&1 & pids+=($!); }
+  [ $bg_pip = 1 ] && { _dep_say "   ⏩ Python packages (in the background): ${_PL_PIP[*]}"; ( _dep_lane_pip ) > "$tmp/pip.log" 2>&1 & pids+=($!); }
+  [ $bg_npm = 1 ] && { _dep_say "   ⏩ npm packages (in the background): ${_PL_NPM[*]}"; ( _dep_lane_npm ) > "$tmp/npm.log" 2>&1 & pids+=($!); }
   _dep_lane_sys
   hash -r 2>/dev/null; _dep_path_fix
   if [ "$late_pip" = 1 ]; then
-    if command -v python3 >/dev/null 2>&1; then _dep_say "   ▶ Python packages (in the background): ${_PL_PIP[*]}"; ( _dep_lane_pip ) > "$tmp/pip.log" 2>&1 & pids+=($!)
+    if command -v python3 >/dev/null 2>&1; then _dep_say "   ⏩ Python packages (in the background): ${_PL_PIP[*]}"; ( _dep_lane_pip ) > "$tmp/pip.log" 2>&1 & pids+=($!)
     else echo "python3 is not available, so the Python packages were skipped" > "$tmp/pip.log"; fi
   fi
   if [ "$late_npm" = 1 ]; then
-    if command -v npm >/dev/null 2>&1; then _dep_say "   ▶ npm packages (in the background): ${_PL_NPM[*]}"; ( _dep_lane_npm ) > "$tmp/npm.log" 2>&1 & pids+=($!)
+    if command -v npm >/dev/null 2>&1; then _dep_say "   ⏩ npm packages (in the background): ${_PL_NPM[*]}"; ( _dep_lane_npm ) > "$tmp/npm.log" 2>&1 & pids+=($!)
     else echo "npm is not available, so the npm packages were skipped" > "$tmp/npm.log"; fi
   fi
   [ "${#pids[@]}" -gt 0 ] && { _dep_say "   … waiting for the background installs"; for p in "${pids[@]}"; do wait "$p" 2>/dev/null; done; }

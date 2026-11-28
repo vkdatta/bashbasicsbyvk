@@ -19,7 +19,7 @@ echo "Working directory: $TARGET"
 TMP_JSON="$(mktemp)"
 trap 'rm -f "$TMP_JSON"' EXIT
 
-echo "▶ Running Pyright..."
+echo "⏩ Running Pyright..."
 
 set +e
 pyright --outputjson > "$TMP_JSON"

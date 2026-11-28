@@ -217,7 +217,7 @@ _chm_cmd() {                 # the _xui_loop handler: 0 redraw · 1 nothing · 3
 # chmod-<items>
 handle_chmod() {
   local raw="$1" i more=""
-  if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁  Google Drive items have no permissions to change."; return 0; fi
+  if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "⛅ Google Drive items have no permissions to change."; return 0; fi
   _sp_guard_and_resolve "${raw#chmod-}" "chmod-" || return 0
   _CHM_PATHS=("${sp_resolved[@]}"); _CHM_MODE=()
   _chm_stat_all

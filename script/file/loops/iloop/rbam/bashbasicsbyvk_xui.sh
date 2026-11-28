@@ -172,7 +172,7 @@ _xui_loop() {
           if [ "$_XUI_DEPTH" -le 1 ]; then
             case "$c" in .r) _inner_next=r ;; -u) _inner_next=upg ;; *) _inner_next="$c" ;; esac
             rc=2
-          else echo "↩  Go back with  u  first."; fi ;;
+          else echo "🔙 Go back with  u  first."; fi ;;
         _*|__sw_tab_*) ;;
         *) _bvk_invalid; rc=0 ;;     # rc 0 -> _xui_fresh redraws THIS menu
       esac

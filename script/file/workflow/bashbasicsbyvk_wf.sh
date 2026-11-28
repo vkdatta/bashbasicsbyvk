@@ -316,10 +316,10 @@ _wf_run() {   # NAME [VALUES for the {$name}s: name=value ... | value ...]
   _wf_set mode play; _wf_set at 0; _wf_set name "${name%.xlr8}"; _wf_set start "$path"; _wf_set screen ""
   if (( ${#_WF_ARGV[@]} )); then for v in "${!_WF_ARGV[@]}"; do printf '%s\n' "${_WF_ARGV[$v]}" > "$BVK_WF_DIR/var.$v"; done; fi
   _WF_ARGV=()
-  echo "▶ Running workflow '${name%.xlr8}' from $path"
+  echo "⏩ Running workflow '${name%.xlr8}' from $path"
 }
 _wf_done() { _wf_get name; [ -t 1 ] && builtin printf '\r\033[K'; echo "✅ Workflow '$_WF_G' finished: all ${#_XL_T[@]} steps."; _wf_off; }
-_wf_say() { [ -t 1 ] && builtin printf '\r\033[K'; echo "▶ $(( $1 + 1 ))/${#_XL_T[@]}  ${_XL_S[$1]}"; }
+_wf_say() { [ -t 1 ] && builtin printf '\r\033[K'; echo "⏩ $(( $1 + 1 ))/${#_XL_T[@]}  ${_XL_S[$1]}"; }
 # the next step that needs a prompt -> _WF_AT.  from / on are settled here.  rc 1 = the run is over (done or failed)
 _wf_next() {   # SCREEN ('' = not a list screen)
   local at t
@@ -499,10 +499,10 @@ _wf_flow() {   # IDX of an if / else / end if -> _WF_FLOW = the index of the ste
   else
     local why=""
     if [ "${_XL_A[$at]}" = asked ] && [ -z "${_XL_K[$at]}" ] && _wf_when_find "${_XL_Q[$at]}"; then _wf_when_why "$_WF_WI"; why="  ($_XL_OUT)"; fi
-    [ -t 1 ] && builtin printf '\r\033[K'; echo "⏭  $(( at + 1 ))/${#_XL_T[@]}  skipped: ${_XL_S[$at]}$why"; _WF_FLOW=$(( ${_XL_J[$at]} + 1 ))
+    [ -t 1 ] && builtin printf '\r\033[K'; echo "⏩ $(( at + 1 ))/${#_XL_T[@]}  skipped: ${_XL_S[$at]}$why"; _WF_FLOW=$(( ${_XL_J[$at]} + 1 ))
   fi
 }
-_wf_skip() { echo "⏭  $(( _WF_AT + 1 ))/${#_XL_T[@]}  not asked this time: ${_XL_S[$_WF_AT]}"; _wf_advance; _wf_next "$1"; }
+_wf_skip() { echo "⏩ $(( _WF_AT + 1 ))/${#_XL_T[@]}  not asked this time: ${_XL_S[$_WF_AT]}"; _wf_advance; _wf_next "$1"; }
 
 # ── hook: a list screen ────────────────────────────────────────────────────
 # reads choice (when recording) / sets choice (when running)
@@ -738,7 +738,7 @@ _wf_prompt() {
   _wf_asks "$at" "$_WF_Q" || { _wf_fail "the app asked '$_WF_Q' but the step answers '${_XL_Q[$at]}'"; return 1; }
   _wf_say "$at"; _wf_advance
   case "$a" in
-    ask) echo "✍  Your turn: type it, then the workflow goes on"; return 1 ;;
+    ask) echo "📝 Your turn: type it, then the workflow goes on"; return 1 ;;
     default) _WF_ANSWER="" ;;
     value) _wf_subst "${_XL_V[$at]}"; _WF_ANSWER="$_XL_OUT" ;;
   esac
@@ -767,7 +767,7 @@ _wf_screen() {   # TITLE
 # ── wf: the list of workflows is the main list on the workflows folder (_wfv_* in bashbasicsbyvk_browse.sh); a number opens the run loop (handle_file)
 _wf_menu() {
   _wf_mode && { echo "🔴  Type stop_record first"; return 0; }
-  [ "${_GD_ACTIVE:-0}" = 1 ] && { echo "☁  Leave Google Drive first (gdx), then type wf"; return 0; }
+  [ "${_GD_ACTIVE:-0}" = 1 ] && { echo "⛅ Leave Google Drive first (gdx), then type wf"; return 0; }
   mkdir -p -- "$_WF_HOME" || { echo "❌ Cannot create $_WF_HOME"; return 0; }
   _wfv_on || _WF_RETURN="$path"
   path="$_WF_HOME"; group_prefix=""; force_show=false; _gv_crumbs=()

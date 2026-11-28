@@ -350,7 +350,7 @@ def t_xui_tabs(a):
     rb0 = '[📤 Give access] 📥 Receive access'
     xs = [hit(cs0, 18, ['📤 Given', '📥 Received']) == 'delta=1',            # on "Received"
           hit(cs1, 4,  ['📤 Given', '📥 Received']) == 'delta=-1',           # on "Given"
-          hit('☁️  Cloud Surf', 3, ['📤 Given', '📥 Received']) == 'none',   # on the title row: not a tab bar
+          hit('⛅ Cloud Surf', 3, ['📤 Given', '📥 Received']) == 'none',   # on the title row: not a tab bar
           hit(rb0, 25, ['📤 Give access', '📥 Receive access']) == 'delta=1']
     return reg and all(xs) and a.alive, 'cs / rbam tab bars: registered=%s hits=%s' % (reg, xs)
 case('cs / rbam: tab bar hit-test on their real header lines', t_xui_tabs, nfiles=20)

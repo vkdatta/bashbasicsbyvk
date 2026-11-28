@@ -48,7 +48,7 @@ if not d.get("ok"):
         "auth_required":   "❌ Email and API key required.",
         "rate_limited":    "⏳ Too many attempts, wait a minute.",
         "ai_unavailable":  "🔴  " + d.get("message", "AI unavailable."),
-        "unsafe_or_invalid_sql": "🛡  Blocked: the AI produced a query that is not a plain read-only SELECT on active_users (" + str(d.get("reason","")) + "). Try rephrasing.",
+        "unsafe_or_invalid_sql": "🔰 Blocked: the AI produced a query that is not a plain read-only SELECT on active_users (" + str(d.get("reason","")) + "). Try rephrasing.",
         "sql_error":       "🔴  The generated SQL failed: " + str(d.get("message","")),
         "insufficient_credits": "💳 " + str(d.get("message","Not enough credits.")),
         "ip_blocked":      "⛔ " + str(d.get("message","Blocked.")),
@@ -244,7 +244,7 @@ PY
           if _bvk_ai_cmd_ok "$cmd"; then
             echo "💡 Try:  $cmd"; [ -n "$note" ] && echo "   $note"
           else
-            echo "🛡  The AI suggested something outside the allowed command list, so it was dropped. Try rephrasing."
+            echo "🔰 The AI suggested something outside the allowed command list, so it was dropped. Try rephrasing."
           fi ;;
         NONE) echo "📜  ${cmd}" ;;
         *)    echo "❌ ${cmd}" ;;

@@ -12,4 +12,4 @@ replay|python3 -I tests/static/t_replay.py
 tidy|python3 -I tests/static/t_tidy.py
 templates|python3 -I tests/static/t_templates.py
 rows|python3 -I tests/static/t_rows.py
-novs16|python3 -I tests/static/t_novs16.py
+icons|python3 -I tests/static/t_icons.py

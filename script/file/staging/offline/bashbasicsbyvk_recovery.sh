@@ -142,7 +142,7 @@ _rb_store() {
   done
   [ ${#keep[@]} -gt 0 ] || return 0
   id=$(_rb_entry_write "$_RB_BIN" "$action" "" "${keep[@]}") || return 1
-  echo "🗂  Kept offline: $(_rb_title "$id")  (Home → Recovery Bin)"
+  echo "📂 Kept offline: $(_rb_title "$id")  (Home → Recovery Bin)"
   return 0
 }
 
@@ -255,7 +255,7 @@ _rb_view_act() {
   _rb_meta "$_RB_VIEW_ROOT" "$id"; label=$(_rb_entry_label "$_RB_VIEW_ROOT" "$id")
   q="$label"; [ -n "$_RBM_target" ] && q+=" · watched path: $_RBM_target"
   for i in "${!_RBM_src[@]}"; do q+=" · from ${_RBM_src[$i]} ($(_rb_hsize "${_RBM_kb[$i]:-0}"))"; done
-  _bvk_menu ans -t "$_RB_VIEW_WHAT" -i "🗂" -q "$q" "r:Restore" "x:Delete (needs the confirmation key)" || return 0
+  _bvk_menu ans -t "$_RB_VIEW_WHAT" -i "📂" -q "$q" "r:Restore" "x:Delete (needs the confirmation key)" || return 0
   case "$ans" in
     r) _rb_restore "$_RB_VIEW_ROOT" "$id" ;;
     x) _rb_delete "$_RB_VIEW_ROOT" "$id" "$label" ;;

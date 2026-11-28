@@ -209,8 +209,8 @@ _pn_complete() {
       case "$verdict" in
         OK)  phase=commit; stuck=0; continue ;;
         TOKEN) stuck=$((stuck + 1)); [ "$stuck" -ge 3 ] && { _pn_set "$d" status interrupted; _pn_unlock "$d"; say "❌ The server keeps refusing the upload token. Kept — try again from Pending (pn)."; return 24; }; continue ;;
-        PAUSED)      _pn_set "$d" status paused; _bb_call POST "/pending/$id/pause" >/dev/null 2>&1; _pn_unlock "$d"; say "⏸  Paused — nothing is lost. Resume it from Pending (pn)."; return 20 ;;
-        INTERRUPTED) _pn_set "$d" status interrupted; _pn_unlock "$d"; say "⏸  Stopped for now — nothing is lost. Continue it from Pending (pn)."; return 21 ;;
+        PAUSED)      _pn_set "$d" status paused; _bb_call POST "/pending/$id/pause" >/dev/null 2>&1; _pn_unlock "$d"; say "⏳ Paused — nothing is lost. Resume it from Pending (pn)."; return 20 ;;
+        INTERRUPTED) _pn_set "$d" status interrupted; _pn_unlock "$d"; say "⏳ Stopped for now — nothing is lost. Continue it from Pending (pn)."; return 21 ;;
         STOPPED)     _pn_unlock "$d"; return 22 ;;
         OFFLINE)     _pn_set "$d" status interrupted; _pn_unlock "$d"; say "📡 Offline for too long. Everything is kept — continue it from Pending (pn) when the connection is back."; return 23 ;;
         *)           _pn_set "$d" status interrupted; _pn_unlock "$d"; say "❌ Some blobs could not be sent. Everything is kept — continue it from Pending (pn)."; return 24 ;;
@@ -247,7 +247,7 @@ _pn_report() {
       [ -n "$_PN_DEDUCTED" ] && _bb_credits "$_PN_DEDUCTED" "$_PN_BALANCE"
       _bb_print_expiry "$_PN_EXPIRES"
       _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE="" ;;
-    backup)   _bb_done_head "Backup"; echo; echo "🗄  $alias" ;;
+    backup)   _bb_done_head "Backup"; echo; echo "💾 $alias" ;;
     saved)    _bb_done_head "Save"; echo; echo "💾 $alias" ;;
     snapshot) _bb_done_head "Snapshot" ;;
     ux)       _bb_done_head "Share"; echo; echo "👥 ${extra:-the chosen} person(s)" ;;
@@ -281,24 +281,24 @@ _pn_continue() {
 _pn_pause() {
   local id="$1" d; d=$(_pn_dir "$id")
   if [ -d "$d" ]; then
-    if _pn_running "$d"; then : > "$d/pause.flag"; echo "⏸  Asked the running transfer to pause…"
+    if _pn_running "$d"; then : > "$d/pause.flag"; echo "⏳ Asked the running transfer to pause…"
       local i; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do _pn_running "$d" || break; sleep 1; done
     fi
     _pn_set "$d" status paused; rm -f "$d/pause.flag"
   fi
   _bb_call POST "/pending/$id/pause"
-  case "$_BB_STATUS" in 200) echo "⏸  Paused. Resume it any time." ;; 404) echo "📜  The server no longer has it." ;; 000) echo "⏸  Paused here (the server could not be reached; it is only a marker there)." ;; *) echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;; esac
+  case "$_BB_STATUS" in 200) echo "⏳ Paused. Resume it any time." ;; 404) echo "📜  The server no longer has it." ;; 000) echo "⏳ Paused here (the server could not be reached; it is only a marker there)." ;; *) echo "❌ $(_bb_fail_reason "$_BB_BODY" "$_BB_STATUS")" ;; esac
 }
 # stop for good: incomplete blobs are deleted on the server and here.  0 stopped · 1 not stopped
 _pn_stop() {
   local id="$1" d; d=$(_pn_dir "$id")
   if [ -d "$d" ] && _pn_running "$d"; then
-    : > "$d/stop.flag"; echo "⏹  Asking the running transfer to stop…"
+    : > "$d/stop.flag"; echo "🛑 Asking the running transfer to stop…"
     local i; for i in 1 2 3 4 5 6 7 8; do _pn_running "$d" || break; sleep 1; done
   fi
   _bb_call DELETE "/pending/$id"
   case "$_BB_STATUS" in
-    200) echo "🗑  Stopped. The incomplete blobs were deleted from the server." ;;
+    200) echo "🚮 Stopped. The incomplete blobs were deleted from the server." ;;
     404) echo "📜  The server had already dropped it." ;;
     409) echo "📜  It had already finished — it is a normal item now (nothing was deleted). Nuke it from its own menu if you do not want it." ;;
     000) echo "📡 Cannot reach the server, so nothing was deleted. Try again when you are online."; return 1 ;;

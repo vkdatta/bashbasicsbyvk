@@ -3,7 +3,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  MODES  (priority, highest first)
 #     ⭐ favourite   a folder that has favourites shows ONLY those
-#     🗂 imaginary   folder too big → grouped view             (fs = show normal)
+#     📂 imaginary   folder too big → grouped view             (fs = show normal)
 #     📁 normal
 #  ns  = leave favourite mode for this visit (ns again = back).  fs  = leave
 #  imaginary mode.  Each override peels one mode:  ns, then fs, shows it all.
@@ -386,7 +386,7 @@ _fav_sw_remove() {                 # _fav_sw_remove <dir> [b | b-1,3 | x]
     sp_resolved=(); _sp_resolve_itemlist "$spec" || return
     selected_items=("${sp_resolved[@]}")
   else
-    select_items_common "🗑 Remove favourite" allow_a || return
+    select_items_common "🚮 Remove favourite" allow_a || return
   fi
   _fav_lock
   _fav_cache_key=""; _fav_load "$dir" >/dev/null 2>&1

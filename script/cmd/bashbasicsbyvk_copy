@@ -119,7 +119,7 @@ else
         process.stdout.write(Buffer.concat([iv, ct, tag]));
     ' "$FILE" > "$ENC_FILE"
 
-    echo "☁ Uploading encrypted content..."
+    echo "⛅ Uploading encrypted content..."
 
     CREDITS_DEDUCTED=""
     CREDITS_BALANCE=""

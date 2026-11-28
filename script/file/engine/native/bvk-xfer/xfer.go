@@ -537,7 +537,7 @@ func cmdXfer(args []string) int {
 	// ── the work list ──
 	var tasks []*xtask
 	missing := func(what string) int {
-		fmt.Fprintf(os.Stderr, "  ⚠  %s is missing on this computer\n", what)
+		fmt.Fprintf(os.Stderr, "  ❗ %s is missing on this computer\n", what)
 		fmt.Println("FAIL")
 		return 2
 	}
@@ -653,7 +653,7 @@ func cmdXfer(args []string) int {
 	}
 
 	if x.alreadyN > 0 {
-		fmt.Fprintf(os.Stderr, "↩  Continuing: %d/%d blob(s) (%d%%) are already on the server — sending the remaining %d.\n", x.alreadyN, x.ntasks, x.alreadyBytes*100/maxI64(1, x.total), len(todo))
+		fmt.Fprintf(os.Stderr, "🔙 Continuing: %d/%d blob(s) (%d%%) are already on the server — sending the remaining %d.\n", x.alreadyN, x.ntasks, x.alreadyBytes*100/maxI64(1, x.total), len(todo))
 	}
 	if rawOn && x.tty {
 		fmt.Fprintln(os.Stderr, "   p = pause · Ctrl-C / Ctrl-Z = stop now and keep it for later (Pending → continue)")
@@ -752,7 +752,7 @@ func cmdXfer(args []string) int {
 		fmt.Fprintf(os.Stderr, "  💾 %s of %s %s are safe on the server (%d/%d blobs) — blobs that were half-sent start again from their first byte.\n", x.fmtB(safe), x.fmtB(x.total), x.unit(), atomic.LoadInt64(&x.doneN), x.ntasks)
 	}
 	for _, m := range errs {
-		fmt.Fprintf(os.Stderr, "  ⚠  %s\n", m)
+		fmt.Fprintf(os.Stderr, "  ❗ %s\n", m)
 	}
 	fmt.Println(verdict)
 	return 0

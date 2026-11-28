@@ -48,7 +48,7 @@ _rb_state() {                                # slot -> _RB_S
     else _RB_S="📨 they asked you — open it to answer"; fi
   elif [ "$_RB_TAB" = 0 ]; then
     if   [ "${_RB_DIN[$k]}" = 1 ]; then _RB_S="💫 active · 🔑 dinons sent"
-    elif [ "${_RB_HELD[$k]}" = 1 ]; then _RB_S="💫 active · ⏸ dinons held (sd-N sends)"
+    elif [ "${_RB_HELD[$k]}" = 1 ]; then _RB_S="💫 active · ⏳ dinons held (sd-N sends)"
     else _RB_S="💫 active · ⏳ dinons not sent yet"; fi
   else
     if [ "${_RB_DIN[$k]}" = 1 ]; then _RB_S="💫 active · 🔑 you can open their files"
@@ -135,7 +135,7 @@ _rb_export() {
 }
 
 _rb_remove() {                               # r-LIST
-  _xui_select_rows "REMOVE" "🗑  Remove which users?" "$1" || return 1
+  _xui_select_rows "REMOVE" "🚮 Remove which users?" "$1" || return 1
   local r k rid n=0 txt
   [ "$_RB_TAB" = 0 ] && txt="They lose access to everything you shared." || txt="You lose access to everything they shared."
   echo "   $txt"
@@ -176,7 +176,7 @@ _rb_answer() {
 _rb_cmd() {
   case "$1" in
     __sw_tab_right__|__sw_tab_left__) _tm_key rb "$1" nowrap || return 1; _RB_LOADED=0; return 3 ;;
-    rbam) echo "↩  Closing RBAM"; return 2 ;;
+    rbam) echo "🔙 Closing RBAM"; return 2 ;;
     ui|ui\ *) _rb_import "${1#ui}"; _RB_LOADED=0; return 0 ;;
     ux)  _rb_export; return 1 ;;
     r-*) _rb_remove "$1"; _RB_LOADED=0; return 0 ;;
@@ -245,7 +245,7 @@ ru_footer() {
 }
 
 _ru_remove() {
-  _xui_select_rows "REMOVE" "🗑  Remove which shares?" "$1" || return 1
+  _xui_select_rows "REMOVE" "🚮 Remove which shares?" "$1" || return 1
   local r k id
   if [ "$_RB_TAB" = 0 ]; then echo "   $_RU_MAIL will no longer see these (the stored data is NOT refunded — only a nuke or a shorter nuke time refunds)."
   else echo "   These disappear from your Cloud Surf (the sender keeps them)."; fi

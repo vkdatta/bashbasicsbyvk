@@ -119,7 +119,7 @@ _find_options_line() {
   [ "$_fo_regex" = 1 ] && r="regex" || r="plain text"
   [ "$_fo_word" = 1 ] && w=" · whole words" || w=""
   [ "$_fo_hidden" = 1 ] && h="yes" || h="no"
-  echo "⚙  $d · $c · $r$w · hidden files: $h"
+  echo "🔧 $d · $c · $r$w · hidden files: $h"
 }
 
 # _find_pattern_prompt <names|contents|both> → "…" text for the question
@@ -144,9 +144,9 @@ _find_apply_report() {
   local n any=0
   n="${_FRS[names_renamed]:-0}";  if [ "$n" -gt 0 ]; then echo "💫 Renamed $n item(s)."; any=1; fi
   n="${_FRS[files_changed]:-0}";  if [ "$n" -gt 0 ]; then echo "💫 Replaced ${_FRS[occurrences]:-0} occurrence(s) in $n file(s)."; any=1; fi
-  n="${_FRS[names_conflict]:-0}"; [ "$n" -gt 0 ] && echo "⚠  $n rename(s) skipped: a file or folder with that name already exists (or two items wanted the same name)."
-  n="${_FRS[names_invalid]:-0}";  [ "$n" -gt 0 ] && echo "⚠  $n rename(s) skipped: the new name is empty, too long or contains a /."
-  n="${_FRS[names_error]:-0}";    [ "$n" -gt 0 ] && echo "⚠  $n rename(s) failed (see the lines above)."
+  n="${_FRS[names_conflict]:-0}"; [ "$n" -gt 0 ] && echo "❗ $n rename(s) skipped: a file or folder with that name already exists (or two items wanted the same name)."
+  n="${_FRS[names_invalid]:-0}";  [ "$n" -gt 0 ] && echo "❗ $n rename(s) skipped: the new name is empty, too long or contains a /."
+  n="${_FRS[names_error]:-0}";    [ "$n" -gt 0 ] && echo "❗ $n rename(s) failed (see the lines above)."
   [ "$any" = 0 ] && echo "Nothing was changed."
   return 0
 }

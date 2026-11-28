@@ -27,7 +27,7 @@ out="$(D="$T/d" DSP="$DSP" BRW="$BRW" bash -c '
   item_icon[$D/a.zip]=file; _pick_rows_raw -r "$D/a.zip" > "$D/../r3"
 ' 2>&1)"
 [ -s "$T/r1" ] && cmp -s "$T/r1" "$T/r2" && ok "_pick_rows_raw == display_items" || { bad "_pick_rows_raw differs from display_items"; echo "$out" | head -5; diff "$T/r1" "$T/r2" | head -6; }
-grep -q '📦 a.zip' "$T/r1" && grep -q '⚙️ run.sh' "$T/r1" && ok "archive and executable icons" || bad "icons"
+grep -q '📦 a.zip' "$T/r1" && grep -q '🔧 run.sh' "$T/r1" && ok "archive and executable icons" || bad "icons"
 grep -q '🔒' "$T/r3" && bad "remote row wears a local lock mark" || ok "remote rows have no lock mark"
 # 5. Find results: Find only supplies DATA (paths + engine extras); the screen is _results_view, the "==" display
 FF="$(bvk_need bashbasicsbyvk_find.sh)"; FR="$(bvk_need bashbasicsbyvk_findrun.sh)"; TW="$(bvk_file bashbasicsbyvk_findrep)"

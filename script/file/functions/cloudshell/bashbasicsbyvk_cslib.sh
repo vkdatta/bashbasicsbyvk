@@ -128,7 +128,7 @@ _cs_bar() {
       if [ -f "$ok" ]; then printf '\r[%s] %3d%%  ✅ Connected        \n\n' "$bar" "$pct"; return 0; fi
       if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then printf '\r[%s] %3d%%  ❌ Aborted          \n\n' "$bar" "$pct"; return 0; fi
       if [ "$pct" -ge 100 ]; then printf '\r[%s] %3d%%  ⏳ Still connecting…\n\n' "$bar" "$pct"; return 0; fi
-      if [ "$pct" -ge 78 ]; then printf '\r[%s] %3d%%  ⚠  Weak connection…' "$bar" "$pct"
+      if [ "$pct" -ge 78 ]; then printf '\r[%s] %3d%%  ❗ Weak connection…' "$bar" "$pct"
       else                       printf '\r[%s] %3d%%  🔄 Connecting…      ' "$bar" "$pct"; fi
     elif [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
       printf '\r[%s] %3d%%  ❌ Aborted          \n\n' "$bar" "$pct"; return 0

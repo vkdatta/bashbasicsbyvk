@@ -74,7 +74,7 @@ cfw_build() {
 }
 
 cfw_row() {
-  _xui_slot "$1"; local s="$_XUI_SLOT" tag="" icon="⚙ " dir="${_CFW_NAME[$_XUI_SLOT]}-recovered"
+  _xui_slot "$1"; local s="$_XUI_SLOT" tag="" icon="🔧 " dir="${_CFW_NAME[$_XUI_SLOT]}-recovered"
   [ "${_CFW_TYPE[$s]}" = Pages ] && { icon="📄"; dir="${_CFW_NAME[$s]}-pages-recovered"; }
   [ -e "$_CFW_NAV/$dir" ] && tag="  💫 recovered here"
   printf -v _vp_line ' %2d) %s %-6s %-30s  %s%s' "$1" "$icon" "${_CFW_TYPE[$s]}" \
@@ -86,7 +86,7 @@ cfw_header() {
   for t in "${_CFW_TYPE[@]}"; do [ "$t" = Worker ] && w=$((w+1)) || p=$((p+1)); done
   local n="📂 $_CFW_NAV"                          # template 7P68NA
   if declare -F _tz_label >/dev/null 2>&1; then n+=$'\n'"🕒 Latest deployment shown in: $(_tz_label)"; fi
-  _tpl_list_header "☁  Cloudflare Workers and Pages   (${w} workers · ${p} pages)" "$n"
+  _tpl_list_header "⛅ Cloudflare Workers and Pages   (${w} workers · ${p} pages)" "$n"
 }
 
 cfw_footer() {
@@ -99,7 +99,7 @@ cfw_footer() {
 _cfw_run() {
   local r s picks=() args=() i
   for r in "${_XUI_SEL[@]}"; do _xui_slot "$r"; picks+=("$_XUI_SLOT"); done
-  echo; echo "☁  Recover ${#picks[@]} item(s) into $_CFW_NAV :"
+  echo; echo "⛅ Recover ${#picks[@]} item(s) into $_CFW_NAV :"
   for s in "${picks[@]}"; do
     echo "     • ${_CFW_TYPE[$s]}  ${_CFW_NAME[$s]}"
     if [ "${_CFW_TYPE[$s]}" = Pages ]; then args+=(-p "${_CFW_NAME[$s]}"); else args+=(-w "${_CFW_NAME[$s]}"); fi
@@ -138,12 +138,12 @@ _cfw_cmd() {
     rf) _cfw_fetch || echo "❌ Refresh failed."; return 0 ;;
     e|e-*) _cfw_export "$1"; return 0 ;;
     r|r-*)
-      _xui_select_rows "RECOVER" "☁  Recover which workers / pages?" "$1" || return 1
+      _xui_select_rows "RECOVER" "⛅ Recover which workers / pages?" "$1" || return 1
       _cfw_run; return 0 ;;
     [0-9]*|a|a-*)
       _xui_parse_sel "$1" || return 1
       _cfw_run; return 0 ;;
-    fx|sw|api|.r|-u) echo "↩  Go back with  u  first."; return 1 ;;   # a hop would leave a stale _inner_next behind
+    fx|sw|api|.r|-u) echo "🔙 Go back with  u  first."; return 1 ;;   # a hop would leave a stale _inner_next behind
     *) return 9 ;;
   esac
 }

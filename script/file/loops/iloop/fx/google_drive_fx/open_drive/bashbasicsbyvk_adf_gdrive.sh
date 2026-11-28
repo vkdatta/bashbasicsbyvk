@@ -39,11 +39,11 @@ gdp_build() {
 gdp_row() {
   _xui_slot "$1"; local s="$_XUI_SLOT" tag=""
   [ "$_GD_ACTIVE" = 1 ] && [ "$_GD_REMOTE" = "${_GDP_NAME[$s]}" ] && tag="  💫 open now"
-  printf -v _vp_line ' %2d) ☁  %-24s  %s%s' "$1" "$(_xui_trunc "${_GDP_NAME[$s]}" 24)" "$(_gdp_when "${_GDP_LAST[$s]}")" "$tag"
+  printf -v _vp_line ' %2d) ⛅ %-24s  %s%s' "$1" "$(_xui_trunc "${_GDP_NAME[$s]}" 24)" "$(_gdp_when "${_GDP_LAST[$s]}")" "$tag"
 }
 
 gdp_header() {                                     # template 7P68NA
-  _tpl_list_header "☁  Google Drive profiles   (${#_GDP_NAME[@]} found in rclone)" "📂 each profile keeps its own settings, buffers and selections in $_GD_BASE/<profile>/"
+  _tpl_list_header "⛅ Google Drive profiles   (${#_GDP_NAME[@]} found in rclone)" "📂 each profile keeps its own settings, buffers and selections in $_GD_BASE/<profile>/"
 }
 
 gdp_footer() {
@@ -61,7 +61,7 @@ _gdp_cmd() {
       if _gd_enter "${_GDP_NAME[$_XUI_SLOT]}"; then return 2; fi
       echo
       return 0 ;;
-    fx|sw|api|.r|-u) echo "↩  Go back with  u  first."; return 1 ;;
+    fx|sw|api|.r|-u) echo "🔙 Go back with  u  first."; return 1 ;;
     *) return 9 ;;
   esac
 }

@@ -25,7 +25,7 @@ _fx_adf_sel_bookmark() { _fx_sel_stage "$_SP_BM_ONCE_FILE" "bookmark"; }
 _fx_adf_sel_upload() {
   local -a sel=()
   _fx_sel_need || return
-  _sel_summary sel "☁  Uploading"
+  _sel_summary sel "⛅ Uploading"
   _up_do_multipart_upload "${sel[@]}"
 }
 
@@ -39,14 +39,14 @@ _fx_adf_sel_upload_text() {
 _fx_adf_sel_map() {
   local -a sel=()
   _fx_sel_need || return
-  _sel_summary sel "🗺  Mapping"
+  _sel_summary sel "🌍 Mapping"
   _map_deliver "$(_map_generate_for_paths "${sel[@]}")"
 }
 
 _fx_adf_sel_zip() {
   local -a sel=()
   _fx_sel_need || return
-  _sel_summary sel "🗜  Compressing"
+  _sel_summary sel "📦 Compressing"
   _compress_paths "${sel[@]}"
 }
 
@@ -60,7 +60,7 @@ _fx_adf_sel_unzip() {
 _fx_adf_sel_delete() {
   local -a sel=()
   _fx_sel_need || return
-  _sel_summary sel "🗑  About to delete"
+  _sel_summary sel "🚮 About to delete"
   _sel_preview sel
   selected_items=("${sel[@]}")
   _fxdel_run_selected

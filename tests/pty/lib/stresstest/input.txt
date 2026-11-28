@@ -59,10 +59,10 @@ delete menu
   1) 📄 AGENTS.md                                                                                                         2) 📁 corpus                                                                                                            3) 📄 LICENSE
   4) 📄 llms-full.txt                                                                                                     5) 📄 llms.txt                                                                                                          6) 📄 MANIFEST.in
   7) 📄 pyproject.toml                                                                                                    8) 📄 README.md                                                                                                         9) 📁 script
- 10) 📄 SECURITY.md                                                                                                      11) 📄 setup.cfg                                                                                                        12) ⚙️ setup.py
+ 10) 📄 SECURITY.md                                                                                                      11) 📄 setup.cfg                                                                                                        12) 🔧 setup.py
  13) 📁 tests                                                                                                              ─────────────────────────────                                                                                        
-DELETE (ranges: 1-10,15-20,33   a = all   a-1-5,7 = all except)                                                         up/down ±1, PgUp/PgDn ±10, Home/End first/last, left/right move cursor                                                                                                                                                                          Item numbers: 1                                                                                                         Are you really sure you want to delete the selected files? This action can't be undone. (y/n): y                        🗄️  Back up 1 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
-🗄️  Name this backup (Enter = just the date and time): n                                                                 …  could become: nf, ns
+DELETE (ranges: 1-10,15-20,33   a = all   a-1-5,7 = all except)                                                         up/down ±1, PgUp/PgDn ±10, Home/End first/last, left/right move cursor                                                                                                                                                                          Item numbers: 1                                                                                                         Are you really sure you want to delete the selected files? This action can't be undone. (y/n): y                        💾 Back up 1 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
+💾 Name this backup (Enter = just the date and time): n                                                                 …  could become: nf, ns
 
 
 it is saying could become nf or ns but what's nf and ns?
@@ -85,8 +85,8 @@ lets test
 
 Item numbers: 2
 Are you really sure you want to delete the selected files? This action can't be undone. (y/n): y
-🗄️  Back up 1 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
-🗄️  Name this backup (Enter = just the date and time): nf
+💾 Back up 1 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
+💾 Name this backup (Enter = just the date and time): nf
 nf  →  ✗ not available here — Enter will cancel  ·  @nf to type it as text
 
 it says even suggestion that nf is not available, bit why the hell then it is giving in first place in suggestion.
@@ -150,8 +150,8 @@ another example
 
 Item numbers: 1,2
 Are you really sure you want to delete the selected files? This action can't be undone. (y/n): y
-🗄️  Back up 2 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
-🗄️  Name this backup (Enter = just the date and time):
+💾 Back up 2 item(s) to the cloud before deleting? [Y/n, c = cancel the delete]: y
+💾 Name this backup (Enter = just the date and time):
 📦 Packing tar.gz → 🔐 encrypting (streamed: the unencrypted archive never touches the disk)
 📦 Packing tar.gz → 🔐 Encrypting  1.2 MB packed  (0s)
    1 MB after tar.gz + encryption, in 1 blob(s).

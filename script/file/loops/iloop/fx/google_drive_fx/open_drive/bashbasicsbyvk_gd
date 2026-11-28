@@ -254,7 +254,7 @@ def ask_yes(prompt):
     Only when the menu is not installed: one plain y/n line on the terminal that asks again until y or n."""
     try:
         import bashbasicsbyvk_yn as _yn
-        return _yn.ask(prompt, title="Google Drive", icon="☁") is True
+        return _yn.ask(prompt, title="Google Drive", icon="⛅") is True
     except ImportError:
         pass
     try:
@@ -748,7 +748,7 @@ def cmd_hydrate(ctx, args):
     total = sum(max(r["size"], 0) for r in todo.values())
     limit = int(os.environ.get("BVK_GD_CONFIRM_MB", "200")) * 1024 * 1024
     if total > limit:
-        if not ask_yes(f"☁  Download {len(todo)} file(s), {fmt_size(total)} from Google Drive first?"):
+        if not ask_yes(f"⛅ Download {len(todo)} file(s), {fmt_size(total)} from Google Drive first?"):
             say("🚫 Cancelled — nothing downloaded.")
             return 4
     stage = tempfile.mkdtemp(prefix="dl-", dir=ctx.tmp)
@@ -1009,11 +1009,11 @@ def cmd_push(ctx, args=None):
     if total["mv"]:
         bits.append(f"⇄ {total['mv']} moved/renamed")
     if total["rm"]:
-        bits.append(f"🗑  {total['rm']} removed" + ("" if os.environ.get("BVK_GD_PERMANENT") == "1" else " (Drive trash)"))
+        bits.append(f"🚮 {total['rm']} removed" + ("" if os.environ.get("BVK_GD_PERMANENT") == "1" else " (Drive trash)"))
     if total["skipped"]:
         bits.append(f"🔴  {total['skipped']} placeholder copy(ies) not uploaded")
     if bits:
-        say("☁  Drive synced: " + " · ".join(bits))
+        say("⛅ Drive synced: " + " · ".join(bits))
     if total["err"]:
         say(f"❌ {total['err']} change(s) could not be pushed — they will be retried next time.")
         return 1
@@ -1415,7 +1415,7 @@ def cmd_recover(ctx, args):
         return 0
     total = sum(f[1] for f in files)
     if total > int(os.environ.get("BVK_GD_CONFIRM_MB", "200")) * 1024 * 1024 and not args.yes:
-        if not ask_yes(f"☁  Download {len(files)} file(s), {fmt_size(total)} to check them (nothing is changed in Drive)?"):
+        if not ask_yes(f"⛅ Download {len(files)} file(s), {fmt_size(total)} to check them (nothing is changed in Drive)?"):
             say("🚫 Cancelled.")
             return 4
     stage = tempfile.mkdtemp(prefix="rc-", dir=ctx.tmp)

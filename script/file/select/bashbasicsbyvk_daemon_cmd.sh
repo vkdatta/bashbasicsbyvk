@@ -37,7 +37,7 @@ _dm_status() {
     _dm_alien_line
     return
   fi
-  if [ ! -f "$_DM_STATUS" ]; then echo "🛰  Local daemon running (pid $pid) — no status yet, give it a few seconds"; _dm_alien_line; return; fi
+  if [ ! -f "$_DM_STATUS" ]; then echo "📡 Local daemon running (pid $pid) — no status yet, give it a few seconds"; _dm_alien_line; return; fi
   python3 - "$_DM_STATUS" "$HOME" <<'PY'
 import json, sys, time
 d = json.load(open(sys.argv[1])); home = sys.argv[2]
@@ -49,16 +49,16 @@ def up(t):
     s = int(time.time() - t) if t else 0
     return "%dd%dh" % (s // 86400, s % 86400 // 3600) if s >= 86400 else ("%dh%dm" % (s // 3600, s % 3600 // 60) if s >= 3600 else "%dm" % (s // 60))
 ix = d.get("index") or {}
-print("🛰  Local daemon v%s  pid %s  watcher: %s  up %s" % (d.get("version"), d.get("pid"), d.get("backend"), up(d.get("started"))))
+print("📡 Local daemon v%s  pid %s  watcher: %s  up %s" % (d.get("version"), d.get("pid"), d.get("backend"), up(d.get("started"))))
 fo = d.get("followed") or {}
 print("   🕐 recents: %s   📌 bookmarks followed: %s (found by inode: %s)   🔒 locks followed: %s   last sync: %s" % (d.get("recents", 0), fo.get("bookmarks", 0), d.get("bookmarks_located", 0), fo.get("locks", 0), ago(d.get("last_track_reconcile"))))
 if d.get("event_batches"):
     print("   ⚡ %s event(s) in %s batch(es)%s" % (d.get("events_seen", 0), d.get("event_batches", 0), ("  — %s dropped (queue full)" % d["events_dropped"]) if d.get("events_dropped") else ""))
 print("   ⭐ favourite folders: %s   moves followed: %s   last sync: %s" % (d.get("fav_folders", 0), d.get("fav_followed", 0), ago(d.get("last_fav_reconcile"))))
 if ix:
-    print("   🗃  index: %s hashes · %s folder sizes" % (format(ix.get("hashes", 0), ","), format(ix.get("dirsizes", 0), ",")))
+    print("   📇 index: %s hashes · %s folder sizes" % (format(ix.get("hashes", 0), ","), format(ix.get("dirsizes", 0), ",")))
 else:
-    print("   🗃  index: off")
+    print("   📇 index: off")
 lw = d.get("last_warm") or []
 print("   🔥 last warm: %s  (%d folder(s))" % (ago(d.get("last_warm_at")), len(lw)))
 for w in lw[-4:]:

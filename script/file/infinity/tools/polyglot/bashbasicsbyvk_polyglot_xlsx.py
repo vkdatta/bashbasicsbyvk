@@ -29,7 +29,7 @@ def _put(ws, row, col, value, bold=False, bg=None, fg="000000", h="left"):
 
 def _banner(ws, title, ncols):
     """Row 1 = title, row 2 = the reliability warning, both merged across the sheet."""
-    for row, text, bg, fg, height in ((1, title, CLR_TITLE_BG, CLR_TITLE_FG, 24), (2, "⚠  " + WARNING, CLR_WARN_BG, CLR_WARN_FG, 44)):
+    for row, text, bg, fg, height in ((1, title, CLR_TITLE_BG, CLR_TITLE_FG, 24), (2, "❗ " + WARNING, CLR_WARN_BG, CLR_WARN_FG, 44)):
         _put(ws, row, 1, text, bold=True, bg=bg, fg=fg, h="center")
         ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
         ws.row_dimensions[row].height = height

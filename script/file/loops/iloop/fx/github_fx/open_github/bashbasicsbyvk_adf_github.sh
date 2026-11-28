@@ -144,7 +144,7 @@ _ghp_cmd() {
       _xui_loop _ghr_cmd
       _xui_leave
       return 0 ;;
-    fx|sw|api|.r|-u) echo "↩  Go back with  u  first."; return 1 ;;
+    fx|sw|api|.r|-u) echo "🔙 Go back with  u  first."; return 1 ;;
     *) return 9 ;;
   esac
 }
@@ -273,7 +273,7 @@ _ghx_ask_field() {
   if [ "${#_GHX_PICK[@]}" -eq 1 ]; then
     cur="$(_ghx_current "${_GHX_PICK[0]}" "$file"; printf x)"; cur="${cur%x}"
     if [ "$multi" = 1 ]; then
-      echo "   ✏  $name of ${_GHX_PICK[0]} — the editor opens; save and close it."
+      echo "   📝 $name of ${_GHX_PICK[0]} — the editor opens; save and close it."
       _ghx_editor "$cur" || return 1; new="$_GHX_TEXT"
     else
       _bvk_read new "   New $name: " -i "$cur" -I || return 1
@@ -282,11 +282,11 @@ _ghx_ask_field() {
     printf '%s' set > "$_GHX_JOB/$file.mode"; printf '%s' "$new" > "$_GHX_JOB/$file.a"
     return 0
   fi
-  _bvk_menu mode -t "How to change the $name of ${#_GHX_PICK[@]} items" -i "✏" \
+  _bvk_menu mode -t "How to change the $name of ${#_GHX_PICK[@]} items" -i "📝" \
     "s:Set it to one new text for all" "f:Find and replace a piece of text" "p:Add text at the start" "a:Add text at the end" || return 1
   local hint=""; [ "$multi" = 1 ] && hint="  (type \\n for a new line)"
   case "$mode" in
-    s) if [ "$multi" = 1 ]; then echo "   ✏  the editor opens: write the text every item gets."; _ghx_editor "" || return 1; a="$_GHX_TEXT"
+    s) if [ "$multi" = 1 ]; then echo "   📝 the editor opens: write the text every item gets."; _ghx_editor "" || return 1; a="$_GHX_TEXT"
        else _bvk_read a "   New $name for all: " -I || return 1; fi
        printf '%s' set > "$_GHX_JOB/$file.mode"; printf '%s' "$a" > "$_GHX_JOB/$file.a" ;;
     f) _bvk_read a "   Find$hint: " -I || return 1; [ -n "$a" ] || { echo "   (nothing to find)"; return 2; }
@@ -313,7 +313,7 @@ _ghx_yes_rc() {
 
 # ── edit
 _ghx_s_ed_fields() {
-  _bvk_menu fields -m -t "Edit ${#_GHX_PICK[@]} item(s)" -i "✏" -q "What do you want to change?" \
+  _bvk_menu fields -m -t "Edit ${#_GHX_PICK[@]} item(s)" -i "📝" -q "What do you want to change?" \
     "t:Release title" "n:Release notes" "m:Tag message" "c:Commit message" || { _bvk_back && return 1; return 3; }
   [ -n "$fields" ] || { echo "🚫 Nothing chosen."; return 3; }
   return 0
@@ -330,7 +330,7 @@ _ghx_s_ed_ask() {                # one question per chosen field; u at any of th
   done
   [ "$any" = 1 ] || { echo "📜  Nothing to change."; return 3; }
   _ghx_job_tags
-  echo; echo "✏  Change:"
+  echo; echo "📝 Change:"
   for k in t n m c; do [ -f "$_GHX_JOB/$(_ghx_field_file "$k").mode" ] && echo "   • $(_ghx_field_name "$k")  ($(<"$_GHX_JOB/$(_ghx_field_file "$k").mode"))"; done
   echo "   on:"; _ghx_show_picked
   return 0
@@ -338,7 +338,7 @@ _ghx_s_ed_ask() {                # one question per chosen field; u at any of th
 _ghx_s_ed_move() {
   [ -f "$_GHX_JOB/commit_message.mode" ] || return 5
   echo
-  echo "⚠  A commit cannot be edited in place: this makes a NEW commit with the same files and parents"
+  echo "❗ A commit cannot be edited in place: this makes a NEW commit with the same files and parents"
   echo "   (signatures are lost) and moves the tag(s) to it. Branches keep the old commit unless you say so."
   local rc; rm -f "$_GHX_JOB/move_branch"
   _bvk_ask ans "Also move any branch that ends exactly at the old commit?"; rc=$?
@@ -422,17 +422,17 @@ _ghx_rename() {
 # ── delete
 _ghx_s_del_what() {
   if [ "$_GHX_TAB" = stable ]; then
-    _bvk_menu what -t "Delete ${#_GHX_PICK[@]} stable release(s)" -i "🗑" \
+    _bvk_menu what -t "Delete ${#_GHX_PICK[@]} stable release(s)" -i "🚮" \
       "r:Delete the release only (the git tag stays)" "b:Delete the release AND its git tag" || { _bvk_back && return 1; return 3; }
   else
-    _bvk_menu what -t "Delete ${#_GHX_PICK[@]} tag(s)" -i "🗑" \
+    _bvk_menu what -t "Delete ${#_GHX_PICK[@]} tag(s)" -i "🚮" \
       "t:Delete the tag only (a release on it becomes a draft on GitHub)" "b:Delete the tag AND its release" || { _bvk_back && return 1; return 3; }
   fi
   return 0
 }
 _ghx_s_del_ok() {
   local rc
-  echo; echo "🗑  Delete from $_GHX_REPO  (cannot be undone from here):"; _ghx_show_picked
+  echo; echo "🚮 Delete from $_GHX_REPO  (cannot be undone from here):"; _ghx_show_picked
   case "$what" in r) echo "   → release only" ;; t) echo "   → tag only" ;; b) echo "   → release and tag" ;; esac
   _bvk_ask ans "Delete ${#_GHX_PICK[@]} item(s)?" -d none; rc=$?
   _ghx_yes_rc "$rc" "$ans"
@@ -448,7 +448,7 @@ _ghx_delete() {
 
 # ── download
 _ghx_s_dl_how() {
-  _bvk_menu how -t "Download ${#_GHX_PICK[@]} item(s) — clone at the $([ "$_GHX_TAB" = branches ] && echo branch || echo tag)" -i "⬇" \
+  _bvk_menu how -t "Download ${#_GHX_PICK[@]} item(s) — clone at the $([ "$_GHX_TAB" = branches ] && echo branch || echo tag)" -i "⏬" \
     "d:With depth — only the last N commits (fast, small)" "f:Without depth — the full history" || { _bvk_back && return 1; return 3; }
   return 0
 }
@@ -475,7 +475,7 @@ _ghx_s_dl_dest() {
 }
 _ghx_s_dl_go() {
   local rc
-  echo; echo "⬇  ${#_GHX_PICK[@]} item(s) → $dest/$(_xui_trunc "${_GHX_REPO#*/}" 30)-<tag>/   ($([ "$depth" -gt 0 ] && echo "depth $depth" || echo "full history")$([[ "$withrel" == [yY]* ]] && echo ", with release notes and files"))"
+  echo; echo "⏬ ${#_GHX_PICK[@]} item(s) → $dest/$(_xui_trunc "${_GHX_REPO#*/}" 30)-<tag>/   ($([ "$depth" -gt 0 ] && echo "depth $depth" || echo "full history")$([[ "$withrel" == [yY]* ]] && echo ", with release notes and files"))"
   _ghx_show_picked
   _bvk_ask ans "Start?"; rc=$?
   _ghx_yes_rc "$rc" "$ans"
@@ -512,7 +512,7 @@ _ghx_s_cr_tagmsg() {
   _bvk_ask ans "Make it an annotated tag with a message?"; rc=$?
   (( rc == 1 )) && return 1
   (( rc == 0 )) || { echo "🚫 Cancelled"; return 3; }
-  case "$ans" in [yY]*) echo "   ✏  the editor opens: write the tag message."; _ghx_editor "" && msg="$_GHX_TEXT" ;; esac
+  case "$ans" in [yY]*) echo "   📝 the editor opens: write the tag message."; _ghx_editor "" && msg="$_GHX_TEXT" ;; esac
   return 0
 }
 _ghx_s_cr_title() {
@@ -668,7 +668,7 @@ _ghx_users_x() {
   local picked="" ans="" i k keep=() rows=() n
   [ "${#_GHX_USERS[@]}" -gt 0 ] || { echo "📜  No saved user names."; return 1; }
   for i in "${!_GHX_USERS[@]}"; do rows+=("$((i+1)):${_GHX_USERS[$i]}"); done
-  _bvk_menu picked -m -t "Remove GitHub user names" -i "🗑" -q "Which user names do you want to remove?" "${rows[@]}" || return 1
+  _bvk_menu picked -m -t "Remove GitHub user names" -i "🚮" -q "Which user names do you want to remove?" "${rows[@]}" || return 1
   [ -n "$picked" ] || { echo "🚫 Nothing chosen."; return 1; }
   n=0; for k in $picked; do n=$((n+1)); done
   _bvk_ask ans "Remove $n user name(s)? Their repos disappear from this list." -d none; _ghx_yes_rc $? "$ans" || return 1
@@ -710,7 +710,7 @@ _gho_cmd() {
       _xui_loop _ghu_cmd
       _xui_leave
       return 0 ;;
-    fx|sw|api|.r|-u) echo "↩  Go back with  u  first."; return 1 ;;
+    fx|sw|api|.r|-u) echo "🔙 Go back with  u  first."; return 1 ;;
     *) return 9 ;;
   esac
 }
@@ -735,7 +735,7 @@ _ghu_cmd() {
       _xui_loop _ghq_cmd
       _xui_leave
       return 0 ;;
-    fx|sw|api|.r|-u) echo "↩  Go back with  u  first."; return 1 ;;
+    fx|sw|api|.r|-u) echo "🔙 Go back with  u  first."; return 1 ;;
     *) return 9 ;;
   esac
 }

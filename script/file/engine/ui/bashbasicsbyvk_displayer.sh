@@ -1041,7 +1041,7 @@ _icon_for_path_v() {
       archive)  _ip_icon="📦" ;;
       image)    _ip_icon="🌄" ;;
       plugin)   _ip_icon="🧩" ;;
-      exec)     _ip_icon="⚙"  ;;
+      exec)     _ip_icon="🔧"  ;;
       *)        _ip_icon="📄" ;;
     esac
   else
@@ -1049,7 +1049,7 @@ _icon_for_path_v() {
     elif _is_archive "$f";    then _ip_icon="📦"
     elif _is_image   "$f";    then _ip_icon="🌄"
     elif _is_plugin  "$f";    then _ip_icon="🧩"
-    elif _is_executable "$f"; then _ip_icon="⚙"
+    elif _is_executable "$f"; then _ip_icon="🔧"
     else                           _ip_icon="📄"
     fi
   fi
@@ -1091,7 +1091,7 @@ _shortcut_display_parts() {
   [ -z "$sc_name" ] && sc_name="${sc_file##*/}" && sc_name="${sc_name%.shortcut}"
   local _broken=""
   [ -n "$sc_target" ] && [ ! -e "$sc_target" ] && _broken=" 🔴 (broken)"
-  if [ "$sc_type" == "dir" ]; then _sc_icon="🔑"; else _sc_icon="🗝"; fi
+  if [ "$sc_type" == "dir" ]; then _sc_icon="🔑"; else _sc_icon="🔑"; fi
   _sc_display="${sc_name}${_broken}"
 }
 
@@ -1277,10 +1277,10 @@ _gv_banner_line() {
   local s
   if [ "${#_gv_crumbs[@]}" -gt 0 ]; then
     s="${_gv_crumbs[*]}"; s="${s// / → }"
-    printf '🗂  Group view: %s' "$s"
+    printf '📂 Group view: %s' "$s"
   else
     s="${group_view_levels[*]}"; s="${s// / → }"
-    printf '🗂  Group view: %s  (change in Settings → Group by)' "$s"
+    printf '📂 Group view: %s  (change in Settings → Group by)' "$s"
   fi
 }
 

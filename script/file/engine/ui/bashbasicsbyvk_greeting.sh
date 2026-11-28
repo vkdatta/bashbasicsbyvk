@@ -28,9 +28,9 @@ declare -g -a _GR_T_EARLY=(      # 04:00–05:59
   "Up before the sun, {n}? Respect 🌅"
   "Good morning, early bird {n} 🐦")
 declare -g -a _GR_T_MORNING=(    # 06:00–11:59
-  "Good morning, {n} ☀"
+  "Good morning, {n} 🌞"
   "Morning, {n} — coffee first, commands second ☕"
-  "Rise and shine, {n} 🌤"
+  "Rise and shine, {n} ⛅"
   "Hello {n}, fresh day, fresh folders 📂")
 declare -g -a _GR_T_NOON=(       # 12:00–16:59
   "Good afternoon, {n} 🌞"
@@ -51,7 +51,7 @@ declare -g -a _GR_D_2=("Tuesday, {n} — the week is warming up" "Happy Tuesday,
 declare -g -a _GR_D_3=("Hump day, {n} 🐪 — halfway there" "Wednesday, {n} — it's downhill from here" "Mid-week check-in, {n}")
 declare -g -a _GR_D_4=("Thursday, {n} — Friday is in sight 👀" "Almost Friday, {n}!" "Hey {n}, it's Thursday: Friday's warm-up act")
 declare -g -a _GR_D_5=("Friday, {n}! 🎉 Almost there" "TGIF, {n} 🥳" "Hey {n}, the weekend is knocking 🚪")
-declare -g -a _GR_D_6=("Happy Saturday, {n} 🛋 — no meetings, only folders" "Weekend mode on, {n} 😎" "Saturday, {n} — side-project hours 🛠")
+declare -g -a _GR_D_6=("Happy Saturday, {n} 🪑 — no meetings, only folders" "Weekend mode on, {n} 😎" "Saturday, {n} — side-project hours 🔨")
 declare -g -a _GR_D_7=("Lazy Sunday, {n} ☕" "Sunday, {n} — a little tidying before Monday? 🧹" "Hello {n}, Sunday vibes 🌿")
 
 # fixed-date holidays:  MMDD|where|text     where = * (everywhere) · IN (only in a +05:30 zone)
@@ -62,9 +62,9 @@ declare -g -a _GR_HOLIDAYS=(
   "0314|*|Happy Pi Day, {n} — 3.14159265… 🥧"
   "0401|*|Happy April Fools' Day, {n} 🤡 — trust nothing, not even this greeting"
   "0422|*|Happy Earth Day, {n} 🌍"
-  "0501|*|Happy Labour Day, {n} — go easy on yourself 🛠"
+  "0501|*|Happy Labour Day, {n} — go easy on yourself 🔨"
   "0815|IN|Happy Independence Day, {n} 🇮🇳"
-  "1002|IN|Happy Gandhi Jayanti, {n} 🕊"
+  "1002|IN|Happy Gandhi Jayanti, {n} 🐦"
   "1031|*|Happy Halloween, {n} 🎃 — trick or treat?"
   "1224|*|Merry Christmas Eve, {n} 🎄"
   "1225|*|Merry Christmas, {n} 🎅"

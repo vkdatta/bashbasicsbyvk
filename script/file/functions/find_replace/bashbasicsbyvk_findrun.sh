@@ -115,7 +115,7 @@ _fr_apply() {
       for p in "${_FR_LIST[@]}"; do [ -f "$p" ] && doomed+=("$p"); done      # folders in the list are name hits: a rename keeps their content
     fi
     if [ "${#doomed[@]}" -gt 0 ]; then
-      echo "🗄  Backing up ${#doomed[@]} file(s) before the replace…"
+      echo "💾 Backing up ${#doomed[@]} file(s) before the replace…"
       _bk_guard findreplace "${doomed[@]}" || { echo "🚫 Nothing was changed."; return 1; }
     fi
   fi
@@ -145,7 +145,7 @@ _fr_results_fill() {
   return 0
 }
 
-# _fr_problems  — after an apply the engine has no path list, only the lines of what could not be done (⚠ …): print them as they are
+# _fr_problems  — after an apply the engine has no path list, only the lines of what could not be done (❗ …): print them as they are
 _fr_problems() { [ -s "$_FR_TMP/lines" ] && cat "$_FR_TMP/lines"; return 0; }
 
 # _fr_notes — one-line warnings the person must not miss (things that were skipped / failed)
@@ -153,8 +153,8 @@ _fr_notes() {
   local n
   n="${_FRS[skipped_binary]:-0}";  [ "$n" -gt 0 ] && echo "📜  $n binary file(s) skipped (Settings → Find & replace → Binary files)"
   n="${_FRS[skipped_large]:-0}";   [ "$n" -gt 0 ] && echo "📜  $n file(s) over the size limit skipped (Settings → Find & replace → Big files)"
-  n="${_FRS[content_errors]:-0}";  [ "$n" -gt 0 ] && echo "⚠  $n file(s) could not be read or edited (listed above with the reason)"
-  n="${_FRS[unreadable]:-0}";      [ "$n" -gt 0 ] && echo "⚠  $n folder(s) could not be opened (permission?)"
+  n="${_FRS[content_errors]:-0}";  [ "$n" -gt 0 ] && echo "❗ $n file(s) could not be read or edited (listed above with the reason)"
+  n="${_FRS[unreadable]:-0}";      [ "$n" -gt 0 ] && echo "❗ $n folder(s) could not be opened (permission?)"
   return 0
 }
 

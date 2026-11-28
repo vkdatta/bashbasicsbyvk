@@ -10,6 +10,8 @@ eval "$(sed -n '/^_vp_strip_ansi()/,/^}/p;/^_vp_in_set()/,/^}/p;/^_vp_cpw()/,/^}
 declare -F _vp_cells >/dev/null || { bad "_vp_cells not found"; echo FAILED; exit 1; }
 chk() { _vp_cells "$2"; [ "$_vp_w" = "$1" ] && ok "$1 cells: ${2//$'\033'/<ESC>}" || bad "want $1 got $_vp_w: ${2//$'\033'/<ESC>}"; }
 chk 3  "abc"
+chk 14 " 12) 🔧 run.sh"          # the gear icon is the 2-cell 🔧 (rule 6b): 4 + 1 + 2 + 1 + 6
+chk 14 "❗ 🚮 ⛅ 💾 📝"          # every icon that replaced a 1-cell one is 2 cells (5 icons x 2 + 4 spaces)
 chk 15 " 1) 📁 file.txt"
 chk 14 " 12) ⚙️  run.sh"
 chk 22 " 3) 🌄 pic.png | 12 KB"

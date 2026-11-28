@@ -271,6 +271,6 @@ _csv_stage_selected() {
 
     echo "📌 Staged for $label: ${staged}/${_csv_total} names"
     _csv_print_failures
-    [ "$staged" -gt 0 ] && echo "▶  Navigate to destination, then use d- to apply."
+    [ "$staged" -gt 0 ] && echo "⏩ Navigate to destination, then use d- to apply."
     return 0
 }

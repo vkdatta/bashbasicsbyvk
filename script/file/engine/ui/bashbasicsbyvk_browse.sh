@@ -17,7 +17,7 @@ get_abs_path() {
 # ~ and relative paths work; surrounding quotes (from a paste or a drag) are dropped.
 handle_goto() {
   local arg="${1#goto}" dest target
-  if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁  Google Drive is open — leave it with gdx first, then use goto"; return 0; fi
+  if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "⛅ Google Drive is open — leave it with gdx first, then use goto"; return 0; fi
   arg="${arg#"${arg%%[![:space:]]*}"}"
   dest="$arg"
   if [ -z "$dest" ]; then
@@ -348,13 +348,13 @@ _bvk_build_path_items() {
 # ── ONE item-picker screen for every "choose items to <action>" job in the folder view (Rename, Delete, Remove bookmark / favourite, Unorganise, Extract, Info ...)
 #     <icon> <Title>
 #
-#     📂 cd path / ☁ nav path        (the same rows as the folder view: _loc_rows)
+#     📂 cd path / ⛅ nav path        (the same rows as the folder view: _loc_rows)
 #
 #     Select items to <action>
 #     ─────  the rows  ─────
 #     u) Up   q) Close
 #     Select:
-# A caller passes only its title ("🗑 Delete"); the action in the sentence is the title without the icon, in lower case.
+# A caller passes only its title ("🚮 Delete"); the action in the sentence is the title without the icon, in lower case.
 # The layout is the template 7UH852 (templates/bashbasicsbyvk_7UH852.sh.tpl); this file only hands it the data.
 _pk_header() {
   _tpl_clear; _tpl_set menu_name "$_PK_TITLE" what "$_PK_WHAT" action "$_PK_ACTION" nav_path_text "" footer_style row footer_items "u.up q h:Home cc:Cheat_codes"
@@ -582,7 +582,7 @@ _bvk_hdr_status() {
 #   [🔔 Notifications 0]  [🐌 Pending 1]
 #
 #   📂 cd path: /data/data/com.termux/files/home          <- where the CURRENT SHELL is cd'ed ($PWD: it does not move while you browse)
-#   ☁ nav path: /data/data/com.termux/files/home         <- where you are browsing (Drive / group / filter marks go here)
+#   ⛅ nav path: /data/data/com.termux/files/home         <- where you are browsing (Drive / group / filter marks go here)
 # The layout is the template JR9TZ5 (templates/bashbasicsbyvk_JR9TZ5.sh.tpl); $1 = the function that prints the notice rows under the location rows.
 _menu_header() {
   _tpl_clear; _tpl_set header_notes "${1:-}"
@@ -593,7 +593,7 @@ _menu_header() {
 _loc_cd_row() { echo "📂 cd path: $PWD"; }
 _loc_nav_row() {
   if [ "${_GD_ACTIVE:-0}" = 1 ]; then _gd_view_path "$path"; else _gd_vp="$path"; fi      # Google Drive open: show the Drive path, not the mirror folder
-  local _hdr_loc="☁ nav path: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
+  local _hdr_loc="⛅ nav path: $_gd_vp${group_prefix:+ [group: ${group_prefix^^}*]}"
   if [ -n "${_RES_HDR:-}" ]; then
     _hdr_loc+="  $_RES_HDR"                                # a results screen (_results_view: Find hits, a preview) names itself here, in the place the "=" filter writes its own text
   elif [ -n "$_filter_query" ]; then
@@ -695,7 +695,7 @@ _pick_rows_raw() {
 
 # ── ONE pick screen for "choose files by GROUP" (delete by extension, delete by date, ...) — template MG2374, same chrome as the pickers above ──
 #   _pick_groups [-i ICON] [-w WORD] WHAT JOB NOUN NAV FILES KEYS LABELS OF OUT      (the last five are variable NAMES in the caller)
-#     WHAT / JOB / NOUN   "extensions" "delete" "extensions"  →  🗑 Select extensions to delete · Suggestion: Use s-N command to pick extensions
+#     WHAT / JOB / NOUN   "extensions" "delete" "extensions"  →  🚮 Select extensions to delete · Suggestion: Use s-N command to pick extensions
 #     NAV      the path shown on the nav row            FILES  the files (array)           KEYS  the group keys in row order (array)
 #     LABELS   key → the row text (assoc)               OF     file → its group key (assoc)    OUT  the picked files (array, filled)
 #   Like the Transfer picker, a pick is MARKED, not final: the row shows a green + (a ~ when only some of its files are marked) and the
@@ -812,7 +812,7 @@ _pick_groups() {
 
 # cd: leave the app and open a shell in the folder being browsed (the main loop's  cd  and every screen whose footer prints  cd) Change directory)
 _bvk_cd_shell() {
-  if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "☁  A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; return 0; fi
+  if [ "${_GD_ACTIVE:-0}" = 1 ]; then echo "⛅ A shell inside the Drive mirror would see empty placeholders — leave with gdx first (or use t to copy out)"; return 0; fi
   _rc_record "$path"; _lt_cleanup; cd "$path" && exec "$SHELL"      # the in-app cd: the folder joins Recents
 }
 

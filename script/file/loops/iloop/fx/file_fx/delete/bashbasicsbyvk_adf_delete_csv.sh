@@ -13,7 +13,7 @@ _fx_adf_delete_select_csv() {
     open_csv_menu || return
     [ -z "$csv_file" ] && return
     _csv_resolve_report "Deleting" || return
-    _sel_summary selected_items "🗑  About to delete"
+    _sel_summary selected_items "🚮 About to delete"
     _sel_preview selected_items
     _fxdel_run_selected; _rc=$?
     [ "$_rc" = 1 ] || return "$_rc"

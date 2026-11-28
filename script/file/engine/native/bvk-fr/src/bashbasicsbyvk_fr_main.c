@@ -169,7 +169,7 @@ static bool reportable(const item_t *it, int mode) {
 
 static void print_item(FILE *o, const cli_t *c, const item_t *it, size_t idx, size_t rootlen, int mode) {
     const char *rel = it->path + rootlen;
-    if (mode == M_APPLY) fputs("  ⚠ ", o);
+    if (mode == M_APPLY) fputs("  ❗ ", o);
     else fprintf(o, "%4zu) ", idx);
     put_esc(o, rel);
     if (it->typ == IT_DIR) fputc('/', o);
@@ -178,11 +178,11 @@ static void print_item(FILE *o, const cli_t *c, const item_t *it, size_t idx, si
         put_esc(o, it->newname);
         if (it->typ == IT_DIR) fputc('/', o);
     }
-    if (it->nstate == NS_CONFLICT) fputs("   ⚠ skipped: a name like that already exists", o);
-    else if (it->nstate == NS_INVALID) fputs("   ⚠ skipped: not a usable name", o);
-    else if (it->nstate == NS_ERROR) fprintf(o, "   ⚠ %s", why(it->nerr));
+    if (it->nstate == NS_CONFLICT) fputs("   ❗ skipped: a name like that already exists", o);
+    else if (it->nstate == NS_INVALID) fputs("   ❗ skipped: not a usable name", o);
+    else if (it->nstate == NS_ERROR) fprintf(o, "   ❗ %s", why(it->nerr));
     if (it->cstate == CS_MATCH || it->cstate == CS_DONE) fprintf(o, "  (%llu match%s)", (unsigned long long)it->occ, it->occ == 1 ? "" : "es");
-    if (it->cstate == CS_ERROR) fprintf(o, "   ⚠ not edited: %s", why(it->cerr));
+    if (it->cstate == CS_ERROR) fprintf(o, "   ❗ not edited: %s", why(it->cerr));
     fputc('\n', o);
     if (it->snippet && mode != M_APPLY) {
         fprintf(o, "        L%u: ", it->line);

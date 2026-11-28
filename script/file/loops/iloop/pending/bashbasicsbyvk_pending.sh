@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bashbasicsbyvk_pending.sh — the  pn  menu: PENDING FILEAPI ACTIONS (Home → Pending, or type  pn)
 # ════════════════════════════════════════════════════════════════════════════
-#   ⏸ Pending FileAPI actions
+#   ⏳ Pending FileAPI actions
 #    1) Upload (up-)          2 pending ›
 #    2) RBAM share (ux-)      ›
 #    3) Backup                ›
@@ -184,7 +184,7 @@ _pn_top_act() {
       echo
       while read -r id; do
         d=$(_pn_dir "$id"); [ "$(_pn_status "$d")" = interrupted ] || continue
-        n=$((n + 1)); echo "▶  ${id:0:10}…  $(_pn_get "$d" name)"
+        n=$((n + 1)); echo "⏩ ${id:0:10}…  $(_pn_get "$d" name)"
         _pn_continue "$d"
       done < <(_pn_local_ids)
       [ $n -eq 0 ] && echo "  Nothing interrupted on this computer."
@@ -200,7 +200,7 @@ _pn_top_act() {
 pending_menu() {
   _dep_need -c "Pending uploads" fileapi.pending || return
   local _icon_keep="${_st_icon:-}" _st_crumb="Pending"
-  _st_icon="⏸"
+  _st_icon="⏳"
   _pn_gc
   builtin printf '\n'
   _pn_srv_load || true       # opening the menu asks the server (smartload shows the bar while it waits)

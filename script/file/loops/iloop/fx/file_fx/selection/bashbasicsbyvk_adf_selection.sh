@@ -214,7 +214,7 @@ _fx_sel_stage() {                   # _fx_sel_stage <buffer-file> <label>
   local msg="📌 Staged for $2: $_CSV_ADDED/${#sel[@]} item(s)"
   [ "${#_CSV_DUPES[@]}" -gt 0 ] && msg="$msg (${#_CSV_DUPES[@]} already staged)"
   echo "$msg"
-  [ "$_CSV_ADDED" -gt 0 ] && echo "▶  Navigate to destination, then use d- to apply."
+  [ "$_CSV_ADDED" -gt 0 ] && echo "⏩ Navigate to destination, then use d- to apply."
 }
 
 _fx_adf_sel_view() {

@@ -147,16 +147,16 @@ _sp_view_set() {
         ;;
       clr|CLR)
         if [ -n "$name" ]; then
-          _bvk_yn confirm "Clear set '$name' from the $label buffer?" -d none -i "🗑" || confirm=n
-          if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then _sp_drop "$file" "$name"; echo "🗑  Set '$name' cleared"; return 0
+          _bvk_yn confirm "Clear set '$name' from the $label buffer?" -d none -i "🚮" || confirm=n
+          if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then _sp_drop "$file" "$name"; echo "🚮 Set '$name' cleared"; return 0
           else echo "🚫 Cancelled"; fi
         else
           local what="the $label buffer"
           [ "$grouped" = 1 ] && what="the flat items of the $label buffer"
-          _bvk_yn confirm "Clear $what?" -d none -i "🗑" || confirm=n
+          _bvk_yn confirm "Clear $what?" -d none -i "🚮" || confirm=n
           if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
             _sp_drop_unnamed "$file"
-            echo "🗑  $label buffer cleared"
+            echo "🚮 $label buffer cleared"
             return 0
           else
             echo "🚫 Cancelled"
@@ -259,7 +259,7 @@ _sp_view_one_buffer() {
         _bvk_yn confirm "Clear the entire $label buffer?" -d none
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
           : > "$file"
-          echo "🗑  $label buffer cleared"
+          echo "🚮 $label buffer cleared"
           return 0
         else
           echo "🚫 Cancelled"
@@ -299,7 +299,7 @@ handle_staging_view() {
       rows+=("$cell)")
     done
 
-    _mc_header "🗂  Shortpath buffers"
+    _mc_header "📂 Shortpath buffers"
     _mc_options 1 "${rows[@]}"
     _mc_footer_std "clr:Clear all buffers"
     _mc_read v_choice "View buffer: " || { _mc_unwind; return 0; }      # rc != 0: the flow was cancelled → leave at once
@@ -318,7 +318,7 @@ handle_staging_view() {
         _bvk_yn confirm "Clear ALL ten buffers? This can't be undone." -d none
         if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
           for r in "${_SP_VIEW_ROWS[@]}"; do : > "$(_sp_file_for "${r% *}" "${r#* }")"; done
-          echo "🗑  All buffers cleared"
+          echo "🚮 All buffers cleared"
         else
           echo "🚫 Cancelled"
         fi

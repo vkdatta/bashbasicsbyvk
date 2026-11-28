@@ -304,7 +304,7 @@ def render_one(evs, T, R, cols, meta, history_rows, probe=True, full=False):
 
     out = []
     A = out.append
-    A("⏱  LOADTIME — %s → %s" % (frm, to))
+    A("⏰ LOADTIME — %s → %s" % (frm, to))
     if T.name == "o" and frm == "shell":
         A("   launch: you ran  o  →  %s is drawn and waiting for a key" % to)
     else:
@@ -505,14 +505,14 @@ def main(argv):
     evs = load(log)
     pairs = pairs_of(evs)
     if not pairs:
-        print("⏱  LOADTIME\n   Nothing measured yet — move to another screen first (open a folder, press s …), then type loadtime.")
+        print("⏰ LOADTIME\n   Nothing measured yet — move to another screen first (open a folder, press s …), then type loadtime.")
         return 0
     toks = pick.split()
     full = "full" in toks
     pick = "all" if "all" in toks else next((t for t in toks if t.isdigit()), "1")
     if pick == "all":
         width = max(60, min(cols, 110))
-        print("⏱  LOADTIME — every screen change this session (newest first)")
+        print("⏰ LOADTIME — every screen change this session (newest first)")
         print("─" * width)
         n = len(pairs)
         for line in history_table(pairs, evs, -1, limit=25, cols=width):
@@ -525,7 +525,7 @@ def main(argv):
     except ValueError:
         k = 1
     if k > len(pairs):
-        print("⏱  LOADTIME\n   Only %d screen change%s recorded so far." % (len(pairs), "" if len(pairs) == 1 else "s"))
+        print("⏰ LOADTIME\n   Only %d screen change%s recorded so far." % (len(pairs), "" if len(pairs) == 1 else "s"))
         return 0
     idx = len(pairs) - k
     T, R = pairs[idx]

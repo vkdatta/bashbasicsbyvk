@@ -128,7 +128,7 @@ _compress_paths() {
   # ── Compress
   local rc follow=false
   $outside && follow=true                                             # the staging symlinks must be followed, never stored
-  echo "🗜  Creating ${ext#.} of ${#paths[@]} item(s) → ${arc_name}${ext}"
+  echo "📦 Creating ${ext#.} of ${#paths[@]} item(s) → ${arc_name}${ext}"
   _arc_create "$fmt" "$arc_path" "$workdir" "$hid_inc" "$follow" "${rel_items[@]}"
   rc=$?
   if [ $rc -eq 0 ]; then

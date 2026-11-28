@@ -7,7 +7,7 @@
 #
 #     🎮 Cheat codes  ·  main
 #
-#     [✳ Menu Specific] 🌏 General          ← → (or a tap) switch the tab
+#     [✨ Menu Specific] 🌏 General          ← → (or a tap) switch the tab
 #        ─────────────────────────────
 #      1) loadtime          Load time: what each screen change cost   ›
 #      2) c-                Stage COPY   (e.g. c-1,3)                  ›
@@ -33,7 +33,7 @@
 #  So the list can never offer a command that would answer "❌ Invalid command".
 #
 #  Two tabs split that list:
-#     ✳ Menu Specific   the commands only THIS menu handles (its own keys, the file actions of the main list ...)
+#     ✨ Menu Specific   the commands only THIS menu handles (its own keys, the file actions of the main list ...)
 #     🌏 General         the commands every screen takes: u q h cc rf =, print, loadtime and every main command run by
 #                        bvk_main_exec (s i -h -auth disk ram health ...)           (_ad_is_general, bashbasicsbyvk_advert.sh)
 #  The cc opens on Menu Specific, or on General when this menu has nothing of its own.  =filter searches the tab you are on.
@@ -60,7 +60,7 @@ _CC_CTX=""            # "st" = called from a Settings / Home screen (their own, 
 
 declare -ga _CC_KEY=() _CC_DESC=() _CC_INS=() _CC_SCOPE=()     # _CC_SCOPE[i] = m (menu specific) | g (general): which tab row i belongs to
 _CC_TABS_REG=0        # 1 once the tab labels are registered for taps (_bvk_tabs_register)
-_CC_TAB_LABELS=("✳ Menu Specific" "🌏 General")
+_CC_TAB_LABELS=("✨ Menu Specific" "🌏 General")
 
 # ── what can be typed here?   (ADVERT: cc only RENDERS the registry — bashbasicsbyvk_advert.sh)
 #   · a list screen (Settings, Home, Pending ...): _st_draw declared everything the screen accepts when it was drawn

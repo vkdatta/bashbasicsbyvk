@@ -242,7 +242,7 @@ func (s *sender) draw(final bool) {
 	}
 	const cols = 24
 	f := pct * cols / 100
-	fmt.Fprintf(os.Stderr, "\x1b[?7l\r\x1b[K\x1b[36m[%s%s] %3d%%  ☁ %.1f/%.1f MB\x1b[0m\x1b[?7h", strings.Repeat("█", f), strings.Repeat("░", cols-f), pct, float64(done)/1048576, float64(s.tot)/1048576)
+	fmt.Fprintf(os.Stderr, "\x1b[?7l\r\x1b[K\x1b[36m[%s%s] %3d%%  ⛅ %.1f/%.1f MB\x1b[0m\x1b[?7h", strings.Repeat("█", f), strings.Repeat("░", cols-f), pct, float64(done)/1048576, float64(s.tot)/1048576)
 	if final {
 		fmt.Fprint(os.Stderr, "\n")
 	}

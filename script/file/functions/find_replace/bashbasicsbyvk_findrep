@@ -454,20 +454,20 @@ def main(argv):
             outf.write(it.path + b"\0")
         if o["limit"] <= 0 or listed <= o["limit"]:
             line = bytearray()
-            line += "  ⚠ ".encode() if mode == 2 else ("%4d) " % listed).encode()
+            line += "  ❗ ".encode() if mode == 2 else ("%4d) " % listed).encode()
             line += _esc2(it.path[rootlen:]) + (b"/" if it.typ == "d" else b"")
             if it.newname is not None and mode != 0 and it.nstate in (PLAN, CONFLICT, INVALID, ERROR):
                 line += "  →  ".encode() + _esc2(it.newname) + (b"/" if it.typ == "d" else b"")
             if it.nstate == CONFLICT:
-                line += "   ⚠ skipped: a name like that already exists".encode()
+                line += "   ❗ skipped: a name like that already exists".encode()
             elif it.nstate == INVALID:
-                line += "   ⚠ skipped: not a usable name".encode()
+                line += "   ❗ skipped: not a usable name".encode()
             elif it.nstate == ERROR:
-                line += ("   ⚠ %s" % why(it.nerr)).encode()
+                line += ("   ❗ %s" % why(it.nerr)).encode()
             if it.cstate in (C_MATCH, C_DONE):
                 line += ("  (%d match%s)" % (it.occ, "" if it.occ == 1 else "es")).encode()
             if it.cstate == C_ERROR:
-                line += ("   ⚠ not edited: %s" % why(it.cerr)).encode()
+                line += ("   ❗ not edited: %s" % why(it.cerr)).encode()
             line += b"\n"
             if it.snippet is not None and mode != 2:
                 line += ("        L%d: " % it.line).encode() + _esc2(it.snippet) + b"\n"

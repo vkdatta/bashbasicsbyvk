@@ -204,7 +204,7 @@ _rule_delete_bundle() {          # _rule_delete_bundle <kind> <name>   (asks y/n
   _rl_is_bundle "$dir" || { echo "❌ $kind rule '$name' not found"; return 1; }
   selected_items=("$dir")
   _lk_confirm_delete "Delete $kind rule '$name'? (y/n): " || return 1
-  rm -rf -- "$dir" && _carry_forget "$dir"; echo "🗑  Deleted rule '$name'"
+  rm -rf -- "$dir" && _carry_forget "$dir"; echo "🚮 Deleted rule '$name'"
 }
 
 # ── last used (unsaved)
@@ -390,7 +390,7 @@ _rl_cmd_delete() {
     return 1
   fi
   if [ "${#items[@]}" -eq 0 ]; then echo "📜  No rules here"; return 1; fi
-  select_items_common "🗑 Delete" allow_a || return 1
+  select_items_common "🚮 Delete" allow_a || return 1
   local -a doomed=(); local p
   for p in "${selected_items[@]}"; do
     if _rl_is_bundle "$p"; then doomed+=("$p"); else echo "🔒 Skipping protected item: ${p##*/}"; fi
@@ -547,7 +547,7 @@ rules_menu() {
     case "$_rl_choice" in
 
       .r|.R)
-        echo "↩  Closing the rule book"; break ;;
+        echo "🔙 Closing the rule book"; break ;;
 
       fx|FX) _inner_next=fx; break ;;
       sw|SW) _inner_next=sw; break ;;
@@ -558,7 +558,7 @@ rules_menu() {
 
       u)
         if [ "$_rl_tab" = rules ] && [ -n "$_rl_cur" ]; then _rl_cur=""
-        else echo "↩  Closing the rule book"; break; fi ;;
+        else echo "🔙 Closing the rule book"; break; fi ;;
 
       c)
         if [ "$_rl_tab" = rules ]; then _rl_cmd_create || _rl_fresh=false

@@ -27,7 +27,7 @@ many = ['IMG-20261116-WA%04d.jpg' % i for i in range(1, 121)] + ['other.txt']
 a = start(many, rows=40)
 a.send('2026111\r', until=lambda: 'result(s)' in a.text()); a.settle()
 t = a.text()
-check('🔍 find: 2026111  (120 result(s))' in t and '☁️ nav path:' in t and '📂 cd path:' in t, 'header: cd path, nav path + find text and count (like "🔍 filter: … (N matches)")')
+check('🔍 find: 2026111  (120 result(s))' in t and '⛅ nav path:' in t and '📂 cd path:' in t, 'header: cd path, nav path + find text and count (like "🔍 filter: … (N matches)")')
 check('  1) 🌄 IMG-20261116-WA0001.jpg' in t, 'rows start at 1 with the folder view\'s icon and name')
 check('more below' in t and 'not shown' not in t, '"▼ N more below" - nothing is cut off')
 check('u) Up   cd) Change directory   q) Quit' in t and 'h) Home   s) Settings   -h) Help   -u) Upgrade' in t, 'footer is the "==" footer')

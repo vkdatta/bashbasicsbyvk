@@ -36,7 +36,7 @@ _tz_db_present() {
 # Returns 0 only when the database is present afterwards.
 _tz_bootstrap() {
   _dep_need -c "The timezone list" tzdata && _tz_db_present && return 0
-  echo "  ↩  Not installed — using the manual list of fixed offsets instead."
+  echo "  🔙 Not installed — using the manual list of fixed offsets instead."
   return 1
 }
 
