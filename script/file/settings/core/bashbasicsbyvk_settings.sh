@@ -25,9 +25,8 @@ DEFAULT_FILTER_MODE="partial"
 DEFAULT_FILTER_HIDDEN_MODE="respect"
 DEFAULT_FILTER_RECURSIVE=false      # = filter looks only in the folder you are viewing
 DEFAULT_DISPLAY_FILTER_PERSIST=false
-DEFAULT_ANIM_OUTER="pop"       # outer loop: whole screen appears at once
+DEFAULT_ANIM="pop"             # the whole app: pop = a screen appears at once · carpet = a screen rolls in row by row
 DEFAULT_MOUSE_MODE="on"         # click / tap an item number, double click / double tap = open it:  on | off  (see bashbasicsbyvk_mouse.sh)
-DEFAULT_ANIM_INNER="carpet"    # inner loops (fx / sw)  (draws instantly, same as pop)
 DEFAULT_NUKE_TIME_SECONDS=3600   # up- / c2c-: how long a new link lives (1 hour). 60 s .. 30 days
 DEFAULT_UX_NUKE_TIME_SECONDS=2592000   # ux-: how long a new share lives (30 days). 60 s .. 30 days
 DEFAULT_APP_TIMEZONE=""          # "" = follow the system clock; else an IANA name, e.g. Asia/Kolkata
@@ -84,8 +83,9 @@ unset filter_mode
 unset filter_hidden_mode
 unset filter_recursive
 unset display_filter_persist
+unset anim
 unset anim_outer
-unset anim_inner
+unset anim_inner      # the two old values: read once below (an old config file), never written again
 unset mouse_mode
 unset nano_wrap
 unset nuke_time_seconds
@@ -172,8 +172,7 @@ unset _bc _bcv _bcd
 : "${filter_recursive:=$DEFAULT_FILTER_RECURSIVE}"
 [[ "$filter_recursive" == true || "$filter_recursive" == false ]] || filter_recursive=$DEFAULT_FILTER_RECURSIVE
 : "${display_filter_persist:=$DEFAULT_DISPLAY_FILTER_PERSIST}"
-: "${anim_outer:=$DEFAULT_ANIM_OUTER}"
-: "${anim_inner:=$DEFAULT_ANIM_INNER}"
+: "${anim:=${anim_outer:-$DEFAULT_ANIM}}"           # an old config file has anim_outer / anim_inner: the main-screens choice becomes the one setting
 : "${mouse_mode:=$DEFAULT_MOUSE_MODE}"
 : "${nano_wrap:=$DEFAULT_NANO_WRAP}"
 : "${nuke_time_seconds:=$DEFAULT_NUKE_TIME_SECONDS}"
@@ -212,8 +211,8 @@ fi
 if ! [[ "$ux_nuke_time_seconds" =~ ^[0-9]{1,9}$ ]] || [ "$ux_nuke_time_seconds" -lt 60 ] || [ "$ux_nuke_time_seconds" -gt 2592000 ]; then
   ux_nuke_time_seconds=$DEFAULT_UX_NUKE_TIME_SECONDS
 fi
-[[ "$anim_outer" == pop || "$anim_outer" == carpet ]] || anim_outer=$DEFAULT_ANIM_OUTER
-[[ "$anim_inner" == pop || "$anim_inner" == carpet ]] || anim_inner=$DEFAULT_ANIM_INNER
+[[ "$anim" == pop || "$anim" == carpet ]] || anim=$DEFAULT_ANIM
+unset anim_outer anim_inner
 [[ "$mouse_mode" == on || "$mouse_mode" == off ]] || mouse_mode=$DEFAULT_MOUSE_MODE
 [[ "$nano_wrap" == wrap || "$nano_wrap" == nowrap ]] || nano_wrap=$DEFAULT_NANO_WRAP
 
@@ -354,8 +353,7 @@ save_settings() {
     echo "filter_hidden_mode=$filter_hidden_mode"
     echo "filter_recursive=$filter_recursive"
     echo "display_filter_persist=$display_filter_persist"
-    echo "anim_outer=$anim_outer"
-    echo "anim_inner=$anim_inner"
+    echo "anim=$anim"
     echo "mouse_mode=$mouse_mode"
     echo "nano_wrap=$nano_wrap"
     echo "nuke_time_seconds=$nuke_time_seconds"
@@ -536,20 +534,12 @@ group_view_settings() {
 # ── animation
 _st_anim_build() {
   _st_reset
-  _st_add h "Main screens"
-  _st_eq "$anim_outer" pop;    _st_add r "pop      (appears at once)"   "$_o" "" o:pop
-  _st_eq "$anim_outer" carpet; _st_add r "carpet   (instant too — no delay)" "$_o" "" o:carpet
-  _st_add h "Inner loops  (fx / sw)"
-  _st_eq "$anim_inner" pop;    _st_add r "pop      (appears at once)"   "$_o" "" i:pop
-  _st_eq "$anim_inner" carpet; _st_add r "carpet   (instant too — no delay)" "$_o" "" i:carpet
+  _st_eq "$anim" pop;    _st_add r "pop      (appears at once)"        "$_o" "" pop
+  _st_eq "$anim" carpet; _st_add r "carpet   (rolls in row by row)"    "$_o" "" carpet
 }
 _st_anim_act() {
-  case "${_st_tag[$1]}" in
-    o:*) anim_outer="${_st_tag[$1]#o:}" ;;
-    i:*) anim_inner="${_st_tag[$1]#i:}" ;;
-  esac
+  anim="${_st_tag[$1]}"
   save_settings
-  declare -F _vp_anim_start >/dev/null 2>&1 && _vp_anim_start
 }
 animation_settings() { _st_run "Animation" _st_anim_build _st_anim_act; }
 
@@ -645,8 +635,7 @@ _st_reset_act() {
   filter_hidden_mode=$DEFAULT_FILTER_HIDDEN_MODE
   filter_recursive=$DEFAULT_FILTER_RECURSIVE
   display_filter_persist=$DEFAULT_DISPLAY_FILTER_PERSIST
-  anim_outer=$DEFAULT_ANIM_OUTER
-  anim_inner=$DEFAULT_ANIM_INNER
+  anim=$DEFAULT_ANIM
   mouse_mode=$DEFAULT_MOUSE_MODE
   nano_wrap=$DEFAULT_NANO_WRAP; bvk_nano_wrap_apply --if-present   # only touches a nanorc that already carries our wrap block
   nuke_time_seconds=$DEFAULT_NUKE_TIME_SECONDS
@@ -689,5 +678,3 @@ _st_reset_act() {
 }
 restore_all_defaults() { _st_run "Reset all settings" _st_reset_build _st_reset_act; }
 
-# warm up the carpet writer in the background (no cost when both loops use pop)
-declare -F _vp_anim_start >/dev/null 2>&1 && _vp_anim_start

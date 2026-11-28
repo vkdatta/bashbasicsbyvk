@@ -1,0 +1,25 @@
+1. ISSUE IN BRIEF
+The Animation setting did nothing: pop and carpet both drew instantly, because the draw code never read anim_outer / anim_inner, and the settings screen split one idea into two sections (main screens, inner loops). The only visible rolling was the Transfer picker, which printed its rows one printf at a time.
+
+1. HOW DID YOU DEBUG
+grepped carpet / anim_outer / anim_inner: only settings.sh, settings_desc.sh and viewport.sh mention them; viewport.sh says carpet draws exactly like pop and _vp_anim_start is an empty stub. Read _vp_emit (one write for the frame), _pick_rows_raw (one printf per row) and the smartmenu print shims. Verified by reading and bash -n only, not by running the app.
+
+1. CAUSE
+The old background carpet writer was removed and the setting was left behind; the Transfer picker's per-row printing was never moved onto the buffered viewport draw.
+
+1. FIX
+One setting, anim (pop | carpet, default pop), for the whole app; an old config's anim_outer becomes anim on first load and the two old keys are no longer written. The Animation screen is one two-row list with new descriptions. viewport.sh: _vp_el writes each line at once when _vp_roll is set (carpet), _vp_emit skips its single write then, _vp_roll_set is called by _vp_render_fresh and _vp_tab_repaint only (in-place repaints and resizes always pop). _pick_rows_raw collects rows and writes once (pop) or prints per row (carpet). _vp_anim_start removed. Google Drive settings sync lists anim.
+
+2. ISSUE IN BRIEF
+In the Transfer picker and every other file picker (the python filepicker uses the same local_navigator), a folder over the big-folder limit showed groups with no way to use fs, and favourites, ns and fa were ignored or blocked; u also dropped the whole folder instead of the last typed group letter.
+
+2. HOW DID YOU DEBUG
+Read transfer.map (fs, ns, fa were block()), local_navigator (no handlers; it called _bvk_index_decide with its own nav_force_show and never _fav_begin) and o (the main loop's mode priority: favourites > groups > normal, fs / ns / fa, u peeling group_prefix). Verified by reading and bash -n only, not by running the app.
+
+2. CAUSE
+The picker was written as its own loop with a copy of part of the main loop's logic, and its map blocked the commands that logic needs.
+
+2. FIX
+transfer.map wires fs, ns and fa from the main commands. local_navigator is now a wrapper (local copies of path, force_show, imaginary_mode, total, and the favourite state it restores on return) around _local_navigator_run, which calls _fav_begin / _fav_build_items for the folder, prints the favourite banner, handles fs (handle_force_show_guarded), ns (handle_normal_show) and fa (handle_fav_add) with the picker's own item list, and lets u peel typed group letters first. Not covered: gcloud_navigator (remote folders have no favourites).
+
+VERIFIED: bash -n on every changed file; loadmap_gen --write / --check; static suites (blind first failed on fs / ns inside _local_navigator_run, fixed by moving them into _nav_mode_cmd): 11 of 14 pass, the 3 left are the untouched upload's own findings (structure labels:n; footer and intent hit the 25 s cap), and footer and intent run clean when started directly (0 new). Not run: a real terminal, so the rolling carpet draw and the picker's favourites / fs / ns / fa were checked by reading only.

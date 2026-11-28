@@ -167,17 +167,57 @@ _nav_add_range() {
   echo "$msg — total selected: ${#_ar_sel[@]}  (v to review)"
 }
 
+# The picker lists a folder EXACTLY like the main list does (o): mode priority ⭐ favourites > 📂 big-folder groups > 📁 normal, with  fs  (show every item),
+# ns  (pause / resume favourite mode),  fa  (add favourites)  and  u  peeling the typed group letters one by one.  It reuses the main list's own functions
+# (_fav_begin, _fav_build_items, handle_force_show_guarded, handle_normal_show, handle_fav_add), which read $path / $force_show / $items / $imaginary_mode:
+# the wrapper gives them the picker's folder in LOCAL copies, so the main list's own state is never touched.
 local_navigator() {
+  local path="$PWD" force_show=false imaginary_mode=false total=""                 # shadows of the main list's globals (dynamic scope), gone on return
+  local _ln_ns="${_ns_on:-false}" _ln_lp="${_fav_last_path:-}" _ln_rc
+  _fav_last_path=""                                                                 # a new visit: favourite mode starts on in every folder
+  _local_navigator_run "$@"; _ln_rc=$?
+  _ns_on="$_ln_ns"; _fav_last_path="$_ln_lp"
+  _fav_on=false; _fav_has=false; _fav_banner=""; _FAV_LABEL=()                       # the main list runs _fav_begin again on its next turn
+  return "$_ln_rc"
+}
+
+# fs / ns / fa typed in the picker.  Runs on the picker's own folder: it reads and sets the nav_* locals of _local_navigator_run (dynamic scope) and
+# hands the main list's handlers the picker's list.  rc 0 = it was one of the three (the loop draws again), 1 = not ours.
+_nav_mode_cmd() {
+  case "$1" in
+    fs|FS)
+      force_show="$nav_force_show"; imaginary_mode="$nav_imaginary"
+      handle_force_show_guarded; nav_force_show="$force_show"
+      [ "$nav_force_show" = true ] && nav_prefix="" ;;
+    ns|NS) handle_normal_show ;;
+    fa|FA|fa\ *|FA\ *)
+      items=("${nav_items[@]}"); imaginary_mode="$nav_imaginary"
+      handle_fav_add "fa${1:2}" ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
+_local_navigator_run() {
   local mode="$1"
   local start_path="${2:-$HOME}"
   local nav_path="$start_path"
   local nav_prefix=""
   local nav_force_show=false
+  local -a items=()                                               # the builders fill $items: keep the main list's own array out of it
   nav_result_path=""
   nav_selected_items=()
 
   while true; do
     nav_last_browsed_path="$nav_path"
+    path="$nav_path"; force_show="$nav_force_show"; imaginary_mode=false
+    local nav_fav=false
+    if declare -F _fav_begin >/dev/null 2>&1; then
+      total=$(count_items_in_path "$nav_path" 2>/dev/null)
+      _fav_begin                                                  # sets _fav_on / _fav_banner / _FAV_LABEL for this folder
+      _fav_banner="${_fav_banner//   sw → ⭐ tab = manage/}"       # sw does not exist inside the picker
+      $_fav_on && nav_fav=true
+    fi
     # ONE pick screen (browse.sh): the same header, rows, icons and 🔒 marks as the folder view
     if [ "$mode" == "source" ]; then _pick_header -s ${_PF_NOUN:+-n "$_PF_NOUN"} "Items" "${_PF_JOB:-Transfer}" "$nav_path" "$nav_prefix" "${_PF_DESC:-}"
     else _pick_header "Destination" "Transfer" "$nav_path" "$nav_prefix"; fi
@@ -185,14 +225,22 @@ local_navigator() {
     local nav_imaginary=false
     local nav_items=()
 
-    _bvk_index_decide "$nav_path" "$nav_prefix" "$nav_force_show"
-    case "$_bvk_ix_kind" in
-      groups) nav_imaginary=true; display_imaginary_groups "$nav_path" "$_bvk_ix_pfx" "$_bvk_ix_count" ;;
-      flat)   nav_items=("${_bvk_pfx_items[@]}") ;;
-    esac
+    if $nav_fav; then
+      _fav_build_items                                            # the folder's live favourites, sorted like any view
+      nav_items=("${items[@]}")
+      echo "$_fav_banner"
+    else
+      [ -n "${_fav_banner:-}" ] && echo "$_fav_banner"             # favourites paused (ns): say how to bring them back
+      _bvk_index_decide "$nav_path" "$nav_prefix" "$nav_force_show"
+      case "$_bvk_ix_kind" in
+        groups) nav_imaginary=true; display_imaginary_groups "$nav_path" "$_bvk_ix_pfx" "$_bvk_ix_count" ;;
+        flat)   nav_items=("${_bvk_pfx_items[@]}") ;;
+      esac
+    fi
 
     if ! $nav_imaginary; then
-      if [ ${#nav_items[@]} -eq 0 ] && [ -n "$nav_prefix" ]; then
+      if $nav_fav; then :                                         # already built above
+      elif [ ${#nav_items[@]} -eq 0 ] && [ -n "$nav_prefix" ]; then
         build_items_for_prefix "$nav_path" "$nav_prefix"
         nav_items=("${items[@]}")
       elif [ ${#nav_items[@]} -eq 0 ]; then
@@ -211,11 +259,15 @@ local_navigator() {
 
     _mc_read nav_choice "${_TPL_ACCEPTOR} " || { _mc_unwind; return 1; }       # rc != 0: the flow was cancelled → leave at once
 
+    _nav_mode_cmd "$nav_choice" && continue                       # fs / ns / fa: the main list's own handlers (wired in transfer.map)
     case "$nav_choice" in
       q|Q) nav_selected_items=(); _bvk_quit; return 1 ;;
       h|H|cc|CC) _mc_std_key "$nav_choice"; _mc_unwind && return 1 ;;
       u|U)
-        if [ "$nav_path" != "/" ]; then
+        if [ -n "$nav_prefix" ]; then                  # a typed group letter is peeled first, like the main list
+          nav_prefix="${nav_prefix%?}"
+          nav_force_show=false
+        elif [ "$nav_path" != "/" ]; then
           nav_path=$(dirname "$nav_path")
           nav_prefix=""
           nav_force_show=false

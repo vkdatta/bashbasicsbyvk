@@ -686,11 +686,15 @@ _pick_rows_raw() {
   else
     declare -F _lk_load >/dev/null && _lk_load
   fi
+  # the Animation setting: carpet = each row is written as it is built (the list rolls in) · pop = the rows are collected and written in ONE write
+  local _prr_roll=0 _prr_buf=""
+  [ "${anim:-pop}" = carpet ] && _prr_roll=1
   for (( i=1; i<=${#items[@]}; i++ )); do
     _item_line_text_v "$i"; ln="$_ilt_out"
     if declare -F _sel_mark_v >/dev/null 2>&1 && _sel_mark_v "${items[i-1]}" "$ln"; then ln="$_smk_out"; fi     # selected with .s — green "+"
-    printf '%s\n' "$ln"
+    if (( _prr_roll )); then printf '%s\n' "$ln"; else _prr_buf+="$ln"$'\n'; fi
   done
+  (( _prr_roll )) || printf '%s' "$_prr_buf"
 }
 
 # ── ONE pick screen for "choose files by GROUP" (delete by extension, delete by date, ...) — template MG2374, same chrome as the pickers above ──

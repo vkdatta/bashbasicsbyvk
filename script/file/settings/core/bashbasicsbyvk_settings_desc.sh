@@ -96,11 +96,9 @@ Group by|date	Group the items by exact day. Perfect for photos or notes made dai
 Big-folder limit|*	When a folder holds more items than this number, the program shows short groups instead of the whole list, which keeps the screen fast and readable. You can change the number or put it back to the usual value of 200.
 Big-folder limit|set	Type a new number of items. Pick a larger value if your phone is fast and you like to see everything at once, or a smaller value if long lists are slow or tiring to scroll. It must be a whole number above zero.
 Big-folder limit|reset	Put the limit back to the standard 200 items. Use it if you changed the number and the lists now feel too long or too short.
-Animation|*	Choose how screens appear, separately for the main screens and for the inner screens such as functions and switching. At the moment both styles show the screen instantly, so you will see no difference.
-Animation|o:pop	For the main screens: the whole screen appears at once. This is quick and clear and is the standard.
-Animation|o:carpet	For the main screens: the screen is drawn in a rolling style that today still appears instantly. No delay is added.
-Animation|i:pop	For the inner screens such as functions and switching: the whole screen appears at once. This is the standard.
-Animation|i:carpet	For the inner screens such as functions and switching: a rolling drawing style that today still appears instantly.
+Animation|*\tChoose how every screen in the program appears: all at once, or rolling in row by row. The choice is the same for all screens, including the file and folder lists of Transfer.
+Animation|pop\tThe whole screen appears at once. This is quick and clear and is the standard.
+Animation|carpet\tThe screen rolls in from the top, one row after another. It adds no pause of its own, so on a fast folder you may barely see it; on a long or slow list the rows visibly arrive one by one.
 Mouse / touch|*	Decide whether you can use a mouse or your finger. It only changes how you operate the program, not what it does.
 Mouse / touch|v:on	Mouse and touch work: tap or click a number to pick it, tap twice quickly to open it, and swipe or use the wheel to scroll. To select and copy text on screen you may need to hold the Shift key. Recommended for phones.
 Mouse / touch|v:off	Only the keyboard is used. Taps and clicks go back to your terminal, so selecting and copying text works in the usual way. Choose this if taps open things you did not mean to open.

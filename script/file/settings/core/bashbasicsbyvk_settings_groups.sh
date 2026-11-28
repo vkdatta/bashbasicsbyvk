@@ -211,7 +211,7 @@ _st_grp_display_build() {
   _st_add a "File details"     0 "$sx"                    details
   _st_add a "Group by"         0 "$gv"                    group
   _st_add a "Big-folder limit" 0 "$index_mode_threshold"  index
-  _st_add a "Animation"        0 "$anim_outer / $anim_inner" anim
+  _st_add a "Animation"        0 "$anim"        anim
   _st_add a "Mouse / touch"    0 "$mouse_mode"            mouse
 }
 _st_grp_display_act() {

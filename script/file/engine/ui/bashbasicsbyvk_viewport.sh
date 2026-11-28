@@ -675,16 +675,23 @@ _vp_ensure_visible() {
   [ "$_vp_start" -ne "$old" ]
 }
 
-# Frame buffering: every line of a screen is appended to _vp_frame and the whole
-# screen is written in ONE write at the end of _vp_emit (pop).  There is no timer, no
-# sleep and no helper process in the draw path: "carpet" is kept as a setting value
-# for old config files but draws exactly like pop — nothing is ever delayed.
+# Frame buffering: every line of a screen is appended to _vp_frame.  The Animation setting ($anim, one value for the whole app) decides how it reaches the terminal:
+#   pop     the whole frame is written in ONE write at the end of _vp_emit (synchronized output): the screen appears at once.
+#   carpet  each line is written the moment it is built (_vp_el), so the screen rolls in from the top, row by row.
+# Neither adds a sleep, a timer or a helper process.  Only a FRESH screen rolls (_vp_render_fresh / _vp_tab_repaint): the in-place repaints (arrow keys, a resize,
+# _vp_force_pop=1) always pop, otherwise every key press would flicker.
 _vp_frame=""
-_vp_force_pop=0         # kept for old callers; every draw is instant now
+_vp_force_pop=0         # 1 = this draw must pop whatever $anim says (an in-place repaint)
+_vp_roll=0              # 1 = _vp_el writes each line now (carpet); set by _vp_roll_set for one draw only
 
-_vp_anim_start() { :; }     # the old background carpet writer no longer exists
+_vp_roll_set() { _vp_roll=0; [ "${anim:-pop}" = carpet ] && (( ! _vp_force_pop )) && _vp_roll=1; return 0; }
 
-_vp_el() { _vp_frame+=$'\r\033[2K\033[?7l'"$1"$'\033[?7h\n'; }
+_vp_el() {
+  local _l=$'\r\033[2K\033[?7l'"$1"$'\033[?7h\n'
+  _vp_frame+="$_l"
+  (( _vp_roll )) && builtin printf '%s' "$_l"
+  return 0
+}
 
 _vp_emit() {
   local i line
@@ -749,7 +756,8 @@ _vp_emit() {
   if (( ${_vp_hint_row:-0} )); then local _hn; for (( _hn=0; _hn<${_vp_hint_n:-1}; _hn++ )); do _vp_el ""; done; _hint_cur="?"; fi   # the rows were just redrawn blank: the next sync repaints the suggestion
 
   # frame is complete — one write; ?2026 = synchronized output (terminals that lack it ignore it)
-  builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"
+  if (( _vp_roll )); then _vp_roll=0          # carpet: every line is already on the screen
+  else builtin printf '\033[?2026h%s\033[?2026l' "$_vp_frame"; fi
   _BVK_SCR_RAW="$_vp_frame"; _BVK_SCR_EXTRA=""      # print: remember what was just drawn
   _vp_frame=""
   _set_available_above "$_blk_h"
@@ -772,7 +780,8 @@ _vp_render_fresh() {
   _vp_geometry
   _vp_ensure_visible "${_hl_index:-1}"
   _lt_e
-  _lt_b "draw: rows → one write to the terminal"
+  _lt_b "draw: rows → one write to the terminal (pop) or row by row (carpet)"
+  _vp_roll_set
   _vp_emit
   _lt_e
   $_vp_input_fn
@@ -820,6 +829,7 @@ _vp_tab_repaint() {
   _vp_build_chrome
   _vp_geometry
   _vp_ensure_visible "${_hl_index:-1}"
+  _vp_roll_set
   _vp_emit
 }
 

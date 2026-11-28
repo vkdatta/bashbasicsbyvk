@@ -225,6 +225,8 @@ _nav_sel_expand() { _lm_stub bashbasicsbyvk_transfer.sh _nav_sel_expand "$@"; }
 _nav_index_ok() { _lm_stub bashbasicsbyvk_transfer.sh _nav_index_ok "$@"; }
 _nav_add_range() { _lm_stub bashbasicsbyvk_transfer.sh _nav_add_range "$@"; }
 local_navigator() { _lm_stub bashbasicsbyvk_transfer.sh local_navigator "$@"; }
+_nav_mode_cmd() { _lm_stub bashbasicsbyvk_transfer.sh _nav_mode_cmd "$@"; }
+_local_navigator_run() { _lm_stub bashbasicsbyvk_transfer.sh _local_navigator_run "$@"; }
 gcloud_navigator() { _lm_stub bashbasicsbyvk_transfer.sh gcloud_navigator "$@"; }
 _transfer_report() { _lm_stub bashbasicsbyvk_transfer.sh _transfer_report "$@"; }
 perform_copy() { _lm_stub bashbasicsbyvk_transfer.sh perform_copy "$@"; }
