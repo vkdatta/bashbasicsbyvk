@@ -83,8 +83,8 @@ _gd_view_path() {
   _gd_vp="$1"
   if [ "${_GD_ACTIVE:-0}" = 1 ]; then
     case "$1" in
-      "$_GD_ROOT")   _gd_vp="☁️  $_GD_REMOTE:/  (Google Drive)" ;;
-      "$_GD_ROOT"/*) _gd_vp="☁️  $_GD_REMOTE:/${1#"$_GD_ROOT"/}" ;;
+      "$_GD_ROOT")   _gd_vp="☁  $_GD_REMOTE:/  (Google Drive)" ;;
+      "$_GD_ROOT"/*) _gd_vp="☁  $_GD_REMOTE:/${1#"$_GD_ROOT"/}" ;;
     esac
   fi
 }
@@ -220,7 +220,7 @@ _gd_enter() {
   path="$_GD_ROOT"; group_prefix=""; force_show=false
   _fx_outer_path="$_GD_ROOT"      # inside fx: the outer path becomes the Drive, so closing fx lands in it
   _GD_FX_LEAVE=1
-  echo "☁️  Google Drive '$remote' is open — gd: Drive menu · gdx: leave"
+  echo "☁  Google Drive '$remote' is open — gd: Drive menu · gdx: leave"
   return 0
 }
 
@@ -239,7 +239,7 @@ _gd_leave() {
     [ -d "$orig" ] || orig="$HOME"
     path="$orig"; group_prefix=""; force_show=false
   fi
-  [ "$quiet" = 1 ] || echo "↩️  Left Google Drive '$remote' — back to $orig"
+  [ "$quiet" = 1 ] || echo "↩  Left Google Drive '$remote' — back to $orig"
   return 0
 }
 
@@ -270,7 +270,7 @@ _gd_cycle() {
   [ "$_GD_ACTIVE" = 1 ] || return 0
   if ! _gd_in_tree "$path"; then          # left the Drive by another road (sw bookmark, h, recents ...)
     _gd_leave --quiet --nopath
-    echo "↩️  Left Google Drive (you moved to a local folder)"
+    echo "↩  Left Google Drive (you moved to a local folder)"
     return 0
   fi
   case "${choice:-}" in
@@ -503,7 +503,7 @@ _gd_export_out() {
   local -a list=(); local it
   for it in "$@"; do _gd_in_tree "$it" && [ -n "$(_gd_native_in "$it")" ] && list+=("$it"); done
   [ "${#list[@]}" -gt 0 ] || return 0
-  echo "☁️  Google files leave the Drive: Google converts them (Docs→docx, Sheets→xlsx, Slides→pptx)"
+  echo "☁  Google files leave the Drive: Google converts them (Docs→docx, Sheets→xlsx, Slides→pptx)"
   _gd_py export "${list[@]}" --to "$dest" --remove-pointers >/dev/null
 }
 
@@ -540,7 +540,7 @@ _gd_export_cmd() {
 _gd_info() {
   local k v remote="" files=0 dl=0 dlb=0 knb=0 folders=0
   echo
-  echo "☁️  Google Drive — profile: $_GD_PROFILE   (rclone remote: $_GD_REMOTE)"
+  echo "☁  Google Drive — profile: $_GD_PROFILE   (rclone remote: $_GD_REMOTE)"
   while IFS=$'\t' read -r k v; do
     case "$k" in folders) folders="$v" ;; files) files="$v" ;; downloaded) dl="$v" ;; downloaded_bytes) dlb="$v" ;; known_bytes) knb="$v" ;; esac
   done < <(_gd_py status 2>/dev/null)

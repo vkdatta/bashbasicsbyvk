@@ -71,7 +71,7 @@ if (pipeline === "upload") {
   const N = parseInt(process.env.BB_N, 10) || 0;
   for (let i = 0; i < N; i++) {
     const fp = path.join(dir, "blob" + i);
-    let size = 0; try { size = fs.statSync(fp).size; } catch (e) { console.error("  \u26a0\ufe0f  blob " + i + " is missing on this computer"); console.log("FAIL"); process.exit(2); }
+    let size = 0; try { size = fs.statSync(fp).size; } catch (e) { console.error("  \u26a0  blob " + i + " is missing on this computer"); console.log("FAIL"); process.exit(2); }
     tasks.push({ key: String(i), idx: i, fp, size, url: base + "/upload/" + id + "/blob/" + i, done: doneUpload.has(i) && storedSizes[i] === size });
   }
 } else {
@@ -81,7 +81,7 @@ if (pipeline === "upload") {
     if (it.k !== "f") continue;
     for (let i = 0; i < it.c; i++) {
       const fp = path.join(dir, it.i + "." + i);
-      let size = 0; try { size = fs.statSync(fp).size; } catch (e) { console.error("  \u26a0\ufe0f  chunk " + it.i + "." + i + " is missing on this computer"); console.log("FAIL"); process.exit(2); }
+      let size = 0; try { size = fs.statSync(fp).size; } catch (e) { console.error("  \u26a0  chunk " + it.i + "." + i + " is missing on this computer"); console.log("FAIL"); process.exit(2); }
       tasks.push({ key: it.i + "." + i, idx: n++, fp, size, url: base + "/ux/" + id + "/item/" + it.i + "/blob/" + i, done: !!(doneUx[it.i] && doneUx[it.i].has(i)) && storedSizes[it.i + "." + i] === size });
     }
   }
@@ -236,7 +236,7 @@ async function uploadOne(t) {
 }
 
 (async () => {
-  if (alreadyN > 0) process.stderr.write("\u21a9\ufe0f  Continuing: " + alreadyN + "/" + tasks.length + " blob(s) (" + Math.floor(alreadyBytes * 100 / Math.max(1, total)) + "%) are already on the server \u2014 sending the remaining " + todo.length + ".\n");
+  if (alreadyN > 0) process.stderr.write("\u21a9  Continuing: " + alreadyN + "/" + tasks.length + " blob(s) (" + Math.floor(alreadyBytes * 100 / Math.max(1, total)) + "%) are already on the server \u2014 sending the remaining " + todo.length + ".\n");
   if (rawOn && TTY) process.stderr.write("   p = pause \u00b7 Ctrl-C / Ctrl-Z = stop now and keep it for later (Pending \u2192 continue)\n");
   let next = 0, failed = 0; const errors = [];
   async function worker() {
@@ -268,7 +268,7 @@ async function uploadOne(t) {
   if (verdict === "OK") draw(true); else if (TTY) process.stderr.write("\n");
   // be honest about what a restart keeps: only COMPLETE blobs are on the server, a blob that was half-sent starts again from its first byte
   if (verdict !== "OK" && TTY && safeBytes < total) process.stderr.write("  \ud83d\udcbe " + fmtB(safeBytes) + " of " + fmtB(total) + " " + unit() + " are safe on the server (" + doneN + "/" + tasks.length + " blobs) \u2014 blobs that were half-sent start again from their first byte.\n");
-  for (const m of errors) process.stderr.write("  \u26a0\ufe0f  " + m + "\n");
+  for (const m of errors) process.stderr.write("  \u26a0  " + m + "\n");
   if (rawOn) { try { process.stdin.setRawMode(false); } catch (e) {} process.stdin.pause(); }
   console.log(verdict);
   setTimeout(() => process.exit(0), 300).unref();

@@ -232,7 +232,7 @@ _scr_validate() {
   _bvk_yn confirm "Remove stale entries from registry?" -d none
   if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
     _scr_save kept
-    echo "🗑️  Removed ${#stale[@]} stale entry/entries. Registry now holds ${#kept[@]}."
+    echo "🗑  Removed ${#stale[@]} stale entry/entries. Registry now holds ${#kept[@]}."
   else
     echo "🚫 No changes made."
   fi
@@ -241,7 +241,7 @@ _scr_validate() {
 # handle_scr_sync   (wire this to a menu option, e.g. "scr-sync" or option 9)
 # User-facing entry point for registry maintenance.
 handle_scr_sync() {
-  _mc_select _scr_choice "🗂️  Shortcut Registry" "Show registry contents" "Validate (find & remove stale entries)" \
+  _mc_select _scr_choice "🗂  Shortcut Registry" "Show registry contents" "Validate (find & remove stale entries)" \
     "Full rebuild (rescan \$HOME — slow, use when in doubt)" || return $(( $? == 2 ? 1 : 0 ))
 
   case "$_scr_choice" in
@@ -261,7 +261,7 @@ handle_scr_sync() {
           _RES_NOTE["$sc_file"]="→ $target$( [ -f "$sc_file" ] || echo '  🔴 missing' )"
         done
         _RES_ROOT="/.."                                   # no folder prefix matches: every row shows its full path
-        _RES_HDR="🗂️  ${#entries[@]} registered shortcut(s)"
+        _RES_HDR="🗂  ${#entries[@]} registered shortcut(s)"
         while _results_view; do :; done                   # a row number has nothing to open here: the list simply stays
       fi
       ;;

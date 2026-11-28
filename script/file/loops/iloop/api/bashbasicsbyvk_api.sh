@@ -197,7 +197,7 @@ _api_sync_local_aliases() {
 # _api_do_alias <idx> [alias]  — set / rename (blank new name = cancel; "-" = remove the alias)
 _api_do_alias() {
   local k="$1" new="${2:-}" id="${_API_ID[$1]}"
-  echo "🏷️  Link $((k + 1)):  current alias: ${_API_ALIAS[$k]:-(none)}"
+  echo "🏷  Link $((k + 1)):  current alias: ${_API_ALIAS[$k]:-(none)}"
   if [ -z "$new" ]; then
     _bvk_read new "   New alias (blank = cancel, - = remove alias): "
   fi
@@ -367,7 +367,7 @@ _api_cmd_key() {
   _bb_key_store "$id" "$key" || { echo "❌ Could not save"; return 1; }
   echo "💫 Key saved on this computer — c-$((k + 1)) now copies this link."
   if [ "${FILEAPI_BASHBASICS_STORE_KEYS:-1}" != "0" ] && _bb_link_secret_put "$id" "${WORKER_URL%/}/${_API_PUB[$_api_k]:-$id}#k=$key"; then
-    _API_LENC[$_api_k]="$_BB_LAST_SECRET_ENC"; echo "☁️  Also kept (encrypted) in the cloud — other devices can copy it too."
+    _API_LENC[$_api_k]="$_BB_LAST_SECRET_ENC"; echo "☁  Also kept (encrypted) in the cloud — other devices can copy it too."
   fi
 }
 
@@ -453,7 +453,7 @@ _api_menu_header() {                               # template 7P68NA
   local _t _n
   case "$_API_SVC" in
     backup)
-      _t="🗄️  BACKUP (bk)   💳 balance: ${_API_BAL:-?} credits"
+      _t="🗄  BACKUP (bk)   💳 balance: ${_API_BAL:-?} credits"
       _n="   copies taken just before you deleted something · $(_api_sort_note) · r-N restores here · c-N copies its link" ;;
     saved)
       _t="💾 SAVED SURF (sv)   💳 balance: ${_API_BAL:-?} credits"
@@ -537,7 +537,7 @@ _api_show() {            # details of link idx
   local k="$1"
   local _kind_txt='file upload' _kind_ico=📦
   [ "${_API_KIND[$k]}" = copy ] && { _kind_txt='text paste'; _kind_ico=📄; }
-  [ "$_API_SVC" = backup ] && { _kind_txt='backup'; _kind_ico=🗄️; }
+  [ "$_API_SVC" = backup ] && { _kind_txt='backup'; _kind_ico=🗄; }
   [ "$_API_SVC" = saved ]  && { _kind_txt='saved item'; _kind_ico=💾; }
   echo "$_kind_ico $(_api_name "$k")   ($_kind_txt, $(_api_hsize "${_API_BYTES[$k]}"))"
   echo "   created : $(_bb_fmt_when "${_API_CREATED[$k]}")"
@@ -650,7 +650,7 @@ _api_s_ed_go() {
 _api_do_edit() {         # _api_do_edit <idx> [spec]
   local k="$1" spec="$2" total="" ans="" id="${_API_ID[$k]}" nexp="" dir="" costnote="" _given="$2" rc
   _mc_steps _api_s_ed_time _api_s_ed_cost _api_s_ed_go; rc=$?
-  case "$rc" in 0) ;; 1) echo "↩️  Back"; return 0 ;; *) return 1 ;; esac
+  case "$rc" in 0) ;; 1) echo "↩  Back"; return 0 ;; *) return 1 ;; esac
   _api_http POST "/links/$id/expiry" "{\"totalSeconds\":$total}" || return 1
   if [ "$_API_STATUS" != "200" ]; then _api_fail; return 1; fi
   local ch rf rd bal ex
@@ -723,7 +723,7 @@ _api_cmd_nuke() {        # x-LIST
 _api_help() {
   case "$_API_SVC" in
     backup) cat <<'HLP'
-🗄️  BACKUP  (bk)
+🗄  BACKUP  (bk)
  A copy of what you deleted, taken just before it was deleted (Settings → File API → Backup). Named DDMMYYYY HHMM NAME.
  N open · r-N restore into the current folder (never overwrites: "name (1)") · c-N copy its link · a-N [name] rename · e-N [time] extend / shorten · x-N nuke
  time rules, credits and refunds are exactly those of Links (api). Default keep time: Settings → File API → Backup.
@@ -786,7 +786,7 @@ api_menu() {
 
     _ap_fresh=true
     case "$_ap_choice" in
-      api|bk|sv|u) echo "↩️  Closing the $( [ "$_API_SVC" = backup ] && echo backup || { [ "$_API_SVC" = saved ] && echo saved || echo links; } ) loop"; break ;;
+      api|bk|sv|u) echo "↩  Closing the $( [ "$_API_SVC" = backup ] && echo backup || { [ "$_API_SVC" = saved ] && echo saved || echo links; } ) loop"; break ;;
 
       fx) _inner_next=fx;  break ;;
       sw) _inner_next=sw;  break ;;

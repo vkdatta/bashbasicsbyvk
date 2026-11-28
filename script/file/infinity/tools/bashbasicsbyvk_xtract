@@ -343,7 +343,7 @@ def build_link_rows_recursive(url, target_depth, current_depth=0,
     print(f"{indent}📄 [L{current_depth}] Fetching: {url}")
 
     if url in visited:
-        print(f"{indent}   ↩️  Already visited, skipping.")
+        print(f"{indent}   ↩  Already visited, skipping.")
         return []
     visited.add(url)
 

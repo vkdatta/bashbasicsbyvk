@@ -3,9 +3,9 @@ delete_items() {
   while :; do
     _ok=false
     if $imaginary_mode; then
-      select_imaginary_items_common "$path" "$group_prefix" "🗑️ Delete" && _ok=true
+      select_imaginary_items_common "$path" "$group_prefix" "🗑 Delete" && _ok=true
     else
-      select_items_common "🗑️ Delete" allow_a && _ok=true
+      select_items_common "🗑 Delete" allow_a && _ok=true
     fi
     $_ok || return 0
     local _has_shortcuts=false

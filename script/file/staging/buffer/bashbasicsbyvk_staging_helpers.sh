@@ -410,7 +410,7 @@ _sp_conflict_decide() {
     esac
     _sp_load_set have "$file" "$_SP_CF_NAME"
     # one menu (never a one-line "Choose [1/2/3/n]"): u / q back out of the whole flow like every other menu
-    _bvk_menu ans -t "Name already used" -i "⚠️" -d 3 \
+    _bvk_menu ans -t "Name already used" -i "⚠" -d 3 \
       -q "A set named '$_SP_CF_NAME' already exists in the $(_sp_op_label "$op") buffer (${#have[@]} item(s))." \
       "1:Add to it" "2:Replace it with the new items" "3:Deny — keep it as it is" "n:Use another name" || return 1
     [ "${_CM_ABORT:-0}" = 1 ] && return 1
@@ -510,7 +510,7 @@ _sp_apply_buffer() {
     return 0
   fi
 
-  echo "⚙️  Applying $label buffer (${#live[@]} item(s)) → $dest"
+  echo "⚙  Applying $label buffer (${#live[@]} item(s)) → $dest"
   case "$op" in
     sc) perform_shortcut "$dest" "${live[@]}" ;;
   esac

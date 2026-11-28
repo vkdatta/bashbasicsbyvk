@@ -13,7 +13,7 @@
 # Three steps (_mc_steps: u = one question back): the level, the dates (the pick screen, MG2374), then Confirm delete / Back up.
 # They fill _fx_adf_delete_by_date's locals (files lvl keys label key_of); selected_items is the global every delete flow fills.
 _dd_s_level() {
-  _mc_select lvl "🗑️  Delete by date in $path (file modified date):" "Day     (e.g. 2024-03-15)" \
+  _mc_select lvl "🗑  Delete by date in $path (file modified date):" "Day     (e.g. 2024-03-15)" \
     "Month   (e.g. 2024-03)" "Year    (e.g. 2024)" "Decade  (e.g. 2020s)" || return $(( $? == 2 ? 2 : 1 ))
   return 0
 }
@@ -35,12 +35,12 @@ _dd_s_pick() {
   done
   mapfile -t keys < <(printf '%s\n' "${!count[@]}" | sort)
   for k in "${keys[@]}"; do label["$k"]="$k  (${count[$k]} file(s))"; done
-  _pick_groups -i 🗑️ -w to "dates" "delete" "dates" "$path" files keys label key_of selected_items
+  _pick_groups -i 🗑 -w to "dates" "delete" "dates" "$path" files keys label key_of selected_items
   case $? in 0) return 0 ;; 1) return 1 ;; 2) return 2 ;; *) return 3 ;; esac       # u = back to the level question
 }
 _dd_s_confirm() {
   local rc
-  _sel_summary selected_items "🗑️  About to delete"
+  _sel_summary selected_items "🗑  About to delete"
   _sel_preview selected_items
   _fxdel_run_selected; rc=$?
   case "$rc" in 1|2) return "$rc" ;; esac
@@ -56,6 +56,6 @@ _fx_adf_delete_by_date() {
   local -A label=() key_of=()
   local -a keys=()
   _mc_steps _dd_s_level _dd_s_pick _dd_s_confirm
-  case $? in 0) ;; 1) echo "↩️  Back"; return ;; 2) return 1 ;; *) return ;; esac
+  case $? in 0) ;; 1) echo "↩  Back"; return ;; 2) return 1 ;; *) return ;; esac
 }
 _fx_adf_register_fx "delete.by.date" "_fx_adf_delete_by_date"

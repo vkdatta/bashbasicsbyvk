@@ -134,7 +134,7 @@ _rn_finalize() {
   [ -n "$oext" ] || return 0                                    # the old name had none either: nothing to decide
   local mode="${rename_noext_mode:-ask}" ans
   if [ "$mode" = ask ]; then
-    _bvk_menu ans -t "No extension" -i "✏️" -q "'${new}' has no extension. The old one is ${oext}" \
+    _bvk_menu ans -t "No extension" -i "✏" -q "'${new}' has no extension. The old one is ${oext}" \
       old:"Use old extension  →  ${new%.}${oext}" none:"Create without extension  →  ${new}" || { _bvk_back && return 6; return 1; }
     mode="$ans"
   fi
@@ -174,7 +174,7 @@ _rename_single_mutation() {
   local _rn_back
   while true; do                                 # u at a New: prompt comes back here: the item picker again
   _rn_back=0
-  select_items_common "✏️ Rename" || return
+  select_items_common "✏ Rename" || return
 
   # a long selection is not asked item by item: it goes straight to the CSV rename (rename.select.items.csv)
   local _lim="${rename_csv_above:-5}"
@@ -197,7 +197,7 @@ _rename_single_mutation() {
       sc_type_r=$(_shortcut_read_field "$item" "SHORTCUT_TYPE")
       [ "$sc_type_r" == "dir" ] \
         && echo "🔑  Shortcut (dir): $cur_name" \
-        || echo "🗝️  Shortcut (file): $cur_name"
+        || echo "🗝  Shortcut (file): $cur_name"
       echo "Renaming a shortcut only changes the shortcut's name — the original is untouched."
       _bvk_read new_name "New display name (blank = cancel): " || { _rn_back=1; break; }
       [ -z "$new_name" ] && echo "🚫 Skipped" && continue

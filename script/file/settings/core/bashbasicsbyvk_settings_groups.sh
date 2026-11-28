@@ -1,6 +1,6 @@
 # bashbasicsbyvk_settings_groups.sh — the Settings menu, grouped
 # ════════════════════════════════════════════════════════════════════════════
-#     ⚙️ Settings
+#     ⚙ Settings
 #      1) Display
 #      2) Filters
 #      3) Colors

@@ -184,7 +184,7 @@ _pn_top_act() {
       echo
       while read -r id; do
         d=$(_pn_dir "$id"); [ "$(_pn_status "$d")" = interrupted ] || continue
-        n=$((n + 1)); echo "▶️  ${id:0:10}…  $(_pn_get "$d" name)"
+        n=$((n + 1)); echo "▶  ${id:0:10}…  $(_pn_get "$d" name)"
         _pn_continue "$d"
       done < <(_pn_local_ids)
       [ $n -eq 0 ] && echo "  Nothing interrupted on this computer."

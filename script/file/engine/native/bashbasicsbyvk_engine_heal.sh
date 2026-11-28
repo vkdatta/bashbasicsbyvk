@@ -31,7 +31,7 @@ _bvk_engine_heal() {
     [ "$_t" = "$_want" ] && [ -n "$_last" ] && [ -n "$_now" ] && [ $((_now - _last)) -lt 86400 ] && return 0
   fi
   echo
-  echo "⚠️  This install was made for ${_ts:-another machine}, but this machine is $_want."
+  echo "⚠  This install was made for ${_ts:-another machine}, but this machine is $_want."
   echo "   The fast engines (list, find & replace, file transfer) need the $_want build; until then the app uses its slower fallbacks."
   _eh_ans=""
   _bvk_yn _eh_ans "Reinstall bashbasicsbyvk for this machine now?" -t "Engines" -i "🔧" || _eh_ans=n

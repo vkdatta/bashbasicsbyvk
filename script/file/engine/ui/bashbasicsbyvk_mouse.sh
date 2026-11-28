@@ -282,7 +282,7 @@ _bvk_mouse_other() {
 # Header rows.  The block's top row is (prompt row - _blk_h + 1) and the header lines are its first rows (_vp_hdr_out).
 #   _bvk_mouse_hdr_hit CLICKED_ROW PROMPT_ROW   -> returns 0 and sets
 #     _MS_HKIND = cmd   _MS_CMD = nf | pn            the buttons row:  "[🔔 Notifications 0]  [🐌 Pending 1]"  (first / second button)
-#     _MS_HKIND = nav   _MS_NAV = /a/b               a folder name of "☁️ nav path: /a/b/c" was touched (c itself = where you are: ignored)
+#     _MS_HKIND = nav   _MS_NAV = /a/b               a folder name of "☁ nav path: /a/b/c" was touched (c itself = where you are: ignored)
 #   returns 1 when the click is on no such field.
 _bvk_mouse_hdr_hit() {
   _MS_HKIND=none; _MS_CMD=""; _MS_NAV=""

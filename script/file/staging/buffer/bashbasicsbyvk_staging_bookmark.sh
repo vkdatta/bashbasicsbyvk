@@ -26,7 +26,7 @@ staging_bookmark_apply() {
     return 0
   fi
 
-  echo "⚙️  Creating bookmark links (${#live[@]} item(s)) → $dest"
+  echo "⚙  Creating bookmark links (${#live[@]} item(s)) → $dest"
   for p in "${live[@]}"; do
     local display_name
     display_name=$(basename "$p")

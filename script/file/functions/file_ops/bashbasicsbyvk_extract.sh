@@ -187,7 +187,7 @@ _xtr_int_step() {                                                    # VAR "Prom
   while :; do _xtr_ask_int "$@"; _r=$?; case "$_r" in 0) return 0 ;; 4) continue ;; *) _xtr_back; return $? ;; esac; done
 }
 _xtr_s_what() {
-  _bvk_menu what -t "Extract" -i "✂️" -q "Extract what?" "1:Lines" "2:Words" "3:Characters" "4:Bytes" || { _xtr_back; return $?; }
+  _bvk_menu what -t "Extract" -i "✂" -q "Extract what?" "1:Lines" "2:Words" "3:Characters" "4:Bytes" || { _xtr_back; return $?; }
   [ "${_CM_ABORT:-0}" = 1 ] && return 3
   case "$what" in 1) kindname=lines ;; 2) kindname=words ;; 3) kindname=chars ;; 4) kindname=bytes ;; *) _bvk_invalid; return 3 ;; esac
   noun="$kindname"; [ "$kindname" = chars ] && noun="characters"
@@ -196,11 +196,11 @@ _xtr_s_what() {
 _xtr_s_mode() {
   mode=""; dlabel=""
   if [ "$kindname" = bytes ]; then
-    _bvk_menu mode -t "Extract bytes" -i "✂️" -q "Which bytes?" "1:First n bytes" "2:Last n bytes" "3:Random n bytes" || { _xtr_back; return $?; }
+    _bvk_menu mode -t "Extract bytes" -i "✂" -q "Which bytes?" "1:First n bytes" "2:Last n bytes" "3:Random n bytes" || { _xtr_back; return $?; }
     [ "${_CM_ABORT:-0}" = 1 ] && return 3
     case "$mode" in 1) xmode=first ;; 2) xmode=last ;; 3) xmode=random ;; *) _bvk_invalid; return 3 ;; esac
   else
-    _bvk_menu mode -t "Extract $noun" -i "✂️" -q "Which $noun?" \
+    _bvk_menu mode -t "Extract $noun" -i "✂" -q "Which $noun?" \
       "1:First n $noun" "2:Range" "3:Last n $noun" "4:Random $noun" "5:Duplicate $noun" "6:Unique $noun" || { _xtr_back; return $?; }
     [ "${_CM_ABORT:-0}" = 1 ] && return 3
     case "$mode" in 1) xmode=first ;; 2) xmode=range ;; 3) xmode=last ;; 4) xmode=random ;;
@@ -250,7 +250,7 @@ _xtr_s_result() {                                                     # run it, 
   local base rc ans stamp ext=txt
   base="$(mktemp)" || return 3
   echo
-  echo "✂️  Extracted"
+  echo "✂  Extracted"
   _xtr_engine "$kindname" "$xmode" "$n" "$n2" "$base" "${sp_files[@]}"
   rc=$?
   if [ "$rc" = 3 ]; then echo "🔴  Nothing to extract (0 results)."; rm -f "$base" "$base.out" "$base.tsv"; return 3; fi
@@ -258,9 +258,9 @@ _xtr_s_result() {                                                     # run it, 
   echo
   [ "$kindname" = bytes ] && ext=bin
   if [ "$kindname" = bytes ]; then
-    _bvk_menu ans -t "Extracted" -i "✂️" -q "What do you want to do with the result?" "c:Copy it to the clipboard" "f:Save it to a file"
+    _bvk_menu ans -t "Extracted" -i "✂" -q "What do you want to do with the result?" "c:Copy it to the clipboard" "f:Save it to a file"
   else
-    _bvk_menu ans -t "Extracted" -i "✂️" -q "What do you want to do with the result?" "c:Copy it to the clipboard" "f:Save it to a file" "x:Save it in Excel"
+    _bvk_menu ans -t "Extracted" -i "✂" -q "What do you want to do with the result?" "c:Copy it to the clipboard" "f:Save it to a file" "x:Save it in Excel"
   fi
   rc=$?
   if [ "$rc" -ne 0 ]; then rm -f "$base" "$base.out" "$base.tsv"; _xtr_back; return $?; fi

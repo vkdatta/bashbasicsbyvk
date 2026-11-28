@@ -403,7 +403,7 @@ _mc_review() {
     _mrv_a="${_mrv_a,,}"; _mrv_a="${_mrv_a//[[:space:]]/}"
     _mc_nav "$_mrv_a"; _mrv_rc=$?
     case "$_mrv_rc" in
-      1) echo "↩️  Back to navigation"; return 1 ;;
+      1) echo "↩  Back to navigation"; return 1 ;;
       2) return 2 ;;
       4) continue ;;
     esac

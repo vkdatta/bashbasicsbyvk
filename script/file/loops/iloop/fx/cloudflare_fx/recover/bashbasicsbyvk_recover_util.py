@@ -48,7 +48,7 @@ def safe_join(root, rel):
 
 def progress(futs, labels, status_of):
     """Live line each time an item finishes: [k/N] icon label."""
-    icon = {"ok": "💫", "skipped": "⏭️", "failed": "❌"}
+    icon = {"ok": "💫", "skipped": "⏭", "failed": "❌"}
     idx = {f: i for i, f in enumerate(futs)}
     for k, f in enumerate(as_completed(futs), 1):
         Report(None).echo(f"── [{k}/{len(futs)}] {icon.get(status_of(f.result()), '')} {labels[idx[f]]}")

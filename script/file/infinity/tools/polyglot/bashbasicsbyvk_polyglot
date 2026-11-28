@@ -133,7 +133,7 @@ def main(argv=None):
             write_xlsx(report, xlsx_path)
             written.insert(0, xlsx_path)
         except ImportError:
-            print("⚠️  openpyxl is not available - Excel report skipped (JSON written).")
+            print("⚠  openpyxl is not available - Excel report skipped (JSON written).")
     if not a.quiet:
         print_report(report, " + ".join(written), a.max_clusters, a.top_files, plain=a.plain)
     if a.fail_above is not None and report["summary"]["overall_duplication_pct"] > a.fail_above:

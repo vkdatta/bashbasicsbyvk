@@ -9,7 +9,7 @@ _gcloud_init_master() {
     return 0
   fi
 
-  echo "☁️  Connecting to Cloud Shell (one-time)..."
+  echo "☁  Connecting to Cloud Shell (one-time)..."
 
   local raw_ssh_cmd
   raw_ssh_cmd=$(gcloud cloud-shell ssh --authorize-session --dry-run 2>/dev/null | tail -1)
@@ -620,7 +620,7 @@ perform_shortcut() {
     sc_path=$(_shortcut_write "$dest" "$abs_target" "$display_name")
 
     local sc_icon
-    [ -d "$item" ] && sc_icon="🔑" || sc_icon="🗝️"
+    [ -d "$item" ] && sc_icon="🔑" || sc_icon="🗝"
     echo "  💫 Shortcut created: ${sc_icon} ${display_name} → $dest/$(basename "$sc_path")"
   done
 }
@@ -781,7 +781,7 @@ transfer_menu() {
   case "$rc" in 0) ;; 2) return 1 ;; *) return 0 ;; esac      # 1 = u on Step 1: back to where transfer was opened from
 
   echo
-  echo "⚙️  Executing $t_op..."
+  echo "⚙  Executing $t_op..."
 
   case "$t_mode" in
   u|U) return ;;
@@ -930,7 +930,7 @@ MAPPER_EOF
       echo "💫 Drive transfer complete"
       ;;
     4)
-      echo "☁️  Transferring to GCloud Shell..."
+      echo "☁  Transferring to GCloud Shell..."
       for item in "${selected_items[@]}"; do
         local base
         base=$(basename "$item")
@@ -942,14 +942,14 @@ MAPPER_EOF
             echo "  🔒 Kept local (locked, or holds locked items): $item  — copied, not moved"
           else
             rm -rf -- "$item" && _carry_forget "$item"
-            echo "  🗑️  Removed local: $item"
+            echo "  🗑  Removed local: $item"
           fi
         fi
       done
       echo "💫 Transfer to GCloud complete"
       ;;
     5)
-      echo "☁️  Transferring from GCloud Shell to local..."
+      echo "☁  Transferring from GCloud Shell to local..."
       for remote_item in "${gcloud_nav_selected_items[@]}"; do
         local base
         base=$(basename "$remote_item")
@@ -957,7 +957,7 @@ MAPPER_EOF
         gcloud cloud-shell scp --recurse "cloudshell:$remote_item" "localhost:$final_dest/"
         if [ $? -eq 0 ] && [ "$t_op" == "move" ]; then
           _gcloud_cmd "rm -rf '$remote_item'"
-          echo "  🗑️  Removed from GCloud: $remote_item"
+          echo "  🗑  Removed from GCloud: $remote_item"
         fi
       done
       echo "💫 Transfer from GCloud complete"

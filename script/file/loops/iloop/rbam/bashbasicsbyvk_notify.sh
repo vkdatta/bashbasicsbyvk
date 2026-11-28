@@ -135,10 +135,10 @@ _nf_open() {
 
 _nf_cmd() {
   case "$1" in
-    nf) echo "↩️  Closing notifications"; return 2 ;;
+    nf) echo "↩  Closing notifications"; return 2 ;;
     rf) _NF_LOADED=0; return 0 ;;
     r-*)
-      _xui_select_rows "DISMISS" "🗑️  Dismiss which notifications?" "$1" || return 1
+      _xui_select_rows "DISMISS" "🗑  Dismiss which notifications?" "$1" || return 1
       local r k
       for r in "${_XUI_SEL[@]}"; do _xui_slot "$r"; k=$_XUI_SLOT; _nf_dismiss "${_NF_ID[$k]}"; done
       echo "💫 Dismissed ${#_XUI_SEL[@]}."; _NF_LOADED=0; return 0 ;;

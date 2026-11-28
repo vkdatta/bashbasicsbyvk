@@ -154,7 +154,7 @@ def main(argv=None):
 
     print(f"\n{'=' * 70}\nSummary")
     for name, status, detail in results:
-        icon = {"ok": "💫", "skipped": "⏭️ ", "failed": "❌"}[status]
+        icon = {"ok": "💫", "skipped": "⏭ ", "failed": "❌"}[status]
         print(f"  {icon} {name}: {detail}")
     return 0 if all(s == "ok" for _, s, _ in results) else 1
 

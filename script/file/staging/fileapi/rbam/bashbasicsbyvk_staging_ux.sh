@@ -282,7 +282,7 @@ _ux_do_share() {
   # 1) recipients + make sure they can read what we send (dinons, sealed)
   _ux_ensure_seal || return 1
   _ux_sync_dinons auto
-  _ux_pick_people || { echo "↩️  Nothing was shared."; return 1; }
+  _ux_pick_people || { echo "↩  Nothing was shared."; return 1; }
   local -a rids=("${_UX_PICKED[@]}")
   local rid_csv; rid_csv=$(IFS=,; echo "${rids[*]}")
 
@@ -366,7 +366,7 @@ _ux_do_share() {
   pdir=$(_pn_adopt "$tmpdir" "$id" ux "$nblobs" "$total_size" "$arcname" "rids=$rid_csv") || { echo "❌ Could not keep the upload folder."; _ux_cleanup; return 1; }
   tmpdir=""; _ux_cleanup
 
-  [ -t 2 ] || echo "☁️  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
+  [ -t 2 ] || echo "☁  Uploading $nblobs encrypted blob(s) — up to $_BB_MAX_PAR in parallel..."
   _pn_complete "$pdir" 0; local prc=$?
   if [ $prc -ne 0 ]; then
     [ $prc -ge 20 ] && echo "   (Pending → type  pn  — the encrypted data waits in $(_pn_root))"

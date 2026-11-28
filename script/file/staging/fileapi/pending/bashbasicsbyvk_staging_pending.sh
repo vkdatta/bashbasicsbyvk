@@ -247,7 +247,7 @@ _pn_report() {
       [ -n "$_PN_DEDUCTED" ] && _bb_credits "$_PN_DEDUCTED" "$_PN_BALANCE"
       _bb_print_expiry "$_PN_EXPIRES"
       _BB_LINK_ALIAS=""; _BB_TTL_OVERRIDE="" ;;
-    backup)   _bb_done_head "Backup"; echo; echo "🗄️  $alias" ;;
+    backup)   _bb_done_head "Backup"; echo; echo "🗄  $alias" ;;
     saved)    _bb_done_head "Save"; echo; echo "💾 $alias" ;;
     snapshot) _bb_done_head "Snapshot" ;;
     ux)       _bb_done_head "Share"; echo; echo "👥 ${extra:-the chosen} person(s)" ;;
@@ -298,7 +298,7 @@ _pn_stop() {
   fi
   _bb_call DELETE "/pending/$id"
   case "$_BB_STATUS" in
-    200) echo "🗑️  Stopped. The incomplete blobs were deleted from the server." ;;
+    200) echo "🗑  Stopped. The incomplete blobs were deleted from the server." ;;
     404) echo "📜  The server had already dropped it." ;;
     409) echo "📜  It had already finished — it is a normal item now (nothing was deleted). Nuke it from its own menu if you do not want it." ;;
     000) echo "📡 Cannot reach the server, so nothing was deleted. Try again when you are online."; return 1 ;;

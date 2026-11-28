@@ -91,7 +91,7 @@ cs_row() {
   fi
 }
 # ── Tabs: defined once in the master template (bashbasicsbyvk_tabmenu.sh), which also draws the bar and builds the footer ──
-_tm_define cs _CS_TAB "☁️  Cloud Surf" "Cloud Surf" 0:"📤 Given" 1:"📥 Received"
+_tm_define cs _CS_TAB "☁  Cloud Surf" "Cloud Surf" 0:"📤 Given" 1:"📥 Received"
 cs_header() {                                      # template V3PX4Y (Cloud Surf|0 · Cloud Surf|1)
   local _n=""
   if [ "${#items[@]}" -eq 0 ]; then
@@ -145,7 +145,7 @@ _cs_expiry() {                               # e-N [spec]
 }
 
 _cs_drop() {                                 # r-LIST on the received tab
-  _xui_select_rows "DROP" "🗑️  Drop which shares from your Cloud Surf?" "$1" || return 1
+  _xui_select_rows "DROP" "🗑  Drop which shares from your Cloud Surf?" "$1" || return 1
   echo "   They disappear from your list (the sender keeps them; they may offer again)."
   _xui_yes "Continue?" || return 1
   local r k
@@ -158,7 +158,7 @@ _cs_drop() {                                 # r-LIST on the received tab
 _cs_cmd() {
   case "$1" in
     __sw_tab_right__|__sw_tab_left__) _tm_key cs "$1" nowrap || return 1; _CS_LOADED=0; return 3 ;;
-    cs) echo "↩️  Closing Cloud Surf"; return 2 ;;
+    cs) echo "↩  Closing Cloud Surf"; return 2 ;;
     rf) _CS_LOADED=0; return 0 ;;
     x-*) [ "$_CS_TAB" = 0 ] || { echo "📜  Only the sender can nuke. Use r-N to drop it from your list."; return 1; }
          _cs_nuke "$1"; _CS_LOADED=0; return 0 ;;

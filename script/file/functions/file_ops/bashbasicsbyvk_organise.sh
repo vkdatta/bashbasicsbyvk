@@ -260,7 +260,7 @@ echo "💫 Organised A-Z"
 organise_menu() {
 local rc
 while true; do
-_mc_select och "🗂️ Organise files in current location ($path):" "Organise by ext" "Organise by year(s) (metadata)" \
+_mc_select och "🗂 Organise files in current location ($path):" "Organise by ext" "Organise by year(s) (metadata)" \
   "Organise by year(s) > month(s) (metadata)" "Organise by year(s) > month(s) > date(s) (metadata)" \
   "Unorganise and bring it to current location" "Organise A-Z" || return $(( $? == 2 ? 1 : 0 ))
 case "$och" in

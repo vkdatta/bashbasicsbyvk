@@ -35,7 +35,7 @@ _bk_clash_filter() {
     { [ -f "$t" ] || [ -L "$t" ]; } && ! [ "$it" -ef "$t" ] && [ ! -d "$it" ] && clash+=("$t")
   done
   if [ ${#clash[@]} -eq 0 ]; then _BK_PASS=("$@"); return 0; fi
-  echo "⚠️  ${#clash[@]} file(s) at the destination have the same name and would be REPLACED: ${clash[0]##*/}$([ ${#clash[@]} -gt 1 ] && echo " …")"
+  echo "⚠  ${#clash[@]} file(s) at the destination have the same name and would be REPLACED: ${clash[0]##*/}$([ ${#clash[@]} -gt 1 ] && echo " …")"
   if _bk_guard replace "${clash[@]}"; then _BK_PASS=("$@"); return 0; fi
   local -A held=(); for t in "${clash[@]}"; do held["$t"]=1; done
   for it in "$@"; do
@@ -69,7 +69,7 @@ _bk_guard() {
   esac
   if [ "$svc" = offline ] || [ "$svc" = both ] || { [ "$svc" = fileapi ] && [ "$_BKD_NOTAKEN" = 1 ]; }; then
     if ! _rb_store "$action" "${real[@]}"; then
-      _bkd_q a "The offline backup FAILED. Go on without it?" -t "No backup" -i "🗄️" || { echo "🚫 Nothing changed."; return 1; }
+      _bkd_q a "The offline backup FAILED. Go on without it?" -t "No backup" -i "🗄" || { echo "🚫 Nothing changed."; return 1; }
       [ "$a" = y ] || { echo "🚫 Nothing changed."; return 1; }
     fi
   fi
@@ -123,7 +123,7 @@ _bkd_ask() {
   [ "$mode" = ask ] || return 5
   # A menu that was cancelled (u = go back, or a command that is not allowed here) returns 1 / 3: the whole flow stops RIGHT HERE —
   # nothing is packed, uploaded or changed.
-  _bkd_q a "Back up ${#real[@]} item(s) to the cloud before ${_BKD_VERB[$action]:-changing them}?" -c -t "Back up first" -i "🗄️" || return $?
+  _bkd_q a "Back up ${#real[@]} item(s) to the cloud before ${_BKD_VERB[$action]:-changing them}?" -c -t "Back up first" -i "🗄" || return $?
   case "$a" in
     c) echo "🚫 Nothing changed."; return 3 ;;
     n) _bkd_skip=1 ;;
@@ -148,7 +148,7 @@ _bkd_upload() {
   _svc_upload backup "$alias" "${real[@]}"
   case $? in
     0)
-      _bb_done_head "Backup"; echo; echo "🗄️  $alias"
+      _bb_done_head "Backup"; echo; echo "🗄  $alias"
       [ -n "$_SVC_DEDUCTED" ] && _bb_credits "$_SVC_DEDUCTED" "$_SVC_BALANCE"
       echo "🕐 Nuke time: $(_bb_fmt_duration "$_SVC_TTL")"; _bb_goto "Home → Backup (bk)"
       return 0 ;;

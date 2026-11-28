@@ -179,7 +179,7 @@ _lk_join() {                 # "a, b, c, … (+N more)"  (max 8 names)
 # the questions of _lk_confirm_delete (_mc_steps steps: they share its locals prompt ans choice prot free final)
 _lcd_first() {
   local rc
-  _bvk_ask ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑️"; rc=$?
+  _bvk_ask ans "${prompt% (y/n): }" -d none -t "Confirm delete" -i "🗑"; rc=$?
   (( rc == 1 )) && return 1
   [ "$rc" = 0 ] && [[ "$ans" == [yY] ]] && return 0
   echo "🚫 Deletion cancelled"; return 3

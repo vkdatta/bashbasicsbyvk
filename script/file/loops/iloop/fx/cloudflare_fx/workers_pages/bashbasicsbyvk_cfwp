@@ -111,7 +111,7 @@ def main(argv=None):
     print(f"\nNavigation path: {nav}\nItems          : " + ", ".join(f"{t} {n}" for t, n in items))
     results = recover_batch(nav, items, token, account)
     print(f"\n{'=' * 70}\nSummary")
-    icon = {"ok": "💫", "skipped": "⏭️ ", "failed": "❌"}
+    icon = {"ok": "💫", "skipped": "⏭ ", "failed": "❌"}
     for typ, name, status, detail in results:
         print(f"  {icon[status]} {typ} {name}: {detail}")
     return 0 if all(s == "ok" for _, _, s, _ in results) else 1

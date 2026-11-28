@@ -265,7 +265,7 @@ run_file() {
             _rf_go "$_RF_EXE" "${_RF_ARGS[@]}" "$file"
             return $?
         fi
-        echo "⚠️ The shebang names '$_RF_EXE', which is not installed: trying the file's extension instead"
+        echo "⚠ The shebang names '$_RF_EXE', which is not installed: trying the file's extension instead"
     fi
     # 2) a compiled program (ELF) runs directly; without the executable bit it cannot run
     if _rf_is_elf "$file"; then

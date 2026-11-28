@@ -79,7 +79,7 @@ _sw_excl_add() {
     "1:filename contains" "2:filename equals" "3:filename from path" "4:filename starts with" "5:filename ends with" \
     "@h:For folders (everything inside is hidden too)" \
     "6:foldername contains" "7:foldername equals" "8:foldername from path" "9:foldername starts with" "10:foldername ends with" \
-    || { echo "↩️  Back"; return 0; }      # u / q = back out (AGENTS rule 6: a fixed-answer question is a _bvk_menu)
+    || { echo "↩  Back"; return 0; }      # u / q = back out (AGENTS rule 6: a fixed-answer question is a _bvk_menu)
   case "$pick" in
     1) kind="filename-contains"   ; what="Name contains" ;;
     2) kind="filename"            ; what="Exact name" ;;
@@ -119,7 +119,7 @@ _sw_excl_drop() {
   local i="$1"
   [ -n "${_SW_XLN[$i]:-}" ] || return 1
   sed -i "${_SW_XLN[$i]}d" "$_RC_EXCLUDE_FILE"
-  echo "🗑️  Removed: ${_SW_XROW[$i]}"
+  echo "🗑  Removed: ${_SW_XROW[$i]}"
 }
 
 # Remove from the typed key r: pick a rule, it goes; the list stays open until it is empty or u.
@@ -182,7 +182,7 @@ _sw_excl_menu() {
     else        # no rule to pick: the three actions are the rows
       _bvk_menu xc -t "Exclude List for Recents" -i "🚫" -k -n -e "(no rules yet)" "${acts[@]}"
     fi || {
-      _bvk_back && { echo "↩️  Back to recents"; return 0; }
+      _bvk_back && { echo "↩  Back to recents"; return 0; }
       _bvk_quit; return 0
     }
     case "$xc" in
@@ -230,8 +230,8 @@ _sw_remove_paths() {
     _sp_resolve_itemlist "$spec" || return 0
     selected_items=("${sp_resolved[@]}")
   else
-    if $imaginary_mode; then select_imaginary_items_common "$path" "$group_prefix" "🗑️ Remove bookmark" || return 0
-    else select_items_common "🗑️ Remove bookmark" allow_a || return 0; fi
+    if $imaginary_mode; then select_imaginary_items_common "$path" "$group_prefix" "🗑 Remove bookmark" || return 0
+    else select_items_common "🗑 Remove bookmark" allow_a || return 0; fi
   fi
   n=${#selected_items[@]}
   [ "$n" -eq 0 ] && { echo "📜  Nothing selected"; return 0; }
@@ -519,7 +519,7 @@ switch_menu() {
     case "$_sw_choice" in
 
       sw|SW)
-        echo "↩️  Exiting switch mode"
+        echo "↩  Exiting switch mode"
         break
         ;;
 
@@ -561,13 +561,13 @@ switch_menu() {
         if _sw_is_ro; then
           # Recents / Favourites are flat lists: there is nothing to go "up" into, so u leaves
           # (it used to print the read-only warning and trap the user)
-          echo "↩️  Exiting switch mode"; break
+          echo "↩  Exiting switch mode"; break
         elif [ -n "$group_prefix" ]; then
           group_prefix="${group_prefix%?}"; force_show=false
         elif [ "$path" != "$_SW_DIR" ] && [ "$path" != "/" ]; then
           path=$(dirname "$path"); group_prefix=""; force_show=false
         else
-          echo "↩️  At root — exiting switch mode"; break
+          echo "↩  At root — exiting switch mode"; break
         fi
         ;;
 

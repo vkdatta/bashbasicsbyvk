@@ -738,7 +738,7 @@ _wf_prompt() {
   _wf_asks "$at" "$_WF_Q" || { _wf_fail "the app asked '$_WF_Q' but the step answers '${_XL_Q[$at]}'"; return 1; }
   _wf_say "$at"; _wf_advance
   case "$a" in
-    ask) echo "✍️  Your turn: type it, then the workflow goes on"; return 1 ;;
+    ask) echo "✍  Your turn: type it, then the workflow goes on"; return 1 ;;
     default) _WF_ANSWER="" ;;
     value) _wf_subst "${_XL_V[$at]}"; _WF_ANSWER="$_XL_OUT" ;;
   esac
@@ -767,7 +767,7 @@ _wf_screen() {   # TITLE
 # ── wf: the list of workflows is the main list on the workflows folder (_wfv_* in bashbasicsbyvk_browse.sh); a number opens the run loop (handle_file)
 _wf_menu() {
   _wf_mode && { echo "🔴  Type stop_record first"; return 0; }
-  [ "${_GD_ACTIVE:-0}" = 1 ] && { echo "☁️  Leave Google Drive first (gdx), then type wf"; return 0; }
+  [ "${_GD_ACTIVE:-0}" = 1 ] && { echo "☁  Leave Google Drive first (gdx), then type wf"; return 0; }
   mkdir -p -- "$_WF_HOME" || { echo "❌ Cannot create $_WF_HOME"; return 0; }
   _wfv_on || _WF_RETURN="$path"
   path="$_WF_HOME"; group_prefix=""; force_show=false; _gv_crumbs=()

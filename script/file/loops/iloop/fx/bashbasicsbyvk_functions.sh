@@ -361,7 +361,7 @@ functions_menu() {
     case "$_fx_choice" in
 
       fx|FX)
-        echo "↩️  Exiting functions mode"
+        echo "↩  Exiting functions mode"
         break
         ;;
 
@@ -387,7 +387,7 @@ functions_menu() {
               _fx_adf_cur_staging=""
             fi
           else
-            echo "↩️  At ADF root — exiting functions mode"; break
+            echo "↩  At ADF root — exiting functions mode"; break
           fi
         elif [ "$_fx_tab" = "udf" ] && [ -n "$group_prefix" ]; then
           group_prefix="${group_prefix%?}"; force_show=false
@@ -395,7 +395,7 @@ functions_menu() {
           if [ "$path" != "$_FX_EXEC_DIR" ] && [[ "$path" == "$_FX_EXEC_DIR"/* ]]; then
             path=$(dirname "$path"); group_prefix=""; force_show=false
           else
-            echo "↩️  At execute root — exiting functions mode"; break
+            echo "↩  At execute root — exiting functions mode"; break
           fi
         fi
         ;;
